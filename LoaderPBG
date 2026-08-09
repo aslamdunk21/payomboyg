@@ -12,17 +12,17 @@ end)
 
 local GameRouter = {
     -- 1. Attack On Titan Revolution (AOTR)
-    [13379208636] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/AOTR",
-    [14916516914] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/AOTR",
+    [13379208636] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
+    [14916516914] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
     -- 2. Anime Card Farm
-    [125039473548047] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/Script",
+    [125039473548047] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ANCradG.lua",
     
     -- 3. Arena Sniper (Sniper Arena)
-    [122446657157717] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/ARNSniper",
-    [126042865144779] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/ARNSniper",
+    [122446657157717] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua",
+    [126042865144779] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua",
 
     -- 4. Roll Anime To Fight (RATF)
-    [107653945083776] = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/RollATFight",
+    [107653945083776] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
     
     -- สคริปต์สำรอง (Default Fallback)
 }
