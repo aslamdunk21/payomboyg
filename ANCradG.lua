@@ -1228,20 +1228,51 @@ InvBalToggle:OnChanged(function(state)
                     if bp then for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                     if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                     
-                    -- ถ้าไอเทมเยอะเกินไป (เช่นเกิน 40)
-                    if #items >= 40 then
+                    if #items > 0 then
                         local threshold = MinRarityIdx[MinRarityDrop.Value or "Rare"] or 3
+                        local trashCards = {}
+                        
                         for _, t in ipairs(items) do
-
-                            
-                            -- ห้ามลบของแพง (Mutation โหด หรือ Trait โหด)
-                            local mut = string.lower(getCardMutation(t))
-                            if mut ~= "normal" and mut ~= "golden" then continue end
+                            -- 1. Check if Pack Card (Using Smart Base Logic)
+                            local isPack = false
+                            local name = string.upper(t.Name)
+                            if string.find(name, "PACK") or string.find(name, "BOX") or string.find(name, "แพ็ค") or string.find(name, "กล่อง") then
+                                isPack = true
+                            else
+                                pcall(function()
+                                    for _, desc in ipairs(t:GetDescendants()) do
+                                        if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
+                                            local txt = string.upper(desc.Text)
+                                            if string.find(txt, "PACK") or string.find(txt, "BOX") or string.find(txt, "แพ็ค") or string.find(txt, "กล่อง") then
+                                                isPack = true; break
+                                            end
+                                        end
+                                    end
+                                end)
+                            end
+                            -- ถ้าเป็น Pack Card ต้องหาระดับให้เจอ
                             local rank = getCardRank(t)
                             local rankIdx = MinRarityIdx[rank] or 99
-                            if rank:find("SS") or rank:find("UR") or rank:find("LR") then rankIdx = 99 end
                             
-                            -- 🚀 NEW: ห้ามขายการ์ดที่มีค่าเงินสูง (O, N, DC, Ud, Dd)
+                            if isPack and rankIdx == 99 then
+                                -- หา Rank จากชื่อแพ็คถ้า attribute ไม่มี
+                                local upName = string.upper(t.Name)
+                                for r, idx in pairs(MinRarityIdx) do
+                                    if string.find(upName, string.upper(r)) then
+                                        rankIdx = idx
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            -- ห้ามลบของแพง (Mutation โหด หรือ Trait โหด) สำหรับการ์ดปกติ
+                            if not isPack then
+                                local mut = string.lower(getCardMutation(t))
+                                if mut ~= "normal" and mut ~= "golden" then continue end
+                                if rank:find("SS") or rank:find("UR") or rank:find("LR") then rankIdx = 99 end
+                            end
+                            
+                            -- ห้ามขายการ์ดที่มีค่าเงินสูง (O, N, DC, Ud, Dd)
                             local cashScore = 0
                             pcall(function()
                                 for _, desc in ipairs(t:GetDescendants()) do
@@ -1265,35 +1296,23 @@ InvBalToggle:OnChanged(function(state)
                             if cashScore >= 1e27 then continue end -- ข้ามการ์ดมูลค่าสูง
                             
                             if rankIdx < threshold then
-                                -- เอาเกรดต่ำไปขายทีละใบ
+                                table.insert(trashCards, t)
+                            end
+                        end
+                        
+                        -- ขายการ์ดขยะแบบละเอียดอ่อน (ทีละใบ) เพื่อป้องกันการเผลอขายแบบ Sell All ทับกัน
+                        if #trashCards > 0 and char and char:FindFirstChild("Humanoid") then
+                            for _, t in ipairs(trashCards) do
                                 pcall(function()
-                                    local c = LocalPlayer.Character
-                                    if c and c:FindFirstChild("Humanoid") then
-                                        c.Humanoid:EquipTool(t)
-                                        task.wait(0.2)
-                                        -- วนหาปุ่ม Sell ใน Plot
-                                        local plot = findPlayerPlot()
-                                        if plot then
-                                            for _, desc in ipairs(plot:GetDescendants()) do
-                                                if desc:IsA("ProximityPrompt") then
-                                                    local pText = string.lower((desc.ActionText or "") .. " " .. (desc.ObjectText or ""))
-                                                    if pText:find("sell") or pText:find("ขาย") then
-                                                        desc.RequiresLineOfSight = false
-                                                        desc.MaxActivationDistance = 99999
-                                                        fireproximityprompt(desc)
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        -- Backup: ลองส่ง Remote เผื่อมี
-                                        local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                                        if rem and rem:FindFirstChild("Sell") then
-                                            rem.Sell:FireServer(t)
-                                        end
-                                        task.wait(0.2)
-                                        -- ถ้ายังขายไม่สำเร็จจริงๆ ลบทิ้งเพื่อไม่ให้กระเป๋าเต็ม
-                                        if t and t.Parent then t:Destroy() end
+                                    char.Humanoid:EquipTool(t)
+                                    task.wait(0.2)
+                                    local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                                    if rem and rem:FindFirstChild("SellRE") then
+                                        rem.SellRE:FireServer("SellHand")
                                     end
+                                    task.wait(0.2)
+                                    -- ถ้ายังขายไม่สำเร็จจริงๆ ลบทิ้งเพื่อไม่ให้กระเป๋าเต็ม
+                                    if t and t.Parent then t:Destroy() end
                                 end)
                             end
                         end
