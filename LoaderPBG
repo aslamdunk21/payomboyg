@@ -23,6 +23,9 @@ local GameRouter = {
 
     -- 4. Roll Anime To Fight (RATF)
     [107653945083776] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
+
+    -- 5. Capybara Vs Plant (CvsP)
+    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
     
     -- สคริปต์สำรอง (Default Fallback)
 }
