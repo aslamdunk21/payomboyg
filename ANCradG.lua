@@ -2395,6 +2395,9 @@ local function collect4BestBaseCards()
                             or string.find(pText, "SELL") or string.find(pText, "ขาย")
                             or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
                             or string.find(pText, "JOIN") or string.find(pText, "ENTER")
+                            or string.find(pText, "SKIP") or string.find(pText, "ข้าม")
+                            or string.find(pText, "MASTER") or string.find(pText, "ROBUX")
+                            or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
                         
                         if not isIgnoredPrompt then
                             local model = desc:FindFirstAncestorOfClass("Model")
@@ -4270,21 +4273,33 @@ end)
 
 -- Profile Box removed as requested because Toggle now acts as the profile.
 
--- Load InterfaceManager for Theme Customization
+-- Load InterfaceManager & SaveManager for Customization and Configs
 local InterfaceManager = nil
+local SaveManager = nil
+
 pcall(function()
     InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+    SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 end)
+
+if SaveManager then
+    SaveManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
+    SaveManager:SetFolder("PayomboyZ_Config/Configs")
+    SaveManager:BuildConfigSection(Tabs.Manage)
+    SaveManager:LoadAutoloadConfig()
+end
 
 if InterfaceManager then
     InterfaceManager:SetLibrary(Fluent)
     InterfaceManager:SetFolder("PayomboyZ_Config")
-    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+    InterfaceManager:BuildInterfaceSection(Tabs.Manage)
 end
 
 Fluent:Notify({
     Title = "PayomboyZ",
-    Content = "ระบบธีมและสี UI พร้อมใช้งานแล้ว! ✅",
+    Content = "ระบบจัดการ Config และ Theme พร้อมใช้งานแล้ว! ✅",
     Duration = 6
 })
 
