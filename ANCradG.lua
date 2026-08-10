@@ -795,14 +795,14 @@ AutoSpawnToggle:OnChanged(function(state)
                         pcall(fireclickdetector, cd)
                         task.wait(0.3)
                     else
-                        task.wait(0.1)
+                        task.wait(0.05)
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(0.3)
+                        task.wait(0.2)
                     else
-                        task.wait(0.1)
+                        task.wait(0.01)
                     end
                 end
             end
@@ -962,7 +962,7 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.4 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
@@ -986,21 +986,8 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then 
-    pcall(function() getgenv().BruteForceLoop:Disconnect() end) 
-end
-getgenv().BruteForceLoopRun = true
-getgenv().BruteForceLoop = {
-    Disconnect = function()
-        getgenv().BruteForceLoopRun = false
-    end
-}
-task.spawn(function()
-    while getgenv().BruteForceLoopRun do
-        instantBuyLoop()
-        task.wait(0.15)
-    end
-end)
+if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
+getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
@@ -1024,14 +1011,11 @@ AutoCarryToggle:OnChanged(function(state)
     if state then
         task.spawn(function()
             while getgenv().AutoCarry do
-                if getgenv().AutoBossRaid or getgenv().AutoTower then
-                    task.wait(2)
-                else
-                    local character = LocalPlayer.Character
-                    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                    local searchArea = findPlayerPlot() or workspace
-                    
-                    for _, prompt in ipairs(searchArea:GetDescendants()) do
+                local character = LocalPlayer.Character
+                local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                local searchArea = findPlayerPlot() or workspace
+                
+                for _, prompt in ipairs(searchArea:GetDescendants()) do
                     if prompt:IsA("ProximityPrompt") then
                         local txt = (prompt.ActionText .. " " .. prompt.ObjectText .. " " .. prompt.Name):lower()
                         local fullTxt = prompt.ActionText .. " " .. prompt.ObjectText .. " " .. prompt.Name
@@ -1057,7 +1041,6 @@ AutoCarryToggle:OnChanged(function(state)
                                 task.wait(0.1)
                                 if originalCFrame and hrp then hrp.CFrame = originalCFrame end
                             end)
-                        end
                         end
                     end
                 end
@@ -1093,13 +1076,10 @@ AutoSellBoxToggle:OnChanged(function(state)
     if state then
         task.spawn(function()
             while getgenv().AutoSellBox do
-                if getgenv().AutoBossRaid or getgenv().AutoTower then
-                    task.wait(2)
-                else
-                    local character = LocalPlayer.Character
-                    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                    local backpack = LocalPlayer:FindFirstChild("Backpack")
-                    local boxTool = nil
+                local character = LocalPlayer.Character
+                local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                local backpack = LocalPlayer:FindFirstChild("Backpack")
+                local boxTool = nil
                 
                 if backpack then
                     for _, tool in ipairs(backpack:GetChildren()) do
@@ -1146,7 +1126,6 @@ AutoSellBoxToggle:OnChanged(function(state)
                                 if hrp then hrp.CFrame = originalCFrame end
                             end)
                         end
-                    end
                     end
                 end
                 task.wait(1)
@@ -2023,11 +2002,56 @@ AutoRerollToggle:OnChanged(function(state)
                     
                     if TraitRollRE and TraitRollRE:IsA("RemoteEvent") then
                         pcall(function() TraitRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Roll", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer(cardTool) end)
-                        pcall(function() TraitRollRE:FireServer({Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer(cId) end)
+                        pcall(function() TraitRollRE:FireServer("Equip", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Insert", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Select", {Tool = cardTool}) end)
+                        
+                        local rollArgs = {
+                            cardTool,
+                            { Tool = cardTool },
+                            { Card = cardTool },
+                            cId,
+                            { UUID = cId },
+                            { Id = cId },
+                            "Roll",
+                            "Reroll"
+                        }
+                        
+                        for _, arg in ipairs(rollArgs) do
+                            pcall(function() TraitRollRE:FireServer(arg) end)
+                            pcall(function() TraitRollRE:FireServer("Roll", arg) end)
+                            pcall(function() TraitRollRE:FireServer("Reroll", arg) end)
+                            pcall(function() TraitRollRE:FireServer(arg, "Roll") end)
+                        end
+                        
+                        pcall(function() TraitRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
                     end
+                    
+                    local function fireAll(id)
+                        local argsToTry = {
+                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
+                        }
+                        local rs = game:GetService("ReplicatedStorage")
+                        for _, obj in ipairs(rs:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                                local name = string.lower(obj.Name)
+                                if string.find(name, "roll") or string.find(name, "trait") then
+                                    if obj:IsA("RemoteEvent") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            pcall(function() obj:FireServer(arg) end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    fireAll(cId)
                     
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
@@ -2164,32 +2188,84 @@ AutoRankRerollToggle:OnChanged(function(state)
                     
                     if RankRollRE and RankRollRE:IsA("RemoteEvent") then
                         pcall(function() RankRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Roll", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Rank", cardTool) end)
-                        pcall(function() RankRollRE:FireServer(cardTool) end)
-                        pcall(function() RankRollRE:FireServer({Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer(cId) end)
+                        pcall(function() RankRollRE:FireServer("Equip", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Insert", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Select", {Tool = cardTool}) end)
+                        
+                        local rollArgs = {
+                            cardTool,
+                            { Tool = cardTool },
+                            { Card = cardTool },
+                            cId,
+                            { UUID = cId },
+                            { Id = cId },
+                            "Roll",
+                            "Reroll",
+                            "Rank",
+                            "Grade"
+                        }
+                        
+                        for _, arg in ipairs(rollArgs) do
+                            pcall(function() RankRollRE:FireServer(arg) end)
+                            pcall(function() RankRollRE:FireServer("Roll", arg) end)
+                            pcall(function() RankRollRE:FireServer("Rank", arg) end)
+                            pcall(function() RankRollRE:FireServer("Grade", arg) end)
+                            pcall(function() RankRollRE:FireServer(arg, "Roll") end)
+                            pcall(function() RankRollRE:FireServer(arg, "Rank") end)
+                            pcall(function() RankRollRE:FireServer(arg, "Grade") end)
+                        end
+                        
+                        pcall(function() RankRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind = "Rank", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Rank", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind = "Grade", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Grade", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollRank", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollResult", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Rank", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                    if playerGui then
-                        for _, v in ipairs(playerGui:GetDescendants()) do
-                            if v:IsA("TextButton") or v:IsA("ImageButton") then
-                                local text = ""
-                                if v:IsA("TextButton") then text = string.upper(v.Text)
-                                elseif v:FindFirstChildWhichIsA("TextLabel") then text = string.upper(v:FindFirstChildWhichIsA("TextLabel").Text) end
-                                
-                                if text == "ROLL" or text == "REROLL" or text == "SPIN" or text == "UPGRADE" or text == "RANK UP" then
-                                    if v.Visible or (v.Parent and v.Parent.Visible) then
-                                        if getconnections then
-                                            for _, conn in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() conn:Fire() end) end
-                                            for _, conn in ipairs(getconnections(v.Activated)) do pcall(function() conn:Fire() end) end
+                    local function fireAll(id)
+                        local argsToTry = {
+                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
+                        }
+                        local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
+                        local rs = game:GetService("ReplicatedStorage")
+                        for _, obj in ipairs(rs:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                                local name = string.lower(obj.Name)
+                                local match = false
+                                for _, kw in ipairs(keywords) do
+                                    if string.find(name, kw) then
+                                        match = true
+                                        break
+                                    end
+                                end
+                                if match then
+                                    if obj:IsA("RemoteEvent") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            pcall(function() obj:FireServer(arg) end)
+                                            pcall(function() obj:FireServer("Roll", arg) end)
+                                            pcall(function() obj:FireServer("Rank", arg) end)
+                                        end
+                                    elseif obj:IsA("RemoteFunction") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
+                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
+                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
                                         end
                                     end
                                 end
                             end
                         end
                     end
+                    fireAll(cId)
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
@@ -2300,8 +2376,7 @@ setupPotionToggle("Production", "ผลผลิต", "PotionProduction", "Produ
 -- 4. RAID & TOWER TAB (เรด & ทาวเวอร์)
 ---------------------------------------------------------
 
-local function collect4BestBaseCards(sourcePref)
-    sourcePref = sourcePref or getgenv().TowerCardSource or "จากบนฐาน (Plot)"
+local function collect4BestBaseCards()
     pcall(function()
         local character = LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -2321,7 +2396,7 @@ local function collect4BestBaseCards(sourcePref)
         scanInv(LocalPlayer:FindFirstChild("Backpack"))
         scanInv(character)
 
-        if sourcePref ~= "จากในกระเป๋า (Inventory)" then
+        if getgenv().TowerCardSource ~= "จากในกระเป๋า (Inventory)" then
             local plotFolder = findPlayerPlot()
             if plotFolder then
                 for _, desc in ipairs(plotFolder:GetDescendants()) do
@@ -2526,13 +2601,13 @@ end
 
 local function getMinutesToNextBoss()
     local min = tonumber(os.date("!%M"))
-    if min >= 55 or min <= 5 then return 0 end
+    if min >= 58 or min <= 5 then return 0 end
     return 60 - min
 end
 
 local function isBossTimeWindow()
     local min = tonumber(os.date("!%M"))
-    return min <= 5 or min >= 55
+    return min <= 5 or min >= 58
 end
 
 
@@ -2570,10 +2645,7 @@ AutoTowerToggle:OnChanged(function(state)
     if state then
         task.spawn(function()
             while getgenv().AutoTower do
-                if getgenv().AutoBossRaid then
-                    task.wait(2)
-                else
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                 if playerGui then
                     local equipBtn, battleBtn, nextBtn, playBtn, openBtn, autoReplayBtn, hideBattleBtn, showBattleBtn
                     local function isGuiVisible(gui)
@@ -2646,7 +2718,7 @@ AutoTowerToggle:OnChanged(function(state)
 
                     if openPrompt and not inTowerUI and not inBattle then
                         if not getgenv().TowerHasCollected then
-                            collect4BestBaseCards(getgenv().TowerCardSource)
+                            collect4BestBaseCards()
                             getgenv().TowerHasCollected = true
                             task.wait(0.5)
                         end
@@ -2669,37 +2741,29 @@ AutoTowerToggle:OnChanged(function(state)
                         task.wait(0.4)
                     end
 
-                    if inBattle then
-                        if autoReplayBtn and not getgenv().AutoReplayToggled then
-                            fireButton(autoReplayBtn)
-                            getgenv().AutoReplayToggled = true
-                            task.wait(0.3)
+                    if openBtn and not inTowerUI and not inBattle then fireButton(openBtn); task.wait(0.4) end
+                    if equipBtn then fireButton(equipBtn); task.wait(0.4) end
+                    if battleBtn then
+                        fireButton(battleBtn)
+                        task.wait(0.5)
+                        if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
+                            LocalPlayer.Character:PivotTo(getgenv().TowerOriginalCFrame)
+                            getgenv().TowerOriginalCFrame = nil
+                            placeCollectedCardsBack()
                         end
-                        if hideBattleBtn then
-                            fireButton(hideBattleBtn)
-                            task.wait(0.3)
-                        end
-                        task.wait(12)
-                    else
-                        if openBtn and not inTowerUI then fireButton(openBtn); task.wait(0.4) end
-                        if equipBtn then fireButton(equipBtn); task.wait(0.4) end
-                        if battleBtn then
-                            fireButton(battleBtn)
-                            task.wait(0.5)
-                            if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
-                                LocalPlayer.Character:PivotTo(getgenv().TowerOriginalCFrame)
-                                getgenv().TowerOriginalCFrame = nil
-                                placeCollectedCardsBack()
-                            end
-                            getgenv().TowerHasCollected = false
-                            getgenv().AutoReplayToggled = false
-                        end
-                        if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                        if playBtn then fireButton(playBtn); task.wait(0.2); end
+                        getgenv().TowerHasCollected = false
+                        getgenv().AutoReplayToggled = false
                     end
+                    if autoReplayBtn and not getgenv().AutoReplayToggled then
+                        fireButton(autoReplayBtn)
+                        getgenv().AutoReplayToggled = true
+                        task.wait(0.3)
+                    end
+                    if nextBtn then fireButton(nextBtn); task.wait(0.2); end
+                    if playBtn then fireButton(playBtn); task.wait(0.2); end
+                    if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
                 end
-                end
-                task.wait(0.5)
+                task.wait(0.2)
             end
         end)
     end
@@ -2744,44 +2808,12 @@ Tabs.Raid:AddButton({
                 task.wait(0.1)
                 vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
             end
-            task.wait(0.5)
-            for _, v in ipairs(playerGui:GetDescendants()) do
-                if v:IsA("TextLabel") and (v.Text:find("Tower Rewards") or v.Text:find("Rewards")) then
-                    local frame = v.Parent
-                    if frame then
-                        local closeBtn
-                        for _, btn in ipairs(frame:GetDescendants()) do
-                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and (btn.Text == "X" or (btn.Name and btn.Name:find("Close"))) then
-                                closeBtn = btn
-                                break
-                            end
-                        end
-                        if closeBtn then
-                            local center = closeBtn.AbsolutePosition + (closeBtn.AbsoluteSize / 2)
-                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                            task.wait(0.1)
-                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-                        end
-                    end
-                end
-            end
         end
         getgenv().AutoReplayToggled = false
         Fluent:Notify({ Title = "Tower", Content = "ยกเลิก Auto Replay และออกจากหอคอยแล้ว!", Duration = 3 })
     end
 })
 
-
-getgenv().BossCardSource = getgenv().BossCardSource or "จากบนฐาน (Plot)"
-local BossSourceDropdown = Tabs.Raid:AddDropdown("BossCardSource", {
-    Title = "แหล่งที่มาของการ์ดบอสเรด",
-    Values = {"จากบนฐาน (Plot)", "จากในกระเป๋า (Inventory)"},
-    Multi = false,
-    Default = getgenv().BossCardSource
-})
-BossSourceDropdown:OnChanged(function(Value)
-    getgenv().BossCardSource = Value
-end)
 
 local BossDiffDropdown = Tabs.Raid:AddDropdown("BossRaidDifficulty", {
     Title = "⚔️ ระดับความยากบอสเรด",
@@ -2895,11 +2927,6 @@ AutoBossToggle:OnChanged(function(state)
 
                         local targetPrompt = bossPrompt or portalPrompt
                         if targetPrompt then
-                            if not getgenv().BossHasCollected then
-                                collect4BestBaseCards(getgenv().BossCardSource)
-                                getgenv().BossHasCollected = true
-                                task.wait(0.5)
-                            end
                             pcall(function()
                                 local character = LocalPlayer.Character
                                 local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -2925,72 +2952,53 @@ AutoBossToggle:OnChanged(function(state)
                         end
                     end
 
-                    local currentlyFighting = autoReplayBtn or showBattleBtn or hideBattleBtn
-                    
-                    if currentlyFighting then
-                        if autoReplayBtn then
-                            local color = autoReplayBtn.BackgroundColor3
-                            if autoReplayBtn.BackgroundTransparency > 0.5 and autoReplayBtn.Parent and autoReplayBtn.Parent:IsA("GuiObject") then
-                                color = autoReplayBtn.Parent.BackgroundColor3
-                            end
-                            if autoReplayBtn:IsA("ImageButton") and autoReplayBtn.ImageColor3 ~= Color3.new(1, 1, 1) then
-                                color = autoReplayBtn.ImageColor3
-                            end
-                            local isGreen = (color.G > color.R + 0.1)
-                            if isGreen then
-                                getgenv().AutoReplayToggledBoss = true
-                            elseif not getgenv().AutoReplayToggledBoss then
-                                fireButton(autoReplayBtn)
-                                getgenv().AutoReplayToggledBoss = true
-                                task.wait(0.2)
-                            end
-                        end
-                        
-                        if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
-                        
+                    if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn); task.wait(0.1) end
+                    if equipBtn then fireButton(equipBtn); task.wait(0.1) end
+                    if battleBtn then
+                        fireButton(battleBtn)
+                        task.wait(0.2)
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
                             getgenv().BossOriginalCFrame = nil
                         end
-                        
-                        task.wait(12)
-                    else
-                        getgenv().AutoReplayToggledBoss = false
-                        
-                        if diffBtn then fireButton(diffBtn); task.wait(0.2) end
-                        if equipBtn then fireButton(equipBtn); task.wait(0.2) end
-                        if battleBtn then
-                            fireButton(battleBtn)
-                            task.wait(0.2)
-                            local character = LocalPlayer.Character
-                            if getgenv().BossOriginalCFrame and character then
-                                character:PivotTo(getgenv().BossOriginalCFrame)
-                                getgenv().BossOriginalCFrame = nil
-                                placeCollectedCardsBack()
-                            end
-                            getgenv().BossHasCollected = false
+                    end
+
+                    if autoReplayBtn then
+                        local color = autoReplayBtn.BackgroundColor3
+                        if autoReplayBtn.BackgroundTransparency > 0.5 and autoReplayBtn.Parent and autoReplayBtn.Parent:IsA("GuiObject") then
+                            color = autoReplayBtn.Parent.BackgroundColor3
                         end
-                        
-                        if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                        if playBtn then fireButton(playBtn); task.wait(0.2); end
-                        
-                        for _, v in ipairs(playerGui:GetDescendants()) do
-                            if v:IsA("TextLabel") and (v.Text:find("Tower Rewards") or v.Text:find("Rewards")) then
-                                local frame = v.Parent
-                                if frame then
-                                    for _, btn in ipairs(frame:GetDescendants()) do
-                                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and (btn.Text == "X" or (btn.Name and btn.Name:find("Close"))) then
-                                            fireButton(btn)
-                                            break
-                                        end
-                                    end
-                                end
-                            end
+                        if autoReplayBtn:IsA("ImageButton") and autoReplayBtn.ImageColor3 ~= Color3.new(1, 1, 1) then
+                            color = autoReplayBtn.ImageColor3
+                        end
+                        local isGreen = (color.G > color.R + 0.1)
+                        if isGreen then
+                            getgenv().AutoReplayToggledBoss = true
+                        elseif not getgenv().AutoReplayToggledBoss then
+                            fireButton(autoReplayBtn)
+                            getgenv().AutoReplayToggledBoss = true
+                            task.wait(0.2)
                         end
                     end
+
+                    if not (autoReplayBtn or showBattleBtn or hideBattleBtn) then
+                        getgenv().AutoReplayToggledBoss = false
+                    end
+
+                    if autoReplayBtn or showBattleBtn then
+                        local character = LocalPlayer.Character
+                        if getgenv().BossOriginalCFrame and character then
+                            character:PivotTo(getgenv().BossOriginalCFrame)
+                            getgenv().BossOriginalCFrame = nil
+                        end
+                    end
+
+                    if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
+                    if nextBtn then fireButton(nextBtn); task.wait(0.2); end
+                    if playBtn then fireButton(playBtn); task.wait(0.2); end
                 end
-                task.wait(0.5)
+                task.wait(0.2)
             end
         end)
     else
@@ -2999,8 +3007,6 @@ AutoBossToggle:OnChanged(function(state)
             character:PivotTo(getgenv().BossOriginalCFrame)
             getgenv().BossOriginalCFrame = nil
         end
-        placeCollectedCardsBack()
-        getgenv().BossHasCollected = false
     end
 end)
 
