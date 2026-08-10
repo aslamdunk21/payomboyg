@@ -4010,14 +4010,70 @@ UIScaleSlider:OnChanged(function(val)
 end)
 
 local function toggleFluentVisibility()
-    pcall(function()
-        local vim = game:GetService("VirtualInputManager")
-        if vim then
-            vim:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
-            task.wait(0.05)
-            vim:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+    local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
+    for _, guiParent in ipairs(containers) do
+        if guiParent then
+            for _, child in ipairs(guiParent:GetChildren()) do
+                if child:IsA("ScreenGui") and child.Name ~= "PayomboyZ_MobileToggle" then
+                    local isFluent = false
+                    local cname = string.lower(child.Name)
+                    if string.find(cname, "fluent") or string.find(cname, "payomboy") or string.find(cname, "dexq") or child.Name == "PayomboyZ_UI" or child:FindFirstChildOfClass("UIScale") then
+                        isFluent = true
+                    end
+                    if not isFluent then
+                        for _, lbl in ipairs(child:GetDescendants()) do
+                            if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
+                                isFluent = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if isFluent then
+                        local uiScale = child:FindFirstChildOfClass("UIScale")
+                        if uiScale then
+                            uiScale.Scale = 1 -- Reset scale before toggle to prevent drag math bugs
+                        end
+                        
+                        child.Enabled = not child.Enabled
+                        
+                        if child.Enabled and uiScale then
+                            task.spawn(function()
+                                task.wait(0.1) -- Wait for absolute size to update
+                                uiScale.Scale = currentUIScale
+                                
+                                -- Fix UI getting stuck out of bounds
+                                pcall(function()
+                                    local viewport = workspace.CurrentCamera.ViewportSize
+                                    local winFrame = nil
+                                    for _, lbl in ipairs(child:GetDescendants()) do
+                                        if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
+                                            local curr = lbl.Parent
+                                            while curr and curr ~= child do
+                                                if curr:IsA("Frame") and curr.AbsoluteSize.X >= 300 and curr.AbsoluteSize.X <= 800 then
+                                                    winFrame = curr
+                                                end
+                                                curr = curr.Parent
+                                            end
+                                        end
+                                    end
+                                    
+                                    if winFrame then
+                                        if winFrame.AbsolutePosition.Y <= 40 or winFrame.AbsolutePosition.X <= -20 or winFrame.AbsolutePosition.X >= viewport.X - 100 or winFrame.AbsolutePosition.Y >= viewport.Y - 100 then
+                                            local scale = currentUIScale or 1
+                                            local targetX = (viewport.X / 2) / scale - (winFrame.AbsoluteSize.X / scale / 2)
+                                            local targetY = (viewport.Y / 2) / scale - (winFrame.AbsoluteSize.Y / scale / 2)
+                                            winFrame.Position = UDim2.fromOffset(targetX, targetY)
+                                        end
+                                    end
+                                end)
+                            end)
+                        end
+                    end
+                end
+            end
         end
-    end)
+    end
 end
 
 -- Emergency UI Reset Keybind (RightControl)
