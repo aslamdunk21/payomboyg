@@ -795,14 +795,14 @@ AutoSpawnToggle:OnChanged(function(state)
                         pcall(fireclickdetector, cd)
                         task.wait(0.3)
                     else
-                        task.wait(0.05)
+                        task.wait(0.1)
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(0.2)
+                        task.wait(0.3)
                     else
-                        task.wait(0.01)
+                        task.wait(0.1)
                     end
                 end
             end
@@ -962,7 +962,7 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.4 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
@@ -986,8 +986,21 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
-getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
+if getgenv().BruteForceLoop then 
+    pcall(function() getgenv().BruteForceLoop:Disconnect() end) 
+end
+getgenv().BruteForceLoopRun = true
+getgenv().BruteForceLoop = {
+    Disconnect = function()
+        getgenv().BruteForceLoopRun = false
+    end
+}
+task.spawn(function()
+    while getgenv().BruteForceLoopRun do
+        instantBuyLoop()
+        task.wait(0.15)
+    end
+end)
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
