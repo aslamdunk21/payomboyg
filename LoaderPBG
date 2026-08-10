@@ -14,6 +14,7 @@ local GameRouter = {
     -- 1. Attack On Titan Revolution (AOTR)
     [13379208636] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
     [14916516914] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
+
     -- 2. Anime Card Farm
     [125039473548047] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ANCradG.lua",
     
@@ -25,7 +26,7 @@ local GameRouter = {
     [107653945083776] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
 
     -- 5. Capybara Vs Plant (CvsP)
-    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
+    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua",
     
     -- สคริปต์สำรอง (Default Fallback)
 }
