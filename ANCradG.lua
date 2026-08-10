@@ -1814,8 +1814,17 @@ AutoUpgradeToggle:OnChanged(function(state)
                                             task.wait(0.1)
                                             vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
                                         end
-                                        availableCash = availableCash - up.cost
+                                        
                                         task.wait(0.2)
+                                        pcall(function()
+                                            local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                                            if rem and rem:FindFirstChild("ConveyorUpgradeRE") then
+                                                rem.ConveyorUpgradeRE:FireServer("ConfirmUpgrade")
+                                            end
+                                        end)
+                                        
+                                        availableCash = availableCash - up.cost
+                                        task.wait(0.5)
                                     elseif up.type == "prompt" and up.prompt then
                                         up.prompt.RequiresLineOfSight = false
                                         up.prompt.MaxActivationDistance = 99999
@@ -3995,6 +4004,32 @@ local function toggleFluentVisibility()
                         task.spawn(function()
                             task.wait(0.1) -- Wait for absolute size to update
                             uiScale.Scale = currentUIScale
+                            
+                            -- Fix UI getting stuck out of bounds (พับจอเล็กแล้ว UI ค้างขอบบน)
+                            pcall(function()
+                                local viewport = workspace.CurrentCamera.ViewportSize
+                                local winFrame = nil
+                                for _, lbl in ipairs(child:GetDescendants()) do
+                                    if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
+                                        local curr = lbl.Parent
+                                        while curr and curr ~= child do
+                                            if curr:IsA("Frame") and curr.AbsoluteSize.X >= 300 and curr.AbsoluteSize.X <= 800 then
+                                                winFrame = curr
+                                            end
+                                            curr = curr.Parent
+                                        end
+                                    end
+                                end
+                                
+                                if winFrame then
+                                    if winFrame.AbsolutePosition.Y <= 40 or winFrame.AbsolutePosition.X <= -20 or winFrame.AbsolutePosition.X >= viewport.X - 100 or winFrame.AbsolutePosition.Y >= viewport.Y - 100 then
+                                        local scale = currentUIScale or 1
+                                        local targetX = (viewport.X / 2) / scale - (winFrame.AbsoluteSize.X / scale / 2)
+                                        local targetY = (viewport.Y / 2) / scale - (winFrame.AbsoluteSize.Y / scale / 2)
+                                        winFrame.Position = UDim2.fromOffset(targetX, targetY)
+                                    end
+                                end
+                            end)
                         end)
                     end
                 end
@@ -4002,6 +4037,49 @@ local function toggleFluentVisibility()
         end
     end
 end
+
+-- Emergency UI Reset Keybind (RightControl)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.RightControl then
+        pcall(function()
+            local viewport = workspace.CurrentCamera.ViewportSize
+            local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
+            local recovered = false
+            for _, guiParent in ipairs(containers) do
+                if guiParent then
+                    for _, child in ipairs(guiParent:GetChildren()) do
+                        local cname = string.lower(child.Name)
+                        if child:IsA("ScreenGui") and (string.find(cname, "fluent") or string.find(cname, "payomboy")) then
+                            local winFrame = nil
+                            for _, lbl in ipairs(child:GetDescendants()) do
+                                if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
+                                    local curr = lbl.Parent
+                                    while curr and curr ~= child do
+                                        if curr:IsA("Frame") and curr.AbsoluteSize.X >= 300 and curr.AbsoluteSize.X <= 800 then
+                                            winFrame = curr
+                                        end
+                                        curr = curr.Parent
+                                    end
+                                end
+                            end
+                            
+                            if winFrame then
+                                local scale = currentUIScale or 1
+                                local targetX = (viewport.X / 2) / scale - (winFrame.AbsoluteSize.X / scale / 2)
+                                local targetY = (viewport.Y / 2) / scale - (winFrame.AbsoluteSize.Y / scale / 2)
+                                winFrame.Position = UDim2.fromOffset(targetX, targetY)
+                                recovered = true
+                            end
+                        end
+                    end
+                end
+            end
+            if recovered and Fluent and Fluent.Notify then
+                Fluent:Notify({ Title = "UI Recovery", Content = "ดึง UI กลับมาตรงกลางแล้ว!", Duration = 3 })
+            end
+        end)
+    end
+end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if UserInputService:GetFocusedTextBox() then return end
