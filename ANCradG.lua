@@ -1405,7 +1405,12 @@ SmartBaseToggle:OnChanged(function(state)
                         for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
                             if desc:IsA("ProximityPrompt") then
                                 local txt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
-                                if not txt:find("SELL") and not txt:find("ขาย") and not txt:find("OPEN") and not txt:find("เปิด") and not txt:find("ARTIFACT") and not txt:find("อาร์ติแฟกต์") and not txt:find("SKIP") and not txt:find("ข้าม") and not txt:find("BOSS") and not txt:find("บอส") and not txt:find("MASTER") and not txt:find("ROBUX") and not txt:find("BUY") and not txt:find("PURCHASE") then
+                                local isIgnored = txt:find("SELL") or txt:find("ขาย") or txt:find("OPEN") or txt:find("เปิด") 
+                                    or txt:find("ARTIFACT") or txt:find("อาร์ติแฟกต์") or txt:find("SKIP") or txt:find("ข้าม") 
+                                    or txt:find("BOSS") or txt:find("บอส") or txt:find("MASTER") or txt:find("ROBUX") 
+                                    or txt:find("BUY") or txt:find("PURCHASE") or txt:find("LUCK") or txt:find("CASH") 
+                                    or txt:find("BOOST") or txt:find("GEMS") or txt:find("PASS") or txt:find("PREMIUM") or txt:find("VIP")
+                                if not isIgnored then
                                     local model = desc:FindFirstAncestorOfClass("Model")
                                     local score = -1 -- แท่นว่างให้คะแนน -1 เพื่อให้อยู่อันดับแรก
                                     
@@ -1505,17 +1510,21 @@ SmartBaseToggle:OnChanged(function(state)
                                         task.wait(0.5) -- รอเซิร์ฟเวอร์ sync
                                     end
                                     
-                                    -- หยิบแพ็คขึ้นมาถือ
+                                    -- หยิบแพ็คขึ้นมาถือ (เพิ่มดีเลย์ให้เซิร์ฟเวอร์รับรู้)
                                     char.Humanoid:EquipTool(packTool)
-                                    task.wait(0.2)
+                                    task.wait(0.5)
                                     
-                                    local isRemove = target.text:find("REMOVE") or target.text:find("ลบ")
+                                    local isRemove = target.text:find("REMOVE") or target.text:find("ลบ") or target.text:find("ถอด") or target.text:find("เอาออก") or target.text:find("เก็บ")
                                     if isRemove then
-                                        -- ถอนการ์ดเดิมออกก่อน
+                                        -- ถอนการ์ดเดิมออกก่อน (สแปมกดเผื่อติดคูลดาวน์)
                                         target.prompt.RequiresLineOfSight = false
                                         target.prompt.MaxActivationDistance = 99999
                                         target.prompt.HoldDuration = 0
-                                        fireproximityprompt(target.prompt)
+                                        for _ = 1, 4 do
+                                            if not target.prompt or not target.prompt.Parent then break end
+                                            fireproximityprompt(target.prompt)
+                                            task.wait(0.3)
+                                        end
                                         
                                         -- ค้นหา Prompt วางการ์ดอันใหม่ที่โผล่ขึ้นมาแทนที่
                                         local newPrompt = nil
@@ -1524,7 +1533,7 @@ SmartBaseToggle:OnChanged(function(state)
                                             for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
                                                 if desc:IsA("ProximityPrompt") then
                                                     local nTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or ""))
-                                                    if not nTxt:find("SELL") and not nTxt:find("OPEN") and not nTxt:find("REMOVE") then
+                                                    if not nTxt:find("SELL") and not nTxt:find("OPEN") and not nTxt:find("REMOVE") and not nTxt:find("ลบ") and not nTxt:find("ถอด") and not nTxt:find("เก็บ") then
                                                         local nPos
                                                         if desc.Parent:IsA("BasePart") then nPos = desc.Parent.Position
                                                         elseif desc.Parent:IsA("Attachment") then nPos = desc.Parent.WorldPosition end
@@ -1543,17 +1552,25 @@ SmartBaseToggle:OnChanged(function(state)
                                             newPrompt.RequiresLineOfSight = false
                                             newPrompt.MaxActivationDistance = 99999
                                             newPrompt.HoldDuration = 0
-                                            fireproximityprompt(newPrompt)
+                                            for _ = 1, 4 do
+                                                if not newPrompt or not newPrompt.Parent then break end
+                                                fireproximityprompt(newPrompt)
+                                                task.wait(0.3)
+                                            end
                                             task.wait(0.5)
                                         else
-                                            Fluent:Notify({ Title = "Smart Base", Content = "ไม่พบจุดวางการ์ด!", Duration = 3 })
+                                            Fluent:Notify({ Title = "Smart Base", Content = "ไม่พบจุดวางการ์ดหลังจากถอน!", Duration = 3 })
                                         end
                                     else
-                                        -- ถ้าเป็นแท่นว่างอยู่แล้ว วางได้เลย
+                                        -- ถ้าเป็นแท่นว่างอยู่แล้ว วางได้เลย (สแปมกดเผื่อไม่ติด)
                                         target.prompt.RequiresLineOfSight = false
                                         target.prompt.MaxActivationDistance = 99999
                                         target.prompt.HoldDuration = 0
-                                        fireproximityprompt(target.prompt)
+                                        for _ = 1, 4 do
+                                            if not target.prompt or not target.prompt.Parent then break end
+                                            fireproximityprompt(target.prompt)
+                                            task.wait(0.3)
+                                        end
                                         task.wait(0.5)
                                     end
                                     
@@ -2398,6 +2415,9 @@ local function collect4BestBaseCards()
                             or string.find(pText, "SKIP") or string.find(pText, "ข้าม")
                             or string.find(pText, "MASTER") or string.find(pText, "ROBUX")
                             or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
+                            or string.find(pText, "LUCK") or string.find(pText, "CASH")
+                            or string.find(pText, "BOOST") or string.find(pText, "GEMS")
+                            or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP")
                         
                         if not isIgnoredPrompt then
                             local model = desc:FindFirstAncestorOfClass("Model")
@@ -3994,10 +4014,24 @@ local function toggleFluentVisibility()
     for _, guiParent in ipairs(containers) do
         if guiParent then
             for _, child in ipairs(guiParent:GetChildren()) do
-                local cname = string.lower(child.Name)
-                if child:IsA("ScreenGui") and (string.find(cname, "fluent") or string.find(cname, "payomboy") or string.find(cname, "dexq") or child.Name == "PayomboyZ_UI" or child:FindFirstChildOfClass("UIScale")) then
-                    local uiScale = child:FindFirstChildOfClass("UIScale")
-                    if uiScale then
+                if child:IsA("ScreenGui") and child.Name ~= "PayomboyZ_MobileToggle" then
+                    local isFluent = false
+                    local cname = string.lower(child.Name)
+                    if string.find(cname, "fluent") or string.find(cname, "payomboy") or string.find(cname, "dexq") or child.Name == "PayomboyZ_UI" or child:FindFirstChildOfClass("UIScale") then
+                        isFluent = true
+                    end
+                    if not isFluent then
+                        for _, lbl in ipairs(child:GetDescendants()) do
+                            if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
+                                isFluent = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if isFluent then
+                        local uiScale = child:FindFirstChildOfClass("UIScale")
+                        if uiScale then
                         uiScale.Scale = 1 -- Reset scale before toggle to prevent drag math bugs
                     end
                     
@@ -4035,6 +4069,7 @@ local function toggleFluentVisibility()
                             end)
                         end)
                     end
+                    end -- End of if isFluent then
                 end
             end
         end
@@ -4052,7 +4087,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
                 if guiParent then
                     for _, child in ipairs(guiParent:GetChildren()) do
                         local cname = string.lower(child.Name)
-                        if child:IsA("ScreenGui") and (string.find(cname, "fluent") or string.find(cname, "payomboy")) then
+                        if child:IsA("ScreenGui") and child.Name ~= "PayomboyZ_MobileToggle" and (string.find(cname, "fluent") or string.find(cname, "payomboy")) then
                             local winFrame = nil
                             for _, lbl in ipairs(child:GetDescendants()) do
                                 if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
