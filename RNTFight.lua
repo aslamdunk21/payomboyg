@@ -25,23 +25,32 @@ local Window = Fluent:CreateWindow({
 task.spawn(function()
     local titleLabel
     local subLabel
+    local attempts = 0
 
     repeat
-        for _, v in ipairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextLabel") then
-                if v.Text == "Roll Anime to Fight! ⚔️" then
-                    titleLabel = v
-                    titleLabel.RichText = true
-                elseif v.Text == "Made by PayomboyZ HUB" then
-                    subLabel = v
-                    subLabel.RichText = true
+        attempts = attempts + 1
+        for _, gui in ipairs(CoreGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, v in ipairs(gui:GetDescendants()) do
+                    if v:IsA("TextLabel") then
+                        if not titleLabel and v.Text:find("Roll Anime to Fight!") then
+                            titleLabel = v
+                            titleLabel.RichText = true
+                        elseif not subLabel and v.Text:find("Made by PayomboyZ HUB") then
+                            subLabel = v
+                            subLabel.RichText = true
+                        end
+                    end
                 end
             end
         end
-        task.wait(0.2)
-    until titleLabel and subLabel
+        if not (titleLabel and subLabel) then
+            task.wait(1)
+        end
+    until (titleLabel and subLabel) or attempts > 10
 
-    while titleLabel.Parent and subLabel.Parent do
+    if titleLabel and subLabel then
+        while titleLabel.Parent and subLabel.Parent do
         local hue = (tick() * 0.15) % 1
         local color = Color3.fromHSV(hue, 1, 1)
 
@@ -66,6 +75,7 @@ task.spawn(function()
         )
 
         task.wait(0.1)
+        end
     end
 end)
 
@@ -1423,9 +1433,9 @@ statsFrame.InputEnded:Connect(function(input)
         if startClickPos then
             local dist = (input.Position - startClickPos).Magnitude
             if dist < 5 then
-                game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.K, false, game)
-                task.wait()
-                game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.K, false, game)
+                pcall(function()
+                    Window:Minimize()
+                end)
             end
         end
     end
