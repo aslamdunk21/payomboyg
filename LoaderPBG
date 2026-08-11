@@ -27,7 +27,10 @@ local GameRouter = {
 
     -- 5. Capybara Vs Plant (CvsP)
     [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua",
-    
+
+    -- 5. Mine a Mountain (MaM)
+    [125927821145949] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain",
+
     -- สคริปต์สำรอง (Default Fallback)
 }
 
