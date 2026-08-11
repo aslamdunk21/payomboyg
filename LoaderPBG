@@ -10,7 +10,80 @@ pcall(function()
     end
 end)
 
-local GameRouter = {
+-- 1. ดึงคีย์ที่ผู้เล่นใช้ล็อกอินเข้ามา (รับค่ามาจาก string.txt)
+local userKey = (getgenv and getgenv().PayomboyZ_InputKey) or (getgenv and getgenv().script_key) or _G.script_key or shared.script_key or script_key
+
+-- 2. รายชื่อคีย์ VVIP (ดึงมาจากไฟล์ VVIP.txt)
+local VVIP_Keys = {
+    ["HqknYxtQZPczCtbVnrrUDtpNVMLDltGD"] = true,
+    ["yujPUHfzAUMbnlHSntOpRQusYurkNddT"] = true,
+    ["GORsrIhgRhgyDhdYquLOprpkbvGRysBr"] = true,
+    ["JRWdnVlzGgfzHrmsuWvxFxGgnsHyGGFT"] = true,
+    ["yELxbVBEhjTWWYlWnGvHfniZpHStViIO"] = true,
+    ["VSeFXwAtdUYWBGDeKZlZxpGkFAdgrQhT"] = true,
+    ["iAItRFBkJvfHQgUZHINILuQETTggSrRq"] = true,
+    ["VQVwUTklAUqDHyNovBTCmOVbGVIpmEwr"] = true,
+    ["oijPBIQrSxSYalCcDtWBhACyoLXAnSiT"] = true,
+    ["NLjAVvrqqOKXPHMjxkuBRuPRiouuTHCC"] = true,
+    ["uUbslUWUairjTmEAeCWrhmzLdDhjbwCB"] = true,
+    ["dZYVyCOoOgaFpXTqtXZTcVWJMwxysGEO"] = true,
+    ["jkxJAwxUHZHUfBYqSowFZitDLOiawLOH"] = true,
+    ["PtrsOtkQkyRgAATtCxfcDjftguhfCWqx"] = true,
+    ["OxArSpxlPbHydCNNjvFsxnniWFGGpZML"] = true,
+    ["HoqjmILYMagFutPeTlLnuYxAtbAPBfrv"] = true,
+    ["TviFIvsragVtJvXmIZPjRiRAIeeUcIDX"] = true,
+    ["ICKCnYxGIfNyCFNQOFYzYKBZDgqYRaoT"] = true,
+    ["vlYCjYrGKGlolVqCLGyUFpsSOPAWvDmZ"] = true,
+    ["rdCiXNZVesEukfdmZNmwKakxUnvyPzSG"] = true,
+    ["aYjvVvfIXtUVQyZJiJexlbcJBTMXRdgN"] = true,
+    ["vvohbewdGWSQCjsGlFwilfvatDCotxOv"] = true,
+    ["MVYiPujXeXMFYEqkpJPqlfxJtsVYkIGb"] = true,
+    ["ZGYHzuxvtYxxeVRcPTpWmTFcsXqKgEVO"] = true,
+    ["iLqLSeCoNKySwNHsSBcgDQuQAKOtZTvA"] = true,
+    ["buvchOPdFtNihRfGNcjtcXBjLimaaWtz"] = true,
+    ["gpXalXChcOhalNRxssuuIucMmqzzybay"] = true,
+    ["GEyqIpYJSfmXdkhUrtcdubsxhuHRviJP"] = true,
+    ["pNheaNhLfAlsRRtQSAxAbjcVYSxRraOh"] = true,
+    ["HzMtCzzUSlgwVkzYbjRWaJeEtUMOCcxW"] = true,
+    ["hoKmLYUyRtMMNJLNwjogPTPCOVXmLArD"] = true,
+    ["VlsqgkkyejlOiqMfavcjamddyGYtURhX"] = true,
+    ["KBYyLLcEQzUHDVggsXquZMNcsUHtLLTt"] = true,
+    ["VEyjecRZeOhADkrGCsuqDRrcpyxTkWGn"] = true,
+    ["CIuTtEoaEPOxFgpMRjlXooKrVFBSWGLJ"] = true,
+    ["hakYUOoLolaLHZWWlYBhaomMFcPwgXFg"] = true,
+    ["vxdqnbUTmgSNiyjlRNwypVQUeMIqxyHU"] = true,
+    ["xCMqCFJuEsojinbNivFGPkwXhafLpePY"] = true,
+    ["EGLRdROrhdfjASXfqbDHZkkSqorFMBrR"] = true,
+    ["uYNnwazMltNYewQTEvagOdUwCSWrNxbq"] = true,
+    ["ZdTNoBsfGpFByERuxVgwDNUKwhkakHLa"] = true,
+    ["hQAAcHbFVIfeEMiRUWxjVHqaePtDxxYn"] = true,
+    ["KCTqiUvHYxvJojgwrPDBOQHbluxXxnKU"] = true,
+    ["NNrHMTaBPKnRtdCLguHDgYCnyxrHMaeG"] = true,
+    ["bKwzRKVcSqNjChoAzIkJcwdMdWQSmnTg"] = true,
+    ["IPrpOSMfclTgOTyNdoHxIikeIdgTKVWR"] = true,
+    ["oiormIFMDDEoMmzgZEuGtAqOoaDdwCXH"] = true,
+    ["eIOagmoVChWFlegzTvmOSkYgIVDjNVrw"] = true,
+    ["UduTWCWYglpiimFLxgFEUgPzEkVHIqOD"] = true,
+    ["qDurEFyFSKCJzoOXrWmHXxRbZdGxKESE"] = true,
+    ["NmxQoWchdoMFMLLrFaVEHpsfJtGcvayd"] = true,
+    ["XazKFjFriuIthHTKNPBEUJWIWMBoxsty"] = true,
+    ["DjeykJdfWuWJeMLoVGdtpNfHxZuKXCOc"] = true,
+    ["qsuaDgzhyaZgoAWjHEipkVazFyjaPKEt"] = true,
+    ["grpEZFPauiMXbaTxWJkUcwdecRHvxPku"] = true,
+    ["aZPslXDRsHMbPiGITYJXxxdHafbooJAn"] = true,
+    ["xjdRCeLWUqboosMXfMBmdaLggyOYjPNy"] = true,
+    ["vvHuPvWkUvcJyMFyJcuCreFcVrwcknRG"] = true,
+    ["wkzvmpFMQmGIEiTkAJIPMuQlwiRqpzYD"] = true,
+}
+
+-- เช็คว่าคีย์นี้เป็น VVIP หรือไม่
+local isVVIP = false
+if userKey and VVIP_Keys[userKey] then
+    isVVIP = true
+end
+
+-- 3. แมพทั่วไป (General Maps) - ทุกคนเล่นได้ 4 แมพ (รวม VVIP ด้วย)
+local NormalRouter = {
     -- 1. Attack On Titan Revolution (AOTR)
     [13379208636] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
     [14916516914] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
@@ -24,24 +97,37 @@ local GameRouter = {
 
     -- 4. Roll Anime To Fight (RATF)
     [107653945083776] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
-
-    -- 5. Capybara Vs Plant (CvsP)
-    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua",
-
-    -- 5. Mine a Mountain (MaM)
-    [125927821145949] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain",
-
-    -- 5. Master Mystery 2 (MM2)
-    [142823291] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua",
-
-    -- สคริปต์สำรอง (Default Fallback)
 }
 
--- ตรวจสอบ PlaceId ของเกมปัจจุบันและโหลดสคริปต์ประจำแมพนั้นๆ
-local placeId = game.PlaceId
-local scriptTarget = GameRouter[placeId] or GameRouter["Default"]
+-- 4. แมพ VVIP (Exclusive Maps) - เฉพาะคนที่มีคีย์ VVIP เท่านั้นเล่นได้ 3 แมพ
+local VVIPRouter = {
+    -- 1. Mine a Mountain (MaM)
+    [125927821145949] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain",
 
-if scriptTarget and scriptTarget ~= "" then
+    -- 2. Master Mystery 2 (MM2)
+    [142823291] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua",
+
+    -- 3. Capybara Vs Plant (CvsP)
+    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua",
+}
+
+-- 5. ตรวจสอบ PlaceId ของเกมปัจจุบันและดำเนินการรันสคริปต์
+local placeId = game.PlaceId
+local scriptTarget = NormalRouter[placeId]
+local vvipScriptTarget = VVIPRouter[placeId]
+
+if vvipScriptTarget then
+    -- หากเป็นแมพสำหรับ VVIP
+    if isVVIP then
+        -- ผ่าน! คีย์เป็น VVIP อนุญาตให้รัน
+        pcall(function()
+            loadstring(game:HttpGet(vvipScriptTarget))()
+        end)
+    else
+        -- ไม่ผ่าน! คีย์ไม่ใช่ VVIP แค่ไม่รันสคริปต์ (ผู้เล่นเล่นแมพได้ปกติแบบไม่มีสคริปต์)
+    end
+elseif scriptTarget then
+    -- หากเป็นแมพธรรมดา ทุกคนเล่นได้
     pcall(function()
         loadstring(game:HttpGet(scriptTarget))()
     end)
