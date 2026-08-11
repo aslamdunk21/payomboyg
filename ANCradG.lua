@@ -172,6 +172,20 @@ local function isLocked(name)
     return MutexLocks[name] == true
 end
 
+-- isCardLocked: ตรวจสอบว่าการ์ดถูก Favorite/Lock ไว้หรือเปล่า
+local function isCardLocked(tool)
+    if not tool then return false end
+    -- เช็ค attribute ที่เกมส่วนใหญ่ใช้
+    if tool:GetAttribute("Locked") == true then return true end
+    if tool:GetAttribute("Favorite") == true then return true end
+    if tool:GetAttribute("IsFavorite") == true then return true end
+    if tool:GetAttribute("FavoriteLock") == true then return true end
+    -- เช็คจาก BoolValue ข้างใน
+    local lockVal = tool:FindFirstChild("Locked") or tool:FindFirstChild("Favorite")
+    if lockVal and lockVal:IsA("BoolValue") and lockVal.Value == true then return true end
+    return false
+end
+
 
 
 -- Cross-Server Trade: File paths
@@ -2007,51 +2021,49 @@ AutoRerollToggle:OnChanged(function(state)
                         pcall(function() TraitRollRE:FireServer("Select", {Tool = cardTool}) end)
                         
                         local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll"
+                            cardTool, { Tool = cardTool }, { Card = cardTool },
+                            cId, { UUID = cId }, { Id = cId }, "Roll", "Reroll"
                         }
-                        
                         for _, arg in ipairs(rollArgs) do
                             pcall(function() TraitRollRE:FireServer(arg) end)
                             pcall(function() TraitRollRE:FireServer("Roll", arg) end)
                             pcall(function() TraitRollRE:FireServer("Reroll", arg) end)
                             pcall(function() TraitRollRE:FireServer(arg, "Roll") end)
                         end
-                        
-                        pcall(function() TraitRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() TraitRollRE:FireServer({Kind="Roll",Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Action="Roll",Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Command="Roll",Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Type="Roll",Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool=cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("Roll",{Tool=cardTool,Currency="Gems"}) end)
                     end
                     
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
+                    -- fallback: scan หา remote (cache ใน getgenv ไม่ต้องค้นซ้ำ)
+                    if getgenv().TraitRollRemoteCache == nil then
                         local rs = game:GetService("ReplicatedStorage")
+                        local found = {}
                         for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                if string.find(name, "roll") or string.find(name, "trait") then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                        end
-                                    end
+                            if obj:IsA("RemoteEvent") then
+                                local n = string.lower(obj.Name)
+                                if string.find(n,"roll") or string.find(n,"trait") then
+                                    table.insert(found, obj)
+                                end
+                            end
+                        end
+                        getgenv().TraitRollRemoteCache = found
+                    end
+                    local fallbackREs = getgenv().TraitRollRemoteCache
+                    if fallbackREs and #fallbackREs > 0 then
+                        local argsToTry = { cId, cardTool, {Card=cId}, {UUID=cId}, {Tool=cardTool} }
+                        for _, obj in ipairs(fallbackREs) do
+                            if obj ~= TraitRollRE then
+                                for _, arg in ipairs(argsToTry) do
+                                    pcall(function() obj:FireServer(arg) end)
                                 end
                             end
                         end
                     end
-                    fireAll(cId)
                     
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
@@ -2184,7 +2196,12 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end
                     
                     local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                    local RankRollRE = Remotes and (Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or Remotes:FindFirstChild("RollRankRE") or Remotes:FindFirstChild("RankRE") or Remotes:FindFirstChild("CardRankingRE") or Remotes:FindFirstChild("RankRerollRE") or Remotes:FindFirstChild("Rank"))
+                    local RankRollRE = Remotes and (
+                        Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or
+                        Remotes:FindFirstChild("RollRankRE") or Remotes:FindFirstChild("RankRE") or
+                        Remotes:FindFirstChild("CardRankingRE") or Remotes:FindFirstChild("RankRerollRE") or
+                        Remotes:FindFirstChild("Rank")
+                    )
                     
                     if RankRollRE and RankRollRE:IsA("RemoteEvent") then
                         pcall(function() RankRollRE:FireServer("Select", cardTool) end)
@@ -2193,18 +2210,9 @@ AutoRankRerollToggle:OnChanged(function(state)
                         pcall(function() RankRollRE:FireServer("Select", {Tool = cardTool}) end)
                         
                         local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll",
-                            "Rank",
-                            "Grade"
+                            cardTool, { Tool = cardTool }, { Card = cardTool },
+                            cId, { UUID = cId }, { Id = cId }, "Roll", "Reroll", "Rank", "Grade"
                         }
-                        
                         for _, arg in ipairs(rollArgs) do
                             pcall(function() RankRollRE:FireServer(arg) end)
                             pcall(function() RankRollRE:FireServer("Roll", arg) end)
@@ -2214,58 +2222,52 @@ AutoRankRerollToggle:OnChanged(function(state)
                             pcall(function() RankRollRE:FireServer(arg, "Rank") end)
                             pcall(function() RankRollRE:FireServer(arg, "Grade") end)
                         end
-                        
-                        pcall(function() RankRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollRank", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Rank", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer({Kind="Roll",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action="Roll",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Command="Roll",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Type="Roll",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind="Rank",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action="Rank",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind="Grade",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action="Grade",Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollRank", {Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollResult", {Tool=cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("Roll",{Tool=cardTool,Currency="Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Rank",{Tool=cardTool,Currency="Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Grade",{Tool=cardTool,Currency="Gems"}) end)
                     end
                     
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
-                        local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
+                    -- fallback: scan หา remote (cache ใน getgenv ไม่ต้องค้นซ้ำ)
+                    if getgenv().RankRollRemoteCache == nil then
+                        local kws = {"rank","ranking","upgrade","stat","boost","cashboost","cardroll","rollcard","rerollcard"}
                         local rs = game:GetService("ReplicatedStorage")
+                        local found = {}
                         for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
+                            if obj:IsA("RemoteEvent") then
+                                local n = string.lower(obj.Name)
                                 local match = false
-                                for _, kw in ipairs(keywords) do
-                                    if string.find(name, kw) then
-                                        match = true
-                                        break
-                                    end
+                                for _, kw in ipairs(kws) do
+                                    if string.find(n,kw) then match = true; break end
                                 end
-                                if match then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                            pcall(function() obj:FireServer("Roll", arg) end)
-                                            pcall(function() obj:FireServer("Rank", arg) end)
-                                        end
-                                    elseif obj:IsA("RemoteFunction") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                                        end
-                                    end
+                                if match then table.insert(found, obj) end
+                            end
+                        end
+                        getgenv().RankRollRemoteCache = found
+                    end
+                    local fallbackREs = getgenv().RankRollRemoteCache
+                    if fallbackREs and #fallbackREs > 0 then
+                        local argsToTry = { cId, cardTool, {Card=cId}, {UUID=cId}, {Tool=cardTool} }
+                        for _, obj in ipairs(fallbackREs) do
+                            if obj ~= RankRollRE then
+                                for _, arg in ipairs(argsToTry) do
+                                    pcall(function() obj:FireServer(arg) end)
+                                    pcall(function() obj:FireServer("Roll",arg) end)
+                                    pcall(function() obj:FireServer("Rank",arg) end)
                                 end
                             end
                         end
                     end
-                    fireAll(cId)
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
@@ -3056,9 +3058,40 @@ Tabs.Trade:AddButton({
     end
 })
 
+-- ฟังก์ชันสร้างรายการของจริงในกระเป๋า (Card + Pack) สำหรับ Trade
+local function GetInventoryCardsForTrade()
+    local inventory = {}
+    local function scanFolder(folder)
+        if not folder then return end
+        for _, item in ipairs(folder:GetChildren()) do
+            if item:IsA("Tool") then
+                local displayName = tostring(
+                    item:GetAttribute("CardName")
+                    or item:GetAttribute("TemplateName")
+                    or item.Name
+                )
+                local rarityAttr = getCardRank(item)
+                local mutation = getCardMutation(item)
+                local key = displayName .. " | " .. tostring(rarityAttr) .. " | " .. tostring(mutation)
+                inventory[key] = (inventory[key] or 0) + 1
+            end
+        end
+    end
+    pcall(function()
+        scanFolder(LocalPlayer:FindFirstChild("Backpack"))
+        if LocalPlayer.Character then scanFolder(LocalPlayer.Character) end
+    end)
+    local list = {}
+    for key, count in pairs(inventory) do
+        table.insert(list, key .. " (x" .. tostring(count) .. ")")
+    end
+    if #list == 0 then table.insert(list, "No cards found") end
+    return list
+end
+
 local TradeCardsDropdown = Tabs.Trade:AddDropdown("SelectedTradeCards", {
-    Title = "🃏 เลือกประเภทการ์ด/แพ็คที่จะเทรดอัตโนมัติ",
-    Values = PackRaritiesList,
+    Title = "🃏 เลือกการ์ดที่จะแลกเปลี่ยน",
+    Values = GetInventoryCardsForTrade(),
     Multi = true,
     Default = {}
 })
@@ -3073,6 +3106,14 @@ TradeCardsDropdown:OnChanged(function(Value)
         end
     end
 end)
+
+Tabs.Trade:AddButton({
+    Title = "🔄 รีเฟรชการ์ดในกระเป๋า",
+    Callback = function()
+        TradeCardsDropdown:SetValues(GetInventoryCardsForTrade())
+        Fluent:Notify({ Title = "แลกเปลี่ยน", Content = "รีเฟรชการ์ดสำเร็จ!", Duration = 3 })
+    end
+})
 
 local AutoGiftToggle = Tabs.Trade:AddToggle("AutoGiftCards", { Title = "🎁 ส่งการ์ด/เทรดอัตโนมัติ", Default = false })
 AutoGiftToggle:OnChanged(function(state)
@@ -3089,38 +3130,18 @@ AutoGiftToggle:OnChanged(function(state)
                         local function getGiftableTool()
                             local function isSelected(t)
                                 if not t:IsA("Tool") then return false end
-                                -- ป้องกันการ์ดที่ล็อกไว้ (Favorite Lock)
-                                if isCardLocked(t) then return false end
-                                -- ถ้าไม่ได้เลือกเฉพาะเจาะจง → ส่งการ์ดทุกอัน
                                 if not next(getgenv().SelectedTradeCards) then return true end
-                                
-                                local name = string.lower(t.Name or "")
-                                local displayName = string.lower(tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or ""))
-                                local r = string.lower(tostring(getCardRank(t)))
-                                local m = string.lower(tostring(getCardMutation(t)))
-                                
+                                local displayName = tostring(
+                                    t:GetAttribute("CardName")
+                                    or t:GetAttribute("TemplateName")
+                                    or t.Name
+                                )
+                                local key = displayName .. " | " .. tostring(getCardRank(t)) .. " | " .. tostring(getCardMutation(t))
                                 for selectedText, _ in pairs(getgenv().SelectedTradeCards) do
-                                    local kw = string.lower(selectedText)
-                                    if string.find(name, kw) or string.find(displayName, kw) or string.find(r, kw) or string.find(m, kw) then
-                                        return true
-                                    end
-                                    -- สำหรับแพ็ค ดูชื่อข้างใน UI
-                                    local hasMatch = false
-                                    pcall(function()
-                                        for _, desc in ipairs(t:GetDescendants()) do
-                                            if desc:IsA("TextLabel") and desc.Text then
-                                                if string.find(string.lower(desc.Text), kw) then
-                                                    hasMatch = true
-                                                    break
-                                                end
-                                            end
-                                        end
-                                    end)
-                                    if hasMatch then return true end
+                                    if selectedText:find(displayName, 1, true) or selectedText:find(key, 1, true) then return true end
                                 end
                                 return false
                             end
-
                             local backpack = LocalPlayer:FindFirstChild("Backpack")
                             if backpack then
                                 for _, t in ipairs(backpack:GetChildren()) do
@@ -4009,70 +4030,75 @@ UIScaleSlider:OnChanged(function(val)
     setUIScale(val)
 end)
 
-local function toggleFluentVisibility()
+-- หา Fluent ScreenGui (ไม่ cache เพื่อให้ reliable เสมอ)
+local function findFluentGui()
     local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
     for _, guiParent in ipairs(containers) do
         if guiParent then
             for _, child in ipairs(guiParent:GetChildren()) do
-                if child:IsA("ScreenGui") and child.Name ~= "PayomboyZ_MobileToggle" then
-                    local isFluent = false
+                if child:IsA("ScreenGui") and child.Name ~= "PayomboyZ_MobileToggle" and child.Name ~= "PayomboyZ_AFK" then
                     local cname = string.lower(child.Name)
-                    if string.find(cname, "fluent") or string.find(cname, "payomboy") or string.find(cname, "dexq") or child.Name == "PayomboyZ_UI" or child:FindFirstChildOfClass("UIScale") then
-                        isFluent = true
+                    -- 1. ตรวจจากชื่อ ScreenGui (วิธีเร็วที่สุด)
+                    if string.find(cname, "fluent") or string.find(cname, "payomboy") or string.find(cname, "dexq") then
+                        return child
                     end
-                    if not isFluent then
-                        for _, lbl in ipairs(child:GetDescendants()) do
-                            if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
-                                isFluent = true
-                                break
-                            end
-                        end
+                    -- 2. ตรวจจาก UIScale (Fluent ใส่ UIScale เสมอหลังเราแก้)
+                    if child:FindFirstChildOfClass("UIScale") then
+                        return child
                     end
-                    
-                    if isFluent then
-                        local uiScale = child:FindFirstChildOfClass("UIScale")
-                        if uiScale then
-                            uiScale.Scale = 1 -- Reset scale before toggle to prevent drag math bugs
-                        end
-                        
-                        child.Enabled = not child.Enabled
-                        
-                        if child.Enabled and uiScale then
-                            task.spawn(function()
-                                task.wait(0.1) -- Wait for absolute size to update
-                                uiScale.Scale = currentUIScale
-                                
-                                -- Fix UI getting stuck out of bounds
-                                pcall(function()
-                                    local viewport = workspace.CurrentCamera.ViewportSize
-                                    local winFrame = nil
-                                    for _, lbl in ipairs(child:GetDescendants()) do
-                                        if lbl:IsA("TextLabel") and lbl.Text:find("PayomboyZ") then
-                                            local curr = lbl.Parent
-                                            while curr and curr ~= child do
-                                                if curr:IsA("Frame") and curr.AbsoluteSize.X >= 300 and curr.AbsoluteSize.X <= 800 then
-                                                    winFrame = curr
-                                                end
-                                                curr = curr.Parent
-                                            end
-                                        end
-                                    end
-                                    
-                                    if winFrame then
-                                        if winFrame.AbsolutePosition.Y <= 40 or winFrame.AbsolutePosition.X <= -20 or winFrame.AbsolutePosition.X >= viewport.X - 100 or winFrame.AbsolutePosition.Y >= viewport.Y - 100 then
-                                            local scale = currentUIScale or 1
-                                            local targetX = (viewport.X / 2) / scale - (winFrame.AbsoluteSize.X / scale / 2)
-                                            local targetY = (viewport.Y / 2) / scale - (winFrame.AbsoluteSize.Y / scale / 2)
-                                            winFrame.Position = UDim2.fromOffset(targetX, targetY)
-                                        end
-                                    end
-                                end)
-                            end)
+                    -- 3. fallback: deep scan หา TextLabel ที่มี PayomboyZ
+                    for _, desc in ipairs(child:GetDescendants()) do
+                        if desc:IsA("TextLabel") and desc.Text and desc.Text:find("PayomboyZ") then
+                            return child
                         end
                     end
                 end
             end
         end
+    end
+    return nil
+end
+
+local function toggleFluentVisibility()
+    local child = findFluentGui()
+    if not child then return end
+
+    local uiScale = child:FindFirstChildOfClass("UIScale")
+    child.Enabled = not child.Enabled
+
+    if child.Enabled then
+        -- คืน scale หลัง enable
+        if uiScale then
+            uiScale.Scale = currentUIScale
+        end
+        -- ตรวจสอบ UI ออกนอกหน้าจอ
+        task.spawn(function()
+            task.wait(0.15)
+            pcall(function()
+                local viewport = workspace.CurrentCamera.ViewportSize
+                local winFrame = nil
+                -- หา frame หลักของ window (ค้นแค่ระดับแรกๆ)
+                for _, fr in ipairs(child:GetDescendants()) do
+                    if fr:IsA("Frame") and fr.AbsoluteSize.X >= 300 and fr.AbsoluteSize.X <= 800 and fr.AbsoluteSize.Y >= 200 then
+                        winFrame = fr
+                        break
+                    end
+                end
+                if winFrame then
+                    local pos = winFrame.AbsolutePosition
+                    local sz  = winFrame.AbsoluteSize
+                    local outOfBounds = pos.Y <= 36 or pos.X <= -20
+                        or pos.X + sz.X >= viewport.X + 20
+                        or pos.Y + sz.Y >= viewport.Y + 20
+                    if outOfBounds then
+                        local scale = currentUIScale or 1
+                        local tx = (viewport.X / 2) / scale - (sz.X / scale / 2)
+                        local ty = (viewport.Y / 2) / scale - (sz.Y / scale / 2)
+                        winFrame.Position = UDim2.fromOffset(math.max(0, tx), math.max(36, ty))
+                    end
+                end
+            end)
+        end)
     end
 end
 
@@ -4126,7 +4152,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         UIScaleSlider:SetValue(newScale)
         Fluent:Notify({ Title = "UI Scale", Content = "ปรับขนาด UI เป็น: " .. tostring(newScale), Duration = 2 })
     elseif input.KeyCode == Enum.KeyCode.K then
-        toggleFluentVisibility()
+        Window:Minimize()
     end
 end)
 
@@ -4302,7 +4328,7 @@ pcall(function()
     end)
 
     toggleWrapper.MouseButton1Click:Connect(function()
-        if toggleFluentVisibility then toggleFluentVisibility() end
+        Window:Minimize()
     end)
 end)
 
