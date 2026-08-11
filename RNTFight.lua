@@ -17,7 +17,7 @@ local Window = Fluent:CreateWindow({
     SubTitle = "Made by PayomboyZ HUB",
     TabWidth = 200,
     Size = UDim2.fromOffset(580, 400),
-    Acrylic = true,
+    Acrylic = false,
     Theme = "Rose",
     MinimizeKey = Enum.KeyCode.K
 })
@@ -35,10 +35,8 @@ task.spawn(function()
                     if v:IsA("TextLabel") then
                         if not titleLabel and v.Text:find("Roll Anime to Fight!") then
                             titleLabel = v
-                            titleLabel.RichText = true
                         elseif not subLabel and v.Text:find("Made by PayomboyZ HUB") then
                             subLabel = v
-                            subLabel.RichText = true
                         end
                     end
                 end
@@ -51,30 +49,15 @@ task.spawn(function()
 
     if titleLabel and subLabel then
         while titleLabel.Parent and subLabel.Parent do
-        local hue = (tick() * 0.15) % 1
-        local color = Color3.fromHSV(hue, 1, 1)
+            local fps = math.floor(workspace:GetRealPhysicsFPS())
+            local ping = 0
+            pcall(function()
+                ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+            end)
 
-        local r = math.floor(color.R * 255)
-        local g = math.floor(color.G * 255)
-        local b = math.floor(color.B * 255)
-        
-        local fps = math.floor(workspace:GetRealPhysicsFPS())
-        local ping = 0
-        pcall(function()
-            ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-        end)
-
-        titleLabel.Text = string.format(
-            '<b><font color="rgb(%d,%d,%d)">Roll Anime to Fight! ⚔️ | FPS: %d | Ping: %d</font></b>',
-            r, g, b, fps, ping
-        )
-
-        subLabel.Text = string.format(
-            '<b><font color="rgb(%d,%d,%d)">Made by PayomboyZ HUB 🌹</font></b>',
-            r, g, b
-        )
-
-        task.wait(0.1)
+            titleLabel.Text = string.format("Roll Anime to Fight! ⚔️ | FPS: %d | Ping: %d", fps, ping)
+            
+            task.wait(0.5)
         end
     end
 end)
@@ -90,7 +73,9 @@ StarterGui:SetCore("SendNotification", {
     Duration = 5
 })
 
-local MainTab = Window:AddTab({ Title = "หน้าหลัก", Icon = "pin" })
+local MainTab = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" })
+local FilterTab = Window:AddTab({ Title = "ตัวละคร", Icon = "users" })
+local UpgradeTab = Window:AddTab({ Title = "อัปเกรด", Icon = "trending-up" })
 local Setting = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
 local Options = Fluent.Options
 
@@ -368,6 +353,10 @@ local AutoBuyPlotEnabled = false
 local AutoSpinWheelEnabled = false
 local AutoClaimBattlepassEnabled = false
 local AutoClaimPremiumBattlepassEnabled = false
+local AutoUpgradeGoldEnabled = false
+local AutoUpgradeLuckEnabled = false
+local AutoUpgradeSlotsEnabled = false
+local AutoUpgradeInventoryEnabled = false
 local SelectedRarities = {}
 local SelectedMutations = {}
 local SelectedRarities2 = {}
@@ -407,6 +396,10 @@ local function saveConfig()
         AutoSpinWheel = getOptionValue("AutoSpinWheel", AutoSpinWheelEnabled),
         AutoClaimBattlepass = getOptionValue("AutoClaimBattlepass", AutoClaimBattlepassEnabled),
         AutoClaimPremiumBattlepass = getOptionValue("AutoClaimPremiumBattlepass", AutoClaimPremiumBattlepassEnabled),
+        AutoUpgradeGold = getOptionValue("AutoUpgradeGold", AutoUpgradeGoldEnabled),
+        AutoUpgradeLuck = getOptionValue("AutoUpgradeLuck", AutoUpgradeLuckEnabled),
+        AutoUpgradeSlots = getOptionValue("AutoUpgradeSlots", AutoUpgradeSlotsEnabled),
+        AutoUpgradeInventory = getOptionValue("AutoUpgradeInventory", AutoUpgradeInventoryEnabled),
     }
 
     local success, jsonString = pcall(function()
@@ -476,6 +469,10 @@ local function loadConfig()
     AutoSpinWheelEnabled = decoded.AutoSpinWheel == true
     AutoClaimBattlepassEnabled = decoded.AutoClaimBattlepass == true
     AutoClaimPremiumBattlepassEnabled = decoded.AutoClaimPremiumBattlepass == true
+    AutoUpgradeGoldEnabled = decoded.AutoUpgradeGold == true
+    AutoUpgradeLuckEnabled = decoded.AutoUpgradeLuck == true
+    AutoUpgradeSlotsEnabled = decoded.AutoUpgradeSlots == true
+    AutoUpgradeInventoryEnabled = decoded.AutoUpgradeInventory == true
 
     task.spawn(function()
         repeat
@@ -493,6 +490,10 @@ local function loadConfig()
             and Options.AutoSpinWheel
             and Options.AutoClaimBattlepass
             and Options.AutoClaimPremiumBattlepass
+            and Options.AutoUpgradeGold
+            and Options.AutoUpgradeLuck
+            and Options.AutoUpgradeSlots
+            and Options.AutoUpgradeInventory
 
         if decoded.Rarities1 ~= nil then
             Options.Rarities1:SetValue(decoded.Rarities1)
@@ -542,6 +543,22 @@ local function loadConfig()
 
         if decoded.AutoClaimPremiumBattlepass ~= nil then
             Options.AutoClaimPremiumBattlepass:SetValue(decoded.AutoClaimPremiumBattlepass)
+        end
+
+        if decoded.AutoUpgradeGold ~= nil then
+            Options.AutoUpgradeGold:SetValue(decoded.AutoUpgradeGold)
+        end
+
+        if decoded.AutoUpgradeLuck ~= nil then
+            Options.AutoUpgradeLuck:SetValue(decoded.AutoUpgradeLuck)
+        end
+
+        if decoded.AutoUpgradeSlots ~= nil then
+            Options.AutoUpgradeSlots:SetValue(decoded.AutoUpgradeSlots)
+        end
+
+        if decoded.AutoUpgradeInventory ~= nil then
+            Options.AutoUpgradeInventory:SetValue(decoded.AutoUpgradeInventory)
         end
     end)
 end
@@ -615,8 +632,8 @@ end
 local function rebuildTargetLookup()
     targetConfig = buildTargetConfig()
 end
-local Section = MainTab:AddSection("เลือกระดับยูนิตที่ต้องการ (Rarity)")
-local RarityDropdown1 = MainTab:AddDropdown("Rarities1", {
+local Section = FilterTab:AddSection("เลือกระดับยูนิตที่ต้องการ (Rarity)")
+local RarityDropdown1 = FilterTab:AddDropdown("Rarities1", {
     Title = "ระดับ 1 (Rarity 1)",
     Description = "เลือกระดับที่ต้องการ 1",
     Values = RarityValues,
@@ -624,7 +641,7 @@ local RarityDropdown1 = MainTab:AddDropdown("Rarities1", {
     Default = selectedToList(SelectedRarities, RarityValues),
 })
 
-local MutationDropdown1 = MainTab:AddDropdown("Mutations1", {
+local MutationDropdown1 = FilterTab:AddDropdown("Mutations1", {
     Title = "บัพ 1 (Mutation 1)",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
@@ -632,7 +649,7 @@ local MutationDropdown1 = MainTab:AddDropdown("Mutations1", {
     Default = selectedToList(SelectedMutations, MutationValues),
 })
 
-local RarityDropdown2 = MainTab:AddDropdown("Rarities2", {
+local RarityDropdown2 = FilterTab:AddDropdown("Rarities2", {
     Title = "ระดับ 2 (Rarity 2)",
     Description = "เลือกระดับที่ต้องการ 2",
     Values = RarityValues,
@@ -640,15 +657,15 @@ local RarityDropdown2 = MainTab:AddDropdown("Rarities2", {
     Default = selectedToList(SelectedRarities2, RarityValues),
 })
 
-local MutationDropdown2 = MainTab:AddDropdown("Mutations2", {
+local MutationDropdown2 = FilterTab:AddDropdown("Mutations2", {
     Title = "บัพ 2 (Mutation 2)",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
     Multi = true,
     Default = selectedToList(SelectedMutations2, MutationValues),
 })
-local Section = MainTab:AddSection("เลือกชื่อยูนิตที่ต้องการ (Name)")
-local NameDropdown3 = MainTab:AddDropdown("Names3", {
+local Section = FilterTab:AddSection("เลือกชื่อยูนิตที่ต้องการ (Name)")
+local NameDropdown3 = FilterTab:AddDropdown("Names3", {
     Title = "ชื่อ 1 (Name 1)",
     Description = "เลือกชื่อที่ต้องการ 1",
     Values = CharacterValues,
@@ -656,7 +673,7 @@ local NameDropdown3 = MainTab:AddDropdown("Names3", {
     Default = selectedToList(SelectedNames3, CharacterValues),
 })
 
-local MutationDropdown3 = MainTab:AddDropdown("Mutations3", {
+local MutationDropdown3 = FilterTab:AddDropdown("Mutations3", {
     Title = "บัพ 1 (Mutation 1)",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
@@ -664,7 +681,7 @@ local MutationDropdown3 = MainTab:AddDropdown("Mutations3", {
     Default = selectedToList(SelectedMutations3, MutationValues),
 })
 
-local NameDropdown4 = MainTab:AddDropdown("Names4", {
+local NameDropdown4 = FilterTab:AddDropdown("Names4", {
     Title = "ชื่อ 2 (Name 2)",
     Description = "เลือกชื่อที่ต้องการ 2",
     Values = CharacterValues,
@@ -672,7 +689,7 @@ local NameDropdown4 = MainTab:AddDropdown("Names4", {
     Default = selectedToList(SelectedNames4, CharacterValues),
 })
 
-local MutationDropdown4 = MainTab:AddDropdown("Mutations4", {
+local MutationDropdown4 = FilterTab:AddDropdown("Mutations4", {
     Title = "บัพ 2 (Mutation 2)",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
@@ -680,6 +697,7 @@ local MutationDropdown4 = MainTab:AddDropdown("Mutations4", {
     Default = selectedToList(SelectedMutations4, MutationValues),
 })
 
+local Section = MainTab:AddSection("ระบบออโต้หลัก (Main Auto)")
 local AutoBuyPlotToggle = MainTab:AddToggle("AutoBuyPlot", {
     Title = "ออโต้สุ่ม/ซื้อ (Auto Roll/Buy)",
     Description = "เปิดเพื่อเริ่มออโต้โรลและซื้อยูนิต",
@@ -702,6 +720,28 @@ local AutoClaimPremiumBattlepassToggle = MainTab:AddToggle("AutoClaimPremiumBatt
     Title = "ออโต้รับแบทเทิลพาส (พรีเมียม)",
     Description = "รับของรางวัลแบทเทิลพาส (พรีเมียม) อัตโนมัติ",
     Default = AutoClaimPremiumBattlepassEnabled,
+})
+
+local UpgradeSection = UpgradeTab:AddSection("ออโต้อัปเกรดด้วยเงิน (Gold Upgrades)")
+local AutoUpgradeGoldToggle = UpgradeTab:AddToggle("AutoUpgradeGold", {
+    Title = "อัปเกรดเงิน (Gold Upgrade)",
+    Description = "อัปเกรดเงินอัตโนมัติเมื่อมีเงินเพียงพอ",
+    Default = AutoUpgradeGoldEnabled,
+})
+local AutoUpgradeLuckToggle = UpgradeTab:AddToggle("AutoUpgradeLuck", {
+    Title = "อัปเกรดโชค (Luck Upgrade)",
+    Description = "อัปเกรดโชคอัตโนมัติเมื่อมีเงินเพียงพอ",
+    Default = AutoUpgradeLuckEnabled,
+})
+local AutoUpgradeSlotsToggle = UpgradeTab:AddToggle("AutoUpgradeSlots", {
+    Title = "อัปเกรดสล็อต (Slot Upgrade)",
+    Description = "อัปเกรดสล็อตอัตโนมัติเมื่อมีเงินเพียงพอ",
+    Default = AutoUpgradeSlotsEnabled,
+})
+local AutoUpgradeInventoryToggle = UpgradeTab:AddToggle("AutoUpgradeInventory", {
+    Title = "อัปเกรดช่องเก็บของ (Inventory Upgrade)",
+    Description = "อัปเกรดช่องเก็บของอัตโนมัติเมื่อมีเงินเพียงพอ",
+    Default = AutoUpgradeInventoryEnabled,
 })
 
 RarityDropdown1:OnChanged(function(value)
@@ -772,6 +812,26 @@ AutoClaimPremiumBattlepassToggle:OnChanged(function(value)
     saveConfig()
 end)
 
+AutoUpgradeGoldToggle:OnChanged(function(value)
+    AutoUpgradeGoldEnabled = value == true
+    saveConfig()
+end)
+
+AutoUpgradeLuckToggle:OnChanged(function(value)
+    AutoUpgradeLuckEnabled = value == true
+    saveConfig()
+end)
+
+AutoUpgradeSlotsToggle:OnChanged(function(value)
+    AutoUpgradeSlotsEnabled = value == true
+    saveConfig()
+end)
+
+AutoUpgradeInventoryToggle:OnChanged(function(value)
+    AutoUpgradeInventoryEnabled = value == true
+    saveConfig()
+end)
+
 RarityDropdown1:SetValue(selectedToList(SelectedRarities, RarityValues))
 MutationDropdown1:SetValue(selectedToList(SelectedMutations, MutationValues))
 RarityDropdown2:SetValue(selectedToList(SelectedRarities2, RarityValues))
@@ -784,7 +844,33 @@ AutoBuyPlotToggle:SetValue(AutoBuyPlotEnabled)
 AutoSpinWheelToggle:SetValue(AutoSpinWheelEnabled)
 AutoClaimBattlepassToggle:SetValue(AutoClaimBattlepassEnabled)
 AutoClaimPremiumBattlepassToggle:SetValue(AutoClaimPremiumBattlepassEnabled)
+AutoUpgradeGoldToggle:SetValue(AutoUpgradeGoldEnabled)
+AutoUpgradeLuckToggle:SetValue(AutoUpgradeLuckEnabled)
+AutoUpgradeSlotsToggle:SetValue(AutoUpgradeSlotsEnabled)
+AutoUpgradeInventoryToggle:SetValue(AutoUpgradeInventoryEnabled)
 rebuildTargetLookup()
+
+task.spawn(function()
+    local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Upgrade")
+    while task.wait(1.5) do
+        if AutoUpgradeGoldEnabled then
+            pcall(function() remote:FireServer("Gold", "Gold") end)
+            task.wait(0.2)
+        end
+        if AutoUpgradeLuckEnabled then
+            pcall(function() remote:FireServer("Gold", "Luck") end)
+            task.wait(0.2)
+        end
+        if AutoUpgradeSlotsEnabled then
+            pcall(function() remote:FireServer("Gold", "Slots") end)
+            task.wait(0.2)
+        end
+        if AutoUpgradeInventoryEnabled then
+            pcall(function() remote:FireServer("Gold", "Inventory") end)
+            task.wait(0.2)
+        end
+    end
+end)
 
 local function valuesSignature(values)
     return table.concat(values, "\31")
