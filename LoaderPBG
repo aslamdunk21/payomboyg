@@ -31,6 +31,9 @@ local GameRouter = {
     -- 5. Mine a Mountain (MaM)
     [125927821145949] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain",
 
+    -- 5. Master Mystery 2 (MM2)
+    [142823291] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua",
+
     -- สคริปต์สำรอง (Default Fallback)
 }
 
