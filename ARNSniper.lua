@@ -383,12 +383,34 @@ CloseBtn.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- ฟังก์ชันช่วย: ตรวจสอบทีม
+-- ฟังก์ชันช่วย: ตรวจสอบทีม (รองรับระบบทีมทุกรูปแบบของเกม)
 -- ==========================================
 local function isSameTeam(targetPlayer)
-    -- ถ้าไม่มีระบบทีม ให้ถือว่าเป็นศัตรูทั้งหมด
-    if not player.Team or not targetPlayer.Team then return false end
-    return player.Team == targetPlayer.Team
+    if not Settings.TeamCheck then return false end
+    if not targetPlayer then return false end
+    
+    -- 1. เช็คจาก Roblox Team Standard
+    if player.Team and targetPlayer.Team then
+        if player.Neutral or targetPlayer.Neutral then return false end
+        if player.Team.Name == "Neutral" or targetPlayer.Team.Name == "Neutral" then return false end
+        if player.Team == targetPlayer.Team then return true end
+    end
+    
+    -- 2. เช็คจาก TeamColor Standard
+    if player.TeamColor and targetPlayer.TeamColor and player.TeamColor == targetPlayer.TeamColor then
+        if player.TeamColor.Name ~= "White" and player.TeamColor.Name ~= "Medium stone grey" then
+            return true
+        end
+    end
+
+    -- 3. เช็คจาก Custom Team Attribute / Leaderstats ในตัวละครหรือผู้เล่น
+    local myTeamVal = player:FindFirstChild("Team") or (player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Team"))
+    local targetTeamVal = targetPlayer:FindFirstChild("Team") or (targetPlayer:FindFirstChild("leaderstats") and targetPlayer.leaderstats:FindFirstChild("Team"))
+    if myTeamVal and targetTeamVal and myTeamVal.Value == targetTeamVal.Value and tostring(myTeamVal.Value) ~= "" then
+        return true
+    end
+
+    return false
 end
 
 -- ==========================================
@@ -440,30 +462,37 @@ task.spawn(function()
                     end
 
                     -- 2. จัดการ Hitbox Expander (ขยายเป้ายิง)
-                    local root = char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        if not root:FindFirstChild("OrigSize") then
-                            local origSize = Instance.new("Vector3Value")
-                            origSize.Name = "OrigSize"
-                            origSize.Value = root.Size
-                            origSize.Parent = root
-                        end
-
-                        if Settings.HitboxExpander and not (Settings.TeamCheck and isSameTeam(p)) then
-                            local humanoid = char:FindFirstChildOfClass("Humanoid")
-                            if humanoid and humanoid.Health > 0 then
-                                root.Size = Vector3.new(5, 5, 5)
-                                root.Transparency = 0.7
-                                root.BrickColor = BrickColor.new("Hot pink")
-                                root.Material = Enum.Material.Neon
-                                root.CanCollide = false
-                            else
-                                root.Size = root.OrigSize.Value
-                                root.Transparency = 1
+                    if Settings.HitboxExpander and not isSameTeam(p) then
+                        local humanoid = char:FindFirstChildOfClass("Humanoid")
+                        if humanoid and humanoid.Health > 0 then
+                            for _, partName in ipairs({"HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso"}) do
+                                local part = char:FindFirstChild(partName)
+                                if part and part:IsA("BasePart") then
+                                    if not part:FindFirstChild("OrigSize") then
+                                        local origSize = Instance.new("Vector3Value")
+                                        origSize.Name = "OrigSize"
+                                        origSize.Value = part.Size
+                                        origSize.Parent = part
+                                    end
+                                    part.Size = Vector3.new(20, 20, 20)
+                                    part.Transparency = 0.96
+                                    part.Color = Color3.fromRGB(0, 170, 255)
+                                    part.Material = Enum.Material.SmoothPlastic
+                                    part.CanCollide = false
+                                end
                             end
-                        else
-                            root.Size = root.OrigSize.Value
-                            root.Transparency = 1
+                        end
+                    else
+                        for _, partName in ipairs({"HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso"}) do
+                            local part = char:FindFirstChild(partName)
+                            if part and part:IsA("BasePart") and part:FindFirstChild("OrigSize") then
+                                part.Size = part.OrigSize.Value
+                                if part.Name == "HumanoidRootPart" then
+                                    part.Transparency = 1
+                                else
+                                    part.Transparency = 0
+                                end
+                            end
                         end
                     end
                 end)
@@ -499,15 +528,26 @@ local function getClosestPlayerToCenter()
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
-            if Settings.TeamCheck and isSameTeam(p) then continue end
+            if isSameTeam(p) then continue end
             local char = p.Character
-            if char and char:FindFirstChild("Head") and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
-                local vector, onScreen = Camera:WorldToViewportPoint(char.Head.Position)
-                if onScreen then
-                    local dist = (Vector2.new(vector.X, vector.Y) - centerPos).Magnitude
-                    if dist < shortestDistance then
-                        shortestDistance = dist
-                        closestPlayer = p
+            if char and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
+                local rootPart = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+                if rootPart then
+                    local vector, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+                    if onScreen then
+                        local screenPos = Vector2.new(vector.X, vector.Y)
+                        local dist = (screenPos - centerPos).Magnitude
+                        
+                        -- หากเปิดขยาย Hitbox ให้คำนวณรัศมีกล่อง 20x20x20 บนหน้าจอ 2D
+                        if Settings.HitboxExpander and rootPart.Name == "HumanoidRootPart" then
+                            local estimatedRadius2D = (rootPart.Size.X * 12) / math.max(1, vector.Z)
+                            dist = math.max(0, dist - estimatedRadius2D)
+                        end
+
+                        if dist < shortestDistance then
+                            shortestDistance = dist
+                            closestPlayer = p
+                        end
                     end
                 end
             end
@@ -523,8 +563,11 @@ RunService.RenderStepped:Connect(function()
     
     if Settings.AimbotEnabled and aimbotting then
         local target = getClosestPlayerToCenter()
-        if target and target.Character and target.Character:FindFirstChild("Head") then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
+        if target and target.Character then
+            local aimTarget = target.Character:FindFirstChild("HumanoidRootPart") or target.Character:FindFirstChild("Head")
+            if aimTarget then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, aimTarget.Position)
+            end
         end
     end
 
@@ -552,16 +595,27 @@ RunService.RenderStepped:Connect(function()
     local myCharacter = player.Character
     local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
 
-    for targetPlayer, line in pairs(tracers) do
+    -- อัปเดต ESP รายคนโดยอิงจาก Players:GetPlayers() สดๆ เสมอ
+    for _, targetPlayer in ipairs(Players:GetPlayers()) do
+        if targetPlayer == player then continue end
+
+        -- ป้องกัน missing tracer/label ถ้าพึ่งเข้ามา
+        if not tracers[targetPlayer] or not espLabels[targetPlayer] then
+            createTracer(targetPlayer)
+        end
+
+        local line = tracers[targetPlayer]
+        local label = espLabels[targetPlayer]
+        if not line or not label then continue end
+
         -- ตรวจสอบ Team Check
-        if Settings.TeamCheck and isSameTeam(targetPlayer) then
+        if isSameTeam(targetPlayer) then
             line.Visible = false
-            if espLabels[targetPlayer] then espLabels[targetPlayer].Visible = false end
+            label.Visible = false
             continue
         end
 
         local character = targetPlayer.Character
-        -- ตรวจสอบครบก่อนใช้งาน (แก้บัค nil Humanoid)
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 
@@ -574,7 +628,7 @@ RunService.RenderStepped:Connect(function()
             -- ซ่อนถ้าเกินระยะที่กำหนด
             if worldDist > Settings.MaxDistance then
                 line.Visible = false
-                if espLabels[targetPlayer] then espLabels[targetPlayer].Visible = false end
+                label.Visible = false
                 continue
             end
 
@@ -595,20 +649,17 @@ RunService.RenderStepped:Connect(function()
                 line.Visible = true
 
                 -- อัปเดต label ชื่อ + ระยะทาง
-                local label = espLabels[targetPlayer]
-                if label then
-                    label.Position = UDim2.new(0, vector.X, 0, vector.Y - 5)
-                    label.Text = targetPlayer.Name .. "\n" .. math.floor(worldDist) .. " studs"
-                    label.TextColor3 = tracerColor
-                    label.Visible = true
-                end
+                label.Position = UDim2.new(0, vector.X, 0, vector.Y - 5)
+                label.Text = targetPlayer.Name .. "\n" .. math.floor(worldDist) .. " studs"
+                label.TextColor3 = tracerColor
+                label.Visible = true
             else
                 line.Visible = false
-                if espLabels[targetPlayer] then espLabels[targetPlayer].Visible = false end
+                label.Visible = false
             end
         else
             line.Visible = false
-            if espLabels[targetPlayer] then espLabels[targetPlayer].Visible = false end
+            label.Visible = false
         end
     end
 end)
