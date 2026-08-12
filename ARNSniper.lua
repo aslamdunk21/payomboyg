@@ -23,7 +23,7 @@ local Settings = {
 
 -- ==========================================
 -- สร้าง UI หลัก
--- ==========================================
+-- ==========================================์
 -- ลบ UI เก่าถ้ามีอยู่แล้ว (ป้องกันซ้ำซ้อนเมื่อ execute หลายครั้ง)
 local oldUI = (game:GetService("CoreGui") or player.PlayerGui):FindFirstChild("PayomboyZ")
 if oldUI then oldUI:Destroy() end
@@ -193,6 +193,7 @@ FOVGui.Parent = UI.Parent
 local FOVFrame = Instance.new("Frame")
 FOVFrame.BackgroundTransparency = 1
 FOVFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 FOVFrame.Size = UDim2.new(0, Settings.FOVRadius * 2, 0, Settings.FOVRadius * 2)
 FOVFrame.Visible = Settings.ShowFOV
 local FOVCorner = Instance.new("UICorner")
@@ -480,21 +481,21 @@ local aimbotting = false
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+    if input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.Touch then
         aimbotting = true
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+    if input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.Touch then
         aimbotting = false
     end
 end)
 
-local function getClosestPlayerToCursor()
+local function getClosestPlayerToCenter()
     local closestPlayer = nil
     local shortestDistance = Settings.FOVRadius
-    local mousePos = UserInputService:GetMouseLocation()
+    local centerPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player then
@@ -503,7 +504,7 @@ local function getClosestPlayerToCursor()
             if char and char:FindFirstChild("Head") and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
                 local vector, onScreen = Camera:WorldToViewportPoint(char.Head.Position)
                 if onScreen then
-                    local dist = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
+                    local dist = (Vector2.new(vector.X, vector.Y) - centerPos).Magnitude
                     if dist < shortestDistance then
                         shortestDistance = dist
                         closestPlayer = p
@@ -517,12 +518,11 @@ end
 
 RunService.RenderStepped:Connect(function()
     if Settings.ShowFOV and FOVFrame then
-        local mousePos = UserInputService:GetMouseLocation()
-        FOVFrame.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
+        FOVFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     end
     
     if Settings.AimbotEnabled and aimbotting then
-        local target = getClosestPlayerToCursor()
+        local target = getClosestPlayerToCenter()
         if target and target.Character and target.Character:FindFirstChild("Head") then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Character.Head.Position)
         end
