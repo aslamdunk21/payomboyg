@@ -7,11 +7,33 @@ local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+while not player do
+    task.wait(0.1)
+    player = Players.LocalPlayer
+end
+local playerGui = player:WaitForChild("PlayerGui", 15) or player.PlayerGui
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+local function safeHttpGet(url, name)
+    local content = nil
+    for i = 1, 5 do
+        local success, result = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if success and result and result ~= "" and not result:find("Curl error") then
+            content = result
+            break
+        end
+        task.wait(1)
+    end
+    if not content then
+        error("Failed to load dependency: " .. tostring(name) .. " after 5 attempts. Check your internet connection or executor.")
+    end
+    return content
+end
+
+local Fluent = loadstring(safeHttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua", "Fluent"))()
+local SaveManager = loadstring(safeHttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/SaveManager.lua", "SaveManager"))()
+local InterfaceManager = loadstring(safeHttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua", "InterfaceManager"))()
 local Window = Fluent:CreateWindow({
     Title = "Roll Anime to Fight! ⚔️",
     SubTitle = "Made by PayomboyZ HUB",
@@ -55,17 +77,10 @@ task.spawn(function()
     until (titleLabel and subLabel) or attempts > 10
 
     if titleLabel and subLabel then
-        while titleLabel.Parent and subLabel.Parent do
-            local fps = math.floor(workspace:GetRealPhysicsFPS())
-            local ping = 0
-            pcall(function()
-                ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-            end)
-
-            titleLabel.Text = string.format("Roll Anime to Fight! ⚔️ | FPS: %d | Ping: %d", fps, ping)
-            
-            task.wait(0.5)
-        end
+        titleLabel.RichText = true
+        subLabel.RichText = true
+        titleLabel.Text = '<b><font color="rgb(255,100,100)">Roll Anime to Fight! ⚔️</font></b>'
+        subLabel.Text = '<b><font color="rgb(200,200,200)">Made by PayomboyZ HUB</font></b>'
     end
 end)
 
@@ -82,7 +97,6 @@ StarterGui:SetCore("SendNotification", {
 
 local MainTab = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" })
 local FilterTab = Window:AddTab({ Title = "ตัวละคร", Icon = "users" })
-local UpgradeTab = Window:AddTab({ Title = "อัปเกรด", Icon = "trending-up" })
 local Setting = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
 local Options = Fluent.Options
 
@@ -235,21 +249,21 @@ local function getCharacterValues()
         end
     end
 
-    local plots = workspace:FindFirstChild("Plots")
-    if plots then
-        for _, plot in ipairs(plots:GetChildren()) do
-            local characters = plot:FindFirstChild("Characters")
-            if characters then
-                for _, model in ipairs(characters:GetChildren()) do
-                    if model:IsA("Model") then
-                        addWorkspaceModelName(model)
+    if not next(values) then
+        local plots = workspace:FindFirstChild("Plots")
+        if plots then
+            for _, plot in ipairs(plots:GetChildren()) do
+                local characters = plot:FindFirstChild("Characters")
+                if characters then
+                    for _, model in ipairs(characters:GetChildren()) do
+                        if model:IsA("Model") then
+                            addWorkspaceModelName(model)
+                        end
                     end
                 end
             end
         end
     end
-
-    if not next(values) then
         for _, name in ipairs(CharacterFallbackValues) do
             values[name] = true
         end
@@ -361,10 +375,6 @@ local RollDelay = 0.8
 local AutoSpinWheelEnabled = false
 local AutoClaimBattlepassEnabled = false
 local AutoClaimPremiumBattlepassEnabled = false
-local AutoUpgradeGoldEnabled = false
-local AutoUpgradeLuckEnabled = false
-local AutoUpgradeSlotsEnabled = false
-local AutoUpgradeInventoryEnabled = false
 local SelectedRarities = {}
 local SelectedMutations = {}
 local SelectedRarities2 = {}
@@ -405,10 +415,6 @@ local function saveConfig()
         AutoSpinWheel = getOptionValue("AutoSpinWheel", AutoSpinWheelEnabled),
         AutoClaimBattlepass = getOptionValue("AutoClaimBattlepass", AutoClaimBattlepassEnabled),
         AutoClaimPremiumBattlepass = getOptionValue("AutoClaimPremiumBattlepass", AutoClaimPremiumBattlepassEnabled),
-        AutoUpgradeGold = getOptionValue("AutoUpgradeGold", AutoUpgradeGoldEnabled),
-        AutoUpgradeLuck = getOptionValue("AutoUpgradeLuck", AutoUpgradeLuckEnabled),
-        AutoUpgradeSlots = getOptionValue("AutoUpgradeSlots", AutoUpgradeSlotsEnabled),
-        AutoUpgradeInventory = getOptionValue("AutoUpgradeInventory", AutoUpgradeInventoryEnabled),
     }
 
     local success, jsonString = pcall(function()
@@ -481,10 +487,6 @@ local function loadConfig()
     AutoSpinWheelEnabled = decoded.AutoSpinWheel == true
     AutoClaimBattlepassEnabled = decoded.AutoClaimBattlepass == true
     AutoClaimPremiumBattlepassEnabled = decoded.AutoClaimPremiumBattlepass == true
-    AutoUpgradeGoldEnabled = decoded.AutoUpgradeGold == true
-    AutoUpgradeLuckEnabled = decoded.AutoUpgradeLuck == true
-    AutoUpgradeSlotsEnabled = decoded.AutoUpgradeSlots == true
-    AutoUpgradeInventoryEnabled = decoded.AutoUpgradeInventory == true
 
     task.spawn(function()
         repeat
@@ -503,10 +505,6 @@ local function loadConfig()
             and Options.AutoSpinWheel
             and Options.AutoClaimBattlepass
             and Options.AutoClaimPremiumBattlepass
-            and Options.AutoUpgradeGold
-            and Options.AutoUpgradeLuck
-            and Options.AutoUpgradeSlots
-            and Options.AutoUpgradeInventory
 
         if decoded.Rarities1 ~= nil then
             Options.Rarities1:SetValue(decoded.Rarities1)
@@ -562,21 +560,6 @@ local function loadConfig()
             Options.AutoClaimPremiumBattlepass:SetValue(decoded.AutoClaimPremiumBattlepass)
         end
 
-        if decoded.AutoUpgradeGold ~= nil then
-            Options.AutoUpgradeGold:SetValue(decoded.AutoUpgradeGold)
-        end
-
-        if decoded.AutoUpgradeLuck ~= nil then
-            Options.AutoUpgradeLuck:SetValue(decoded.AutoUpgradeLuck)
-        end
-
-        if decoded.AutoUpgradeSlots ~= nil then
-            Options.AutoUpgradeSlots:SetValue(decoded.AutoUpgradeSlots)
-        end
-
-        if decoded.AutoUpgradeInventory ~= nil then
-            Options.AutoUpgradeInventory:SetValue(decoded.AutoUpgradeInventory)
-        end
     end)
 end
 
@@ -747,27 +730,7 @@ local AutoClaimPremiumBattlepassToggle = MainTab:AddToggle("AutoClaimPremiumBatt
     Default = AutoClaimPremiumBattlepassEnabled,
 })
 
-local UpgradeSection = UpgradeTab:AddSection("ออโต้อัปเกรดด้วยเงิน (Gold Upgrades)")
-local AutoUpgradeGoldToggle = UpgradeTab:AddToggle("AutoUpgradeGold", {
-    Title = "อัปเกรดเงิน (Gold Upgrade)",
-    Description = "อัปเกรดเงินอัตโนมัติเมื่อมีเงินเพียงพอ",
-    Default = AutoUpgradeGoldEnabled,
-})
-local AutoUpgradeLuckToggle = UpgradeTab:AddToggle("AutoUpgradeLuck", {
-    Title = "อัปเกรดโชค (Luck Upgrade)",
-    Description = "อัปเกรดโชคอัตโนมัติเมื่อมีเงินเพียงพอ",
-    Default = AutoUpgradeLuckEnabled,
-})
-local AutoUpgradeSlotsToggle = UpgradeTab:AddToggle("AutoUpgradeSlots", {
-    Title = "อัปเกรดสล็อต (Slot Upgrade)",
-    Description = "อัปเกรดสล็อตอัตโนมัติเมื่อมีเงินเพียงพอ",
-    Default = AutoUpgradeSlotsEnabled,
-})
-local AutoUpgradeInventoryToggle = UpgradeTab:AddToggle("AutoUpgradeInventory", {
-    Title = "อัปเกรดช่องเก็บของ (Inventory Upgrade)",
-    Description = "อัปเกรดช่องเก็บของอัตโนมัติเมื่อมีเงินเพียงพอ",
-    Default = AutoUpgradeInventoryEnabled,
-})
+
 
 RarityDropdown1:OnChanged(function(value)
     SelectedRarities = normalizeMultiValue(value, RarityValues)
@@ -842,26 +805,6 @@ AutoClaimPremiumBattlepassToggle:OnChanged(function(value)
     saveConfig()
 end)
 
-AutoUpgradeGoldToggle:OnChanged(function(value)
-    AutoUpgradeGoldEnabled = value == true
-    saveConfig()
-end)
-
-AutoUpgradeLuckToggle:OnChanged(function(value)
-    AutoUpgradeLuckEnabled = value == true
-    saveConfig()
-end)
-
-AutoUpgradeSlotsToggle:OnChanged(function(value)
-    AutoUpgradeSlotsEnabled = value == true
-    saveConfig()
-end)
-
-AutoUpgradeInventoryToggle:OnChanged(function(value)
-    AutoUpgradeInventoryEnabled = value == true
-    saveConfig()
-end)
-
 RarityDropdown1:SetValue(selectedToList(SelectedRarities, RarityValues))
 MutationDropdown1:SetValue(selectedToList(SelectedMutations, MutationValues))
 RarityDropdown2:SetValue(selectedToList(SelectedRarities2, RarityValues))
@@ -875,33 +818,7 @@ RollDelaySlider:SetValue(RollDelay)
 AutoSpinWheelToggle:SetValue(AutoSpinWheelEnabled)
 AutoClaimBattlepassToggle:SetValue(AutoClaimBattlepassEnabled)
 AutoClaimPremiumBattlepassToggle:SetValue(AutoClaimPremiumBattlepassEnabled)
-AutoUpgradeGoldToggle:SetValue(AutoUpgradeGoldEnabled)
-AutoUpgradeLuckToggle:SetValue(AutoUpgradeLuckEnabled)
-AutoUpgradeSlotsToggle:SetValue(AutoUpgradeSlotsEnabled)
-AutoUpgradeInventoryToggle:SetValue(AutoUpgradeInventoryEnabled)
 rebuildTargetLookup()
-
-task.spawn(function()
-    local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Upgrade")
-    while task.wait(2.0) do
-        if AutoUpgradeGoldEnabled then
-            pcall(function() remote:FireServer("Gold", "Gold") end)
-            task.wait(0.3)
-        end
-        if AutoUpgradeLuckEnabled then
-            pcall(function() remote:FireServer("Gold", "Luck") end)
-            task.wait(0.3)
-        end
-        if AutoUpgradeSlotsEnabled then
-            pcall(function() remote:FireServer("Gold", "Slots") end)
-            task.wait(0.3)
-        end
-        if AutoUpgradeInventoryEnabled then
-            pcall(function() remote:FireServer("Gold", "Inventory") end)
-            task.wait(0.3)
-        end
-    end
-end)
 
 local function valuesSignature(values)
     return table.concat(values, "\31")
@@ -948,7 +865,7 @@ local function refreshDynamicValues()
 end
 
 task.spawn(function()
-    while task.wait(30) do
+    while task.wait(120) do
         refreshDynamicValues()
     end
 end)
@@ -975,7 +892,7 @@ task.spawn(function()
         return num or 0
     end
 
-    while task.wait(0.2) do
+    while task.wait(1) do
         if not AutoSpinWheelEnabled then
             running = false
             continue
@@ -989,6 +906,7 @@ task.spawn(function()
             end
 
             remote:FireServer("Spin")
+            task.wait(2)
         else
             running = false
         end
@@ -1012,7 +930,7 @@ task.spawn(function()
         :WaitForChild("Battlepass")
         :WaitForChild("Claim")
 
-    while task.wait(1) do
+    while task.wait(5) do
         if not AutoClaimBattlepassEnabled then
             continue
         end
@@ -1057,7 +975,7 @@ task.spawn(function()
         :WaitForChild("Battlepass")
         :WaitForChild("Claim")
 
-    while task.wait(1) do
+    while task.wait(5) do
         if not AutoClaimPremiumBattlepassEnabled then
             continue
         end
@@ -1105,50 +1023,21 @@ local function normalizeKey(value)
     return key
 end
 
-local function getAttributes(model)
-    local ok, attributes = pcall(function()
-        return model:GetAttributes()
-    end)
-
-    if ok and type(attributes) == "table" then
-        return attributes
-    end
-
-    return {}
-end
-
 local function getModelMutation(model)
-    local attributes = getAttributes(model)
-    local mutation = attributes.Mutation
-    if mutation == nil or tostring(mutation) == "" then
+    local ok, mutation = pcall(function() return model:GetAttribute("Mutation") end)
+    if not ok or mutation == nil or tostring(mutation) == "" then
         return "Normal"
     end
-
     return mutation
 end
 
 local function getRarityLabel(model)
     local head = model:FindFirstChild("Head")
     local buyUI = head and head:FindFirstChild("BuyUI")
-    local frame = buyUI and buyUI:FindFirstChild("Frame")
-    local chance = frame and frame:FindFirstChild("Chance")
-    local label = chance and chance:FindFirstChild("TextLabel")
-
-    if label and label:IsA("TextLabel") then
-        return label
+    if buyUI then
+        local chance = buyUI:FindFirstChild("Chance", true)
+        if chance then return chance:FindFirstChildWhichIsA("TextLabel") end
     end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local fallbackChance = fallbackBuyUI:FindFirstChild("Chance", true)
-        if fallbackChance then
-            label = fallbackChance:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
     return nil
 end
 
@@ -1167,25 +1056,10 @@ end
 local function getCharacterNameLabel(model)
     local head = model:FindFirstChild("Head")
     local buyUI = head and head:FindFirstChild("BuyUI")
-    local frame = buyUI and buyUI:FindFirstChild("Frame")
-    local nameFrame = frame and frame:FindFirstChild("Name")
-    local label = nameFrame and nameFrame:FindFirstChild("TextLabel")
-
-    if label and label:IsA("TextLabel") then
-        return label
+    if buyUI then
+        local nameFrame = buyUI:FindFirstChild("Name", true)
+        if nameFrame then return nameFrame:FindFirstChildWhichIsA("TextLabel") end
     end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local fallbackName = fallbackBuyUI:FindFirstChild("Name", true)
-        if fallbackName then
-            label = fallbackName:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
     return nil
 end
 
@@ -1224,8 +1098,8 @@ local function getModelCharacterNameAliases(model)
 end
 
 local function hasAttackAttribute(model)
-    local attributes = getAttributes(model)
-    return attributes.Attack ~= nil
+    local ok, attack = pcall(function() return model:GetAttribute("Attack") end)
+    return ok and attack ~= nil
 end
 
 local function isBoughtCharacterModel(model, scanRoot)
@@ -1320,73 +1194,20 @@ end
 local function getPriceLabel(model)
     local head = model:FindFirstChild("Head")
     local buyUI = head and head:FindFirstChild("BuyUI")
-
     if buyUI then
-        local frame = buyUI:FindFirstChild("Frame")
-        local price = frame and frame:FindFirstChild("Price")
-        local label = price and price:FindFirstChild("TextLabel")
-
-        if label and label:IsA("TextLabel") then
-            return label
-        end
+        local price = buyUI:FindFirstChild("Price", true)
+        if price then return price:FindFirstChildWhichIsA("TextLabel") end
     end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local price = fallbackBuyUI:FindFirstChild("Price", true)
-        if price then
-            local label = price:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
     return nil
 end
 
 local function findPrompt(root)
-    if not root then
-        return nil
-    end
-
-    local direct = root:FindFirstChildOfClass("ProximityPrompt")
-    if direct then return direct end
-
-    local buyUI = root:FindFirstChild("BuyUI") or root:FindFirstChild("Head")
+    if not root then return nil end
+    local head = root:FindFirstChild("Head")
+    local buyUI = head and head:FindFirstChild("BuyUI")
     if buyUI then
-        local prompt = buyUI:FindFirstChildOfClass("ProximityPrompt")
-            or (buyUI:FindFirstChild("BuyUI") and buyUI.BuyUI:FindFirstChildOfClass("ProximityPrompt"))
-        if prompt then
-            return prompt
-        end
+        return buyUI:FindFirstChildWhichIsA("ProximityPrompt", true) or root:FindFirstChildWhichIsA("ProximityPrompt", true)
     end
-
-    local buyUIFallback = root:FindFirstChild("BuyUI", true)
-    if buyUIFallback then
-        local prompt = buyUIFallback:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prompt then
-            return prompt
-        end
-    end
-
-    local preferredPromptNames = {
-        "BuyPrompt",
-        "PlacementPrompt",
-        "RollPrompt",
-        "GiftPrompt",
-        "ProximityPrompt",
-        "Prox",
-        "Prompt",
-    }
-
-    for _, name in ipairs(preferredPromptNames) do
-        local inst = root:FindFirstChild(name, true)
-        if inst and inst:IsA("ProximityPrompt") then
-            return inst
-        end
-    end
-
     return root:FindFirstChildWhichIsA("ProximityPrompt", true)
 end
 
@@ -1452,6 +1273,11 @@ local function getBuyCandidates(plot)
     local models = scanRoot == plot and scanRoot:GetDescendants() or scanRoot:GetChildren()
     for _, inst in ipairs(models) do
         if inst:IsA("Model") then
+            local head = inst:FindFirstChild("Head")
+            if not head or not head:FindFirstChild("BuyUI") then
+                continue
+            end
+
             if isBoughtCharacterModel(inst, scanRoot) then
                 continue
             end
@@ -1460,7 +1286,7 @@ local function getBuyCandidates(plot)
             local prompt = findPrompt(inst)
             local targetIndex, characterName, mutation = getTargetIndex(inst)
 
-            if priceLabel and prompt and targetIndex then
+            if priceLabel and prompt and prompt.Enabled and targetIndex then
                 local price = parseMoney(priceLabel.Text)
                 if price then
                     local entry = {
@@ -1524,7 +1350,7 @@ if myPlot then
 
             if not state.buying and not boughtOrBlocked then
                 local rollPrompt = getRollPrompt(myPlot)
-                if rollPrompt then
+                if rollPrompt and rollPrompt.Enabled then
                     firePrompt(rollPrompt)
                     task.wait(RollDelay)
                 end
@@ -1533,179 +1359,7 @@ if myPlot then
     end)
 end
 
-local SettingSection = Setting:AddSection("ระบบแสดงผลบนหน้าจอ (Stats HUD)")
 
-local statsGui = Instance.new("ScreenGui")
-statsGui.Name = "PayomboyZStats"
-statsGui.ResetOnSpawn = false
-statsGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-statsGui.Parent = CoreGui
-
-local statsFrame = Instance.new("Frame")
-statsFrame.Name = "MainFrame"
-statsFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-statsFrame.BackgroundTransparency = 0.3
-statsFrame.BorderSizePixel = 0
-statsFrame.Position = UDim2.new(0.5, -100, 0, 10)
-statsFrame.Size = UDim2.new(0, 200, 0, 75)
-statsFrame.Active = true
-statsFrame.Draggable = true
-statsFrame.Parent = statsGui
-
-local startClickPos = nil
-statsFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        startClickPos = input.Position
-    end
-end)
-
-statsFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        if startClickPos then
-            local dist = (input.Position - startClickPos).Magnitude
-            if dist < 5 then
-                pcall(function()
-                    Window:Minimize()
-                end)
-            end
-        end
-    end
-end)
-
-local uicorner = Instance.new("UICorner")
-uicorner.CornerRadius = UDim.new(0, 8)
-uicorner.Parent = statsFrame
-
-local uistroke = Instance.new("UIStroke")
-uistroke.Color = Color3.fromRGB(255, 0, 127)
-uistroke.Thickness = 1.5
-uistroke.Parent = statsFrame
-
-local listLayout = Instance.new("UIListLayout")
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.FillDirection = Enum.FillDirection.Horizontal
-listLayout.Padding = UDim.new(0, 15)
-listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-listLayout.Parent = statsFrame
-
-local padding = Instance.new("UIPadding")
-padding.PaddingLeft = UDim.new(0, 15)
-padding.PaddingRight = UDim.new(0, 15)
-padding.PaddingTop = UDim.new(0, 10)
-padding.PaddingBottom = UDim.new(0, 10)
-padding.Parent = statsFrame
-
-local avatarImg = Instance.new("ImageLabel")
-avatarImg.Name = "Avatar"
-avatarImg.Size = UDim2.new(0, 50, 0, 50)
-avatarImg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-avatarImg.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. player.UserId .. "&width=420&height=420&format=png"
-avatarImg.Parent = statsFrame
-
-local avatarCorner = Instance.new("UICorner")
-avatarCorner.CornerRadius = UDim.new(1, 0)
-avatarCorner.Parent = avatarImg
-
-local textContainer = Instance.new("Frame")
-textContainer.Name = "TextContainer"
-textContainer.BackgroundTransparency = 1
-textContainer.Size = UDim2.new(1, -65, 1, 0)
-textContainer.Parent = statsFrame
-
-local textLayout = Instance.new("UIListLayout")
-textLayout.SortOrder = Enum.SortOrder.LayoutOrder
-textLayout.Padding = UDim.new(0, 5)
-textLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-textLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-textLayout.Parent = textContainer
-
-local function createLabel(name, text)
-    local lbl = Instance.new("TextLabel")
-    lbl.Name = name
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(1, 0, 0, 15)
-    lbl.Font = Enum.Font.GothamBold
-    lbl.Text = text
-    lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-    lbl.TextSize = 13
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = textContainer
-    return lbl
-end
-
-local fpsLbl = createLabel("FPS", "FPS: 0")
-local pingLbl = createLabel("Ping", "Ping: 0 ms")
-local idLbl = createLabel("ID", "ID: " .. tostring(player.UserId))
-
-local ShowFPS = true
-local ShowPing = true
-local ShowID = true
-
-local function updateStatsUI()
-    fpsLbl.Visible = ShowFPS
-    pingLbl.Visible = ShowPing
-    idLbl.Visible = ShowID
-    
-    local visibleCount = 0
-    if ShowFPS then visibleCount += 1 end
-    if ShowPing then visibleCount += 1 end
-    if ShowID then visibleCount += 1 end
-    
-    if visibleCount == 0 then
-        statsFrame.Visible = false
-    else
-        statsFrame.Visible = true
-        local textHeight = (visibleCount * 15) + ((visibleCount - 1) * 5)
-        local frameHeight = math.max(50, textHeight) + 20
-        statsFrame.Size = UDim2.new(0, 220, 0, frameHeight)
-    end
-end
-
-updateStatsUI()
-
-task.spawn(function()
-    while task.wait(0.5) do
-        if ShowFPS then
-            fpsLbl.Text = "FPS: " .. math.floor(workspace:GetRealPhysicsFPS())
-        end
-        if ShowPing then
-            local ping = 0
-            pcall(function() ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()) end)
-            pingLbl.Text = "Ping: " .. ping .. " ms"
-        end
-    end
-end)
-
-local FPSToggleUI = Setting:AddToggle("ShowFPS_UI", {
-    Title = "แสดง FPS",
-    Description = "แสดงค่าเฟรมเรตบนหน้าจอ",
-    Default = ShowFPS
-})
-FPSToggleUI:OnChanged(function(v)
-    ShowFPS = v
-    updateStatsUI()
-end)
-
-local PingToggleUI = Setting:AddToggle("ShowPing_UI", {
-    Title = "แสดง Ping",
-    Description = "แสดงค่าปิงบนหน้าจอ",
-    Default = ShowPing
-})
-PingToggleUI:OnChanged(function(v)
-    ShowPing = v
-    updateStatsUI()
-end)
-
-local IDToggleUI = Setting:AddToggle("ShowID_UI", {
-    Title = "แสดง Check ID",
-    Description = "แสดง User ID บนหน้าจอ",
-    Default = ShowID
-})
-IDToggleUI:OnChanged(function(v)
-    ShowID = v
-    updateStatsUI()
-end)
 
 Setting:AddSection("จัดการระบบส่วนหลัง (System Config)")
 
