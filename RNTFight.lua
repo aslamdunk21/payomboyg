@@ -31,9 +31,9 @@ local function safeHttpGet(url, name)
     return content
 end
 
-local Fluent = loadstring(safeHttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua", "Fluent"))()
-local SaveManager = loadstring(safeHttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/SaveManager.lua", "SaveManager"))()
-local InterfaceManager = loadstring(safeHttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua", "InterfaceManager"))()
+local Fluent = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/main.lua", "Fluent"))()
+local SaveManager = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua", "SaveManager"))()
+local InterfaceManager = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua", "InterfaceManager"))()
 local Window = Fluent:CreateWindow({
     Title = "Roll Anime to Fight! ⚔️",
     SubTitle = "Made by PayomboyZ HUB",
