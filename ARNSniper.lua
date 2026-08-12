@@ -18,12 +18,15 @@ local Settings = {
     HighlightESP = false,
     AimbotEnabled = false,
     ShowFOV = false,
-    FOVRadius = 150
+    FOVRadius = 150,
+    Noclip = false,    -- เดินทะลุกำแพง (Noclip)
+    SpeedHack = false, -- เดินเร็ว (Speed)
+    WalkSpeed = 32     -- ความเร็วเดิน (studs/s)
 }
 
 -- ==========================================
 -- สร้าง UI หลัก
--- ==========================================์
+-- ==========================================
 -- ลบ UI เก่าถ้ามีอยู่แล้ว (ป้องกันซ้ำซ้อนเมื่อ execute หลายครั้ง)
 local oldUI = (game:GetService("CoreGui") or player.PlayerGui):FindFirstChild("PayomboyZ")
 if oldUI then oldUI:Destroy() end
@@ -44,8 +47,8 @@ UI.Parent = success and coreGui or player:WaitForChild("PlayerGui")
 -- ==========================================
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 420, 0, 270)
-MainFrame.Position = UDim2.new(0.5, -210, 0.5, -65)
+MainFrame.Size = UDim2.new(0, 420, 0, 310)
+MainFrame.Position = UDim2.new(0.5, -210, 0.5, -155)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -133,13 +136,18 @@ StatsLabel.TextXAlignment = Enum.TextXAlignment.Right
 StatsLabel.Parent = MainFrame
 
 -- ==========================================
--- กรอบเนื้อหา (Content)
+-- กรอบเนื้อหา (Content - Scrolling)
 -- ==========================================
-local Content = Instance.new("Frame")
+local Content = Instance.new("ScrollingFrame")
 Content.Name = "Content"
-Content.Size = UDim2.new(1, -20, 1, -55)
-Content.Position = UDim2.new(0, 10, 0, 50)
+Content.Size = UDim2.new(1, -10, 1, -55)
+Content.Position = UDim2.new(0, 5, 0, 50)
 Content.BackgroundTransparency = 1
+Content.BorderSizePixel = 0
+Content.ScrollBarThickness = 4
+Content.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
+Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Content.Parent = MainFrame
 
 local UIGridLayout = Instance.new("UIGridLayout")
@@ -171,6 +179,72 @@ local function createToggle(name, text, defaultValue, callback)
         callback(state)
     end)
     return btn
+end
+
+-- ==========================================
+-- ฟังก์ชันสร้างแถบปรับความเร็ว (Speed Adjuster)
+-- ==========================================
+local function createSpeedControl()
+    local container = Instance.new("Frame")
+    container.Name = "SpeedControlContainer"
+    container.Size = UDim2.new(0, 185, 0, 38)
+    container.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    container.Parent = Content
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
+
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Name = "MinusBtn"
+    minusBtn.Size = UDim2.new(0, 32, 1, -8)
+    minusBtn.Position = UDim2.new(0, 4, 0, 4)
+    minusBtn.BackgroundColor3 = Color3.fromRGB(70, 40, 40)
+    minusBtn.Text = "-"
+    minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 16
+    minusBtn.Parent = container
+    Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 6)
+
+    local displayLabel = Instance.new("TextLabel")
+    displayLabel.Name = "DisplayLabel"
+    displayLabel.Size = UDim2.new(1, -76, 1, 0)
+    displayLabel.Position = UDim2.new(0, 38, 0, 0)
+    displayLabel.BackgroundTransparency = 1
+    displayLabel.Text = "ความเร็ว\n⚡ " .. Settings.WalkSpeed
+    displayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    displayLabel.Font = Enum.Font.GothamSemibold
+    displayLabel.TextSize = 11
+    displayLabel.Parent = container
+
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Name = "PlusBtn"
+    plusBtn.Size = UDim2.new(0, 32, 1, -8)
+    plusBtn.Position = UDim2.new(1, -36, 0, 4)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(40, 70, 40)
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 16
+    plusBtn.Parent = container
+    Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 6)
+
+    local function updateDisplay()
+        displayLabel.Text = "ความเร็ว\n⚡ " .. Settings.WalkSpeed
+        pcall(function()
+            if Settings.SpeedHack and player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+                player.Character.Humanoid.WalkSpeed = Settings.WalkSpeed
+            end
+        end)
+    end
+
+    minusBtn.MouseButton1Click:Connect(function()
+        Settings.WalkSpeed = math.max(16, Settings.WalkSpeed - 4)
+        updateDisplay()
+    end)
+
+    plusBtn.MouseButton1Click:Connect(function()
+        Settings.WalkSpeed = math.min(150, Settings.WalkSpeed + 4)
+        updateDisplay()
+    end)
 end
 
 -- ==========================================
@@ -350,6 +424,21 @@ createToggle("FOVToggle", "⭕ แสดงวงกลม FOV", Settings.ShowFO
     if FOVFrame then FOVFrame.Visible = state end
 end)
 
+createToggle("NoclipToggle", "🏃 เดินทะลุกำแพง", Settings.Noclip, function(state)
+    Settings.Noclip = state
+end)
+
+createToggle("SpeedToggle", "⚡ เปิดเดินเร็ว", Settings.SpeedHack, function(state)
+    Settings.SpeedHack = state
+    pcall(function()
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            player.Character.Humanoid.WalkSpeed = state and Settings.WalkSpeed or 16
+        end
+    end)
+end)
+
+createSpeedControl()
+
 -- ==========================================
 -- ปุ่ม Minimize และ Close
 -- ==========================================
@@ -499,6 +588,33 @@ task.spawn(function()
             end
         end
     end
+end)
+
+-- ==========================================
+-- ลูปทำงานเบื้องหลัง: เดินทะลุกำแพง (Noclip) & เดินเร็ว (Speed)
+-- ==========================================
+RunService.Stepped:Connect(function()
+    pcall(function()
+        local char = player.Character
+        if char then
+            -- 1. Noclip (เดินทะลุกำแพง)
+            if Settings.Noclip then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            
+            -- 2. SpeedHack (เดินเร็ว)
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                if Settings.SpeedHack then
+                    humanoid.WalkSpeed = Settings.WalkSpeed
+                end
+            end
+        end
+    end)
 end)
 
 -- ==========================================
