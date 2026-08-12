@@ -25,7 +25,7 @@ local Window = fluentLibrary:CreateWindow({
     SubTitle = "คาปิบาร่า vs ต้นไม้",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
-    Acrylic = true, -- เปิดโหมดโปร่งแสง (กระจก)
+    Acrylic = false, -- ปิด Acrylic เพื่อลดอาการกระตุกและ FPS Drop
     Theme = "Light", -- ธีมสว่าง สบายตา พร้อมสีแดงตัด
     MinimizeKey = Enum.KeyCode.LeftControl
 })
@@ -48,8 +48,12 @@ local eggDropdown = shopTab:AddDropdown("SelectEgg", {
     Multi = false,
     Default = 1,
 })
+local lastEggStockCheck = 0
+local cachedEggStock = 0
+
 eggDropdown:OnChanged(function(Value)
     selectedEgg = Value
+    lastEggStockCheck = 0 -- รีเซ็ตการเช็คสต็อกเมื่อเปลี่ยนไอเทม
 end)
 
 getgenv().autoBuyEggsEnabled = false
@@ -63,15 +67,23 @@ buyEggToggle:OnChanged(function(Value)
 end)
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         if getgenv().autoBuyEggsEnabled and selectedEgg ~= "" then
-            local totalStock, usedStock = requestPersonalStockRemote:InvokeServer()
-            if totalStock and usedStock then
-                local availableStock = math.max(0, (totalStock[selectedEgg] or 0) - (usedStock[selectedEgg] or 0))
-                if availableStock > 0 then
-                    buyItemRemote:FireServer(selectedEgg)
+            pcall(function()
+                -- ดึงข้อมูลสต็อกทุกๆ 10 วิ แทนการดึงทุกรอบ (แก้ปัญหากระตุกจาก InvokeServer)
+                if tick() - lastEggStockCheck > 10 then
+                    local totalStock, usedStock = requestPersonalStockRemote:InvokeServer()
+                    if totalStock and usedStock then
+                        cachedEggStock = math.max(0, (totalStock[selectedEgg] or 0) - (usedStock[selectedEgg] or 0))
+                    end
+                    lastEggStockCheck = tick()
                 end
-            end
+
+                if cachedEggStock > 0 then
+                    buyItemRemote:FireServer(selectedEgg)
+                    cachedEggStock = cachedEggStock - 1
+                end
+            end)
         end
     end
 end)
@@ -94,8 +106,12 @@ local gearDropdown = shopTab:AddDropdown("SelectGear", {
     Multi = false,
     Default = 1,
 })
+local lastGearStockCheck = 0
+local cachedGearStock = 0
+
 gearDropdown:OnChanged(function(Value)
     selectedGear = Value
+    lastGearStockCheck = 0
 end)
 
 getgenv().autoBuyGearsEnabled = false
@@ -109,15 +125,22 @@ buyGearToggle:OnChanged(function(Value)
 end)
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         if getgenv().autoBuyGearsEnabled and selectedGear ~= "" then
-            local totalStock, usedStock = requestPersonalStockRemote:InvokeServer()
-            if totalStock and usedStock then
-                local availableStock = math.max(0, (totalStock[selectedGear] or 0) - (usedStock[selectedGear] or 0))
-                if availableStock > 0 then
-                    buyItemRemote:FireServer(selectedGear)
+            pcall(function()
+                if tick() - lastGearStockCheck > 10 then
+                    local totalStock, usedStock = requestPersonalStockRemote:InvokeServer()
+                    if totalStock and usedStock then
+                        cachedGearStock = math.max(0, (totalStock[selectedGear] or 0) - (usedStock[selectedGear] or 0))
+                    end
+                    lastGearStockCheck = tick()
                 end
-            end
+
+                if cachedGearStock > 0 then
+                    buyItemRemote:FireServer(selectedGear)
+                    cachedGearStock = cachedGearStock - 1
+                end
+            end)
         end
     end
 end)
@@ -142,8 +165,12 @@ local merchantDropdown = shopTab:AddDropdown("SelectMerchant", {
     Multi = false,
     Default = 1,
 })
+local lastMerchantStockCheck = 0
+local cachedMerchantStock = 0
+
 merchantDropdown:OnChanged(function(Value)
     selectedMerchant = Value
+    lastMerchantStockCheck = 0
 end)
 
 getgenv().autoBuyMerchantEnabled = false
@@ -157,15 +184,22 @@ buyMerchantToggle:OnChanged(function(Value)
 end)
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         if getgenv().autoBuyMerchantEnabled and selectedMerchant ~= "" then
-            local merchantName, totalStock, usedStock = requestMerchantStockRemote:InvokeServer()
-            if totalStock and usedStock then
-                local availableStock = math.max(0, (totalStock[selectedMerchant] or 0) - (usedStock[selectedMerchant] or 0))
-                if availableStock > 0 then
-                    buyMerchantItemRemote:FireServer(selectedMerchant)
+            pcall(function()
+                if tick() - lastMerchantStockCheck > 10 then
+                    local merchantName, totalStock, usedStock = requestMerchantStockRemote:InvokeServer()
+                    if totalStock and usedStock then
+                        cachedMerchantStock = math.max(0, (totalStock[selectedMerchant] or 0) - (usedStock[selectedMerchant] or 0))
+                    end
+                    lastMerchantStockCheck = tick()
                 end
-            end
+
+                if cachedMerchantStock > 0 then
+                    buyMerchantItemRemote:FireServer(selectedMerchant)
+                    cachedMerchantStock = cachedMerchantStock - 1
+                end
+            end)
         end
     end
 end)
@@ -200,7 +234,9 @@ end)
 task.spawn(function()
     while task.wait(60) do
         if getgenv().autoEquipBestEnabled then
-            equipBestPlantsRemote:FireServer()
+            pcall(function()
+                equipBestPlantsRemote:FireServer()
+            end)
         end
     end
 end)
@@ -208,27 +244,28 @@ end)
 task.spawn(function()
     while task.wait(2) do
         if getgenv().autoHatchEnabled then
-            local worldFolder = workspace:FindFirstChild("World")
-            local mapFolder = worldFolder and worldFolder:FindFirstChild("Map")
-            local placedItemsFolder = mapFolder and mapFolder:FindFirstChild("PlacedItems")
-            local placedItemsServer = placedItemsFolder and placedItemsFolder:FindFirstChild("Server")
-            
-            if placedItemsServer then
-                for _, itemModel in ipairs(placedItemsServer:GetChildren()) do
-                    if itemModel:IsA("Model") then
-                        local serverConfiguration = itemModel:FindFirstChild("ServerConfiguration")
-                        if serverConfiguration then
-                            local typeValue = serverConfiguration:FindFirstChild("Type")
-                            local hatchPercentageValue = serverConfiguration:FindFirstChild("HatchPercentage")
-                            
-                            if typeValue and typeValue.Value == "Egg" and hatchPercentageValue and hatchPercentageValue.Value >= 100 then
-                                hatchRemote:FireServer(itemModel.Name)
-                                task.wait(0.1)
+            pcall(function()
+                local worldFolder = workspace:FindFirstChild("World")
+                local mapFolder = worldFolder and worldFolder:FindFirstChild("Map")
+                local placedItemsFolder = mapFolder and mapFolder:FindFirstChild("PlacedItems")
+                local placedItemsServer = placedItemsFolder and placedItemsFolder:FindFirstChild("Server")
+                
+                if placedItemsServer then
+                    for _, itemModel in ipairs(placedItemsServer:GetChildren()) do
+                        if itemModel:IsA("Model") then
+                            local serverConfiguration = itemModel:FindFirstChild("ServerConfiguration")
+                            if serverConfiguration then
+                                local typeValue = serverConfiguration:FindFirstChild("Type")
+                                local hatchPercentageValue = serverConfiguration:FindFirstChild("HatchPercentage")
+                                
+                                if typeValue and typeValue.Value == "Egg" and hatchPercentageValue and hatchPercentageValue.Value >= 100 then
+                                    hatchRemote:FireServer(itemModel.Name)
+                                end
                             end
                         end
                     end
                 end
-            end
+            end)
         end
     end
 end)
@@ -282,8 +319,10 @@ end)
 task.spawn(function()
     while task.wait(1) do
         if getgenv().autoSpawnBossEnabled and selectedBoss ~= "" then
-            summonBossRemote:InvokeServer("Summon", selectedBoss)
-            task.wait(spawnInterval - 1)
+            pcall(function()
+                summonBossRemote:InvokeServer("Summon", selectedBoss)
+            end)
+            task.wait(math.max(0, spawnInterval - 1))
         end
     end
 end)
@@ -312,7 +351,9 @@ end)
 task.spawn(function()
     while task.wait(5) do
         if getgenv().autoSellAllEnabled then
-            sellRemote:FireServer("bulkSell", "Plant")
+            pcall(function()
+                sellRemote:FireServer("bulkSell", "Plant")
+            end)
         end
     end
 end)
