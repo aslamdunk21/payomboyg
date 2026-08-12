@@ -1,107 +1,71 @@
-local CoreGui = gethui and gethui() or game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-while not player do
-    task.wait(0.1)
-    player = Players.LocalPlayer
-end
+while not player do task.wait(0.1); player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui", 15) or player.PlayerGui
 
-local function safeHttpGet(url, name)
-    local content = nil
-    for i = 1, 5 do
-        local success, result = pcall(function()
-            return game:HttpGet(url)
-        end)
-        if success and result and result ~= "" and not result:find("Curl error") then
-            content = result
-            break
-        end
-        task.wait(1)
-    end
-    if not content then
-        error("Failed to load dependency: " .. tostring(name) .. " after 5 attempts. Check your internet connection or executor.")
-    end
-    return content
-end
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
-local Fluent = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/main.lua", "Fluent"))()
-local SaveManager = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua", "SaveManager"))()
-local InterfaceManager = loadstring(safeHttpGet("https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua", "InterfaceManager"))()
-local Window = Fluent:CreateWindow({
-    Title = "Roll Anime to Fight! ⚔️",
-    SubTitle = "Made by PayomboyZ HUB",
-    TabWidth = 200,
-    Size = UDim2.fromOffset(580, 400),
-    Acrylic = false,
-    Theme = "Rose",
-    MinimizeKey = Enum.KeyCode.K
+WindUI:AddTheme({
+    Name = "Dark",
+    Accent = Color3.fromHex("#18181b"),
+    Background = Color3.fromHex("#101010"),
+    Outline = Color3.fromHex("#FFFFFF"),
+    Text = Color3.fromHex("#FFFFFF"),
+    Placeholder = Color3.fromHex("#7a7a7a"),
+    Button = Color3.fromHex("#52525b"),
+    Icon = Color3.fromHex("#a1a1aa"),
 })
 
-task.spawn(function()
-    local titleLabel
-    local subLabel
-    local attempts = 0
+local Window = WindUI:CreateWindow({
+    Title = "Roll Anime to Fight! ⚔️",
+    Author = "by PayomboyZ HUB",
+    Folder = "PayomboyZ",
+    Icon = "swords",
+    Theme = "Dark",
+    Acrylic = true,
+    Transparent = true,
+    Size = UDim2.fromOffset(620, 440),
+    MinSize = Vector2.new(560, 350),
+    ToggleKey = Enum.KeyCode.K,
+    Resizable = true,
+    AutoScale = true,
+    NewElements = true,
+    ScrollBarEnabled = false,
+    SideBarWidth = 180,
+    Topbar = { Height = 44, ButtonsType = "Default" },
+    OpenButton = {
+        Title = "Roll Anime",
+        Icon = "swords",
+        CornerRadius = UDim.new(1, 0),
+        StrokeThickness = 3,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = false,
+    },
+    User = { Enabled = true, Anonymous = false },
+})
 
-    repeat
-        attempts = attempts + 1
-        local fluentGui = nil
-        for _, gui in ipairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and (gui.Name:find("Fluent") or gui.Name:find("ScreenGui")) then
-                fluentGui = gui
-                break
-            end
-        end
-        
-        if fluentGui then
-            for _, v in ipairs(fluentGui:GetDescendants()) do
-                if v:IsA("TextLabel") then
-                    if not titleLabel and v.Text:find("Roll Anime to Fight!") then
-                        titleLabel = v
-                    elseif not subLabel and v.Text:find("Made by PayomboyZ HUB") then
-                        subLabel = v
-                    end
-                end
-            end
-        end
-        
-        if not (titleLabel and subLabel) then
-            task.wait(1)
-        end
-    until (titleLabel and subLabel) or attempts > 10
-
-    if titleLabel and subLabel then
-        titleLabel.RichText = true
-        subLabel.RichText = true
-        titleLabel.Text = '<b><font color="rgb(255,100,100)">Roll Anime to Fight! ⚔️</font></b>'
-        subLabel.Text = '<b><font color="rgb(200,200,200)">Made by PayomboyZ HUB</font></b>'
-    end
-end)
+WindUI:SetNotificationLower(true)
 
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
-StarterGui:SetCore("SendNotification", {
-    Title = "PayomboyZ HUB",
-    Text = "AntiAFK Active",
-    Duration = 5
-})
-
-local MainTab = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" })
-local FilterTab = Window:AddTab({ Title = "ตัวละคร", Icon = "users" })
-local Setting = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
-local Options = Fluent.Options
+local MainTab = Window:Tab({ Title = "หน้าหลัก", Icon = "home" })
+local FilterTab = Window:Tab({ Title = "ตัวละคร", Icon = "users" })
+local Setting = Window:Tab({ Title = "ตั้งค่า", Icon = "settings" })
 
 local ConfigFolder = "PayomboyZ"
 local ConfigFile = ConfigFolder .. "/config.json"
+
 
 local CharacterFallbackValues = {
     "Zoro",
@@ -384,6 +348,43 @@ local SelectedMutations3 = {}
 local SelectedNames4 = {}
 local SelectedMutations4 = {}
 
+local function saveConfig()
+    if not isfolder then return end
+    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    local ok, json = pcall(function() return HttpService:JSONEncode({
+        Rarities1 = SelectedRarities, Mutations1 = SelectedMutations,
+        Rarities2 = SelectedRarities2, Mutations2 = SelectedMutations2,
+        Names3 = SelectedNames3, Mutations3 = SelectedMutations3,
+        Names4 = SelectedNames4, Mutations4 = SelectedMutations4,
+        AutoBuyPlot = AutoBuyPlotEnabled, RollDelay = RollDelay,
+        AutoSpinWheel = AutoSpinWheelEnabled,
+        AutoClaimBattlepass = AutoClaimBattlepassEnabled,
+        AutoClaimPremiumBattlepass = AutoClaimPremiumBattlepassEnabled,
+    }) end)
+    if ok then pcall(writefile, ConfigFile, json) end
+end
+
+local function loadConfigValues()
+    if not isfile or not isfile(ConfigFile) then return end
+    local ok, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
+    if not ok or type(decoded) ~= "table" then return end
+    local function tryLoad(src, dest, allowed) local v = normalizeMultiValue(src, allowed); if next(v) then return v end return dest end
+    SelectedRarities  = tryLoad(decoded.Rarities1, SelectedRarities, RarityValues)
+    SelectedMutations = tryLoad(decoded.Mutations1 or decoded.Mutations, SelectedMutations, MutationValues)
+    SelectedRarities2 = tryLoad(decoded.Rarities2, SelectedRarities2, RarityValues)
+    SelectedMutations2= tryLoad(decoded.Mutations2, SelectedMutations2, MutationValues)
+    SelectedNames3    = tryLoad(decoded.Names3, SelectedNames3, CharacterValues)
+    SelectedMutations3= tryLoad(decoded.Mutations3, SelectedMutations3, MutationValues)
+    SelectedNames4    = tryLoad(decoded.Names4, SelectedNames4, CharacterValues)
+    SelectedMutations4= tryLoad(decoded.Mutations4, SelectedMutations4, MutationValues)
+    AutoBuyPlotEnabled = decoded.AutoBuyPlot == true
+    RollDelay = tonumber(decoded.RollDelay) or RollDelay
+    AutoSpinWheelEnabled = decoded.AutoSpinWheel == true
+    AutoClaimBattlepassEnabled = decoded.AutoClaimBattlepass == true
+    AutoClaimPremiumBattlepassEnabled = decoded.AutoClaimPremiumBattlepass == true
+end
+loadConfigValues()
+
 local function getOptionValue(optionName, fallback)
     local value = fallback
 
@@ -632,192 +633,79 @@ end
 local function rebuildTargetLookup()
     targetConfig = buildTargetConfig()
 end
-local Section = FilterTab:AddSection("เลือกระดับยูนิตที่ต้องการ (Rarity)")
-local RarityDropdown1 = FilterTab:AddDropdown("Rarities1", {
-    Title = "ระดับ 1 (Rarity 1)",
-    Description = "เลือกระดับที่ต้องการ 1",
-    Values = RarityValues,
-    Multi = true,
-    Default = selectedToList(SelectedRarities, RarityValues),
+
+-- ===== WindUI ELEMENTS =====
+FilterTab:Section({ Title = "เลือกระดับยูนิตที่ต้องการ (Rarity)" })
+FilterTab:Dropdown({
+    Title = "ระดับ 1 (Rarity 1)", Multi = true,
+    Values = RarityValues, Value = selectedToList(SelectedRarities, RarityValues),
+    Callback = function(v) SelectedRarities = normalizeMultiValue(v, RarityValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "บัพ 1 (Mutation 1)", Multi = true,
+    Values = MutationValues, Value = selectedToList(SelectedMutations, MutationValues),
+    Callback = function(v) SelectedMutations = normalizeMultiValue(v, MutationValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "ระดับ 2 (Rarity 2)", Multi = true,
+    Values = RarityValues, Value = selectedToList(SelectedRarities2, RarityValues),
+    Callback = function(v) SelectedRarities2 = normalizeMultiValue(v, RarityValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "บัพ 2 (Mutation 2)", Multi = true,
+    Values = MutationValues, Value = selectedToList(SelectedMutations2, MutationValues),
+    Callback = function(v) SelectedMutations2 = normalizeMultiValue(v, MutationValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Section({ Title = "เลือกชื่อยูนิตที่ต้องการ (Name)" })
+FilterTab:Dropdown({
+    Title = "ชื่อ 1 (Name 1)", Multi = true,
+    Values = CharacterValues, Value = selectedToList(SelectedNames3, CharacterValues),
+    Callback = function(v) SelectedNames3 = normalizeMultiValue(v, CharacterValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "บัพ 1 (Mutation 1)", Multi = true,
+    Values = MutationValues, Value = selectedToList(SelectedMutations3, MutationValues),
+    Callback = function(v) SelectedMutations3 = normalizeMultiValue(v, MutationValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "ชื่อ 2 (Name 2)", Multi = true,
+    Values = CharacterValues, Value = selectedToList(SelectedNames4, CharacterValues),
+    Callback = function(v) SelectedNames4 = normalizeMultiValue(v, CharacterValues); rebuildTargetLookup(); saveConfig() end,
+})
+FilterTab:Dropdown({
+    Title = "บัพ 2 (Mutation 2)", Multi = true,
+    Values = MutationValues, Value = selectedToList(SelectedMutations4, MutationValues),
+    Callback = function(v) SelectedMutations4 = normalizeMultiValue(v, MutationValues); rebuildTargetLookup(); saveConfig() end,
 })
 
-local MutationDropdown1 = FilterTab:AddDropdown("Mutations1", {
-    Title = "บัพ 1 (Mutation 1)",
-    Description = "เลือกบัพที่ต้องการ 1",
-    Values = MutationValues,
-    Multi = true,
-    Default = selectedToList(SelectedMutations, MutationValues),
-})
-
-local RarityDropdown2 = FilterTab:AddDropdown("Rarities2", {
-    Title = "ระดับ 2 (Rarity 2)",
-    Description = "เลือกระดับที่ต้องการ 2",
-    Values = RarityValues,
-    Multi = true,
-    Default = selectedToList(SelectedRarities2, RarityValues),
-})
-
-local MutationDropdown2 = FilterTab:AddDropdown("Mutations2", {
-    Title = "บัพ 2 (Mutation 2)",
-    Description = "เลือกบัพที่ต้องการ 2",
-    Values = MutationValues,
-    Multi = true,
-    Default = selectedToList(SelectedMutations2, MutationValues),
-})
-local Section = FilterTab:AddSection("เลือกชื่อยูนิตที่ต้องการ (Name)")
-local NameDropdown3 = FilterTab:AddDropdown("Names3", {
-    Title = "ชื่อ 1 (Name 1)",
-    Description = "เลือกชื่อที่ต้องการ 1",
-    Values = CharacterValues,
-    Multi = true,
-    Default = selectedToList(SelectedNames3, CharacterValues),
-})
-
-local MutationDropdown3 = FilterTab:AddDropdown("Mutations3", {
-    Title = "บัพ 1 (Mutation 1)",
-    Description = "เลือกบัพที่ต้องการ 1",
-    Values = MutationValues,
-    Multi = true,
-    Default = selectedToList(SelectedMutations3, MutationValues),
-})
-
-local NameDropdown4 = FilterTab:AddDropdown("Names4", {
-    Title = "ชื่อ 2 (Name 2)",
-    Description = "เลือกชื่อที่ต้องการ 2",
-    Values = CharacterValues,
-    Multi = true,
-    Default = selectedToList(SelectedNames4, CharacterValues),
-})
-
-local MutationDropdown4 = FilterTab:AddDropdown("Mutations4", {
-    Title = "บัพ 2 (Mutation 2)",
-    Description = "เลือกบัพที่ต้องการ 2",
-    Values = MutationValues,
-    Multi = true,
-    Default = selectedToList(SelectedMutations4, MutationValues),
-})
-
-local Section = MainTab:AddSection("ระบบออโต้หลัก (Main Auto)")
-local AutoBuyPlotToggle = MainTab:AddToggle("AutoBuyPlot", {
+MainTab:Section({ Title = "ระบบออโต้หลัก (Main Auto)" })
+MainTab:Toggle({
     Title = "ออโต้สุ่ม/ซื้อ (Auto Roll/Buy)",
-    Description = "เปิดเพื่อเริ่มออโต้โรลและซื้อยูนิต",
-    Default = AutoBuyPlotEnabled,
+    Value = AutoBuyPlotEnabled,
+    Callback = function(v) AutoBuyPlotEnabled = v; saveConfig() end,
 })
-local RollDelaySlider = MainTab:AddSlider("RollDelay", {
+MainTab:Slider({
     Title = "ดีเลย์การสุ่ม (Roll Delay)",
-    Description = "ความเร็วการสุ่ม (วินาที) - แนะนำ 0.8s ขึ้นไปเพื่อลดปิง",
-    Default = RollDelay,
-    Min = 0.3,
-    Max = 3.0,
-    Rounding = 1,
+    Value = RollDelay, Min = 0.3, Max = 3.0, Decimals = 1,
+    Callback = function(v) RollDelay = tonumber(v) or 0.8; saveConfig() end,
 })
-local Section = MainTab:AddSection("ฟังชั่นอื่นๆ (Misc)")
-local AutoSpinWheelToggle = MainTab:AddToggle("AutoSpinWheel", {
+MainTab:Section({ Title = "ฟังชั่นอื่นๆ (Misc)" })
+MainTab:Toggle({
     Title = "ออโต้วงล้อ (Auto Spin Wheel)",
-    Description = "สปินวงล้ออัตโนมัติเมื่อมีสิทธิ์",
-    Default = AutoSpinWheelEnabled,
+    Value = AutoSpinWheelEnabled,
+    Callback = function(v) AutoSpinWheelEnabled = v; saveConfig() end,
 })
-
-local AutoClaimBattlepassToggle = MainTab:AddToggle("AutoClaimBattlepass", {
+MainTab:Toggle({
     Title = "ออโต้รับแบทเทิลพาส (ฟรี)",
-    Description = "รับของรางวัลแบทเทิลพาส (ฟรี) อัตโนมัติ",
-    Default = AutoClaimBattlepassEnabled,
+    Value = AutoClaimBattlepassEnabled,
+    Callback = function(v) AutoClaimBattlepassEnabled = v; saveConfig() end,
 })
-
-local AutoClaimPremiumBattlepassToggle = MainTab:AddToggle("AutoClaimPremiumBattlepass", {
+MainTab:Toggle({
     Title = "ออโต้รับแบทเทิลพาส (พรีเมียม)",
-    Description = "รับของรางวัลแบทเทิลพาส (พรีเมียม) อัตโนมัติ",
-    Default = AutoClaimPremiumBattlepassEnabled,
+    Value = AutoClaimPremiumBattlepassEnabled,
+    Callback = function(v) AutoClaimPremiumBattlepassEnabled = v; saveConfig() end,
 })
 
-
-
-RarityDropdown1:OnChanged(function(value)
-    SelectedRarities = normalizeMultiValue(value, RarityValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown1:OnChanged(function(value)
-    SelectedMutations = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-RarityDropdown2:OnChanged(function(value)
-    SelectedRarities2 = normalizeMultiValue(value, RarityValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown2:OnChanged(function(value)
-    SelectedMutations2 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-NameDropdown3:OnChanged(function(value)
-    SelectedNames3 = normalizeMultiValue(value, CharacterValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown3:OnChanged(function(value)
-    SelectedMutations3 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-NameDropdown4:OnChanged(function(value)
-    SelectedNames4 = normalizeMultiValue(value, CharacterValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown4:OnChanged(function(value)
-    SelectedMutations4 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-AutoBuyPlotToggle:OnChanged(function(value)
-    AutoBuyPlotEnabled = value == true
-    saveConfig()
-end)
-
-RollDelaySlider:OnChanged(function(value)
-    RollDelay = tonumber(value) or 0.8
-    saveConfig()
-end)
-
-AutoSpinWheelToggle:OnChanged(function(value)
-    AutoSpinWheelEnabled = value == true
-    saveConfig()
-end)
-
-AutoClaimBattlepassToggle:OnChanged(function(value)
-    AutoClaimBattlepassEnabled = value == true
-    saveConfig()
-end)
-
-AutoClaimPremiumBattlepassToggle:OnChanged(function(value)
-    AutoClaimPremiumBattlepassEnabled = value == true
-    saveConfig()
-end)
-
-RarityDropdown1:SetValue(selectedToList(SelectedRarities, RarityValues))
-MutationDropdown1:SetValue(selectedToList(SelectedMutations, MutationValues))
-RarityDropdown2:SetValue(selectedToList(SelectedRarities2, RarityValues))
-MutationDropdown2:SetValue(selectedToList(SelectedMutations2, MutationValues))
-NameDropdown3:SetValue(selectedToList(SelectedNames3, CharacterValues))
-MutationDropdown3:SetValue(selectedToList(SelectedMutations3, MutationValues))
-NameDropdown4:SetValue(selectedToList(SelectedNames4, CharacterValues))
-MutationDropdown4:SetValue(selectedToList(SelectedMutations4, MutationValues))
-AutoBuyPlotToggle:SetValue(AutoBuyPlotEnabled)
-RollDelaySlider:SetValue(RollDelay)
-AutoSpinWheelToggle:SetValue(AutoSpinWheelEnabled)
-AutoClaimBattlepassToggle:SetValue(AutoClaimBattlepassEnabled)
-AutoClaimPremiumBattlepassToggle:SetValue(AutoClaimPremiumBattlepassEnabled)
 rebuildTargetLookup()
 
 local function valuesSignature(values)
@@ -1361,7 +1249,41 @@ end
 
 
 
-Setting:AddSection("จัดการระบบส่วนหลัง (System Config)")
+-- Settings tab: theme + keybind
+local currentKey = Enum.KeyCode.K
+Setting:Section({ Title = "ตั้งค่า UI" })
+Setting:Dropdown({
+    Title = "Theme",
+    Values = (function() local n={} for k in pairs(WindUI:GetThemes()) do table.insert(n,k) end table.sort(n) return n end)(),
+    Value = WindUI:GetCurrentTheme(),
+    Callback = function(v) WindUI:SetTheme(v) end,
+})
+Setting:Toggle({
+    Title = "Acrylic", Value = true,
+    Callback = function(v) WindUI:ToggleAcrylic(v) end,
+})
+Setting:Toggle({
+    Title = "Transparent", Value = true,
+    Callback = function(v) Window:ToggleTransparency(v) end,
+})
+Setting:Keybind({
+    Title = "Toggle UI Key", Value = currentKey,
+    Callback = function(v)
+        currentKey = (typeof(v)=="EnumItem") and v or Enum.KeyCode[tostring(v)]
+        Window:SetToggleKey(currentKey)
+    end,
+})
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == currentKey then Window:Toggle() end
+end)
+
+WindUI:Notify({
+    Title = "PayomboyZ HUB",
+    Content = "โหลดสำเร็จ! ขอให้สนุกนะ ❤️",
+})
+
+return myPlot
 
 SaveManager:LoadAutoloadConfig()
 SaveManager:SetLibrary(Fluent)
