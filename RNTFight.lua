@@ -1,4 +1,4 @@
-local CoreGui = game:GetService("CoreGui")
+local CoreGui = gethui and gethui() or game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,19 +29,26 @@ task.spawn(function()
 
     repeat
         attempts = attempts + 1
+        local fluentGui = nil
         for _, gui in ipairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, v in ipairs(gui:GetDescendants()) do
-                    if v:IsA("TextLabel") then
-                        if not titleLabel and v.Text:find("Roll Anime to Fight!") then
-                            titleLabel = v
-                        elseif not subLabel and v.Text:find("Made by PayomboyZ HUB") then
-                            subLabel = v
-                        end
+            if gui:IsA("ScreenGui") and (gui.Name:find("Fluent") or gui.Name:find("ScreenGui")) then
+                fluentGui = gui
+                break
+            end
+        end
+        
+        if fluentGui then
+            for _, v in ipairs(fluentGui:GetDescendants()) do
+                if v:IsA("TextLabel") then
+                    if not titleLabel and v.Text:find("Roll Anime to Fight!") then
+                        titleLabel = v
+                    elseif not subLabel and v.Text:find("Made by PayomboyZ HUB") then
+                        subLabel = v
                     end
                 end
             end
         end
+        
         if not (titleLabel and subLabel) then
             task.wait(1)
         end
@@ -350,6 +357,7 @@ local function selectedToList(selectedValues, allowedValues)
 end
 
 local AutoBuyPlotEnabled = false
+local RollDelay = 0.8
 local AutoSpinWheelEnabled = false
 local AutoClaimBattlepassEnabled = false
 local AutoClaimPremiumBattlepassEnabled = false
@@ -393,6 +401,7 @@ local function saveConfig()
         Names4 = getOptionValue("Names4", SelectedNames4),
         Mutations4 = getOptionValue("Mutations4", SelectedMutations4),
         AutoBuyPlot = getOptionValue("AutoBuyPlot", AutoBuyPlotEnabled),
+        RollDelay = getOptionValue("RollDelay", RollDelay),
         AutoSpinWheel = getOptionValue("AutoSpinWheel", AutoSpinWheelEnabled),
         AutoClaimBattlepass = getOptionValue("AutoClaimBattlepass", AutoClaimBattlepassEnabled),
         AutoClaimPremiumBattlepass = getOptionValue("AutoClaimPremiumBattlepass", AutoClaimPremiumBattlepassEnabled),
@@ -466,6 +475,9 @@ local function loadConfig()
     end
 
     AutoBuyPlotEnabled = decoded.AutoBuyPlot == true
+    if decoded.RollDelay ~= nil then
+        RollDelay = tonumber(decoded.RollDelay) or 0.8
+    end
     AutoSpinWheelEnabled = decoded.AutoSpinWheel == true
     AutoClaimBattlepassEnabled = decoded.AutoClaimBattlepass == true
     AutoClaimPremiumBattlepassEnabled = decoded.AutoClaimPremiumBattlepass == true
@@ -487,6 +499,7 @@ local function loadConfig()
             and Options.Names4
             and Options.Mutations4
             and Options.AutoBuyPlot
+            and Options.RollDelay
             and Options.AutoSpinWheel
             and Options.AutoClaimBattlepass
             and Options.AutoClaimPremiumBattlepass
@@ -531,6 +544,10 @@ local function loadConfig()
 
         if decoded.AutoBuyPlot ~= nil then
             Options.AutoBuyPlot:SetValue(decoded.AutoBuyPlot)
+        end
+
+        if decoded.RollDelay ~= nil then
+            Options.RollDelay:SetValue(decoded.RollDelay)
         end
 
         if decoded.AutoSpinWheel ~= nil then
@@ -703,6 +720,14 @@ local AutoBuyPlotToggle = MainTab:AddToggle("AutoBuyPlot", {
     Description = "เปิดเพื่อเริ่มออโต้โรลและซื้อยูนิต",
     Default = AutoBuyPlotEnabled,
 })
+local RollDelaySlider = MainTab:AddSlider("RollDelay", {
+    Title = "ดีเลย์การสุ่ม (Roll Delay)",
+    Description = "ความเร็วการสุ่ม (วินาที) - แนะนำ 0.8s ขึ้นไปเพื่อลดปิง",
+    Default = RollDelay,
+    Min = 0.3,
+    Max = 3.0,
+    Rounding = 1,
+})
 local Section = MainTab:AddSection("ฟังชั่นอื่นๆ (Misc)")
 local AutoSpinWheelToggle = MainTab:AddToggle("AutoSpinWheel", {
     Title = "ออโต้วงล้อ (Auto Spin Wheel)",
@@ -797,6 +822,11 @@ AutoBuyPlotToggle:OnChanged(function(value)
     saveConfig()
 end)
 
+RollDelaySlider:OnChanged(function(value)
+    RollDelay = tonumber(value) or 0.8
+    saveConfig()
+end)
+
 AutoSpinWheelToggle:OnChanged(function(value)
     AutoSpinWheelEnabled = value == true
     saveConfig()
@@ -841,6 +871,7 @@ MutationDropdown3:SetValue(selectedToList(SelectedMutations3, MutationValues))
 NameDropdown4:SetValue(selectedToList(SelectedNames4, CharacterValues))
 MutationDropdown4:SetValue(selectedToList(SelectedMutations4, MutationValues))
 AutoBuyPlotToggle:SetValue(AutoBuyPlotEnabled)
+RollDelaySlider:SetValue(RollDelay)
 AutoSpinWheelToggle:SetValue(AutoSpinWheelEnabled)
 AutoClaimBattlepassToggle:SetValue(AutoClaimBattlepassEnabled)
 AutoClaimPremiumBattlepassToggle:SetValue(AutoClaimPremiumBattlepassEnabled)
@@ -852,22 +883,22 @@ rebuildTargetLookup()
 
 task.spawn(function()
     local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Upgrade")
-    while task.wait(1.5) do
+    while task.wait(2.0) do
         if AutoUpgradeGoldEnabled then
             pcall(function() remote:FireServer("Gold", "Gold") end)
-            task.wait(0.2)
+            task.wait(0.3)
         end
         if AutoUpgradeLuckEnabled then
             pcall(function() remote:FireServer("Gold", "Luck") end)
-            task.wait(0.2)
+            task.wait(0.3)
         end
         if AutoUpgradeSlotsEnabled then
             pcall(function() remote:FireServer("Gold", "Slots") end)
-            task.wait(0.2)
+            task.wait(0.3)
         end
         if AutoUpgradeInventoryEnabled then
             pcall(function() remote:FireServer("Gold", "Inventory") end)
-            task.wait(0.2)
+            task.wait(0.3)
         end
     end
 end)
@@ -1282,7 +1313,8 @@ local function parseMoney(text)
 end
 
 local function readCash()
-    return parseMoney(cashLabel.Text)
+    if not cashLabel then return 0 end
+    return parseMoney(cashLabel.Text) or 0
 end
 
 local function getPriceLabel(model)
@@ -1318,9 +1350,21 @@ local function findPrompt(root)
         return nil
     end
 
-    local buyUI = root:FindFirstChild("BuyUI", true)
+    local direct = root:FindFirstChildOfClass("ProximityPrompt")
+    if direct then return direct end
+
+    local buyUI = root:FindFirstChild("BuyUI") or root:FindFirstChild("Head")
     if buyUI then
-        local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local prompt = buyUI:FindFirstChildOfClass("ProximityPrompt")
+            or (buyUI:FindFirstChild("BuyUI") and buyUI.BuyUI:FindFirstChildOfClass("ProximityPrompt"))
+        if prompt then
+            return prompt
+        end
+    end
+
+    local buyUIFallback = root:FindFirstChild("BuyUI", true)
+    if buyUIFallback then
+        local prompt = buyUIFallback:FindFirstChildWhichIsA("ProximityPrompt", true)
         if prompt then
             return prompt
         end
@@ -1482,6 +1526,7 @@ if myPlot then
                 local rollPrompt = getRollPrompt(myPlot)
                 if rollPrompt then
                     firePrompt(rollPrompt)
+                    task.wait(RollDelay)
                 end
             end
         end
@@ -1695,19 +1740,30 @@ task.spawn(function()
         ["Interface"] = "การปรับแต่ง UI",
         ["Configuration"] = "จัดการคอนฟิก",
     }
-    for i = 1, 30 do
-        task.wait(1)
-        for _, v in ipairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextLabel") or v:IsA("TextButton") then
-                if translations[v.Text] then
-                    v.Text = translations[v.Text]
-                end
-                if v.Text:match("^Current autoload config:") then
-                    local configName = v.Text:gsub("Current autoload config: ", "")
-                    if configName == "none" then configName = "ไม่มี" end
-                    v.Text = "คอนฟิกออโต้โหลดปัจจุบัน: " .. configName
+    task.wait(2)
+    local targetGui = nil
+    for _, gui in ipairs(CoreGui:GetChildren()) do
+        if gui:IsA("ScreenGui") and (gui.Name:find("Fluent") or gui.Name:find("ScreenGui")) then
+            targetGui = gui
+            break
+        end
+    end
+    
+    if targetGui then
+        for i = 1, 5 do
+            for _, v in ipairs(targetGui:GetDescendants()) do
+                if v:IsA("TextLabel") or v:IsA("TextButton") then
+                    if translations[v.Text] then
+                        v.Text = translations[v.Text]
+                    end
+                    if v.Text:match("^Current autoload config:") then
+                        local configName = v.Text:gsub("Current autoload config: ", "")
+                        if configName == "none" then configName = "ไม่มี" end
+                        v.Text = "คอนฟิกออโต้โหลดปัจจุบัน: " .. configName
+                    end
                 end
             end
+            task.wait(1)
         end
     end
 end)
