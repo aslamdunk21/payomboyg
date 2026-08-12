@@ -264,9 +264,9 @@ local function getCharacterValues()
             end
         end
     end
-        for _, name in ipairs(CharacterFallbackValues) do
-            values[name] = true
-        end
+
+    for _, name in ipairs(CharacterFallbackValues) do
+        values[name] = true
     end
 
     return sortedValues(values)
