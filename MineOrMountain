@@ -422,6 +422,32 @@ local Window = Library:CreateWindow({
 	ShowCustomCursor = false,
 })
 
+local currentTitleFont = Enum.Font.FredokaOne
+
+local function updateTitleFont(fontEnum)
+	currentTitleFont = fontEnum or Enum.Font.FredokaOne
+	pcall(function()
+		for _, container in ipairs({ GuiRoot, Services.CoreGui }) do
+			if container then
+				for _, v in ipairs(container:GetDescendants()) do
+					if v:IsA("TextLabel") and v.Text and (v.Text:find("PayomboyZ") or v.Text:find("HUB")) then
+						v.Font = currentTitleFont
+					end
+				end
+			end
+		end
+	end)
+end
+
+task.spawn(function()
+	for i = 1, 15 do
+		updateTitleFont(currentTitleFont)
+		task.wait(0.2)
+	end
+end)
+
+
+
 local Tabs = {
 	crystals = Window:AddTab(L("Crystals"), "gem"),
 	players = Window:AddTab(L("Players"), "users"),
@@ -4996,7 +5022,7 @@ do
 
 		FarmBox:AddToggle("AutoFarmBoulders", {
 			Text = "Auto Farm",
-			Default = true,
+			Default = false,
 			Callback = setActive,
 		})
 
@@ -6182,24 +6208,274 @@ do
 
 		local MenuGroup = SettingsTab:AddRightGroupbox(L("Menu"), "wrench")
 
+		-- ปุ่มซ่อน/เปิด หน้าต่างสคริปต์
+		MenuGroup:AddButton("ซ่อน / เปิด หน้าต่าง", function()
+			pcall(function()
+				Library:Toggle()
+			end)
+		end)
+
 		MenuGroup:AddLabel(L("Menu bind")):AddKeyPicker("MenuKeybind", {
 			Default = Config.KeybindMenu,
 			NoUI = true,
 			Text = L("Menu keybind"),
 		})
 
+		MenuGroup:AddDropdown("TitleFontSelector", {
+			Text = "ฟอนต์ชื่อสคริปต์ (Title Font)",
+			Values = {
+				"FredokaOne (นุ่มนวล)", 
+				"GothamBold (เนี๊ยบ)", 
+				"LuckiestGuy (เกมมิ่ง)", 
+				"Michroma (ไซไฟ)", 
+				"Montserrat (ทันสมัย)",
+				"PermanentMarker (ลายมือ)"
+			},
+			Default = "FredokaOne (นุ่มนวล)",
+			Multi = false,
+			Callback = function(value)
+				local fontMap = {
+					["FredokaOne (นุ่มนวล)"] = Enum.Font.FredokaOne,
+					["GothamBold (เนี๊ยบ)"] = Enum.Font.GothamBold,
+					["LuckiestGuy (เกมมิ่ง)"] = Enum.Font.LuckiestGuy,
+					["Michroma (ไซไฟ)"] = Enum.Font.Michroma,
+					["Montserrat (ทันสมัย)"] = Enum.Font.MontserratBold,
+					["PermanentMarker (ลายมือ)"] = Enum.Font.PermanentMarker,
+				}
+				updateTitleFont(fontMap[value] or Enum.Font.FredokaOne)
+			end,
+		})
+
 		MenuGroup:AddButton(L("Unload"), function()
 			Library:Unload()
+		end)
+
+		-- ── Avatar Display & Toggle Pop-Up Widget ─────────────────────────
+		local avatarGui
+		local avatarDragConn
+		local avatarStatsConn
+
+		local function removeAvatarGui()
+			if avatarDragConn then
+				avatarDragConn:Disconnect()
+				avatarDragConn = nil
+			end
+			if avatarStatsConn then
+				avatarStatsConn:Disconnect()
+				avatarStatsConn = nil
+			end
+			if avatarGui then
+				pcall(function() avatarGui:Destroy() end)
+				avatarGui = nil
+			end
+		end
+
+		local function createAvatarGui()
+			removeAvatarGui()
+
+			-- ScreenGui แยกอิสระจาก UI หลัก (อยู่นอกสุด)
+			local screenGui = Instance.new("ScreenGui")
+			screenGui.Name = "UniverseAvatarDisplay"
+			screenGui.ResetOnSpawn = false
+			screenGui.IgnoreGuiInset = true
+			screenGui.DisplayOrder = 9999
+			screenGui.Parent = GuiRoot
+			avatarGui = screenGui
+
+			-- กรอบหลักแบบ TextButton เพื่อรับ Click/Touch ได้ 100% ทุกอุปกรณ์
+			local frame = Instance.new("TextButton")
+			frame.Name = "AvatarCard"
+			frame.Size = UDim2.fromOffset(235, 78)
+			frame.Position = UDim2.fromOffset(15, 65)
+			frame.BackgroundColor3 = Color3.fromRGB(14, 14, 17)
+			frame.BackgroundTransparency = 0
+			frame.BorderSizePixel = 0
+			frame.Text = ""
+			frame.AutoButtonColor = false
+			frame.Active = true
+			frame.Parent = screenGui
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 10)
+			corner.Parent = frame
+
+			-- ขอบสีแดงเด่นชัด
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Color3.fromRGB(220, 30, 30)
+			stroke.Thickness = 2
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			stroke.Parent = frame
+
+			-- รูป Avatar วงกลม (ซ้าย)
+			local avatarImg = Instance.new("ImageLabel")
+			avatarImg.Name = "AvatarImage"
+			avatarImg.Size = UDim2.fromOffset(54, 54)
+			avatarImg.Position = UDim2.fromOffset(12, 12)
+			avatarImg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			avatarImg.BorderSizePixel = 0
+			avatarImg.Image = string.format(
+				"rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150",
+				LocalPlayer.UserId
+			)
+			avatarImg.Parent = frame
+
+			local imgCorner = Instance.new("UICorner")
+			imgCorner.CornerRadius = UDim.new(1, 0)
+			imgCorner.Parent = avatarImg
+
+			local imgStroke = Instance.new("UIStroke")
+			imgStroke.Color = Color3.fromRGB(220, 30, 30)
+			imgStroke.Thickness = 2
+			imgStroke.Parent = avatarImg
+
+			-- ชื่อ DisplayName
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Name = "DisplayName"
+			nameLabel.Size = UDim2.new(1, -80, 0, 20)
+			nameLabel.Position = UDim2.fromOffset(74, 10)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Font = Enum.Font.GothamBold
+			nameLabel.TextSize = 15
+			nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			nameLabel.Text = LocalPlayer.DisplayName
+			nameLabel.Parent = frame
+
+			-- @Username
+			local userLabel = Instance.new("TextLabel")
+			userLabel.Name = "Username"
+			userLabel.Size = UDim2.new(1, -80, 0, 16)
+			userLabel.Position = UDim2.fromOffset(74, 30)
+			userLabel.BackgroundTransparency = 1
+			userLabel.Font = Enum.Font.Gotham
+			userLabel.TextSize = 12
+			userLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+			userLabel.TextXAlignment = Enum.TextXAlignment.Left
+			userLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			userLabel.Text = "@" .. LocalPlayer.Name
+			userLabel.Parent = frame
+
+			-- FPS & Ping Stats Real-time
+			local statsLabel = Instance.new("TextLabel")
+			statsLabel.Name = "StatsLabel"
+			statsLabel.Size = UDim2.new(1, -80, 0, 18)
+			statsLabel.Position = UDim2.fromOffset(74, 48)
+			statsLabel.BackgroundTransparency = 1
+			statsLabel.Font = Enum.Font.GothamBold
+			statsLabel.TextSize = 11
+			statsLabel.TextColor3 = Color3.fromRGB(0, 230, 140)
+			statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+			statsLabel.Text = "FPS: 60  |  Ping: 0ms"
+			statsLabel.Parent = frame
+
+			-- Loop อัปเดต FPS & Ping Real-time
+			local frameCount = 0
+			local lastFpsCheck = os.clock()
+			local currentFps = 60
+			local currentPing = 0
+
+			avatarStatsConn = Services.RunService.Heartbeat:Connect(function(dt)
+				frameCount += 1
+				local now = os.clock()
+				if now - lastFpsCheck >= 0.5 then
+					currentFps = math.floor(frameCount / (now - lastFpsCheck) + 0.5)
+					frameCount = 0
+					lastFpsCheck = now
+
+					pcall(function()
+						local pingVal = Services.Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+						currentPing = math.floor(pingVal + 0.5)
+					end)
+
+					if statsLabel and statsLabel.Parent then
+						statsLabel.Text = string.format("FPS: %d  |  Ping: %dms", currentFps, currentPing)
+					end
+				end
+			end)
+
+			-- ── Dragging & Tap-to-Toggle Script Window Logic ──────────────────
+			local dragging = false
+			local dragStart, startPos
+			local hasMoved = false
+
+			frame.InputBegan:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = true
+					hasMoved = false
+					dragStart = input.Position
+					startPos = frame.Position
+				end
+			end)
+
+			frame.InputEnded:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch then
+					dragging = false
+				end
+			end)
+
+			-- Tap/Click Trigger (เมื่อแตะหรือคลิกโดยไม่ได้ลาก) -> Toggle UI หลัก
+			frame.Activated:Connect(function()
+				if not hasMoved then
+					pcall(function() Library:Toggle() end)
+				end
+				hasMoved = false
+			end)
+
+			avatarDragConn = Services.UserInputService.InputChanged:Connect(function(input)
+				if dragging and (
+					input.UserInputType == Enum.UserInputType.MouseMovement
+					or input.UserInputType == Enum.UserInputType.Touch
+				) then
+					local delta = input.Position - dragStart
+					if delta.Magnitude > 6 then
+						hasMoved = true
+					end
+					if hasMoved then
+						frame.Position = UDim2.fromOffset(
+							startPos.X.Offset + delta.X,
+							startPos.Y.Offset + delta.Y
+						)
+					end
+				end
+			end)
+		end
+
+		MenuGroup:AddDivider()
+		MenuGroup:AddToggle("AvatarDisplay", {
+			Text = "แสดง Avatar + ข้อมูลตัวละคร",
+			Default = true,
+			Callback = function(value)
+				if value then
+					createAvatarGui()
+				else
+					removeAvatarGui()
+				end
+			end,
+		})
+
+		-- รับประกันการสร้างทันทีเมื่อเริ่มรันสคริปต์
+		task.defer(createAvatarGui)
+		task.delay(1, function()
+			if not avatarGui or not avatarGui.Parent then
+				createAvatarGui()
+			end
 		end)
 	end
 
 	install()
 end
 
-SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName", "MenuKeybind" })
+SaveManager:SetIgnoreIndexes({ "SaveManager_ConfigList", "SaveManager_ConfigName", "MenuKeybind", "AvatarDisplay" })
 
 Library.ToggleKeybind = Library.Options.MenuKeybind
-ThemeManager:ApplyToTab(SettingsTab)
+
+do
+	local ThemeGroup = SettingsTab:AddRightGroupbox("Themes", "palette")
+	ThemeManager:ApplyToGroupbox(ThemeGroup)
+end
 
 -- ── xin.json Auto Config ──────────────────────────────────────────────
 -- รันสคริป: ถ้ามี xin.json → โหลดทันที / ถ้าไม่มี → สร้างด้วย default
@@ -6336,6 +6612,16 @@ local function cleanupAll()
 		EspHolder:Destroy()
 		EspHolder = nil
 	end
+
+	if floatToggleGui then
+		pcall(function() floatToggleGui:Destroy() end)
+		floatToggleGui = nil
+	end
+
+	pcall(function()
+		local g = GuiRoot:FindFirstChild("UniverseAvatarDisplay")
+		if g then g:Destroy() end
+	end)
 
 	State.rootPart = nil
 	getgenv().UniverseLoaded = false
