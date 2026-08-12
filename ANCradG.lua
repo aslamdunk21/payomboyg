@@ -2,6 +2,25 @@
 -- Theme: Crimson Red / Dark Elegance (Fluent UI)
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
+-- [FIX] หยุดการทำงานของสคริปต์เก่าที่ค้างอยู่ (แก้ปัญหาปิงขึ้น/แลคก่อนที่ UI จะโหลด)
+if getgenv().PayomboyZ_Unload then pcall(getgenv().PayomboyZ_Unload) end
+getgenv().PayomboyZ_Unload = function()
+    getgenv().AutoSpawnPack = false
+    getgenv().AutoBuyCards = false
+    getgenv().AutoCarry = false
+    getgenv().AutoSellBox = false
+    getgenv().AutoClaimRewards = false
+    getgenv().InventoryBalancing = false
+    getgenv().SmartBase = false
+    getgenv().AutoOpenPack = false
+    getgenv().AutoUpgradeBase = false
+    getgenv().AutoReroll = false
+    getgenv().AutoRankReroll = false
+    getgenv().AutoMerchant = false
+    if getgenv().BruteForceLoop then pcall(function() getgenv().BruteForceLoop:Disconnect() end); getgenv().BruteForceLoop = nil end
+    if getgenv().AntiAfkConnection then pcall(function() getgenv().AntiAfkConnection:Disconnect() end); getgenv().AntiAfkConnection = nil end
+end
+
 local Fluent = nil
 local s, r = pcall(function()
     return loadstring(game:HttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua"))()
@@ -815,7 +834,7 @@ AutoSpawnToggle:OnChanged(function(state)
                     if activeCards >= 3 then
                         task.wait(0.2)
                     else
-                        task.wait(0.01)
+                        task.wait(0.1)
                     end
                 end
             end
@@ -999,12 +1018,20 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
-getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
+if getgenv().BruteForceLoop then pcall(function() getgenv().BruteForceLoop:Disconnect() end) end
+getgenv().BruteForceLoop = nil
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
+    if state then
+        task.spawn(function()
+            while getgenv().AutoBuyCards do
+                pcall(instantBuyLoop)
+                task.wait(0.1)
+            end
+        end)
+    end
 end)
 
 getgenv().InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม"
@@ -1147,19 +1174,20 @@ AutoSellBoxToggle:OnChanged(function(state)
     end
 end)
 
-local antiAfkConnection
 local AntiAfkToggle = Tabs.Main:AddToggle("AntiAfkState", { Title = "🛡️ ป้องกันหลุด (Anti AFK)", Default = false })
 AntiAfkToggle:OnChanged(function(state)
     getgenv().AntiAfkState = state
     if state then
-        antiAfkConnection = LocalPlayer.Idled:Connect(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
+        if not getgenv().AntiAfkConnection then
+            getgenv().AntiAfkConnection = LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
     else
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
+        if getgenv().AntiAfkConnection then
+            getgenv().AntiAfkConnection:Disconnect()
+            getgenv().AntiAfkConnection = nil
         end
     end
 end)
