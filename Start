@@ -1,0 +1,753 @@
+-- ==============================================================================
+-- PayomboyZ Hub - Stage 1: Key UI & Smart Auto-Login (Start.txt)
+-- URL: https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/start.txt
+-- ==============================================================================
+
+local LuarmorConfig = {
+    ScriptId = "PayomboyZ_Hub",
+    SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
+    GetKeyURL = "https://discordapp.com/channels/1533260775458607256/1533265542394155158",
+    DiscordURL = "https://discord.gg/5DEAQBj2y",
+    LogoPath = "543199739_2812856088914181_3062917809445648175_n.jpg",
+    StartURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/start.txt",
+    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua"
+}
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local function LoadSavedKey()
+    local saved = ""
+    pcall(function()
+        if isfile and isfile(LuarmorConfig.SavedKeyFile) and readfile then
+            saved = readfile(LuarmorConfig.SavedKeyFile)
+        end
+    end)
+    return saved:gsub("%s+", "")
+end
+
+local function ShowToast(title, message, isError)
+    pcall(function()
+        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+        local ToastGui = Instance.new("ScreenGui")
+        ToastGui.Name = "PayomboyZ_Toast"
+        ToastGui.ResetOnSpawn = false
+        pcall(function() ToastGui.Parent = CoreGui end)
+        if not ToastGui.Parent then ToastGui.Parent = PlayerGui end
+
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(0, 320, 0, 58)
+        Frame.Position = UDim2.new(1, -340, 0, 20)
+        Frame.BackgroundColor3 = Color3.fromRGB(15, 3, 6)
+        Frame.BorderSizePixel = 0
+        Frame.Parent = ToastGui
+
+        local Corner = Instance.new("UICorner")
+        Corner.CornerRadius = UDim.new(0, 7)
+        Corner.Parent = Frame
+
+        local Stroke = Instance.new("UIStroke")
+        Stroke.Color = isError and Color3.fromRGB(255, 77, 101) or Color3.fromRGB(255, 55, 77)
+        Stroke.Transparency = 0.2
+        Stroke.Thickness = 1.25
+        Stroke.Parent = Frame
+
+        local TText = Instance.new("TextLabel")
+        TText.Size = UDim2.new(1, -20, 0, 20)
+        TText.Position = UDim2.new(0, 10, 0, 6)
+        TText.BackgroundTransparency = 1
+        TText.Text = title
+        TText.Font = Enum.Font.GothamBold
+        TText.TextSize = 13
+        TText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TText.TextXAlignment = Enum.TextXAlignment.Left
+        TText.Parent = Frame
+
+        local MText = Instance.new("TextLabel")
+        MText.Size = UDim2.new(1, -20, 0, 18)
+        MText.Position = UDim2.new(0, 10, 0, 29)
+        MText.BackgroundTransparency = 1
+        MText.Text = message
+        MText.Font = Enum.Font.Gotham
+        MText.TextSize = 11
+        MText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        MText.TextXAlignment = Enum.TextXAlignment.Left
+        MText.Parent = Frame
+
+        task.delay(4, function()
+            ToastGui:Destroy()
+        end)
+    end)
+end
+
+local function PassToKeyChecker(userKey)
+    if not userKey or userKey == "" then return end
+    userKey = userKey:gsub("%s+", "")
+    
+    if getgenv then getgenv().PayomboyZ_InputKey = userKey end
+
+    -- ==============================================================================
+    -- 🛡️ EVENT-DRIVEN LUARMOR ERROR WATCHER (Optimized - CPU 0%)
+    -- ==============================================================================
+    local ErrorWatcherActive = true
+    local connections = {}
+
+    local function cleanupConnections()
+        ErrorWatcherActive = false
+        for _, conn in ipairs(connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        table.clear(connections)
+    end
+
+    local function checkDescendant(descendant)
+        if not ErrorWatcherActive then return end
+        pcall(function()
+            local textStr = ""
+            local nameStr = ""
+
+            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
+                textStr = (descendant.Text or ""):lower()
+            end
+            nameStr = (descendant.Name or ""):lower()
+
+            local function isError(s)
+                return s:find("auth error") 
+                    or s:find("whitelist error") 
+                    or s:find("no key found") 
+                    or s:find("invalid key") 
+                    or s:find("need a script_key")
+                    or s:find("incorrect key")
+                    or s:find("key is invalid")
+            end
+
+            -- ดักจับกรณี Luarmor เตะออกจากเกม (Kick) ผ่านระบบ Roblox Prompt
+            local isKickPrompt = false
+            if descendant:IsA("TextLabel") and (descendant.Name == "ErrorMessage" or descendant.Name == "ErrorTitle") then
+                if textStr:find("kick") or textStr:find("auth") or textStr:find("whitelist") or textStr:find("unexpected") then
+                    isKickPrompt = true
+                end
+            end
+
+            if isError(textStr) or isError(nameStr) or isKickPrompt then
+                cleanupConnections()
+
+                -- ลบคีย์ที่หมดอายุทิ้งทันที เพื่อกันการโหลดซ้ำซาก
+                if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
+                    delfile(LuarmorConfig.SavedKeyFile)
+                end
+
+                -- ทำลาย Error Popup ทิ้ง (ถ้าเป็น GUI ปกติ)
+                if not isKickPrompt then
+                    local topGui = descendant
+                    while topGui and not topGui:IsA("ScreenGui") and topGui.Parent do
+                        topGui = topGui.Parent
+                    end
+                    if topGui and topGui:IsA("ScreenGui") then
+                        topGui.Enabled = false
+                        topGui:Destroy()
+                    else
+                        pcall(function() descendant.Parent:Destroy() end)
+                    end
+
+                    -- สั่งให้เปิดหน้า Start.txt ขึ้นมาใหม่ทันที
+                    if getgenv then 
+                        getgenv().PayomboyZ_ShowUI = true 
+                        getgenv().PayomboyZ_ErrorMsg = "❌ คีย์หมดอายุหรือไม่ถูกต้อง! กรุณาใส่คีย์ใหม่"
+                    end
+
+                    -- แปะเลข tick() ป้องกันการดึงแคชไฟล์เก่าจาก executor
+                    loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
+                end
+            end
+        end)
+    end
+
+    local function watchContainer(container)
+        pcall(function()
+            if not container then return end
+            -- ตรวจสอบ UI เดิมที่มีอยู่แล้ว
+            for _, descendant in ipairs(container:GetDescendants()) do
+                task.spawn(checkDescendant, descendant)
+            end
+            -- ดักจับเมื่อมี UI เพิ่มเข้ามาใหม่
+            local conn = container.DescendantAdded:Connect(checkDescendant)
+            table.insert(connections, conn)
+        end)
+    end
+
+    -- เริ่มดักจับ UI ใน CoreGui และ PlayerGui
+    local containers = {}
+    if pcall(function() return CoreGui end) then table.insert(containers, CoreGui) end
+    if pcall(function() return LocalPlayer:FindFirstChild("PlayerGui") end) and LocalPlayer.PlayerGui then table.insert(containers, LocalPlayer.PlayerGui) end
+    pcall(function()
+        if gethui then
+            local hui = gethui()
+            if type(hui) == "table" then
+                for _, v in ipairs(hui) do
+                    if typeof(v) == "Instance" then table.insert(containers, v) end
+                end
+            elseif typeof(hui) == "Instance" then
+                table.insert(containers, hui)
+            end
+        end
+    end)
+
+    for _, container in ipairs(containers) do
+        watchContainer(container)
+    end
+
+    -- ==============================================================================
+    -- 🧠 ระบบจำคีย์แบบอัตโนมัติ (AutoSave) - ถูกลบชั่วคราวตามที่ผู้ใช้สั่ง
+    -- ==============================================================================
+    task.spawn(function()
+        task.wait(10)
+        -- ผ่านไป 10 วินาที ถ้าไม่มี Error ตรวจจับเข้ามา ให้เซฟคีย์ลงเครื่อง
+        pcall(function()
+            if writefile then writefile(LuarmorConfig.SavedKeyFile, userKey) end
+        end)
+    end)
+
+    -- ==============================================================================
+    -- 🔑 ส่ง Key เข้าสู่ Luarmor Engine
+    -- ==============================================================================
+    if getgenv then getgenv().script_key = userKey end
+    if getrenv then pcall(function() getrenv().script_key = userKey end) end
+    _G.script_key = userKey
+    shared.script_key = userKey
+    script_key = userKey
+
+    pcall(function()
+        loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
+    end)
+
+    -- สั่งให้ยกเลิกการดักจับเหตุการณ์หลังจากผ่านไป 60 วินาที เพื่อคืนค่าความทรงจำ
+    task.delay(60, cleanupConnections)
+end
+
+-- ==============================================================================
+-- 🎨 NEW MACLIB KEY UI GENERATOR (MINE MOUNTAIN THEME)
+-- ==============================================================================
+local function CreateLoaderUI(initialStatus, defaultKeyText)
+    if CoreGui:FindFirstChild("PayomboyZ_LuarmorLoader") then CoreGui.PayomboyZ_LuarmorLoader:Destroy() end
+    if LocalPlayer.PlayerGui:FindFirstChild("PayomboyZ_LuarmorLoader") then LocalPlayer.PlayerGui.PayomboyZ_LuarmorLoader:Destroy() end
+
+    local LoaderGui = Instance.new("ScreenGui")
+    LoaderGui.Name = "PayomboyZ_LuarmorLoader"
+    LoaderGui.ResetOnSpawn = false
+    LoaderGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    LoaderGui.IgnoreGuiInset = true
+
+    pcall(function() LoaderGui.Parent = CoreGui end)
+    if not LoaderGui.Parent then LoaderGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+    local LoaderTheme = {
+        Background = Color3.fromRGB(5, 1, 3),
+        Panel = Color3.fromRGB(14, 3, 6),
+        PanelAlt = Color3.fromRGB(28, 5, 10),
+        Field = Color3.fromRGB(19, 4, 8),
+        FieldStroke = Color3.fromRGB(247, 38, 70),
+        RowStroke = Color3.fromRGB(133, 11, 31),
+        Button = Color3.fromRGB(167, 10, 37),
+        ButtonDark = Color3.fromRGB(48, 5, 12),
+        Accent = Color3.fromRGB(255, 68, 93),
+        GlowSoft = Color3.fromRGB(208, 16, 48),
+        Text = Color3.fromRGB(255, 255, 255),
+        Muted = Color3.fromRGB(255, 255, 255),
+        Good = Color3.fromRGB(255, 255, 255),
+        Bad = Color3.fromRGB(255, 77, 101)
+    }
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainFrame.Size = UDim2.new(0, 520, 0, 330)
+    MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    MainFrame.BackgroundColor3 = LoaderTheme.Background
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.ClipsDescendants = true
+    MainFrame.Parent = LoaderGui
+
+    local MainCorner = Instance.new("UICorner")
+    MainCorner.CornerRadius = UDim.new(0, 7)
+    MainCorner.Parent = MainFrame
+
+    local MainStroke = Instance.new("UIStroke")
+    MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    MainStroke.Thickness = 1.5
+    MainStroke.Transparency = 0.14
+    MainStroke.Color = LoaderTheme.Accent
+    MainStroke.Parent = MainFrame
+
+    local MainGradient = Instance.new("UIGradient")
+    MainGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 3, 8)),
+        ColorSequenceKeypoint.new(1, LoaderTheme.Background)
+    })
+    MainGradient.Rotation = 90
+    MainGradient.Parent = MainFrame
+
+    local Sidebar = Instance.new("Frame")
+    Sidebar.Size = UDim2.new(1, 0, 0, 46)
+    Sidebar.BackgroundColor3 = LoaderTheme.Panel
+    Sidebar.BorderSizePixel = 0
+    Sidebar.Parent = MainFrame
+
+    local SideCorner = Instance.new("UICorner")
+    SideCorner.CornerRadius = UDim.new(0, 7)
+    SideCorner.Parent = Sidebar
+
+    local SideFix = Instance.new("Frame")
+    SideFix.Size = UDim2.new(1, 0, 0, 1)
+    SideFix.Position = UDim2.new(0, 0, 1, -1)
+    SideFix.BackgroundColor3 = LoaderTheme.GlowSoft
+    SideFix.BackgroundTransparency = 0.25
+    SideFix.BorderSizePixel = 0
+    SideFix.Parent = Sidebar
+
+    local HeaderGradient = Instance.new("UIGradient")
+    HeaderGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, LoaderTheme.PanelAlt),
+        ColorSequenceKeypoint.new(1, LoaderTheme.Panel)
+    })
+    HeaderGradient.Rotation = 0
+    HeaderGradient.Parent = Sidebar
+
+    local HeaderStroke = Instance.new("UIStroke")
+    HeaderStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    HeaderStroke.Color = LoaderTheme.GlowSoft
+    HeaderStroke.Transparency = 0.55
+    HeaderStroke.Thickness = 1
+    HeaderStroke.Parent = Sidebar
+
+    local LogoImg = Instance.new("ImageLabel")
+    LogoImg.Name = "PayomboyZ_Logo"
+    LogoImg.Size = UDim2.new(0, 26, 0, 26)
+    LogoImg.Position = UDim2.new(0, 14, 0, 10)
+    LogoImg.BackgroundColor3 = LoaderTheme.PanelAlt
+    LogoImg.BackgroundTransparency = 0
+    LogoImg.ScaleType = Enum.ScaleType.Fit
+    LogoImg.Parent = Sidebar
+
+    local LogoCorner = Instance.new("UICorner")
+    LogoCorner.CornerRadius = UDim.new(1, 0)
+    LogoCorner.Parent = LogoImg
+
+    local LogoStroke = Instance.new("UIStroke")
+    LogoStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    LogoStroke.Color = LoaderTheme.Accent
+    LogoStroke.Transparency = 0.3
+    LogoStroke.Thickness = 1
+    LogoStroke.Parent = LogoImg
+
+    local profileImageLoaded = pcall(function()
+        LogoImg.Image = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size150x150
+        )
+    end)
+
+    if not profileImageLoaded and getcustomasset then
+        pcall(function()
+            if isfile and isfile(LuarmorConfig.LogoPath) then
+                LogoImg.Image = getcustomasset(LuarmorConfig.LogoPath)
+            elseif isfile and isfile("AOTR/" .. LuarmorConfig.LogoPath) then
+                LogoImg.Image = getcustomasset("AOTR/" .. LuarmorConfig.LogoPath)
+            end
+        end)
+    end
+
+    local SubBrand = Instance.new("TextLabel")
+    SubBrand.Size = UDim2.new(1, -242, 0, 18)
+    SubBrand.Position = UDim2.new(0, 50, 0, 5)
+    SubBrand.BackgroundTransparency = 1
+    SubBrand.Text = "PAYOMBOYZ HUB"
+    SubBrand.Font = Enum.Font.GothamBold
+    SubBrand.TextSize = 12
+    SubBrand.TextColor3 = LoaderTheme.Text
+    SubBrand.TextXAlignment = Enum.TextXAlignment.Left
+    SubBrand.Parent = Sidebar
+
+    local BrandCaption = Instance.new("TextLabel")
+    BrandCaption.Size = UDim2.new(1, -242, 0, 15)
+    BrandCaption.Position = UDim2.new(0, 50, 0, 23)
+    BrandCaption.BackgroundTransparency = 1
+    BrandCaption.Text = "LUARMOR KEY ACCESS"
+    BrandCaption.Font = Enum.Font.GothamMedium
+    BrandCaption.TextSize = 10
+    BrandCaption.TextColor3 = LoaderTheme.Text
+    BrandCaption.RichText = true
+    BrandCaption.TextXAlignment = Enum.TextXAlignment.Left
+    BrandCaption.Parent = Sidebar
+
+    task.spawn(function()
+        local rgbConnection
+        rgbConnection = RunService.RenderStepped:Connect(function()
+            if not BrandCaption.Parent then
+                rgbConnection:Disconnect()
+                return
+            end
+
+            local hue = (tick() * 0.15) % 1
+            local color = Color3.fromHSV(hue, 1, 1)
+            local r = math.floor(color.R * 255)
+            local g = math.floor(color.G * 255)
+            local b = math.floor(color.B * 255)
+
+            BrandCaption.Text = string.format(
+                '<b><font color="rgb(%d,%d,%d)">LUARMOR KEY ACCESS</font></b>',
+                r,
+                g,
+                b
+            )
+        end)
+    end)
+
+    local ShieldWidget = Instance.new("Frame")
+    ShieldWidget.Size = UDim2.new(0, 106, 0, 28)
+    ShieldWidget.Position = UDim2.new(1, -146, 0.5, -14)
+    ShieldWidget.BackgroundColor3 = LoaderTheme.PanelAlt
+    ShieldWidget.BorderSizePixel = 0
+    ShieldWidget.Parent = Sidebar
+
+    local ShieldCorner = Instance.new("UICorner")
+    ShieldCorner.CornerRadius = UDim.new(0, 6)
+    ShieldCorner.Parent = ShieldWidget
+
+    local ShieldStroke = Instance.new("UIStroke")
+    ShieldStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ShieldStroke.Color = LoaderTheme.RowStroke
+    ShieldStroke.Transparency = 0.2
+    ShieldStroke.Thickness = 1
+    ShieldStroke.Parent = ShieldWidget
+
+    local ShieldGradient = Instance.new("UIGradient")
+    ShieldGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(63, 6, 17)),
+        ColorSequenceKeypoint.new(1, LoaderTheme.PanelAlt)
+    })
+    ShieldGradient.Rotation = 0
+    ShieldGradient.Parent = ShieldWidget
+
+    local ShieldLabel = Instance.new("TextLabel")
+    ShieldLabel.Size = UDim2.new(1, 0, 1, 0)
+    ShieldLabel.BackgroundTransparency = 1
+    ShieldLabel.Text = "🛡️ LUARMOR"
+    ShieldLabel.Font = Enum.Font.GothamBold
+    ShieldLabel.TextSize = 10
+    ShieldLabel.TextColor3 = LoaderTheme.Text
+    ShieldLabel.Parent = ShieldWidget
+
+    local Content = Instance.new("Frame")
+    Content.Size = UDim2.new(1, 0, 1, 0)
+    Content.BackgroundTransparency = 1
+    Content.Parent = MainFrame
+
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+    CloseBtn.Position = UDim2.new(1, -34, 0, 11)
+    CloseBtn.BackgroundColor3 = LoaderTheme.ButtonDark
+    CloseBtn.BorderSizePixel = 0
+    CloseBtn.Text = "❌"
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.TextSize = 12
+    CloseBtn.TextColor3 = LoaderTheme.Text
+    CloseBtn.Parent = Content
+
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.Parent = CloseBtn
+
+    local CloseStroke = Instance.new("UIStroke")
+    CloseStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    CloseStroke.Color = LoaderTheme.GlowSoft
+    CloseStroke.Transparency = 0.55
+    CloseStroke.Thickness = 1
+    CloseStroke.Parent = CloseBtn
+    CloseBtn.MouseButton1Click:Connect(function() LoaderGui:Destroy() end)
+
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, -44, 0, 26)
+    Title.Position = UDim2.new(0, 22, 0, 66)
+    Title.BackgroundTransparency = 1
+    Title.Text = "Key System Verification"
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 17
+    Title.TextColor3 = LoaderTheme.Text
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Parent = Content
+
+    local Desc = Instance.new("TextLabel")
+    Desc.Size = UDim2.new(1, -44, 0, 34)
+    Desc.Position = UDim2.new(0, 22, 0, 94)
+    Desc.BackgroundTransparency = 1
+    Desc.Text = "กรุณากรอก Luarmor Key ของคุณเพื่อเริ่มใช้งานสคริปต์ (ระบบจะบันทึกคีย์ให้อัตโนมัติ)"
+    Desc.Font = Enum.Font.Gotham
+    Desc.TextSize = 11
+    Desc.TextColor3 = LoaderTheme.Muted
+    Desc.TextTransparency = 0
+    Desc.TextWrapped = true
+    Desc.TextXAlignment = Enum.TextXAlignment.Left
+    Desc.TextYAlignment = Enum.TextYAlignment.Top
+    Desc.Parent = Content
+
+    local InputContainer = Instance.new("Frame")
+    InputContainer.Size = UDim2.new(1, -44, 0, 44)
+    InputContainer.Position = UDim2.new(0, 22, 0, 140)
+    InputContainer.BackgroundColor3 = LoaderTheme.Field
+    InputContainer.BorderSizePixel = 0
+    InputContainer.Parent = Content
+
+    local InputCorner = Instance.new("UICorner")
+    InputCorner.CornerRadius = UDim.new(0, 6)
+    InputCorner.Parent = InputContainer
+
+    local InputStroke = Instance.new("UIStroke")
+    InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    InputStroke.Thickness = 1
+    InputStroke.Transparency = 0.25
+    InputStroke.Color = LoaderTheme.FieldStroke
+    InputStroke.Parent = InputContainer
+
+    local InputAccent = Instance.new("Frame")
+    InputAccent.Size = UDim2.new(0, 3, 1, -16)
+    InputAccent.Position = UDim2.new(0, 10, 0, 8)
+    InputAccent.BackgroundColor3 = LoaderTheme.Accent
+    InputAccent.BorderSizePixel = 0
+    InputAccent.Parent = InputContainer
+
+    local InputAccentCorner = Instance.new("UICorner")
+    InputAccentCorner.CornerRadius = UDim.new(1, 0)
+    InputAccentCorner.Parent = InputAccent
+
+    local KeyPrefix = Instance.new("TextLabel")
+    KeyPrefix.Size = UDim2.new(0, 32, 1, 0)
+    KeyPrefix.Position = UDim2.new(0, 22, 0, 0)
+    KeyPrefix.BackgroundTransparency = 1
+    KeyPrefix.Text = "KEY"
+    KeyPrefix.Font = Enum.Font.GothamBold
+    KeyPrefix.TextSize = 10
+    KeyPrefix.TextColor3 = LoaderTheme.Text
+    KeyPrefix.TextXAlignment = Enum.TextXAlignment.Left
+    KeyPrefix.Parent = InputContainer
+
+    local KeyTextBox = Instance.new("TextBox")
+    KeyTextBox.Size = UDim2.new(1, -72, 1, 0)
+    KeyTextBox.Position = UDim2.new(0, 60, 0, 0)
+    KeyTextBox.BackgroundTransparency = 1
+    KeyTextBox.PlaceholderText = "กรอก Key ของคุณที่นี่..."
+    KeyTextBox.PlaceholderColor3 = LoaderTheme.Text
+    KeyTextBox.Text = defaultKeyText or ""
+    KeyTextBox.Font = Enum.Font.GothamMedium
+    KeyTextBox.TextSize = 12
+    KeyTextBox.TextColor3 = LoaderTheme.Text
+    KeyTextBox.TextXAlignment = Enum.TextXAlignment.Left
+    KeyTextBox.ClearTextOnFocus = false
+    KeyTextBox.Parent = InputContainer
+
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(1, -44, 0, 18)
+    StatusText.Position = UDim2.new(0, 22, 0, 193)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = initialStatus or "พร้อมรับข้อมูล Key"
+    StatusText.Font = Enum.Font.GothamMedium
+    StatusText.TextSize = 11
+    StatusText.TextColor3 = initialStatus and LoaderTheme.Bad or LoaderTheme.Muted
+    StatusText.TextTransparency = 0
+    StatusText.TextXAlignment = Enum.TextXAlignment.Left
+    StatusText.Parent = Content
+
+    local VerifyBtn = Instance.new("TextButton")
+    VerifyBtn.Size = UDim2.new(1, -44, 0, 42)
+    VerifyBtn.Position = UDim2.new(0, 22, 0, 219)
+    VerifyBtn.BackgroundColor3 = LoaderTheme.Button
+    VerifyBtn.BorderSizePixel = 0
+    VerifyBtn.Text = 'ตรวจสอบและเข้าใช้งาน (<font color="#68FF9D">Verify Key</font>)'
+    VerifyBtn.RichText = true
+    VerifyBtn.Font = Enum.Font.GothamBold
+    VerifyBtn.TextSize = 13
+    VerifyBtn.TextColor3 = LoaderTheme.Text
+    VerifyBtn.Parent = Content
+
+    local VerifyCorner = Instance.new("UICorner")
+    VerifyCorner.CornerRadius = UDim.new(0, 6)
+    VerifyCorner.Parent = VerifyBtn
+
+    local VerifyStroke = Instance.new("UIStroke")
+    VerifyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    VerifyStroke.Color = LoaderTheme.Accent
+    VerifyStroke.Transparency = 0.16
+    VerifyStroke.Thickness = 1
+    VerifyStroke.Parent = VerifyBtn
+
+    local GetKeyBtn = Instance.new("TextButton")
+    GetKeyBtn.Size = UDim2.new(0.5, -27, 0, 34)
+    GetKeyBtn.Position = UDim2.new(0, 22, 0, 273)
+    GetKeyBtn.BackgroundColor3 = LoaderTheme.ButtonDark
+    GetKeyBtn.BorderSizePixel = 0
+    GetKeyBtn.Text = "🔑 ซื้อ / รับ Key"
+    GetKeyBtn.Font = Enum.Font.GothamBold
+    GetKeyBtn.TextSize = 11
+    GetKeyBtn.TextColor3 = LoaderTheme.Text
+    GetKeyBtn.Parent = Content
+
+    local GetKeyCorner = Instance.new("UICorner")
+    GetKeyCorner.CornerRadius = UDim.new(0, 6)
+    GetKeyCorner.Parent = GetKeyBtn
+
+    local GetKeyStroke = Instance.new("UIStroke")
+    GetKeyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    GetKeyStroke.Color = LoaderTheme.GlowSoft
+    GetKeyStroke.Transparency = 0.35
+    GetKeyStroke.Thickness = 1
+    GetKeyStroke.Parent = GetKeyBtn
+
+    local DiscordBtn = Instance.new("TextButton")
+    DiscordBtn.Size = UDim2.new(0.5, -27, 0, 34)
+    DiscordBtn.Position = UDim2.new(0.5, 5, 0, 273)
+    DiscordBtn.BackgroundColor3 = LoaderTheme.ButtonDark
+    DiscordBtn.BorderSizePixel = 0
+    DiscordBtn.Text = "💬 Discord"
+    DiscordBtn.Font = Enum.Font.GothamBold
+    DiscordBtn.TextSize = 11
+    DiscordBtn.TextColor3 = LoaderTheme.Text
+    DiscordBtn.Parent = Content
+
+    local DiscordCorner = Instance.new("UICorner")
+    DiscordCorner.CornerRadius = UDim.new(0, 6)
+    DiscordCorner.Parent = DiscordBtn
+
+    local DiscordStroke = Instance.new("UIStroke")
+    DiscordStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    DiscordStroke.Color = LoaderTheme.GlowSoft
+    DiscordStroke.Transparency = 0.35
+    DiscordStroke.Thickness = 1
+    DiscordStroke.Parent = DiscordBtn
+
+    VerifyBtn.MouseButton1Click:Connect(function()
+        local userKey = KeyTextBox.Text:gsub("%s+", "")
+        if userKey == "" then
+            StatusText.Text = "⚠️ กรุณากรอก Key ก่อนกดปุ่มนี้!"
+            StatusText.TextColor3 = LoaderTheme.Text
+            InputStroke.Color = LoaderTheme.Bad
+            return
+        end
+        StatusText.Text = "⏳ บันทึก Key เรียบร้อย! กำลังเชื่อมต่อ Luarmor..."
+        StatusText.TextColor3 = LoaderTheme.Text
+        task.wait(0.3)
+        LoaderGui:Destroy()
+        PassToKeyChecker(userKey)
+    end)
+
+    GetKeyBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            if setclipboard then setclipboard(LuarmorConfig.GetKeyURL) end
+        end)
+        StatusText.Text = "📋 คัดลอกลิงก์รับ Key เรียบร้อยแล้ว!"
+        StatusText.TextColor3 = LoaderTheme.Text
+    end)
+
+    DiscordBtn.MouseButton1Click:Connect(function()
+        pcall(function()
+            if setclipboard then setclipboard(LuarmorConfig.DiscordURL) end
+        end)
+        StatusText.Text = "💬 คัดลอกลิงก์ Discord เรียบร้อยแล้ว!"
+        StatusText.TextColor3 = LoaderTheme.Text
+    end)
+end
+
+-- ==============================================================================
+-- 🚀 SMART AUTO-LOGIN (ระบบกันค้าง & เข้าเกมอัตโนมัติ)
+-- ==============================================================================
+if getgenv and getgenv().PayomboyZ_ShowUI then
+    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
+    getgenv().PayomboyZ_ShowUI = false
+    return
+end
+
+local savedKey = LoadSavedKey()
+
+if savedKey and savedKey ~= "" then
+    -- ==============================================================================
+    -- 🚀 INSTANT AUTO-LOGIN & ESCAPE HATCH (ฉลาด ไว และแก้บั๊กค้าง 100%)
+    -- ==============================================================================
+    
+    -- สร้างปุ่ม "ยกเลิกคีย์" (Escape Hatch) ไว้บนสุดของจอ เผื่อกรณี Luarmor ค้าง
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local EscapeGui = Instance.new("ScreenGui")
+    EscapeGui.Name = "PayomboyZ_Escape"
+    EscapeGui.ResetOnSpawn = false
+    EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    pcall(function() EscapeGui.Parent = CoreGui end)
+    if not EscapeGui.Parent then EscapeGui.Parent = PlayerGui end
+
+    local EscBtn = Instance.new("TextButton")
+    EscBtn.Size = UDim2.new(0, 160, 0, 32)
+    EscBtn.Position = UDim2.new(0.5, -80, 0, -40) -- ซ่อนไว้ด้านบนก่อน
+    EscBtn.BackgroundColor3 = Color3.fromRGB(255, 68, 93)
+    EscBtn.Text = "❌ ลบคีย์เดิม (Reset Key)"
+    EscBtn.Font = Enum.Font.GothamBold
+    EscBtn.TextSize = 12
+    EscBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    EscBtn.BorderSizePixel = 0
+    EscBtn.Parent = EscapeGui
+
+    local EscCorner = Instance.new("UICorner")
+    EscCorner.CornerRadius = UDim.new(0, 6)
+    EscCorner.Parent = EscBtn
+
+    local EscStroke = Instance.new("UIStroke")
+    EscStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    EscStroke.Color = Color3.fromRGB(255, 255, 255)
+    EscStroke.Transparency = 0.2
+    EscStroke.Thickness = 1
+    EscStroke.Parent = EscBtn
+
+    -- แอนิเมชั่นเลื่อนปุ่มลงมาตรงกลางบน
+    task.spawn(function()
+        local ts = game:GetService("TweenService")
+        ts:Create(EscBtn, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -80, 0, 20)}):Play()
+    end)
+
+    EscBtn.MouseButton1Click:Connect(function()
+        -- ถ้าลูกค้ากดปุ่มนี้ แปลว่ามันค้างหรือต้องการเปลี่ยนคีย์
+        if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
+            delfile(LuarmorConfig.SavedKeyFile)
+        end
+        EscBtn.Text = "✅ ลบคีย์แล้ว! กำลังเปิดหน้าต่างใหม่..."
+        EscBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        task.wait(1.5)
+        
+        -- ทำลายปุ่มทิ้ง
+        if EscapeGui then EscapeGui:Destroy() end
+        
+        -- เรียกหน้า Start.txt ขึ้นมาใหม่แบบนุ่มนวล โดยไม่ต้องเตะผู้เล่นออกจากเกม
+        if getgenv then 
+            getgenv().PayomboyZ_ShowUI = true 
+            getgenv().PayomboyZ_ErrorMsg = "✅ ลบคีย์เดิมสำเร็จ! กรุณาใส่คีย์ใหม่"
+        end
+        loadstring(game:HttpGet(LuarmorConfig.StartURL))()
+    end)
+
+    -- ทำลายปุ่มทิ้งอัตโนมัติเมื่อผ่านไป 12 วินาที (แปลว่าเข้าเกมสำเร็จแล้ว)
+    task.delay(12, function()
+        if EscapeGui then
+            local ts = game:GetService("TweenService")
+            local tw = ts:Create(EscBtn, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2.new(0.5, -80, 0, -50)})
+            tw:Play()
+            tw.Completed:Connect(function() pcall(function() EscapeGui:Destroy() end) end)
+        end
+    end)
+
+    -- ข้ามหน้าต่าง UI แล้วพุ่งไปหา Luarmor ทันที! (ไม่มีหน่วงเวลา)
+    ShowToast("🔑 PayomboyZ Hub", "พบ Key เดิม! กำลังเชื่อมต่ออัตโนมัติ...", false)
+    PassToKeyChecker(savedKey)
+else
+    -- ถ้าไม่มีคีย์ ก็สร้าง UI ให้กรอก
+    CreateLoaderUI()
+end
