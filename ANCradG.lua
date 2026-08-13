@@ -1262,66 +1262,13 @@ AutoRerollToggle:OnChanged(function(state)
                         getgenv().NotifiedRerollStart = true
                     end
                     
-                    local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                    local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") or game:GetService("ReplicatedStorage")
                     local TraitRollRE = Remotes and (Remotes:FindFirstChild("TraitRollRE") or Remotes:FindFirstChild("RollTraitRE") or Remotes:FindFirstChild("TraitRE") or Remotes:FindFirstChild("TraitRerollRE") or Remotes:FindFirstChild("Trait"))
                     
                     if TraitRollRE and TraitRollRE:IsA("RemoteEvent") then
-                        pcall(function() TraitRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Equip", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Insert", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Select", {Tool = cardTool}) end)
-                        
-                        local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll"
-                        }
-                        
-                        for _, arg in ipairs(rollArgs) do
-                            pcall(function() TraitRollRE:FireServer(arg) end)
-                            pcall(function() TraitRollRE:FireServer("Roll", arg) end)
-                            pcall(function() TraitRollRE:FireServer("Reroll", arg) end)
-                            pcall(function() TraitRollRE:FireServer(arg, "Roll") end)
-                        end
-                        
-                        pcall(function() TraitRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
-                    end
-                    
-                    if not getgenv().CachedTraitRemotes then
-                        getgenv().CachedTraitRemotes = {}
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                if string.find(name, "roll") or string.find(name, "trait") then
-                                    table.insert(getgenv().CachedTraitRemotes, obj)
-                                end
-                            end
-                        end
-                    end
-
-                    local argsToTry = { cId, cardTool, { Card = cId }, { UUID = cId }, { Tool = cardTool } }
-                    for _, obj in ipairs(getgenv().CachedTraitRemotes) do
-                        if obj:IsA("RemoteEvent") then
-                            for _, arg in ipairs(argsToTry) do
-                                pcall(function() obj:FireServer(arg) end)
-                            end
-                        elseif obj:IsA("RemoteFunction") then
-                            for _, arg in ipairs(argsToTry) do
-                                task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                            end
-                        end
+                        pcall(function() TraitRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Reroll", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer(cardTool) end)
                     end
 
                     pcall(function()
@@ -1454,90 +1401,13 @@ AutoRankRerollToggle:OnChanged(function(state)
                         getgenv().NotifiedRankRerollStart = true
                     end
                     
-                    local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                    local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") or game:GetService("ReplicatedStorage")
                     local RankRollRE = Remotes and (Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or Remotes:FindFirstChild("RollRankRE") or Remotes:FindFirstChild("RankRE") or Remotes:FindFirstChild("CardRankingRE") or Remotes:FindFirstChild("RankRerollRE") or Remotes:FindFirstChild("Rank"))
                     
                     if RankRollRE and RankRollRE:IsA("RemoteEvent") then
-                        pcall(function() RankRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Equip", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Insert", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Select", {Tool = cardTool}) end)
-                        
-                        local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll",
-                            "Rank",
-                            "Grade"
-                        }
-                        
-                        for _, arg in ipairs(rollArgs) do
-                            pcall(function() RankRollRE:FireServer(arg) end)
-                            pcall(function() RankRollRE:FireServer("Roll", arg) end)
-                            pcall(function() RankRollRE:FireServer("Rank", arg) end)
-                            pcall(function() RankRollRE:FireServer("Grade", arg) end)
-                            pcall(function() RankRollRE:FireServer(arg, "Roll") end)
-                            pcall(function() RankRollRE:FireServer(arg, "Rank") end)
-                            pcall(function() RankRollRE:FireServer(arg, "Grade") end)
-                        end
-                        
-                        pcall(function() RankRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollRank", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Rank", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
-                    end
-                    
-                    if not getgenv().CachedRankRemotes then
-                        getgenv().CachedRankRemotes = {}
-                        local keywords = {"rank", "ranking", "grade", "cardroll", "rollcard", "rerollcard", "upgrade"}
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                local match = false
-                                for _, kw in ipairs(keywords) do
-                                    if string.find(name, kw) then
-                                        match = true
-                                        break
-                                    end
-                                end
-                                if match then
-                                    table.insert(getgenv().CachedRankRemotes, obj)
-                                end
-                            end
-                        end
-                    end
-
-                    local argsToTry = { cId, cardTool, { Card = cId }, { UUID = cId }, { Tool = cardTool } }
-                    for _, obj in ipairs(getgenv().CachedRankRemotes) do
-                        if obj:IsA("RemoteEvent") then
-                            for _, arg in ipairs(argsToTry) do
-                                pcall(function() obj:FireServer(arg) end)
-                                pcall(function() obj:FireServer("Roll", arg) end)
-                                pcall(function() obj:FireServer("Rank", arg) end)
-                            end
-                        elseif obj:IsA("RemoteFunction") then
-                            for _, arg in ipairs(argsToTry) do
-                                task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                            end
-                        end
+                        pcall(function() RankRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Rank", cardTool) end)
+                        pcall(function() RankRollRE:FireServer(cardTool) end)
                     end
 
                     pcall(function()
@@ -2328,7 +2198,6 @@ AutoUpgradeToggle:OnChanged(function(state)
                                 ) then
                                     local parentFrame = txt.Parent
                                     if parentFrame then
-                                        -- หาปุ่มอัปเกรดใน Frame นี้
                                         local btn
                                         for _, child in ipairs(parentFrame:GetDescendants()) do
                                             if child:IsA("TextButton") or child:IsA("ImageButton") then
@@ -2351,103 +2220,44 @@ AutoUpgradeToggle:OnChanged(function(state)
                                 end
                             end
                         end
-                        
-                        -- 2. หาปุ่มอัปเกรดสายพานจาก Plot
+
+                        -- 2. อัปเกรดจาก ProximityPrompt บนฐาน
                         local plot = findPlayerPlot()
                         if plot and plot:FindFirstChild("Plot_N0") then
-                            for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
-                                if desc:IsA("ProximityPrompt") then
-                                    local actTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
-                                    if actTxt:find("UPGRADE CONVEYOR") or actTxt:find("UPGRADE BELT") or (actTxt:find("UPGRADE") and (actTxt:find("CONVEYOR") or actTxt:find("BELT"))) then
+                            for _, prompt in ipairs(plot.Plot_N0:GetDescendants()) do
+                                if prompt:IsA("ProximityPrompt") then
+                                    local actTxt = string.upper((prompt.ActionText or "") .. " " .. (prompt.ObjectText or ""))
+                                    if actTxt:find("UPGRADE") or actTxt:find("อัปเกรด") or actTxt:find("SPEED") or actTxt:find("CASH") then
                                         local cost = 0
-                                        if desc.Parent then
-                                            local bg = desc.Parent:FindFirstChildWhichIsA("BillboardGui")
-                                            if bg then
-                                                for _, t in ipairs(bg:GetDescendants()) do
-                                                    if t:IsA("TextLabel") and string.find(t.Text, "%$") then
-                                                        cost = parseNum(t.Text)
-                                                        break
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        if cost == 0 then
-                                            local matched = string.match(actTxt, "%$[%d%.KMBTQAQI]+")
-                                            if matched then cost = parseNum(matched) end
-                                        end
-                                        if cost > 0 then
-                                            table.insert(upgradeFrames, { prompt = desc, cost = cost, name = "Conveyor Upgrade", type = "prompt" })
-                                        end
+                                        local matched = string.match(actTxt, "%$[%d%.KMBTQAQI]+")
+                                        if matched then cost = parseNum(matched) end
+                                        table.insert(upgradeFrames, { prompt = prompt, cost = cost, name = actTxt, type = "prompt" })
                                     end
                                 end
                             end
                         end
 
-                        if #upgradeFrames > 0 then
-                            -- เรียงลำดับตาม Priority
-                            local mode = getgenv().UpgradePriorityMode or "สมดุล (Balance)"
-                            table.sort(upgradeFrames, function(a, b)
-                                local scoreA, scoreB = 0, 0
-                                if mode == "เน้นเงิน (Cash > Speed > Time)" then
-                                    if a.name:find("Cash") then scoreA = 100
-                                    elseif a.name:find("Conveyor") then scoreA = 90
-                                    elseif a.name:find("Speed") then scoreA = 80
-                                    elseif a.name:find("Time") then scoreA = 70 end
-                                    
-                                    if b.name:find("Cash") then scoreB = 100
-                                    elseif b.name:find("Conveyor") then scoreB = 90
-                                    elseif b.name:find("Speed") then scoreB = 80
-                                    elseif b.name:find("Time") then scoreB = 70 end
-                                elseif mode == "เน้นความเร็ว (Speed > Cash > Time)" then
-                                    if a.name:find("Speed") then scoreA = 100
-                                    elseif a.name:find("Time") then scoreA = 90
-                                    elseif a.name:find("Conveyor") then scoreA = 80
-                                    elseif a.name:find("Cash") then scoreA = 70 end
-                                    
-                                    if b.name:find("Speed") then scoreB = 100
-                                    elseif b.name:find("Time") then scoreB = 90
-                                    elseif b.name:find("Conveyor") then scoreB = 80
-                                    elseif b.name:find("Cash") then scoreB = 70 end
-                                end
-                                
-                                if scoreA ~= scoreB then return scoreA > scoreB end
-                                return a.cost < b.cost
-                            end)
+                        -- 3. เรียงลำดับตามราคา
+                        table.sort(upgradeFrames, function(a, b) return a.cost < b.cost end)
 
-                            -- ลองอัปเกรด
-                            for _, up in ipairs(upgradeFrames) do
-                                if availableCash >= up.cost then
-                                    if up.type == "ui" and up.button then
-                                        local fired = false
-                                        if getconnections then
-                                            for _, c in pairs(getconnections(up.button.MouseButton1Click)) do c:Fire(); fired = true end
-                                            for _, c in pairs(getconnections(up.button.Activated)) do c:Fire(); fired = true end
+                        -- 4. ทำการอัปเกรด
+                        for _, up in ipairs(upgradeFrames) do
+                            if availableCash >= up.cost then
+                                if up.type == "ui" and up.button then
+                                    pcall(function()
+                                        firesignal(up.button.MouseButton1Click)
+                                        if up.button:FindFirstChildOfClass("BindableEvent") then
+                                            up.button:FindFirstChildOfClass("BindableEvent"):Fire()
                                         end
-                                        if not fired then
-                                            local vim = game:GetService("VirtualInputManager")
-                                            local center = up.button.AbsolutePosition + (up.button.AbsoluteSize / 2)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                                            task.wait(0.1)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-                                        end
-                                        
-                                        task.wait(0.2)
-                                        pcall(function()
-                                            local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                                            if rem and rem:FindFirstChild("ConveyorUpgradeRE") then
-                                                rem.ConveyorUpgradeRE:FireServer("ConfirmUpgrade")
-                                            end
-                                        end)
-                                        
-                                        availableCash = availableCash - up.cost
-                                        task.wait(0.5)
-                                    elseif up.type == "prompt" and up.prompt then
-                                        up.prompt.RequiresLineOfSight = false
-                                        up.prompt.MaxActivationDistance = 99999
-                                        fireproximityprompt(up.prompt)
-                                        availableCash = availableCash - up.cost
-                                        task.wait(0.5)
-                                    end
+                                    end)
+                                    availableCash = availableCash - up.cost
+                                    task.wait(0.3)
+                                elseif up.type == "prompt" and up.prompt then
+                                    up.prompt.RequiresLineOfSight = false
+                                    up.prompt.MaxActivationDistance = 99999
+                                    fireproximityprompt(up.prompt)
+                                    availableCash = availableCash - up.cost
+                                    task.wait(0.5)
                                 end
                             end
                         end
@@ -2463,70 +2273,59 @@ end)
 -- 4. RAID & TOWER TAB (เรด & ทาวเวอร์)
 ---------------------------------------------------------
 
+local function isBossOrSpecialItem(model, desc)
+    if not model then return true end
+    local mName = string.upper(model.Name or "")
+    
+    if string.find(mName, "BOSS") or string.find(mName, "RAID") or string.find(mName, "STATUE") 
+       or string.find(mName, "ARTIFACT") or string.find(mName, "SPAWN") or string.find(mName, "LUCK")
+       or string.find(mName, "CASH") or string.find(mName, "BUY") or string.find(mName, "PURCHASE") then
+        return true
+    end
+
+    if desc then
+        local pText = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
+        if string.find(pText, "SELL") or string.find(pText, "ขาย") 
+           or string.find(pText, "OPEN") or string.find(pText, "เปิด")
+           or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
+           or string.find(pText, "LUCK") or string.find(pText, "CASH")
+           or string.find(pText, "BOOST") or string.find(pText, "GEMS")
+           or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP") then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function collect4BestBaseCards()
     pcall(function()
+        if (getgenv().TowerCardSource or "จากในกระเป๋า (Inventory)") == "จากในกระเป๋า (Inventory)" then
+            return
+        end
+
         local character = LocalPlayer.Character
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local allCards = {}
-        
-        local function scanInv(container)
-            if not container then return end
-            for _, t in ipairs(container:GetChildren()) do
-                if t:IsA("Tool") and not isPackCard(t) then
-                    local score = getUnifiedCardScore(t)
-                    table.insert(allCards, { item = t, score = score, source = "Inv", uuid = t.Name })
-                end
-            end
-        end
-        scanInv(LocalPlayer:FindFirstChild("Backpack"))
-        scanInv(character)
+        local plot = findPlayerPlot()
+        if not plot or not plot:FindFirstChild("Plot_N0") then return end
 
-        if getgenv().TowerCardSource ~= "จากในกระเป๋า (Inventory)" then
-            local plotFolder = findPlayerPlot()
-            if plotFolder then
-                for _, desc in ipairs(plotFolder:GetDescendants()) do
-                    if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                        local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
-                        
-                        local isIgnoredPrompt = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
-                            or string.find(pText, "SPAWN") or string.find(pText, "สุ่ม")
-                            or string.find(pText, "OPEN") or string.find(pText, "เปิด")
-                            or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์")
-                            or string.find(pText, "UPGRADE") or string.find(pText, "อัปเกรด")
-                            or string.find(pText, "CLAIM") or string.find(pText, "รับ")
-                            or string.find(pText, "SELL") or string.find(pText, "ขาย")
-                            or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
-                            or string.find(pText, "JOIN") or string.find(pText, "ENTER")
-                            or string.find(pText, "SKIP") or string.find(pText, "ข้าม")
-                            or string.find(pText, "MASTER") or string.find(pText, "ROBUX")
-                            or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
-                            or string.find(pText, "LUCK") or string.find(pText, "CASH")
-                            or string.find(pText, "BOOST") or string.find(pText, "GEMS")
-                            or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP")
-                        
-                        if not isIgnoredPrompt then
-                            local model = desc:FindFirstAncestorOfClass("Model")
-                            if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
-                                local isPack = isPackCard(model)
-                                if not isPack then
-                                    for _, txtObj in ipairs(model:GetDescendants()) do
-                                        if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-                                            local txtUpper = string.upper(txtObj.Text or "")
-                                            if string.find(txtUpper, "PACK") or string.find(txtUpper, "แพ็ค") or string.find(txtUpper, "BOX") or string.find(txtUpper, "กล่อง") then
-                                                isPack = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                end
-                                if not isPack then
-                                    local score = getUnifiedCardScore(model)
-                                    if score > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
-                                        table.insert(allCards, { item = model, score = score, source = "Plot", interact = desc })
-                                    end
-                                end
+        local baseCards = {}
+        for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                local model = desc:FindFirstAncestorOfClass("Model")
+                if model and model.Name ~= "Plot_N0" and not model:FindFirstChildOfClass("Humanoid") then
+                    if not isBossOrSpecialItem(model, desc:IsA("ProximityPrompt") and desc or nil) then
+                        local score = getUnifiedCardScore(model)
+                        if score > 0 then
+                            local pos
+                            if desc.Parent:IsA("BasePart") then pos = desc.Parent.Position
+                            elseif desc.Parent:IsA("Attachment") then pos = desc.Parent.WorldPosition
+                            elseif model.PrimaryPart then pos = model.PrimaryPart.Position end
+                            
+                            if pos then
+                                table.insert(baseCards, { interact = desc, score = score, pos = pos, modelName = model.Name })
                             end
                         end
                     end
@@ -2534,57 +2333,40 @@ local function collect4BestBaseCards()
             end
         end
 
-        if #allCards == 0 then return end
-        table.sort(allCards, function(a, b) return a.score > b.score end)
+        if #baseCards == 0 then return end
+
+        table.sort(baseCards, function(a, b) return a.score > b.score end)
 
         local originalCFrame = hrp.CFrame
         getgenv().CollectedCardPositions = {}
-        
-        task.wait(1)
 
-        for i = 1, math.min(4, #allCards) do
-            local card = allCards[i]
-            if card.source == "Plot" and card.interact and card.interact.Parent then
-                pcall(function()
-                    local targetPos
-                    if card.interact.Parent:IsA("BasePart") then
-                        targetPos = card.interact.Parent.Position
-                    elseif card.interact.Parent:IsA("Attachment") then
-                        targetPos = card.interact.Parent.WorldPosition
-                    elseif card.item and card.item.PrimaryPart then
-                        targetPos = card.item.PrimaryPart.Position
+        local toCollect = math.min(4, #baseCards)
+        for i = 1, toCollect do
+            local card = baseCards[i]
+            table.insert(getgenv().CollectedCardPositions, { pos = card.pos, score = card.score, assumedName = card.modelName })
+            
+            pcall(function()
+                hrp.CFrame = CFrame.new(card.pos) + Vector3.new(0, 3, 0)
+                task.wait(0.4)
+
+                if card.interact:IsA("ProximityPrompt") then
+                    card.interact.RequiresLineOfSight = false
+                    card.interact.MaxActivationDistance = 99999
+                    card.interact.HoldDuration = 0
+                    for _ = 1, 6 do
+                        if not card.interact or not card.interact.Parent then break end
+                        fireproximityprompt(card.interact)
+                        task.wait(0.4)
                     end
-                    
-                    if targetPos and hrp then
-                        table.insert(getgenv().CollectedCardPositions, { pos = targetPos, score = card.score, assumedName = card.item.Name })
-                        hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
-                        
-                        if i == 1 then
-                            task.wait(1.5)
-                        else
-                            task.wait(0.8)
-                        end
-                        
-                        if card.interact:IsA("ProximityPrompt") then
-                            card.interact.RequiresLineOfSight = false
-                            card.interact.MaxActivationDistance = 99999
-                            card.interact.HoldDuration = 0
-                            for _ = 1, 8 do
-                                if not card.interact or not card.interact.Parent then break end
-                                fireproximityprompt(card.interact)
-                                task.wait(0.4)
-                            end
-                        elseif card.interact:IsA("ClickDetector") then
-                            for _ = 1, 8 do
-                                if not card.interact or not card.interact.Parent then break end
-                                fireclickdetector(card.interact)
-                                task.wait(0.4)
-                            end
-                        end
-                        task.wait(0.5)
+                elseif card.interact:IsA("ClickDetector") then
+                    for _ = 1, 8 do
+                        if not card.interact or not card.interact.Parent then break end
+                        fireclickdetector(card.interact)
+                        task.wait(0.4)
                     end
-                end)
-            end
+                end
+                task.wait(0.5)
+            end)
         end
 
         if originalCFrame and hrp then
@@ -2742,57 +2524,76 @@ AutoTowerToggle:OnChanged(function(state)
                         return not (current and current:IsA("ScreenGui")) or current.Enabled
                     end
                     
-                    for _, v in ipairs(playerGui:GetDescendants()) do
-                        if (v:IsA("TextButton") or v:IsA("TextLabel") or v:IsA("ImageButton")) then
-                            local rawText = v:IsA("TextButton") and v.Text or (v:IsA("TextLabel") and v.Text or "")
-                            local cleanText = string.gsub(rawText, "<[^>]+>", "")
-                            local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
-                            
-                            local isInventoryBtn = false
-                            local parentObj = v.Parent
-                            while parentObj and parentObj:IsA("GuiObject") do
-                                local pName = string.lower(parentObj.Name)
-                                if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
-                                    isInventoryBtn = true
-                                    break
+                    for _, gui in ipairs(getGameGuis()) do
+                        for _, v in ipairs(gui:GetDescendants()) do
+                            if (v:IsA("TextButton") or v:IsA("TextLabel") or v:IsA("ImageButton")) then
+                                local rawText = v:IsA("TextButton") and v.Text or (v:IsA("TextLabel") and v.Text or "")
+                                local cleanText = string.gsub(rawText, "<[^>]+>", "")
+                                local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
+                                
+                                local isInventoryBtn = false
+                                local parentObj = v.Parent
+                                while parentObj and parentObj:IsA("GuiObject") do
+                                    local pName = string.lower(parentObj.Name)
+                                    if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
+                                        isInventoryBtn = true
+                                        break
+                                    end
+                                    parentObj = parentObj.Parent
                                 end
-                                parentObj = parentObj.Parent
-                            end
 
-                            if (text == "EQUIP BEST" or text:find("EQUIP") or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then equipBtn = btn end
-                            elseif text == "BATTLE" or text:find("BATTLE") or text:find("ต่อสู้") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then battleBtn = btn end
-                            elseif text == "NEXT" or text == "NEXT FLOOR" or text:find("NEXT") or text:find("ชั้นต่อไป") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then nextBtn = btn end
-                            elseif text == "PLAY" or text == "START" or text:find("PLAY") or text:find("เริ่ม") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then playBtn = btn end
-                            elseif text == "AUTO REPLAY" or text:find("AUTO REPLAY") or text:find("เล่นอัตโนมัติ") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then autoReplayBtn = btn end
-                            elseif text == "HIDE BATTLE" or text:find("HIDE BATTLE") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then hideBattleBtn = btn end
-                            elseif text == "SHOW BATTLE" or text:find("SHOW BATTLE") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn and isGuiVisible(btn) then showBattleBtn = btn end
-                            elseif text:find("INFINITY TOWER") or text:find("TOWER") or text:find("หอคอย") then
-                                local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
-                                if btn then openBtn = btn end
+                                if (text == "EQUIP BEST" or text:find("EQUIP") or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then equipBtn = btn end
+                                elseif text == "BATTLE" or text:find("BATTLE") or text:find("ต่อสู้") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then battleBtn = btn end
+                                elseif text == "NEXT" or text == "NEXT FLOOR" or text:find("NEXT") or text:find("ชั้นต่อไป") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then nextBtn = btn end
+                                elseif text == "PLAY" or text == "START" or text:find("PLAY") or text:find("เริ่ม") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then playBtn = btn end
+                                elseif text == "AUTO REPLAY" or text:find("AUTO REPLAY") or text:find("เล่นอัตโนมัติ") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then autoReplayBtn = btn end
+                                elseif text == "HIDE BATTLE" or text:find("HIDE BATTLE") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then hideBattleBtn = btn end
+                                elseif text == "SHOW BATTLE" or text:find("SHOW BATTLE") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn and isGuiVisible(btn) then showBattleBtn = btn end
+                                elseif string.find(text, "OPEN INFINITY TOWER") or string.find(text, "INFINITY TOWER") or string.find(text, "TOWER") or string.find(text, "หอคอย") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton") or v
+                                    if btn then openBtn = btn end
+                                end
                             end
                         end
+                    end
+
+                    local inTowerUI = equipBtn or battleBtn
+                    local inBattle = autoReplayBtn or showBattleBtn or hideBattleBtn
+
+                    -- Smart Idle: While inside Tower Battle with Auto Replay active, pause polling to save CPU & avoid interference
+                    if inBattle and getgenv().AutoReplayToggled then
+                        task.wait(2.5)
+                        continue
+                    end
+
+                    if inBattle and autoReplayBtn and not getgenv().AutoReplayToggled then
+                        fireButton(autoReplayBtn)
+                        getgenv().AutoReplayToggled = true
+                        task.wait(0.5)
+                        task.wait(2.5)
+                        continue
                     end
 
                     local openPrompt = getgenv().TowerOpenPrompt
                     if not openPrompt or not openPrompt.Parent then
                         for _, prompt in ipairs(workspace:GetDescendants()) do
                             if prompt:IsA("ProximityPrompt") then
-                                local pText = string.upper((prompt.ActionText or "") .. " " .. (prompt.ObjectText or "") .. " " .. prompt.Name)
-                                if string.find(pText, "INFINITY") or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์") or string.find(pText, "หอคอย") then
+                                local pText = string.upper((prompt.ActionText or "") .. " " .. (prompt.ObjectText or "") .. " " .. prompt.Name .. " " .. (prompt.Parent and prompt.Parent.Name or ""))
+                                if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") or string.find(pText, "ทาวเวอร์") or string.find(pText, "หอคอย") or string.find(pText, "TOWER") then
                                     getgenv().TowerOpenPrompt = prompt
                                     openPrompt = prompt
                                     break
@@ -2801,11 +2602,8 @@ AutoTowerToggle:OnChanged(function(state)
                         end
                     end
 
-                    local inTowerUI = equipBtn or battleBtn
-                    local inBattle = autoReplayBtn or showBattleBtn
-
                     if openPrompt and not inTowerUI and not inBattle then
-                        if not getgenv().TowerHasCollected then
+                        if not getgenv().TowerHasCollected and getgenv().TowerCardSource == "จากบนฐาน (Plot)" then
                             collect4BestBaseCards()
                             getgenv().TowerHasCollected = true
                             task.wait(0.5)
@@ -2850,30 +2648,6 @@ AutoTowerToggle:OnChanged(function(state)
                     if nextBtn then fireButton(nextBtn) task.wait(0.2) end
                     if playBtn then fireButton(playBtn) task.wait(0.2) end
                     if hideBattleBtn then fireButton(hideBattleBtn) task.wait(0.2) end
-
-                    -- Direct Remote Backup Triggers for Tower
-                    pcall(function()
-                        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") or game:GetService("ReplicatedStorage")
-                        if remotes then
-                            local towerRE = remotes:FindFirstChild("TowerRE") or remotes:FindFirstChild("InfinityTowerRE") or remotes:FindFirstChild("TowerBattleRE")
-                            if not towerRE then
-                                for _, r in ipairs(remotes:GetDescendants()) do
-                                    if r:IsA("RemoteEvent") and string.find(string.lower(r.Name), "tower") then
-                                        towerRE = r
-                                        break
-                                    end
-                                end
-                            end
-                            if towerRE and towerRE:IsA("RemoteEvent") then
-                                if inTowerUI or inBattle then
-                                    towerRE:FireServer("EquipBest")
-                                    towerRE:FireServer("Battle")
-                                    towerRE:FireServer("NextFloor")
-                                    towerRE:FireServer("AutoReplay", true)
-                                end
-                            end
-                        end
-                    end)
                 end
                 task.wait(0.3)
             end
@@ -3023,6 +2797,13 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
+                    
+                    -- Smart Battle Idle: If Auto Replay is active during Boss Raid battle, rest loop to save CPU
+                    if (showBattleBtn or hideBattleBtn) and getgenv().AutoReplayToggledBoss then
+                        task.wait(2.5)
+                        continue
+                    end
+
                     if not inBattle and isBossTimeWindow() then
                         local targetPrompt = getgenv().BossTargetPrompt
                         if not targetPrompt or not targetPrompt.Parent then
@@ -3031,7 +2812,7 @@ AutoBossToggle:OnChanged(function(state)
                             for _, p in ipairs(searchFolder:GetChildren()) do
                                 local prompt = p:FindFirstChildWhichIsA("ProximityPrompt", true)
                                 if prompt then
-                                    local pText = string.upper(prompt.ActionText .. " " .. prompt.ObjectText .. " " .. (prompt.Parent and prompt.Parent.Name or "") .. " " .. prompt.Name)
+                                    local pText = string.upper((prompt.ActionText or "") .. " " .. (prompt.ObjectText or "") .. " " .. (prompt.Parent and prompt.Parent.Name or "") .. " " .. (prompt.Name or ""))
                                     if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
                                         portalPrompt = prompt
                                     elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
