@@ -3,14 +3,48 @@
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
 local WindUI = nil
-pcall(function()
-    WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
+local loadError = nil
+
+-- 1. Try URL 1 (aslamdunk7 repository)
+local s1, r1 = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
 end)
 
-if not WindUI then
-    pcall(function()
-        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+if s1 and r1 and type(r1) == "table" then
+    WindUI = r1
+else
+    loadError = tostring(r1)
+    -- 2. Try URL 2 (Footagesus main repository)
+    local s2, r2 = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
     end)
+    if s2 and r2 and type(r2) == "table" then
+        WindUI = r2
+    else
+        loadError = (loadError or "") .. " | " .. tostring(r2)
+        -- 3. Try local WindUI.txt if saved locally
+        pcall(function()
+            if isfile and isfile("WindUI.txt") and readfile then
+                local content = readfile("WindUI.txt")
+                if content and #content > 100 then
+                    WindUI = loadstring(content)()
+                end
+            end
+        end)
+    end
+end
+
+if not WindUI then
+    local errText = "Failed to load WindUI library! Error: " .. tostring(loadError)
+    warn("[PayomboyZ] " .. errText)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "PayomboyZ UI Error",
+            Text = "ไม่สามารถโหลด WindUI ได้ กรุณาเช็คอินเทอร์เน็ตหรือ Executor",
+            Duration = 8
+        })
+    end)
+    return
 end
 
 local UserInputService = game:GetService("UserInputService")
@@ -18,18 +52,31 @@ local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.Key
 local defaultWindowSize = isMobileDevice and UDim2.fromOffset(360, 280) or UDim2.fromOffset(580, 420)
 
 local rawWindow = nil
-pcall(function()
-    rawWindow = WindUI:CreateWindow({
+local sWin, rWin = pcall(function()
+    return WindUI:CreateWindow({
         Title = "PayomboyZ",
         Author = "โดย Dexq | Anime Card Farm",
         Folder = "PayomboyZ_Config",
         Size = defaultWindowSize,
-        Transparent = true,
+        Transparent = false,
         Theme = "Dark",
         SideBarWidth = isMobileDevice and 120 or 170,
         HasOutline = true,
     })
 end)
+
+if sWin and rWin then
+    rawWindow = rWin
+else
+    warn("[PayomboyZ] CreateWindow Error: " .. tostring(rWin))
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "PayomboyZ UI Error",
+            Text = "CreateWindow error: " .. tostring(rWin),
+            Duration = 8
+        })
+    end)
+end
 
 local Options = {}
 local Fluent = {}
