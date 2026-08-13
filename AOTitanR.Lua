@@ -14,26 +14,6 @@ task.spawn(function()
     local playerGui = player:WaitForChild("PlayerGui", 10)
     if not playerGui then return end
 
-
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local remote = ReplicatedStorage:FindFirstChild("Assets") 
-        and ReplicatedStorage.Assets:FindFirstChild("Remotes") 
-        and ReplicatedStorage.Assets.Remotes:FindFirstChild("POST")
-    
-    if not remote then
-
-        local TeleportService = game:GetService("TeleportService")
-        if not checkAnyVisible() then
-            task.wait(10)
-            if not checkAnyVisible() then
-                pcall(function()
-                    TeleportService:Teleport(13379208636, player)
-                end)
-            end
-        end
-        return
-    end
-
     local function IsActuallyVisible(gui)
         if not gui or not gui:IsA("GuiObject") then return false end
         if not gui.Visible then return false end
@@ -72,10 +52,28 @@ task.spawn(function()
         end
         return false
     end
+
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local remote = ReplicatedStorage:FindFirstChild("Assets") 
+        and ReplicatedStorage.Assets:FindFirstChild("Remotes") 
+        and ReplicatedStorage.Assets.Remotes:FindFirstChild("POST")
+    
+    if not remote then
+        local TeleportService = game:GetService("TeleportService")
+        if not checkAnyVisible() then
+            task.wait(10)
+            if not checkAnyVisible() then
+                pcall(function()
+                    TeleportService:Teleport(13379208636, player)
+                end)
+            end
+        end
+        return
+    end
+
     if not checkAnyVisible() then
         task.wait(10)
         if not checkAnyVisible() then
-
             pcall(function()
                 remote:FireServer("Functions", "Teleport", "Menu", nil)
             end)
@@ -87,7 +85,8 @@ end)
 repeat task.wait() until game:IsLoaded()
 repeat task.wait() until game:GetService("Players").LocalPlayer
 repeat task.wait() until game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
-repeat task.wait() until game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Interface")
+local _startWait = tick()
+repeat task.wait(0.1) until (game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Interface")) or (tick() - _startWait > 5)
 task.wait(1)
 
 -- ระบบ AFK 
@@ -104,11 +103,35 @@ player.Idled:Connect(function()
 	VirtualUser:Button2Up(Vector2.zero, currentCamera.CFrame)
 end)
 ----------------------------------------------------------------------
+local function FetchComponent(githubPath)
+    local urls = {
+        "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/" .. githubPath,
+        "https://cdn.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath,
+        "https://fastly.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath
+    }
+    for _, url in ipairs(urls) do
+        local ok, content = pcall(function() return game:HttpGet(url, true) end)
+        if ok and type(content) == "string" and #content > 100 then
+            local func, err = loadstring(content)
+            if func then
+                local execOk, res = pcall(func)
+                if execOk and res then
+                    return res
+                end
+            end
+        end
+    end
+    return nil
+end
 
-local repo="https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
-local Library=loadstring(game:HttpGet(repo.."Library.lua"))()
-local ThemeManager=loadstring(game:HttpGet(repo.."addons/ThemeManager.lua"))()
-local SaveManager=loadstring(game:HttpGet(repo.."addons/SaveManager.lua"))()
+local Library = FetchComponent("Library.lua")
+local ThemeManager = FetchComponent("addons/ThemeManager.lua")
+local SaveManager = FetchComponent("addons/SaveManager.lua")
+
+if not Library then
+    warn("[AOTR] Failed to load LinoriaLib UI library from all sources!")
+    return
+end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -125,11 +148,12 @@ end)
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
-local Assets = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Remotes")
-local POST = Assets:WaitForChild("POST")
-local GET = Assets:WaitForChild("GET")
+local Assets = ReplicatedStorage:WaitForChild("Assets", 10) and ReplicatedStorage.Assets:WaitForChild("Remotes", 10)
+local POST = Assets and Assets:WaitForChild("POST", 10)
+local GET = Assets and Assets:WaitForChild("GET", 10)
 
 local function SafeInvoke(remote, ...)
+    if not remote then return false, nil end
     local args = {...}
     local maxRetries = 3
     local attempt = 0
@@ -150,6 +174,7 @@ local function SafeInvoke(remote, ...)
 end
 
 local function SafeFire(remote, ...)
+    if not remote then return false end
     local args = {...}
     local success = pcall(function()
         remote:FireServer(unpack(args))
@@ -228,253 +253,673 @@ task.spawn(function()
     until tick() - start > 3
 end)
 
+local WindowObj
+if MacLib then
+    pcall(function()
+        WindowObj = MacLib:Window({
+            Title = "AOTR PayomboyZ",
+            Subtitle = "Anime Card Farm Automation",
+            Size = UDim2.fromOffset(868, 650),
+            DragStyle = 1,
+            DisabledWindowControls = {},
+            ShowCustomCursor = false,
+            KeySystem = false,
+        })
+    end)
+    pcall(function()
+        if WindowObj and WindowObj.SetTheme then
+            WindowObj:SetTheme("Red")
+        end
+    end)
+end
+
+local TabGroup
+if WindowObj and WindowObj.TabGroup then
+    pcall(function()
+        TabGroup = WindowObj:TabGroup()
+    end)
+end
+
+local Options = {}
+local Toggles = {}
+getgenv().Options = Options
+getgenv().Toggles = Toggles
+
+-- Removed Mock Library
+
+local function GetMacLibHolder()
+    local gui = (gethui and gethui()) or game:GetService("CoreGui") or (game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui"))
+    if gui then
+        local macGui = gui:FindFirstChild("Maclib") or gui:FindFirstChild("MacLib")
+        if macGui then
+            return macGui:FindFirstChild("Main") or macGui:FindFirstChildOfClass("Frame") or macGui
+        end
+    end
+    return nil
+end
+
+local function wrapMacSection(macSection)
+    local wrapper = {}
+    
+    function wrapper:GetToggle(id)
+        return Toggles[id] or Options[id]
+    end
+    
+    local function injectChaining(obj)
+        if type(obj) ~= "table" then obj = {} end
+        obj.AddKeyPicker = function(self, key_id, key_config) return wrapper:AddKeyPicker(key_id, key_config) end
+        obj.AddColorPicker = function(...) return obj end
+        obj.AddTooltip = function(...) return obj end
+        return obj
+    end
+
+    function wrapper:AddToggle(id, config)
+        local title = config.Text or config.Title or id
+        local userCb = config.Callback
+        local proxy = {}
+        local onChangedCallbacks = {}
+        local currentValue = config.Default or false
+        
+        local macObj
+        if macSection and macSection.Toggle then
+            pcall(function()
+                macObj = macSection:Toggle({
+                    Name = title,
+                    Default = currentValue,
+                    Callback = function(val)
+                        currentValue = val
+                        if userCb then pcall(userCb, val) end
+                        for _, cb in ipairs(onChangedCallbacks) do pcall(cb, val) end
+                    end
+                }, id)
+            end)
+        end
+
+        proxy.SetValue = function(self, val)
+            currentValue = val
+            pcall(function() if macObj and macObj.SetState then macObj:SetState(val) end end)
+        end
+        proxy.OnChanged = function(self, cb)
+            if type(cb) == "function" then table.insert(onChangedCallbacks, cb) end
+        end
+
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "Value" then return currentValue end
+                if macObj and macObj[k] ~= nil then return macObj[k] end
+                return rawget(t, k)
+            end,
+            __newindex = function(t, k, v)
+                if k == "Value" then proxy:SetValue(v) else rawset(t, k, v) end
+            end
+        })
+
+        Toggles[id] = proxy
+        Options[id] = proxy
+        return injectChaining(proxy)
+    end
+
+    function wrapper:AddSlider(id, config)
+        local title = config.Text or config.Title or id
+        local min = config.Min or 0
+        local max = config.Max or 100
+        if min == max then max = min + 1 end
+        local userCb = config.Callback
+        local proxy = {}
+        local onChangedCallbacks = {}
+        local currentValue = config.Default or min
+
+        local macObj
+        if macSection and macSection.Slider then
+            pcall(function()
+                macObj = macSection:Slider({
+                    Name = title,
+                    Default = currentValue,
+                    Minimum = min,
+                    Maximum = max,
+                    DisplayMethod = "Value",
+                    Callback = function(val)
+                        currentValue = val
+                        if userCb then pcall(userCb, val) end
+                        for _, cb in ipairs(onChangedCallbacks) do pcall(cb, val) end
+                    end
+                }, id)
+            end)
+        end
+
+        proxy.SetValue = function(self, val)
+            currentValue = val
+            pcall(function() if macObj and macObj.SetValue then macObj:SetValue(val) end end)
+        end
+        proxy.OnChanged = function(self, cb)
+            if type(cb) == "function" then table.insert(onChangedCallbacks, cb) end
+        end
+
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "Value" then return currentValue end
+                if macObj and macObj[k] ~= nil then return macObj[k] end
+                return rawget(t, k)
+            end,
+            __newindex = function(t, k, v)
+                if k == "Value" then proxy:SetValue(v) else rawset(t, k, v) end
+            end
+        })
+
+        Options[id] = proxy
+        return injectChaining(proxy)
+    end
+
+    function wrapper:AddDropdown(id, config)
+        local title = config.Text or config.Title or id
+        local vals = config.Values or {}
+        if #vals == 0 then vals = {"None"} end
+        local isMulti = config.Multi or false
+        local userCb = config.Callback
+        local proxy = {}
+        local onChangedCallbacks = {}
+        
+        local currentVal
+        if isMulti then
+            currentVal = {}
+            if type(config.Default) == "table" then
+                for k, v in pairs(config.Default) do
+                    if type(k) == "number" and type(v) == "string" then currentVal[v] = true
+                    elseif type(k) == "string" and v then currentVal[k] = true end
+                end
+            end
+        else
+            currentVal = type(config.Default) == "table" and config.Default[1] or config.Default or vals[1]
+        end
+
+        local macObj
+        if macSection and macSection.Dropdown then
+            pcall(function()
+                macObj = macSection:Dropdown({
+                    Name = title,
+                    Multi = isMulti,
+                    Options = vals,
+                    Default = config.Default or {},
+                    Callback = function(val)
+                        if isMulti then
+                            local dict = {}
+                            if type(val) == "table" then
+                                for k, v in pairs(val) do
+                                    if type(k) == "number" and type(v) == "string" then dict[v] = true
+                                    elseif type(k) == "string" and v then dict[k] = true end
+                                end
+                            elseif type(val) == "string" and val ~= "" then
+                                dict[val] = true
+                            end
+                            currentVal = dict
+                            if userCb then pcall(userCb, dict) end
+                            for _, cb in ipairs(onChangedCallbacks) do pcall(cb, dict) end
+                        else
+                            local sVal = type(val) == "table" and val[1] or val
+                            currentVal = sVal
+                            if userCb then pcall(userCb, sVal) end
+                            for _, cb in ipairs(onChangedCallbacks) do pcall(cb, sVal) end
+                        end
+                    end
+                }, id)
+            end)
+        end
+
+        proxy.SetValue = function(self, val)
+            if isMulti then
+                local dict = {}
+                if type(val) == "table" then
+                    for k, v in pairs(val) do
+                        if type(k) == "number" and type(v) == "string" then dict[v] = true
+                        elseif type(k) == "string" and v then dict[k] = true end
+                    end
+                elseif type(val) == "string" then dict[val] = true end
+                currentVal = dict
+                pcall(function() if macObj and macObj.Set then macObj:Set(val) end end)
+            else
+                currentVal = type(val) == "table" and val[1] or val
+                pcall(function() if macObj and macObj.Set then macObj:Set(val) end end)
+            end
+        end
+
+        proxy.SetValues = function(self, newVals)
+            pcall(function()
+                if macObj then
+                    if macObj.SetOptions then macObj:SetOptions(newVals)
+                    elseif macObj.UpdateOptions then macObj:UpdateOptions(newVals)
+                    elseif macObj.Refresh then macObj:Refresh(newVals) end
+                end
+            end)
+        end
+
+        proxy.OnChanged = function(self, cb)
+            if type(cb) == "function" then table.insert(onChangedCallbacks, cb) end
+        end
+
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "Value" then return currentVal end
+                if macObj and macObj[k] ~= nil then return macObj[k] end
+                return rawget(t, k)
+            end,
+            __newindex = function(t, k, v)
+                if k == "Value" then proxy:SetValue(v) else rawset(t, k, v) end
+            end
+        })
+
+        Options[id] = proxy
+        return injectChaining(proxy)
+    end
+
+    function wrapper:AddInput(id, config)
+        local title = config.Text or config.Title or id
+        local userCb = config.Callback
+        local proxy = {}
+        local onChangedCallbacks = {}
+        local currentValue = config.Default or ""
+
+        local macObj
+        if macSection and macSection.Input then
+            pcall(function()
+                macObj = macSection:Input({
+                    Name = title,
+                    Placeholder = config.Placeholder or "",
+                    Default = currentValue,
+                    Callback = function(val)
+                        currentValue = val
+                        if userCb then pcall(userCb, val) end
+                        for _, cb in ipairs(onChangedCallbacks) do pcall(cb, val) end
+                    end
+                }, id)
+            end)
+        end
+
+        proxy.SetValue = function(self, val)
+            currentValue = val
+            pcall(function() if macObj and macObj.SetText then macObj:SetText(val) end end)
+        end
+        proxy.OnChanged = function(self, cb)
+            if type(cb) == "function" then table.insert(onChangedCallbacks, cb) end
+        end
+
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "Value" then return currentValue end
+                if macObj and macObj[k] ~= nil then return macObj[k] end
+                return rawget(t, k)
+            end,
+            __newindex = function(t, k, v)
+                if k == "Value" then proxy:SetValue(v) else rawset(t, k, v) end
+            end
+        })
+
+        Options[id] = proxy
+        return injectChaining(proxy)
+    end
+
+    function wrapper:AddButton(config, callback)
+        local title = type(config) == "table" and (config.Text or config.Title) or config
+        local cb = type(config) == "table" and (config.Callback or callback) or callback
+        local btnObj
+        if macSection and macSection.Button then
+            pcall(function()
+                btnObj = macSection:Button({
+                    Name = title,
+                    Callback = cb or function() end
+                })
+            end)
+        end
+        return injectChaining(btnObj)
+    end
+
+    function wrapper:AddLabel(text)
+        local lbl
+        if macSection and macSection.Paragraph then
+            pcall(function()
+                lbl = macSection:Paragraph({ Title = tostring(text or ""), Description = "" })
+            end)
+        end
+        return injectChaining(lbl)
+    end
+
+    function wrapper:AddKeyPicker(id, config)
+        local title = config.Text or config.Title or id
+        local userCb = config.Callback
+        local proxy = {}
+        local currentValue = config.Default or "End"
+
+        local macObj
+        if macSection and macSection.Keybind then
+            pcall(function()
+                macObj = macSection:Keybind({
+                    Name = title,
+                    Default = currentValue,
+                    Callback = function(val)
+                        currentValue = val
+                        if userCb then pcall(userCb, val) end
+                    end
+                }, id)
+            end)
+        end
+
+        proxy.SetValue = function(self, val) currentValue = val end
+        setmetatable(proxy, {
+            __index = function(t, k)
+                if k == "Value" then return currentValue end
+                if macObj and macObj[k] ~= nil then return macObj[k] end
+                return rawget(t, k)
+            end
+        })
+
+        Options[id] = proxy
+        return injectChaining(proxy)
+    end
+
+    function wrapper:AddDivider()
+    end
+
+    function wrapper:AddTab(title)
+        return wrapper
+    end
+
+    return wrapper
+end
+
+local function wrapMacTab(macTab)
+    local tabWrapper = {}
+    function tabWrapper:AddLeftGroupbox(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Left", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    function tabWrapper:AddRightGroupbox(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Right", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    function tabWrapper:AddSection(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Left", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    function tabWrapper:AddGroupbox(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Left", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    function tabWrapper:AddLeftTabbox(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Left", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    function tabWrapper:AddRightTabbox(title)
+        local sec
+        if macTab and macTab.Section then
+            pcall(function() sec = macTab:Section({ Side = "Right", Title = title }) end)
+        end
+        return wrapMacSection(sec)
+    end
+    return tabWrapper
+end
+
 local Window = Library:CreateWindow({Title="AOTR PayomboyZ", Center=true, AutoShow=true})
 
--- ==================== GLASSMORPHISM & CUSTOM BACKGROUND LOGO ====================
-task.spawn(function()
-    pcall(function()
-        if not Window or not Window.Holder then return end
-        
-        -- Enable Glassmorphism transparency on Main Holder
-        Window.Holder.BackgroundTransparency = 0.22
-        
-        -- Custom Background Logo Image
-        local BgImage = Instance.new("ImageLabel")
-        BgImage.Name = "PayomboyZ_BgLogo"
-        BgImage.Size = UDim2.new(0, 260, 0, 260)
-        BgImage.Position = UDim2.new(0.5, -130, 0.5, -130)
-        BgImage.BackgroundTransparency = 1
-        BgImage.ImageTransparency = 0.82
-        BgImage.ZIndex = 1
-        BgImage.ScaleType = Enum.ScaleType.Fit
-        BgImage.Parent = Window.Holder
-        
-        -- Resolve Local Image Asset
-        local bgPath = "543199739_2812856088914181_3062917809445648175_n.jpg"
-        if getcustomasset then
+local function GetPayomboyZAsset()
+    local imgUrl = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local fileName = "PayomboyZ_Logo.jpg"
+    
+    if isfile and readfile and writefile and getcustomasset then
+        if not isfile(fileName) then
             pcall(function()
-                if isfile and isfile(bgPath) then
-                    BgImage.Image = getcustomasset(bgPath)
-                elseif isfile and isfile("AOTR/" .. bgPath) then
-                    BgImage.Image = getcustomasset("AOTR/" .. bgPath)
+                local content = game:HttpGet(imgUrl)
+                if content and #content > 100 then
+                    writefile(fileName, content)
+                end
+            end)
+        end
+        if isfile(fileName) then
+            local ok, asset = pcall(function() return getcustomasset(fileName) end)
+            if ok and asset then
+                return asset
+            end
+        end
+    end
+    return "rbxassetid://6031075931"
+end
+
+local function CreateMobilePopUpToggle()
+    local assetId = GetPayomboyZAsset()
+    local Players = game:GetService("Players")
+    local UserInputService = game:GetService("UserInputService")
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+    local parentGui
+    if gethui then
+        parentGui = gethui()
+    else
+        local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+        if ok and cg then parentGui = cg else parentGui = playerGui end
+    end
+    
+    if parentGui:FindFirstChild("AOTRPayomboyZ_ToggleGui") then
+        parentGui.AOTRPayomboyZ_ToggleGui:Destroy()
+    end
+    
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "AOTRPayomboyZ_ToggleGui"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.Parent = parentGui
+    
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainToggleFrame"
+    mainFrame.Size = UDim2.new(0, 160, 0, 48)
+    mainFrame.Position = UDim2.new(0.02, 0, 0.25, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Parent = gui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 0)
+    corner.Parent = mainFrame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(220, 20, 60)
+    stroke.Thickness = 2
+    stroke.Parent = mainFrame
+    
+    local img = Instance.new("ImageLabel")
+    img.Name = "LogoImage"
+    img.Size = UDim2.new(0, 38, 0, 38)
+    img.Position = UDim2.new(0, 5, 0, 5)
+    img.BackgroundTransparency = 1
+    img.Image = assetId
+    img.Parent = mainFrame
+    
+    local imgCorner = Instance.new("UICorner")
+    imgCorner.CornerRadius = UDim.new(0, 0)
+    imgCorner.Parent = img
+    
+    local title = Instance.new("TextLabel")
+    title.Name = "TitleText"
+    title.Size = UDim2.new(0, 105, 0, 20)
+    title.Position = UDim2.new(0, 48, 0, 6)
+    title.BackgroundTransparency = 1
+    title.Text = "AOTR PayomboyZ"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 11
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = mainFrame
+    
+    local status = Instance.new("TextLabel")
+    status.Name = "StatusText"
+    status.Size = UDim2.new(0, 105, 0, 16)
+    status.Position = UDim2.new(0, 48, 0, 24)
+    status.BackgroundTransparency = 1
+    status.Text = "TAP TO TOGGLE"
+    status.Font = Enum.Font.GothamMedium
+    status.TextSize = 9
+    status.TextColor3 = Color3.fromRGB(220, 20, 60)
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.Parent = mainFrame
+    
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 1, 0)
+    button.BackgroundTransparency = 1
+    button.Text = ""
+    button.Parent = mainFrame
+    
+    local dragging, dragInput, dragStart, startPos
+    
+    local function update(input)
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+    
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
                 end
             end)
         end
     end)
-end)
-
--- ==================== PROFILE HUD WIDGET ====================
-task.spawn(function()
-    pcall(function()
-        local player = game:GetService("Players").LocalPlayer
-        
-        local ProfileFrame = Instance.new("Frame")
-        ProfileFrame.Name = "ProfileHUD"
-        ProfileFrame.Size = UDim2.new(0, 210, 0, 50)
-        ProfileFrame.Position = UDim2.new(0, 0, 0, -60)
-        ProfileFrame.BackgroundColor3 = Color3.fromHex("1c1c1c")
-        ProfileFrame.BackgroundTransparency = 0.2
-        ProfileFrame.BorderSizePixel = 0
-        ProfileFrame.Parent = Window.Holder
-        
-        local Corner = Instance.new("UICorner")
-        Corner.CornerRadius = UDim.new(0, 8)
-        Corner.Parent = ProfileFrame
-        
-        local Stroke = Instance.new("UIStroke")
-        Stroke.Name = "ProfileStroke"
-        Stroke.Color = Library.AccentColor or Color3.fromRGB(220, 20, 60)
-        Stroke.Thickness = 1.2
-        Stroke.Parent = ProfileFrame
-
-        local Avatar = Instance.new("ImageLabel")
-        Avatar.Size = UDim2.new(0, 36, 0, 36)
-        Avatar.Position = UDim2.new(0, 7, 0.5, -18)
-        Avatar.BackgroundColor3 = Color3.fromHex("1c1c1c")
-        Avatar.BackgroundTransparency = 1
-        Avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
-        Avatar.Parent = ProfileFrame
-        
-        local AvatarCorner = Instance.new("UICorner")
-        AvatarCorner.CornerRadius = UDim.new(1, 0)
-        AvatarCorner.Parent = Avatar
-        
-        local DisplayName = Instance.new("TextLabel")
-        DisplayName.Size = UDim2.new(1, -55, 0, 20)
-        DisplayName.Position = UDim2.new(0, 50, 0, 7)
-        DisplayName.BackgroundTransparency = 1
-        DisplayName.Text = player.DisplayName
-        DisplayName.Font = Enum.Font.GothamBold
-        DisplayName.TextSize = 14
-        DisplayName.TextColor3 = Color3.fromRGB(255, 255, 255)
-        DisplayName.TextXAlignment = Enum.TextXAlignment.Left
-        DisplayName.Parent = ProfileFrame
-        
-        local Username = Instance.new("TextLabel")
-        Username.Size = UDim2.new(1, -55, 0, 16)
-        Username.Position = UDim2.new(0, 50, 0, 27)
-        Username.BackgroundTransparency = 1
-        Username.Text = "@" .. player.Name
-        Username.Font = Enum.Font.Gotham
-        Username.TextSize = 12
-        Username.TextColor3 = Color3.fromRGB(160, 160, 160)
-        Username.TextXAlignment = Enum.TextXAlignment.Left
-        Username.Parent = ProfileFrame
-    end)
-end)
-
--- ==================== BREATHING COLOR CYCLE (WHITE - RED - GREEN - PURPLE) ====================
-task.spawn(function()
-    local Colors = {
-        Color3.fromRGB(255, 255, 255), -- White
-        Color3.fromRGB(235, 45, 65),   -- Red
-        Color3.fromRGB(45, 225, 110),  -- Green
-        Color3.fromRGB(180, 60, 240)   -- Purple
-    }
     
-    local colorIndex = 1
-    local t = 0
-    local speed = 0.4 -- Breathing transition speed
-    
-    local RunService = game:GetService("RunService")
-    RunService.RenderStepped:Connect(function(dt)
-        t = t + dt * speed
-        if t >= 1 then
-            t = 0
-            colorIndex = (colorIndex % #Colors) + 1
+    mainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
         end
-        
-        local nextIndex = (colorIndex % #Colors) + 1
-        local c1 = Colors[colorIndex]
-        local c2 = Colors[nextIndex]
-        
-        -- Smooth Lerp between current and next color
-        local currentColor = c1:Lerp(c2, t)
-        
-        -- Breathing pulse intensity (Sine wave modulation)
-        local pulse = (math.sin(tick() * 2.5) + 1) / 2
-        local breathingColor = Color3.new(
-            math.clamp(currentColor.R * (0.75 + 0.25 * pulse), 0, 1),
-            math.clamp(currentColor.G * (0.75 + 0.25 * pulse), 0, 1),
-            math.clamp(currentColor.B * (0.75 + 0.25 * pulse), 0, 1)
-        )
-        
-        Library.AccentColor = breathingColor
-        pcall(function()
-            if Library.UpdateColorsUsingRegistry then
-                Library:UpdateColorsUsingRegistry()
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+    
+    local lastClick = 0
+    button.MouseButton1Click:Connect(function()
+        if tick() - lastClick > 0.2 then
+            lastClick = tick()
+            if Library then
+                Library:Toggle()
             end
-            if Window and Window.Holder and Window.Holder:FindFirstChild("ProfileHUD") then
-                local stroke = Window.Holder.ProfileHUD:FindFirstChild("ProfileStroke")
-                if stroke then stroke.Color = breathingColor end
-            end
+        end
+    end)
+    
+    task.spawn(function()
+        local popupFrame = Instance.new("Frame")
+        popupFrame.Name = "WelcomePopup"
+        popupFrame.Size = UDim2.new(0, 320, 0, 66)
+        popupFrame.Position = UDim2.new(0.5, -160, -0.2, 0)
+        popupFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+        popupFrame.BorderSizePixel = 0
+        popupFrame.Parent = gui
+        
+        local popCorner = Instance.new("UICorner")
+        popCorner.CornerRadius = UDim.new(0, 0)
+        popCorner.Parent = popupFrame
+        
+        local popStroke = Instance.new("UIStroke")
+        popStroke.Color = Color3.fromRGB(220, 20, 60)
+        popStroke.Thickness = 1.5
+        popStroke.Parent = popupFrame
+        
+        local popImg = Instance.new("ImageLabel")
+        popImg.Size = UDim2.new(0, 48, 0, 48)
+        popImg.Position = UDim2.new(0, 9, 0, 9)
+        popImg.BackgroundTransparency = 1
+        popImg.Image = assetId
+        popImg.Parent = popupFrame
+        
+        local popImgCorner = Instance.new("UICorner")
+        popImgCorner.CornerRadius = UDim.new(0, 0)
+        popImgCorner.Parent = popImg
+        
+        local popTitle = Instance.new("TextLabel")
+        popTitle.Size = UDim2.new(0, 240, 0, 22)
+        popTitle.Position = UDim2.new(0, 66, 0, 10)
+        popTitle.BackgroundTransparency = 1
+        popTitle.Text = "AOTR PayomboyZ"
+        popTitle.Font = Enum.Font.GothamBold
+        popTitle.TextSize = 15
+        popTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        popTitle.TextXAlignment = Enum.TextXAlignment.Left
+        popTitle.Parent = popupFrame
+        
+        local popSub = Instance.new("TextLabel")
+        popSub.Size = UDim2.new(0, 240, 0, 18)
+        popSub.Position = UDim2.new(0, 66, 0, 32)
+        popSub.BackgroundTransparency = 1
+        popSub.Text = "Loaded Successfully! [PC & Mobile]"
+        popSub.Font = Enum.Font.Gotham
+        popSub.TextSize = 11
+        popSub.TextColor3 = Color3.fromRGB(200, 200, 200)
+        popSub.TextXAlignment = Enum.TextXAlignment.Left
+        popSub.Parent = popupFrame
+        
+        local TweenService = game:GetService("TweenService")
+        local tweenIn = TweenService:Create(popupFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0.5, -160, 0.05, 0)
+        })
+        tweenIn:Play()
+        
+        task.wait(4.5)
+        
+        local tweenOut = TweenService:Create(popupFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, -160, -0.2, 0)
+        })
+        tweenOut:Play()
+        tweenOut.Completed:Connect(function()
+            popupFrame:Destroy()
         end)
     end)
-end)
+end
 
--- ==================== FLOATING TOP CORNER WATERMARK ====================
-task.spawn(function()
-    pcall(function()
-        local Players = game:GetService("Players")
-        local Stats = game:GetService("Stats")
-        local RunService = game:GetService("RunService")
-        local LocalPlayer = Players.LocalPlayer
-        
-        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-        
-        local WatermarkGui = Instance.new("ScreenGui")
-        WatermarkGui.Name = "PayomboyZ_Watermark"
-        WatermarkGui.ResetOnSpawn = false
-        WatermarkGui.IgnoreGuiInset = true
-        WatermarkGui.Parent = PlayerGui
-        
-        local WFrame = Instance.new("Frame")
-        WFrame.Name = "WatermarkFrame"
-        WFrame.Size = UDim2.new(0, 310, 0, 30)
-        WFrame.Position = UDim2.new(1, -325, 0, 12)
-        WFrame.BackgroundColor3 = Color3.fromHex("1c1c1c")
-        WFrame.BackgroundTransparency = 0.25
-        WFrame.BorderSizePixel = 0
-        WFrame.Parent = WatermarkGui
-        
-        local WCorner = Instance.new("UICorner")
-        WCorner.CornerRadius = UDim.new(0, 6)
-        WCorner.Parent = WFrame
-        
-        local WStroke = Instance.new("UIStroke")
-        WStroke.Thickness = 1
-        WStroke.Color = Library.AccentColor or Color3.fromRGB(220, 20, 60)
-        WStroke.Parent = WFrame
-        
-        local WLabel = Instance.new("TextLabel")
-        WLabel.Size = UDim2.new(1, 0, 1, 0)
-        WLabel.BackgroundTransparency = 1
-        WLabel.Font = Enum.Font.GothamBold
-        WLabel.TextSize = 12
-        WLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-        WLabel.Text = "AOTR PayomboyZ | FPS: -- | Ping: --ms | --:--:--"
-        WLabel.Parent = WFrame
-        
-        -- Update metrics every frame / second
-        local fpsCount = 0
-        local lastFpsTick = tick()
-        local currentFps = 60
-        
-        RunService.RenderStepped:Connect(function()
-            fpsCount = fpsCount + 1
-            if tick() - lastFpsTick >= 1 then
-                currentFps = fpsCount
-                fpsCount = 0
-                lastFpsTick = tick()
-            end
-        end)
-        
-        task.spawn(function()
-            while task.wait(0.5) do
-                pcall(function()
-                    local ping = 0
-                    if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") and Stats.Network.ServerStatsItem:FindFirstChild("Data Ping") then
-                        ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
-                    end
-                    local timeStr = os.date("%H:%M:%S")
-                    WLabel.Text = string.format("AOTR PayomboyZ | FPS: %d | Ping: %dms | %s", currentFps, ping, timeStr)
-                    WStroke.Color = Library.AccentColor
-                end)
-            end
-        end)
-    end)
-end)
+CreateMobilePopUpToggle()
 
 local function isUIHiddenGlobal()
-    local ok, hidden = pcall(function()
-        return Window and Window.Holder and not Window.Holder.Visible
-    end)
+    local ok, hidden = pcall(function() return Window and Window.Holder and not Window.Holder.Visible end)
     return ok and hidden
 end
 
 local function hideUIGlobal()
-    pcall(function()
-        if Window and Window.Holder and Window.Holder.Visible then
-            if Library and Library.Toggle then
-                Library:Toggle()
-            end
-        end
-    end)
+    pcall(function() if Window and Window.Holder and Window.Holder.Visible and Library and Library.Toggle then Library:Toggle() end end)
 end
 
 local function showUIGlobal()
-    pcall(function()
-        if Window and Window.Holder and not Window.Holder.Visible then
-            if Library and Library.Toggle then
-                Library:Toggle()
-            end
-        end
-    end)
+    pcall(function() if Window and Window.Holder and not Window.Holder.Visible and Library and Library.Toggle then Library:Toggle() end end)
 end
 
 getgenv().isUIHidden = isUIHiddenGlobal
 getgenv().hideUI = hideUIGlobal
 getgenv().showUI = showUIGlobal
+
+pcall(function()
+    if game.Workspace:FindFirstChild("LinoriaLibSettings") then game.Workspace.LinoriaLibSettings:Destroy() end
+    if isfolder("LinoriaLibSettings") then delfolder("LinoriaLibSettings") end
+end)
 
 local AOTRPayomboyZFolder = "AOTRPayomboyZ"
 if not isfolder(AOTRPayomboyZFolder) then makefolder(AOTRPayomboyZFolder) end
@@ -486,37 +931,71 @@ elseif IsIngameLobby() then activeFolder = AOTRPayomboyZFolder.."/Ingame"
 else activeFolder = AOTRPayomboyZFolder.."/Default" end
 if not isfolder(activeFolder) then makefolder(activeFolder) end
 
-pcall(function()
-    if game.Workspace:FindFirstChild("LinoriaLibSettings") then game.Workspace.LinoriaLibSettings:Destroy() end
-    if isfolder("LinoriaLibSettings") then delfolder("LinoriaLibSettings") end
-end)
+local Tabs = {}
+if IsMainmenuLobby() then Tabs.MainMenu = Window:AddTab("Main Menu") end
+if IsLobbyLobby() then
+    Tabs.Lobby = Window:AddTab("Lobby")
+    Tabs.Session = Window:AddTab("Equipment")
+    Tabs.Trade = Window:AddTab("Trade")
+end
+if IsIngameLobby() then
+    Tabs.AutoFarm = Window:AddTab("Auto Farm")
+    Tabs.Webhook = Window:AddTab("Webhook")
+    
+    local MiscGroup = Tabs.AutoFarm:AddLeftGroupbox("Misc")
+    MiscGroup:AddSlider("UIScale", { Text = "UI Scale (%)", Default = 100, Min = 10, Max = 200, Rounding = 0, Suffix = "%", Callback = function() end })
+    MiscGroup:AddToggle("PlayerStats", { Text = "Player Stats", Default = false, Callback = function() end })
+    MiscGroup:AddDropdown("FPSPerformance", { Text = "FPS Performance", Values = {"--"}, Default = "--", Callback = function() end })
+    MiscGroup:AddSlider("SetFPS", { Text = "Set FPS", Default = 60, Min = 10, Max = 120, Rounding = 0, Suffix = " FPS", Callback = function() end })
+
+    local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Farm Select")
+    FarmGroup:AddDropdown("FarmSelectOption", { Text = "Farm Select", Values = {"--", "Blade", "Thunder Spear"}, Default = "--", Callback = function() end })
+    FarmGroup:AddSlider("HoverSpeed", { Text = "Hover Speed", Default = 120, Min = 0, Max = 1000, Rounding = 0, Callback = function() end })
+    FarmGroup:AddSlider("HoverHeight", { Text = "Hover Height", Default = 120, Min = 0, Max = 400, Rounding = 0, Callback = function() end })
+    FarmGroup:AddSlider("KillHits", { Text = "Kill Hits", Default = 1, Min = 1, Max = 9, Rounding = 0, Callback = function() end })
+    FarmGroup:AddToggle("AutoFarmBlade", { Text = "Auto Farm Blade", Default = false, Callback = function() end })
+    FarmGroup:AddToggle("AutoReloadBlade", { Text = "Auto Reload Blade", Default = false, Callback = function() end })
+    FarmGroup:AddToggle("AutoRetry", { Text = "Auto Retry", Default = false, Callback = function() end })
+
+    local SafetyGroup = Tabs.AutoFarm:AddRightGroupbox("Safety Settings")
+    SafetyGroup:AddLabel("-- 60s is safe! --")
+    SafetyGroup:AddLabel("--- End Missions ---")
+    SafetyGroup:AddSlider("EndMissions", { Text = "End Missions", Default = 60, Min = 0, Max = 60, Rounding = 0, Callback = function() end })
+    SafetyGroup:AddSlider("StopAttacking", { Text = "Stop attacking when .. titans Left", Default = 10, Min = 0, Max = 25, Rounding = 0, Callback = function() end })
+
+    local TeleportGroup = Tabs.AutoFarm:AddRightGroupbox("วาร์ปด่วน")
+    TeleportGroup:AddButton("วาร์ปกลับหน้าหลัก", function() end)
+    TeleportGroup:AddButton("วาร์ปกลับล็อบบี้", function() end)
+    TeleportGroup:AddSlider("SetDelay", { Text = "หน่วงเวลาวาร์ป (วิ)", Default = 0, Min = 0, Max = 1200, Rounding = 0, Suffix = " sec", Callback = function() end })
+    TeleportGroup:AddDropdown("SelectMulti", { Text = "เลือก [ หลายทาง ]", Values = {"--"}, Default = "--", Callback = function() end })
+    TeleportGroup:AddToggle("EnableFailedSafe", { Text = "เปิดเซฟโหมดกันพลาด", Default = false, Callback = function() end })
+end
+
+local SettingsTab = Window:AddTab("Configuration")
+local MenuGroup = SettingsTab:AddLeftGroupbox("Menu")
+MenuGroup:AddToggle("AutoHideUI", { Text = "Auto Hide UI", Default = false, Callback = function() end })
+MenuGroup:AddToggle("EnableUIMobile", { Text = "Enable UI for Mobile", Default = false, Callback = function() end })
+MenuGroup:AddButton("Unload", function() Library:Unload() end)
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
 
 
-local oldBuildFolderTree = SaveManager.BuildFolderTree
-SaveManager.BuildFolderTree = function(...) if oldBuildFolderTree then return oldBuildFolderTree(...) end end
+
+Library.ToggleKeybind = Options.MenuKeybind
+
+ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
-SaveManager:SetFolder(activeFolder)
+
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({"MenuKeybind"})
 
-ThemeManager:SetLibrary(Library)
-ThemeManager:SetFolder(AOTRPayomboyZFolder)
-Library.AccentColor = Color3.fromRGB(220, 20, 60)
-pcall(function() Library:UpdateColorsUsingRegistry() end)
+ThemeManager:SetFolder("AOTRPayomboyZ")
+SaveManager:SetFolder(activeFolder)
 
-pcall(function() SaveManager:BuildFolderTree() end)
+SaveManager:BuildConfigSection(SettingsTab)
+ThemeManager:ApplyToTab(SettingsTab)
 
-local Tabs = {}
-if IsMainmenuLobby() then Tabs.MainMenu = Window:AddTab("หน้าหลัก") end
-if IsLobbyLobby() then
-    Tabs.Lobby = Window:AddTab("ล็อบบี้")
-    Tabs.Session = Window:AddTab("อุปกรณ์")
-    Tabs.Trade = Window:AddTab("เทรด")
-end
-if IsIngameLobby() then
-    Tabs.AutoFarm = Window:AddTab("ออโต้ฟาร์ม")
-    Tabs.Webhook = Window:AddTab("ระบบส่งแจ้งเตือน")
-end
+SaveManager:LoadAutoloadConfig()
+
 if IsMainmenuLobby() then
   
     if not getgenv().SpinState then
@@ -526,7 +1005,7 @@ if IsMainmenuLobby() then
         }
     end
 
-    Tabs.Webhook = Window:AddTab("แฟมมิลี่")
+    Tabs.Webhook = Window:AddTab("Family")
 
     local WebhookGroup = Tabs.Webhook:AddLeftGroupbox("Webhook")
 
@@ -789,25 +1268,25 @@ if IsMainmenuLobby() then
 
     WebhookGroup:AddInput("Webhook_URL", {
         Default = "", Numeric = false, Finished = true,
-        Text = "ลิงก์ Discord Webhook",
+        Text = "Discord Webhook URL",
         Placeholder = "https://discord.com/api/webhooks/...",
         Callback = function(v) webhookURL = v; getgenv().WebhookURL = v end
     })
 
     WebhookGroup:AddDropdown("Webhook_PingMode", {
-        Text = "โหมดการ Ping",
+        Text = "Ping Mode",
         Values = {"None", "Everyone", "Here"},
         Default = "None",
         Multi = false,
         Callback = function(v) pingMode = v; getgenv().WebhookPingMode = v end
     })
 
-    WebhookGroup:AddButton("ทดสอบส่ง", function()
+    WebhookGroup:AddButton("Test Send", function()
         SendTargetWebhook("Test Family (JaMe)", "?")
     end)
 
     WebhookGroup:AddToggle("AutoNotifyToggle", {
-        Text = "ส่งแฟมมิลี่ไป Discord อัตโนมัติ",
+        Text = "Auto Send Families to Discord",
         Default = false,
         Callback = function(v)
             autoNotifyEnabled = v
@@ -818,8 +1297,8 @@ if IsMainmenuLobby() then
         end
     })
 
-    local SpinGroup = Tabs.Webhook:AddRightGroupbox("สุ่มอัตโนมัติ")
-    local StopSpinGroup = Tabs.Webhook:AddRightGroupbox("หยุดเมื่อสุ่มถึงจำนวน")
+    local SpinGroup = Tabs.Webhook:AddRightGroupbox("Auto Spin")
+    local StopSpinGroup = Tabs.Webhook:AddRightGroupbox("Stop at Spin Left")
 
     local selectedFamilies = {}
     local rollDelay = 0.01
@@ -1053,20 +1532,20 @@ if IsMainmenuLobby() then
         end)
     end
 
-    SpinGroup:AddLabel("ช่อง A (เท่านั้น)")
+    SpinGroup:AddLabel("Slot A (only)")
     SpinGroup:AddDivider()
 
-    SpinGroup:AddButton("เช็คแฟมมิลี่ปัจจุบัน", function()
+    SpinGroup:AddButton("Check Current Family", function()
         syncUIFamilies()
         local family = getCurrentFamilyFromUI() or "Unknown"
         local spinState = getgenv().SpinState
         local spinsText = (spinState and spinState.hasRolled) and tostring(spinState.storedSpins) or "??"
-        Library:Notify(string.format("ช่อง A | แฟมมิลี่: %s | โรลคงเหลือ: %s", family, spinsText), 3)
+        Library:Notify(string.format("Slot A | Family: %s | Spins left: %s", family, spinsText), 3)
     end)
 
     SpinGroup:AddDivider()
     SpinGroup:AddDropdown("AutoSpinFamilies", {
-        Text = "เลือกแฟมมิลี่เป้าหมาย",
+        Text = "Select Target Families",
         Values = FAMILY_LIST,
         Multi = true,
         Default = {},
@@ -1079,7 +1558,7 @@ if IsMainmenuLobby() then
     })
     SpinGroup:AddDivider()
     SpinGroup:AddSlider("AutoSpinDelaySlider", {
-        Text = "หน่วงเวลาสุ่ม",
+        Text = "Roll Delay",
         Default = 0.01,
         Min = 0.001,
         Max = 1,
@@ -1089,7 +1568,7 @@ if IsMainmenuLobby() then
     })
 
     SpinGroup:AddToggle("AutoSpinToggle", {
-        Text = "สุ่มอัตโนมัติ",
+        Text = "Auto Spin",
         Default = false,
         Callback = function(v)
             if v then
@@ -1132,7 +1611,7 @@ if IsMainmenuLobby() then
     })
 
     StopSpinGroup:AddToggle("StopAtSpinLimitToggle", {
-        Text = "เปิดใช้หยุดเมื่อโรลเหลือน้อยกว่า",
+        Text = "Enable Stop at Spin Left",
         Default = false,
         Callback = function(v)
             stopAtSpinLimitEnabled = v
@@ -1140,7 +1619,7 @@ if IsMainmenuLobby() then
     })
 
     StopSpinGroup:AddInput("StopAtSpinLimitInput", {
-        Text = "หยุดเมื่อโรล <",
+        Text = "Stop when spins < Left",
         Default = "0",
         Numeric = true,
         Finished = true,
@@ -1165,8 +1644,10 @@ if IsMainmenuLobby() then
     end
 
     task.spawn(function()
-        repeat task.wait(0.1) until Window and Window.Holder
-        repeat task.wait(0.1) until Options and Options.AutoSpinFamilies
+        local _wWait1 = tick()
+        repeat task.wait(0.1) until (Window and Window.Holder) or (tick() - _wWait1 > 5)
+        local _wWait2 = tick()
+        repeat task.wait(0.1) until (Options and Options.AutoSpinFamilies) or (tick() - _wWait2 > 5)
         task.wait(0.5)
 
         if Options.AutoSpinToggle and Options.AutoSpinToggle.Value then
@@ -1182,7 +1663,7 @@ if IsMainmenuLobby() then
 
             if not hasTarget then
                 Options.AutoSpinToggle:SetValue(false)
-                Library:Notify("Auto Spin disabled: No target families selected", 3)
+                if Library and Library.Notify then Library:Notify("Auto Spin disabled: No target families selected", 3) end
             else
                 Options.AutoSpinToggle:SetValue(true)
             end
@@ -1195,7 +1676,9 @@ if IsMainmenuLobby() then
 end
 
 if IsMainmenuLobby() then
-    while not Tabs.Webhook do task.wait(0.1) end
+    local _wWaitTab = tick()
+    while not Tabs.Webhook and (tick() - _wWaitTab < 5) do task.wait(0.1) end
+    if not Tabs.Webhook then return end
 
     local PopupGroup = Tabs.Webhook:AddLeftGroupbox("Show Family")
     local popupEnabled = false
@@ -1750,7 +2233,7 @@ if IsLobbyLobby() then
                 end
             })
             box:AddToggle(cacheName.."_Accept", {
-                Text = "รับการเทรดอัตโนมัติ", 
+                Text = "Auto Accept", 
                 Default = false, 
                 Callback = function(v) 
                     acceptToggle.Enabled = v
@@ -1763,14 +2246,14 @@ if IsLobbyLobby() then
             local State = { Cache = {} }
             local box = Tabs.Trade:AddLeftGroupbox(title)
             local dd = box:AddDropdown(cacheName.."_Dropdown", {
-                Text = "ผู้เล่น", 
+                Text = "Players", 
                 Values = loadList(file), 
                 Multi = true, 
                 Default = {}, 
                 Callback = function(v) State.Cache = v end
             })
             box:AddInput(cacheName.."_Input", {
-                Text = "เพิ่มชื่อผู้เล่น", 
+                Text = "Add Users", 
                 Placeholder = "name1, name2", 
                 Default = "", 
                 Callback = function(v) State.Input = v end
@@ -1810,16 +2293,16 @@ if IsLobbyLobby() then
         end
         
         local currentState = { Cache = nil }
-        local g1 = Tabs.Trade:AddLeftGroupbox("ผู้เล่นในห้องปัจจุบัน")
+        local g1 = Tabs.Trade:AddLeftGroupbox("Current Players")
         local cd = g1:AddDropdown("Trade_CurrentDropdown", {
-            Text = "ออนไลน์", 
-            Values = {"ไม่มีผู้เล่น"}, 
+            Text = "Online", 
+            Values = {"No Players"}, 
             Multi = true, 
             Default = {}, 
             Callback = function(v) currentState.Cache = v end
         })
         
-        g1:AddButton("เลือกทั้งหมด", function()
+        g1:AddButton("Select All Online", function()
             local allOnline = {}
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= Player then allOnline[p.Name] = true end
@@ -1828,7 +2311,7 @@ if IsLobbyLobby() then
             currentState.Cache = allOnline
         end)
         
-        g1:AddButton("ยกเลิกการเลือกทั้งหมด", function()
+        g1:AddButton("Deselect All", function()
             cd:SetValue({})
             currentState.Cache = {}
         end)
@@ -1855,7 +2338,7 @@ end
 
 
 if IsLobbyLobby() then
-    local SettingBox = Tabs.Trade:AddLeftGroupbox("ตั้งค่าการเทรด")
+    local SettingBox = Tabs.Trade:AddLeftGroupbox("Setting Trading")
     
     local selectedOption = "On"
     
@@ -1879,7 +2362,7 @@ if IsLobbyLobby() then
     })
     
     SettingBox:AddToggle("ApplyHistoryToggle", {
-        Text = "ล้างประวัติการเทรด",
+        Text = "Apply History",
         Default = false,
         Callback = function(v)
             if v then
@@ -1898,9 +2381,11 @@ end
 
 if IsLobbyLobby() then
     task.spawn(function()
-        while not Tabs.Trade do task.wait(0.1) end
+        local _wWaitTrade = tick()
+        while not Tabs.Trade and (tick() - _wWaitTrade < 5) do task.wait(0.1) end
+        if not Tabs.Trade then return end
 
-        local Alt2Box = Tabs.Trade:AddRightGroupbox("เทรดของอัตโนมัติ")
+        local Alt2Box = Tabs.Trade:AddRightGroupbox("Auto Trade : Manual")
 
         local Alt2Enabled = false
         local Alt2Running = false
@@ -2644,8 +3129,8 @@ local selectedConfig = isMobile and CONFIG_PRESETS.mobile or CONFIG_PRESETS.pc
 local OFFSET_X = selectedConfig.OFFSET_X
 local OFFSET_Y = selectedConfig.OFFSET_Y
 
-local UISettingsTab = Window:AddTab("ตั้งค่า")
-local MenuGroup = UISettingsTab:AddLeftGroupbox("เมนู")
+local UISettingsTab = Window:AddTab("Settings")
+local MenuGroup = UISettingsTab:AddLeftGroupbox("Menu")
 
 local function IsUIVisible()
     return Window and Window.Holder and Window.Holder.Visible
@@ -2660,14 +3145,14 @@ local function HideUI()
 end
 
 MenuGroup:AddToggle("HideUIToggle", {
-    Text = "ซ่อน UI อัตโนมัติ",
+    Text = "Auto Hide UI",
     Default = false,
     Callback = function(v)
     end
 })
 
 MenuGroup:AddToggle("EnableMobileUI", {
-    Text = "เปิดใช้งาน UI มือถือ",
+    Text = "Enable UI for Mobile",
     Default = getgenv().scalemobile or false,
     Callback = function(v)
         getgenv().scalemobile = v
@@ -2697,16 +3182,16 @@ MenuGroup:AddToggle("EnableMobileUI", {
     end
 })
 
-MenuGroup:AddButton("ปิดสคริปต์ (Unload)", function()
+MenuGroup:AddButton("Unload", function()
     Library:Unload()
 end)
 
-MenuGroup:AddLabel("ปุ่มเปิดปิดเมนู"):AddKeyPicker(
+MenuGroup:AddLabel("Menu Bind"):AddKeyPicker(
     "MenuKeybind",
     {
         Default = "End",
         NoUI = true,
-        Text = "ปุ่มเปิดปิดเมนู",
+        Text = "Menu Keybind",
         Callback = function(key)
             if Library and Options.MenuKeybind then
                 Library.ToggleKeybind = Options.MenuKeybind
@@ -2729,8 +3214,8 @@ function SaveManager:BuildConfigSection(tab)
         oldBuildConfigSection(self, tab)
     end
 
-    local section = tab:AddRightGroupbox("การตั้งค่าโปรไฟล์")
-    section:AddButton("ลบโปรไฟล์การตั้งค่า", function()
+    local section = tab:AddRightGroupbox("Configuration")
+    section:AddButton("Delete config", function()
         if not Options or not Options.SaveManager_ConfigList then return end
         local name = Options.SaveManager_ConfigList.Value
         if not name then return end
@@ -2743,7 +3228,7 @@ function SaveManager:BuildConfigSection(tab)
         end
     end)
     
-    section:AddButton("รีเซ็ตโหลดอัตโนมัติ", function()
+    section:AddButton("Reset Autoload", function()
         local autoloadPath = self.Folder .. "/settings/autoload.txt"
         if isfile(autoloadPath) then
             delfile(autoloadPath)
@@ -2812,7 +3297,7 @@ end)
 
 
 if IsMainmenuLobby() then
-    local g = Tabs.MainMenu:AddRightGroupbox("เข้าเล่นเกม")
+    local g = Tabs.MainMenu:AddRightGroupbox("Start GaMe")
 
     local d, s, a = 1, false, "A"
 
@@ -2907,16 +3392,16 @@ if IsMainmenuLobby() then
 
     g:AddDropdown("SlotSelectionDropdown", {
         Values = {"A","B","C"}, Default = "A", Multi = false,
-        Text = "เลือกช่องตัวละคร", Callback = function(x) a = x end
+        Text = "Select Slot", Callback = function(x) a = x end
     })
     g:AddDivider()
     g:AddSlider("SelectDelaySlider", {
-        Text = "หน่วงเวลา", Default = d, Min = 0.1, Max = 10, Rounding = 1,
+        Text = "Delay", Default = d, Min = 0.1, Max = 10, Rounding = 1,
         Callback = function(x) d = x end
     })
     g:AddDivider()
     g:AddToggle("AutoClickSelectToggle", {
-        Text = "เลือกตัวละครอัตโนมัติ", Default = false,
+        Text = "Auto Slot [ SELECT ]", Default = false,
         Callback = function(x)
             s = x
             if not x then return end
@@ -2934,7 +3419,7 @@ if IsMainmenuLobby() then
     })
 
     
-    local C = Tabs.MainMenu:AddRightGroupbox("ป็อปอัปเข้าร่วมชุมชน")
+    local C = Tabs.MainMenu:AddRightGroupbox("Join Community")
 
     local autoJoinEnabled = false
     local autoNotNowEnabled = false
@@ -2981,14 +3466,14 @@ if IsMainmenuLobby() then
     end
 
     C:AddToggle("AutoDialogClickerToggle", {
-        Text = "กด 'เข้าร่วมชุมชน' อัตโนมัติ", Default = false,
+        Text = "Auto Click 'Join Community'", Default = false,
         Callback = function(v)
             autoJoinEnabled = v
         end
     })
 
     C:AddToggle("AutoNotNowClickerToggle", {
-        Text = "กด 'ไว้ทีหลัง' อัตโนมัติ", Default = false,
+        Text = "Not Click 'Join Community'", Default = false,
         Callback = function(v)
             autoNotNowEnabled = v
         end
@@ -3011,7 +3496,7 @@ if IsMainmenuLobby() then
 end
 
 if IsMainmenuLobby() then
-    local J = Tabs.MainMenu:AddRightGroupbox("เข้าเซิร์ฟเวอร์อัตโนมัติ")
+    local J = Tabs.MainMenu:AddRightGroupbox("Auto Join")
 
     local D2 = 0
     local Dst = "Lobby"
@@ -3039,14 +3524,14 @@ if IsMainmenuLobby() then
 
     J:AddDropdown("JoinDestinationDropdown", {
         Values = {"Lobby","Trade"}, Default = "Lobby", Multi = false,
-        Text = "เข้าเล่นที่", Callback = function(x) Dst = x end
+        Text = "Teleport To", Callback = function(x) Dst = x end
     })
     J:AddSlider("AutoJoinDelaySlider", {
-        Text = "หน่วงเวลา (วินาที)", Default = 0, Min = 0, Max = 120, Rounding = 0,
+        Text = "Delay (seconds)", Default = 0, Min = 0, Max = 120, Rounding = 0,
         Callback = function(x) D2 = x end
     })
     J:AddToggle("MyToggle", {
-        Text = "วาร์ปอัตโนมัติ", Default = false,
+        Text = "Auto Join", Default = false,
         Callback = function(x)
             E = x
             if not x then R = false; return end
@@ -3995,7 +4480,7 @@ if Tabs.Lobby then
     MissionTab:AddDropdown("MissionDropdown", {
         Values = {"Shiganshina","Trost","Outskirts","Forest","Utgard","Docks","Stohess"},
         Default = State_Mission.Name,
-        Text = "ภารกิจ",
+        Text = "Mission",
         Callback = function(val)
             State_Mission.Name = val
             local newObjs = MissionObjectives[val] or {"Skirmish"}
@@ -4010,14 +4495,14 @@ if Tabs.Lobby then
     MissionTab:AddDropdown("MissionObjectiveDropdown", {
         Values = MissionObjectives["Shiganshina"],
         Default = State_Mission.Objective,
-        Text = "โหมดภารกิจ",
+        Text = "Objective",
         Callback = function(val) State_Mission.Objective = val end
     })
 
     MissionTab:AddDropdown("MissionDifficultyDropdown", {
         Values = {"Easy","Normal","Hard","Severe","Aberrant","Hardest"},
         Default = State_Mission.Difficulty,
-        Text = "ความยาก",
+        Text = "Mode",
         Callback = function(val) State_Mission.Difficulty = val end
     })
 
@@ -4025,12 +4510,12 @@ if Tabs.Lobby then
         Values = ModifiersList,
         Default = {},
         Multi = true,
-        Text = "เงื่อนไขพิเศษ (Modifiers)",
+        Text = "Modifiers",
         Callback = function() end
     })
 
     MissionTab:AddSlider("MissionDelaySlider", {
-        Text = "หน่วงเวลา",
+        Text = "Delay",
         Default = MissionDelay,
         Min = 0, Max = 60, Rounding = 0,
         Callback = function(v) MissionDelay = v end
@@ -4042,7 +4527,7 @@ if Tabs.Lobby then
     local missionStartTask = nil
 
     local missionToggle = MissionTab:AddToggle("AutoStartMissionToggle", {
-        Text = "เริ่มภารกิจอัตโนมัติ",
+        Text = "Start Mission",
         Default = false,
         Callback = function(v)
             if v then
@@ -4611,7 +5096,7 @@ if Tabs.Lobby then
 
 end
 if IsLobbyLobby() then
-    local UpgradeTabbox = Tabs.Session:AddLeftTabbox("อัพเกรดอุปกรณ์อัตโนมัติ")
+    local UpgradeTabbox = Tabs.Session:AddLeftTabbox("อัพเกรดอุปกรณ์")
 
         local activeUpgradeType = nil 
 
@@ -4673,7 +5158,7 @@ if IsLobbyLobby() then
         return ready
     end
 
-        local BladeTab = UpgradeTabbox:AddTab("ดาบ")
+        local BladeTab = UpgradeTabbox:AddTab("Blade")
 
     getgenv().AutoUpgradeBlade = false
     getgenv().UpgradeRunning = false
@@ -4694,7 +5179,7 @@ if IsLobbyLobby() then
     end
 
     BladeTab:AddSlider("BladeUpgradeDelaySlider", {
-        Text = "หน่วงเวลา (วินาที)",
+        Text = "หน่วงเวลาอัพเกรด (วินาที)",
         Default = 0,
         Min = 0,
         Max = 60,
@@ -4758,7 +5243,7 @@ if IsLobbyLobby() then
         end
     })
 
-        local SpearTab = UpgradeTabbox:AddTab("หอกสายฟ้า")
+        local SpearTab = UpgradeTabbox:AddTab("Thunder Spear")
 
     getgenv().AutoUpgradeSpear = false
     getgenv().SpearUpgradeRunning = false
@@ -4785,7 +5270,7 @@ if IsLobbyLobby() then
     end
 
     SpearTab:AddSlider("SpearUpgradeDelaySlider", {
-        Text = "หน่วงเวลา (วินาที)",
+        Text = "หน่วงเวลาอัพเกรด (วินาที)",
         Default = 0,
         Min = 0,
         Max = 60,
@@ -4851,7 +5336,7 @@ if IsLobbyLobby() then
 end
 
 if IsLobbyLobby() then
-    local UnlockGroupLeft = Tabs.Session:AddLeftGroupbox("ปลดล็อคสกิล (ดาบ)")
+    local UnlockGroupLeft = Tabs.Session:AddLeftGroupbox("ปลดล็อคสกิล")
 
     local branches = {
         ["Support Left"] = {
@@ -4899,28 +5384,26 @@ if IsLobbyLobby() then
     local function createDropdown(category, text)
         local dropdown = UnlockGroupLeft:AddDropdown(category .. "SideDropdown", {
             Text = text,
-            Values = {"None", "ซ้าย", "ขวา"},
+            Values = {"None", "Left", "Right"},
             Default = "None",
             Multi = false,
             Callback = function(v)
-                if v == "ซ้าย" then
-                    selected[category] = "Left"
-                elseif v == "ขวา" then
-                    selected[category] = "Right"
-                else
-                    selected[category] = nil
+                if v == "None" then 
+                    selected[category] = nil 
+                else 
+                    selected[category] = v 
                 end
             end
         })
         return dropdown
     end
 
-    local supportDropdown = createDropdown("Support", "สายสนับสนุน")
+    local supportDropdown = createDropdown("Support", "สายซัพพอร์ต")
     local offenseDropdown = createDropdown("Offense", "สายโจมตี")
     local defenseDropdown = createDropdown("Defense", "สายป้องกัน")
 
     UnlockGroupLeft:AddSlider("UnlockDelaySlider", {
-        Text = "หน่วงเวลา (วินาที)",
+        Text = "หน่วงเวลาปลดล็อค (วินาที)",
         Default = 0.08,
         Min = 0.01,
         Max = 1,
@@ -4971,7 +5454,7 @@ if IsLobbyLobby() then
     end
 
     UnlockGroupLeft:AddToggle("UnlockSkillsToggle", {
-        Text = "เริ่มปลดล็อคสกิลดาบอัตโนมัติ",
+        Text = "เริ่มปลดล็อคสกิลดาบ",
         Default = false,
         Callback = function(v)
             if not v then return end
@@ -5033,7 +5516,7 @@ end
 
 if IsLobbyLobby() then
 
-    local BoostGroup = Tabs.Lobby:AddRightGroupbox("เลือกซื้อ Boost")
+    local BoostGroup = Tabs.Lobby:AddRightGroupbox("Boost Selection")
 
     local purchaseAmount = 1
     local purchaseDelay = 0
@@ -5268,7 +5751,7 @@ if IsLobbyLobby() then
     end
 
     BoostGroup:AddDropdown("Boost_ListDropdown", {
-        Text = " --- เลือก Boost ---",
+        Text = " --- Select Boosts ---",
         Values = ALL_BOOSTS,
         Default = {},
         Multi = true,
@@ -5276,19 +5759,19 @@ if IsLobbyLobby() then
     })
 
     BoostGroup:AddSlider("Boost_AmountSlider", {
-        Text = "จำนวน",
+        Text = "Amount",
         Default = 1, Min = 1, Max = 50, Rounding = 0,
         Callback = function(v) purchaseAmount = v end
     })
 
     BoostGroup:AddSlider("Boost_DelaySlider", {
-        Text = "หน่วงเวลาซื้อ (วินาที)",
+        Text = "Purchase Delay (seconds)",
         Default = 0, Min = 0, Max = 60, Rounding = 0,
         Callback = function(v) purchaseDelay = v end
     })
 
     BoostGroup:AddToggle("Boost_PurchaseToggle", {
-        Text = "ซื้อ",
+        Text = "Purchase",
         Default = false,
         Callback = function(v)
             if v then
@@ -5360,7 +5843,7 @@ if IsLobbyLobby() then
     })
 
     BoostGroup:AddToggle("Boost_AutoUseToggle", {
-        Text = "ใช้งาน Boost ทั้งหมดอัตโนมัติ",
+        Text = "Auto Use All Boosts",
         Default = false,
         Callback = function(v)
             if v then
@@ -5564,7 +6047,7 @@ if IsLobbyLobby() then
     PrestigeGroup:AddDropdown("BoostDropdown", { 
         Values = {"Luck Boost","Exp Boost","Gold Boost"}, 
         Default = getgenv().SelectedBoost, 
-        Text = "บูสที่ต้องการรับ", 
+        Text = "บัฟ (Boost)", 
         Callback = function(v) getgenv().SelectedBoost = v end 
     })
     PrestigeGroup:AddSlider("PrestigeCooldownSlider", { 
@@ -5577,7 +6060,7 @@ if IsLobbyLobby() then
         Callback = function(v) PrestigeCooldown = v end 
     })
     PrestigeGroup:AddToggle("ForceGoldToggle", { 
-        Text = "บังคับใช้เงื่อนไขทอง", 
+        Text = "บังคับใช้ทอง", 
         Default = getgenv().ForceGoldRequirement, 
         Callback = function(v) 
             getgenv().ForceGoldRequirement = v
@@ -5686,7 +6169,7 @@ if IsLobbyLobby() then
     end)
 end
 if IsLobbyLobby() then
-    local AutoClaimGroup = Tabs.Session:AddLeftGroupbox("รับรางวัลอัตโนมัติ")
+    local AutoClaimGroup = Tabs.Session:AddLeftGroupbox("รับของอัตโนมัติ")
     
     getgenv().ClaimQuestEnabled = false
     getgenv().ClaimQuestRunning = false
@@ -5694,7 +6177,7 @@ if IsLobbyLobby() then
     getgenv().ClaimAchievementRunning = false
     getgenv().ClaimDelay = 0
     
-    local statusLabel = AutoClaimGroup:AddLabel("สถานะ: กำลังตรวจสอบ...", true)
+    local statusLabel = AutoClaimGroup:AddLabel("Status: Checking...", true)
     
         local function getCurrencyValues()
         local player = game:GetService("Players").LocalPlayer
@@ -5730,9 +6213,9 @@ if IsLobbyLobby() then
             pcall(function()
                 local ready = isCurrenciesReady()
                 if ready then
-                    statusLabel:SetText("สถานะ: พร้อมใช้งาน")
+                    statusLabel:SetText("Status: Ready")
                 else
-                    statusLabel:SetText("สถานะ: ยังไม่พร้อม (รอทอง/เพชร)")
+                    statusLabel:SetText("Status: Not Ready (Waiting for Gold/Gems)")
                 end
             end)
         end
@@ -5791,7 +6274,7 @@ if IsLobbyLobby() then
     end
     
     AutoClaimGroup:AddToggle("ClaimQuestToggle", {
-        Text = "รับเควสอัตโนมัติ",
+        Text = "รับเควส",
         Default = false,
         Callback = function(v)
             getgenv().ClaimQuestEnabled = v
@@ -5807,7 +6290,7 @@ if IsLobbyLobby() then
     })
     
     AutoClaimGroup:AddToggle("ClaimAchievementToggle", {
-        Text = "รับความสำเร็จอัตโนมัติ",
+        Text = "รับความสำเร็จ",
         Default = false,
         Callback = function(v)
             getgenv().ClaimAchievementEnabled = v
@@ -5823,7 +6306,7 @@ if IsLobbyLobby() then
     })
     
     AutoClaimGroup:AddSlider("ClaimDelaySlider", {
-        Text = "หน่วงเวลา (วินาที)",
+        Text = "หน่วงเวลารับของ (วิ)",
         Default = 0,
         Min = 0,
         Max = 60,
@@ -5871,7 +6354,7 @@ do
 end
 
 if IsIngameLobby() and Tabs.AutoFarm then
-    local MiscGroup = Tabs.AutoFarm:AddLeftGroupbox("การตั้งค่าอื่นๆ")
+    local MiscGroup = Tabs.AutoFarm:AddLeftGroupbox("Misc")
 
         local StatsGui = nil
     local StatsEnabled = false
@@ -5962,7 +6445,7 @@ if IsIngameLobby() and Tabs.AutoFarm then
     end)
 
         MiscGroup:AddSlider("UIScaleSlider", {
-        Text = "ขนาด UI (%)",
+        Text = "UI Scale (%)",
         Default = 100,
         Min = 50,
         Max = 200,
@@ -6214,7 +6697,7 @@ if IsIngameLobby() and Tabs.AutoFarm then
     end
 
     MiscGroup:AddToggle("PlayerStatsToggle", {
-        Text = "แสดงสถานะผู้เล่น",
+        Text = "Player Stats",
         Default = false,
         Callback = function(v)
             StatsEnabled = v
@@ -6230,12 +6713,12 @@ if IsIngameLobby() and Tabs.AutoFarm then
     })
 
         MiscGroup:AddDropdown("RenderModeDropdown", {
-        Text = "ตั้งค่าลดแลค",
-        Values = {"ภาพกาก", "ลบแมพ", "ปิด 3D Render", "ปิด Text DMG"},
+        Text = "FPS Performance",
+        Values = {"Low Graphic", "Delete Map", "Disable 3D Render", "Disable Text DMG"},
         Default = {},
         Multi = true,
         Callback = function(v)
-                        if v["ภาพกาก"] then
+                        if v["Low Graphic"] then
                 pcall(function()
                     game:GetService("Lighting").Brightness = 0
                     game:GetService("Lighting").GlobalShadows = false
@@ -6256,7 +6739,7 @@ if IsIngameLobby() and Tabs.AutoFarm then
                 end)
             end
 
-                        if v["ลบแมพ"] then
+                        if v["Delete Map"] then
                 local climbable = workspace:FindFirstChild("Climbable")
                 local unclimbable = workspace:FindFirstChild("Unclimbable")
                 if climbable or unclimbable then
@@ -6276,7 +6759,7 @@ if IsIngameLobby() and Tabs.AutoFarm then
                 end
             end
 
-                        if v["ปิด 3D Render"] then
+                        if v["Disable 3D Render"] then
                 pcall(function()
                     game:GetService("RunService"):Set3dRenderingEnabled(false)
                     settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
@@ -6294,7 +6777,7 @@ if IsIngameLobby() and Tabs.AutoFarm then
                 end)
             end
 
-                        if v["ปิด Text DMG"] then
+                        if v["Disable Text DMG"] then
                 for i = 1, 5 do
                     pcall(function()
                         local args = {
@@ -6818,7 +7301,7 @@ if Tabs.AutoFarm then
         end
     end)
 
-    local TeleportGroup = Tabs.AutoFarm:AddRightGroupbox("วาร์ปทันที")
+    local TeleportGroup = Tabs.AutoFarm:AddRightGroupbox("Teleport Now")
     local tpLabel = TeleportGroup:AddLabel("")
     local function AddConfirmTP(name, id, time)
         local c = false
@@ -6827,13 +7310,13 @@ if Tabs.AutoFarm then
                 pcall(function() TeleportService:Teleport(id, Player) end)
             else
                 c = true
-                tpLabel:SetText("แน่ใจหรือไม่?")
+                tpLabel:SetText("Are you sure?")
                 task.delay(time or 3, function() c = false; tpLabel:SetText("") end)
             end
         end)
     end
-    AddConfirmTP("วาร์ปไปหน้าหลัก", MAIN_MENU_ID, 1.5)
-    AddConfirmTP("วาร์ปไปล็อบบี้", LOBBY_ID)
+    AddConfirmTP("Teleport to Main Menu", MAIN_MENU_ID, 1.5)
+    AddConfirmTP("Teleport to Lobby", LOBBY_ID)
     
     TeleportGroup:AddDivider()
 
@@ -6847,7 +7330,7 @@ if Tabs.AutoFarm then
     local maxAttempts = 5
 
     TeleportGroup:AddSlider("CombinedActionDelaySlider", {
-        Text = "ตั้งเวลาหน่วง (วินาที)",
+        Text = "Set Delay (seconds)",
         Default = 0,
         Min = 0,
         Max = 1200,
@@ -6862,7 +7345,7 @@ if Tabs.AutoFarm then
         Values = {"Teleport to Main Menu", "Teleport to Lobby", "Kill Character", "AUTO Leave Game"},
         Default = {},
         Multi = true,
-        Text = "เลือกคำสั่ง [ เลือกหลายอันได้ ]",
+        Text = "Select [ Multi ]",
         Callback = function(v)
             selectedActions = v
         end
@@ -6969,7 +7452,7 @@ if Tabs.AutoFarm then
     end
 
     TeleportGroup:AddToggle("CombinedActionToggle", {
-        Text = "เปิดใช้งาน Safety Settings",
+        Text = "Enable Failed Safe",
         Default = false,
         Callback = function(v)
             combinedEnabled = v
@@ -8258,7 +8741,7 @@ local function FindRefillObject()
     return nil
 end
 
-local function ReloadSpears()
+ReloadSpears = function()
     local refill = FindRefillObject()
     if refill then
         pcall(function() POST:FireServer("Attacks", "Reload", refill) end)
@@ -8266,10 +8749,10 @@ local function ReloadSpears()
     CurrentFirePower = 8
 end
 
-local function FireSpear()
+FireSpear = function()
     if CurrentFirePower <= 0 then
         ReloadSpears()
-        task.wait(0.15)           if CurrentFirePower == 0 then return end
+        task.wait(0.15); if CurrentFirePower == 0 then return end
     end
     pcall(function()
         GET:InvokeServer("Spears", "S_Fire", tostring(CurrentFirePower))
@@ -8277,7 +8760,7 @@ local function FireSpear()
     end)
 end
 
-local function ThunderAOEAttack()
+ThunderAOEAttack = function()
         local activeList = ActiveTitans
     for _, entry in ipairs(activeList) do
         local nape = entry.nape
@@ -8289,7 +8772,7 @@ local function ThunderAOEAttack()
     end
 end
 
-local function ThunderAttackAllTitans()
+ThunderAttackAllTitans = function()
     if #ActiveTitans == 0 then return end
     if not isObjectivesActiveForCore() then return end
     
@@ -8355,7 +8838,7 @@ local function ThunderAttackAllTitans()
     ThunderAOEAttack()
 end
 
-local function SpearFarmUpdate()
+SpearFarmUpdate = function()
     pcall(function()
         local G = getgenv()
         
@@ -8444,9 +8927,8 @@ local function SpearFarmUpdate()
     end)
 end
 
-local SpearFarmConn = nil
-local function CreateSpearFarmLoop()
-    if SpearFarmConn then SpearFarmConn:Disconnect() end
+CreateSpearFarmLoop = function()
+    if SpearFarmConn then pcall(function() SpearFarmConn:Disconnect() end) end
     SpearFarmConn = RunService.Heartbeat:Connect(SpearFarmUpdate)
 end
 CreateSpearFarmLoop()
@@ -9604,7 +10086,7 @@ if IsIngameLobby() and Tabs.Webhook then
 end
 
 if Tabs.AutoFarm then
-    local MiscGroup = Tabs.AutoFarm:AddRightGroupbox("ข้ามคัทซีน")
+    local MiscGroup = Tabs.AutoFarm:AddRightGroupbox("Skip Cutscene")
 
     local skipEnabled = false
     local skipRunning = false
@@ -9686,7 +10168,7 @@ if Tabs.AutoFarm then
     end)
 
     MiscGroup:AddToggle("SkipCutSceneToggle", {
-        Text = "ข้ามคัทซีนอัตโนมัติ",
+        Text = "Skip Cut Scene",
         Default = false,
         Callback = function(v)
             skipEnabled = v
@@ -9697,7 +10179,7 @@ if Tabs.AutoFarm then
     })
 
     MiscGroup:AddToggle("SkipForceToggle", {
-        Text = "บังคับข้ามคัทซีน",
+        Text = "Skip Fixed",
         Default = false,
         Callback = function(v)
             if v then
@@ -9716,6 +10198,7 @@ if Tabs.AutoFarm then
                                 return Object
                             end
                         end
+                        return nil
                     end
 
                     local startObj = GetNil("Start", "1_39502")
@@ -9737,7 +10220,7 @@ end
 
 
 if Tabs.AutoFarm then
-    local SpearGroup = Tabs.AutoFarm:AddRightGroupbox("ทำเควสหอกสายฟ้า")
+    local SpearGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Spear Quest")
     
     local spearQuestEnabled = false
     local spearQuestRunning = false
@@ -9756,7 +10239,7 @@ if Tabs.AutoFarm then
     end
     
     SpearGroup:AddToggle("AutoSpearQuestToggle", {
-        Text="ทำเควสหอกอัตโนมัติ",
+        Text="Auto Spear Quest",
         Default=false,
         Callback=function(v)
             spearQuestEnabled = v
@@ -9818,3 +10301,7 @@ if Tabs.AutoFarm then
         end
     })
 end
+
+pcall(function()
+    SaveManager:LoadAutoloadConfig()
+end)
