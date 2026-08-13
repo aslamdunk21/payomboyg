@@ -258,6 +258,9 @@ end
 
 local function getCardRank(item)
     if not item then return "None" end
+    local cachedRank = item:GetAttribute("CachedRank")
+    if cachedRank and cachedRank ~= "" then return cachedRank end
+
     local attr = item:GetAttribute("Rank") 
         or item:GetAttribute("CardRank") 
         or item:GetAttribute("Grade") 
@@ -266,14 +269,19 @@ local function getCardRank(item)
         or item:GetAttribute("CardRarity")
         or item:GetAttribute("Tier")
         or item:GetAttribute("CashBoost")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
+        item:SetAttribute("CachedRank", tostring(attr))
+        return tostring(attr)
+    end
 
     for _, childName in ipairs({"Rank", "Grade", "CardRank", "CardGrade", "Rarity", "Tier"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
+                item:SetAttribute("CachedRank", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
+                item:SetAttribute("CachedRank", valObj.Text)
                 return valObj.Text
             end
         end
@@ -290,6 +298,7 @@ local function getCardRank(item)
                     or string.match(cleanTxt, "[^%w%+%.]" .. escapedR .. "[^%w%+%.]")
                     or string.match(cleanTxt, "[^%w%+%.]" .. escapedR .. "$")
                 then
+                    item:SetAttribute("CachedRank", r)
                     return r
                 end
             end
@@ -300,17 +309,25 @@ end
 
 local function getCardTrait(item)
     if not item then return "None" end
+    local cachedTrait = item:GetAttribute("CachedTrait")
+    if cachedTrait and cachedTrait ~= "" then return cachedTrait end
+
     local attr = item:GetAttribute("Trait") 
         or item:GetAttribute("CardTrait") 
         or item:GetAttribute("MutationTrait")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
+        item:SetAttribute("CachedTrait", tostring(attr))
+        return tostring(attr)
+    end
 
     for _, childName in ipairs({"Trait", "CardTrait"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
+                item:SetAttribute("CachedTrait", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
+                item:SetAttribute("CachedTrait", valObj.Text)
                 return valObj.Text
             end
         end
@@ -321,6 +338,7 @@ local function getCardTrait(item)
             local cleanTxt = string.gsub(txtObj.Text, "<[^>]+>", "")
             for _, t in ipairs(knownTraitList) do
                 if string.find(string.lower(cleanTxt), string.lower(t)) then
+                    item:SetAttribute("CachedTrait", t)
                     return t
                 end
             end
@@ -331,15 +349,23 @@ end
 
 local function getCardMutation(item)
     if not item then return "Normal" end
+    local cachedMutation = item:GetAttribute("CachedMutation")
+    if cachedMutation and cachedMutation ~= "" then return cachedMutation end
+
     local attr = item:GetAttribute("CardMutation") or item:GetAttribute("Mutation")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
+        item:SetAttribute("CachedMutation", tostring(attr))
+        return tostring(attr)
+    end
 
     for _, childName in ipairs({"Mutation", "CardMutation"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
+                item:SetAttribute("CachedMutation", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
+                item:SetAttribute("CachedMutation", valObj.Text)
                 return valObj.Text
             end
         end
@@ -762,9 +788,14 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop
+-- Heartbeat Instant Buy Loop (Rate-Limited to Prevent Ping & FPS Spikes)
+local lastBuyTick = 0
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
+    local nowTick = tick()
+    if nowTick - lastBuyTick < 0.04 then return end -- Max ~25 Hz execution rate
+    lastBuyTick = nowTick
+
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
@@ -1107,6 +1138,7 @@ AutoRerollToggle:OnChanged(function(state)
                 local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
                 
                 if cardTool and cardTool.Parent then
+                    cardTool:SetAttribute("CachedTrait", nil)
                     local currentTrait = getCardTrait(cardTool)
                     
                     local hasSelected = false
@@ -1175,25 +1207,29 @@ AutoRerollToggle:OnChanged(function(state)
                         pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
+                    -- Optimized fireAll using Cached Remotes List (Prevents Packet Spikes)
+                    if not getgenv().CachedTraitRemotes then
+                        getgenv().CachedTraitRemotes = {}
                         local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                        local rFolder = rs:FindFirstChild("Remotes") or rs
+                        for _, obj in ipairs(rFolder:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") then
                                 local name = string.lower(obj.Name)
-                                if string.find(name, "roll") or string.find(name, "trait") then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                        end
-                                    end
+                                if name:find("roll") or name:find("trait") then
+                                    table.insert(getgenv().CachedTraitRemotes, obj)
                                 end
                             end
                         end
                     end
-                    fireAll(cId)
+
+                    local argsToTry = { cId, cardTool, { Card = cId }, { UUID = cId }, { Tool = cardTool } }
+                    for _, obj in ipairs(getgenv().CachedTraitRemotes) do
+                        if obj:IsA("RemoteEvent") then
+                            for _, arg in ipairs(argsToTry) do
+                                pcall(function() obj:FireServer(arg) end)
+                            end
+                        end
+                    end
                     
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
@@ -1293,6 +1329,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                 local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
                 
                 if cardTool and cardTool.Parent then
+                    cardTool:SetAttribute("CachedRank", nil)
                     local currentRank = getCardRank(cardTool)
                     
                     local hasSelected = false
@@ -1373,41 +1410,35 @@ AutoRankRerollToggle:OnChanged(function(state)
                         pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
+                    -- Optimized fireAll for Rank Reroll using Cached Remotes List (Prevents Packet & Ping Spikes)
+                    if not getgenv().CachedRankRemotes then
+                        getgenv().CachedRankRemotes = {}
                         local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
                         local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
+                        local rFolder = rs:FindFirstChild("Remotes") or rs
+                        for _, obj in ipairs(rFolder:GetDescendants()) do
                             if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
                                 local name = string.lower(obj.Name)
-                                local match = false
                                 for _, kw in ipairs(keywords) do
-                                    if string.find(name, kw) then
-                                        match = true
+                                    if name:find(kw) then
+                                        table.insert(getgenv().CachedRankRemotes, obj)
                                         break
-                                    end
-                                end
-                                if match then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                            pcall(function() obj:FireServer("Roll", arg) end)
-                                            pcall(function() obj:FireServer("Rank", arg) end)
-                                        end
-                                    elseif obj:IsA("RemoteFunction") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                                        end
                                     end
                                 end
                             end
                         end
                     end
-                    fireAll(cId)
+
+                    local argsToTry = { cId, cardTool, { Card = cId }, { UUID = cId }, { Tool = cardTool } }
+                    for _, obj in ipairs(getgenv().CachedRankRemotes) do
+                        if obj:IsA("RemoteEvent") then
+                            for _, arg in ipairs(argsToTry) do
+                                pcall(function() obj:FireServer(arg) end)
+                            end
+                        elseif obj:IsA("RemoteFunction") then
+                            pcall(function() obj:InvokeServer(cId) end)
+                        end
+                    end
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
@@ -1916,13 +1947,16 @@ AutoTowerToggle:OnChanged(function(state)
                         end
                     end
 
-                    local openPrompt
-                    for _, p in ipairs(workspace:GetDescendants()) do
-                        if p:IsA("ProximityPrompt") then
-                            local pText = string.upper(p.ActionText .. " " .. p.ObjectText)
-                            if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") then
-                                openPrompt = p
-                                break
+                    local openPrompt = getgenv().TowerOpenPrompt
+                    if not openPrompt or not openPrompt.Parent then
+                        for _, p in ipairs(workspace:GetDescendants()) do
+                            if p:IsA("ProximityPrompt") then
+                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText)
+                                if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") then
+                                    getgenv().TowerOpenPrompt = p
+                                    openPrompt = p
+                                    break
+                                end
                             end
                         end
                     end
@@ -2077,21 +2111,24 @@ AutoBossToggle:OnChanged(function(state)
 
                     local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
                     if not inBattle and isBossTimeWindow() then
-                        local bossPrompt, portalPrompt
-                        for _, p in ipairs(workspace:GetDescendants()) do
-                            if p:IsA("ProximityPrompt") then
-                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or "") .. " " .. p.Name)
-                                if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
-                                    portalPrompt = p
-                                elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
-                                    if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") or string.find(pText, "ENTER") then
-                                        bossPrompt = p
+                        local targetPrompt = getgenv().BossTargetPrompt
+                        if not targetPrompt or not targetPrompt.Parent then
+                            local bossPrompt, portalPrompt
+                            for _, p in ipairs(workspace:GetDescendants()) do
+                                if p:IsA("ProximityPrompt") then
+                                    local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or "") .. " " .. p.Name)
+                                    if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
+                                        portalPrompt = p
+                                    elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
+                                        if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") or string.find(pText, "ENTER") then
+                                            bossPrompt = p
+                                        end
                                     end
                                 end
                             end
+                            targetPrompt = bossPrompt or portalPrompt
+                            getgenv().BossTargetPrompt = targetPrompt
                         end
-
-                        local targetPrompt = bossPrompt or portalPrompt
                         if targetPrompt then
                             pcall(function()
                                 local character = LocalPlayer.Character
