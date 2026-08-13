@@ -50,10 +50,7 @@ local function fetchDependency(urls, name)
 end
 
 local fluentUrls = {
-    "https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/main.lua",
-    "https://fastly.jsdelivr.net/gh/1dontgiveaf/Fluent@main/main.lua",
-    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua",
-    "https://statically.io/gh/1dontgiveaf/Fluent/main/main.lua"
+    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua"
 }
 
 local Fluent = fetchDependency(fluentUrls, "Fluent UI")
