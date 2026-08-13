@@ -3,23 +3,14 @@
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
 local WindUI = nil
-local s, r = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
+pcall(function()
+    WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
 end)
 
-if s and r then
-    WindUI = r
-else
-    local s2, r2 = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-    end)
-    if s2 and r2 then
-        WindUI = r2
-    end
-end
-
 if not WindUI then
-    WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
+    pcall(function()
+        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+    end)
 end
 
 local UserInputService = game:GetService("UserInputService")
