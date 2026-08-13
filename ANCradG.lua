@@ -678,6 +678,38 @@ Tabs.Main:AddButton({
     end
 })
 
+local LimitFPSToggle = Tabs.Main:AddToggle("CapFPS30", { Title = "⚡ จำกัด FPS เหลือ 30 (Cap FPS 30)", Default = false })
+LimitFPSToggle:OnChanged(function(state)
+    pcall(function()
+        if setfpscap then
+            setfpscap(state and 30 or 60)
+            Fluent:Notify({ Title = "FPS Cap", Content = state and "จำกัด FPS เหลือ 30 แล้ว" or "ปลดล็อก FPS (60)", Duration = 3 })
+        else
+            Fluent:Notify({ Title = "ข้อผิดพลาด", Content = "ตัวรันไม่รองรับ setfpscap!", Duration = 3 })
+        end
+    end)
+end)
+
+getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 10
+
+local AutoSpawnDelaySlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
+    Title = "⏱️ ความหน่วงการสุ่มแพ็ก (Auto Spawn Delay)",
+    Description = "10 = 0.1 วินาที, 100 = 1.0 วินาที",
+    Default = getgenv().AutoSpawnDelay,
+    Min = 10,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        getgenv().AutoSpawnDelay = Value
+    end
+})
+
+local AntiLagToggle = Tabs.Main:AddToggle("PingSaver", { Title = "🚀 โหมดลดปิง & CPU (Reduce Ping & CPU Lag)", Default = true })
+AntiLagToggle:OnChanged(function(state)
+    getgenv().PingSaver = state
+    Fluent:Notify({ Title = "Optimization", Content = state and "เปิดโหมดลดปิง & ประหยัด CPU แล้ว" or "ปิดโหมดลดปิง", Duration = 3 })
+end)
+
 local AutoSpawnToggle = Tabs.Main:AddToggle("AutoSpawnPack", { Title = "🎲 สุ่มแพ็กอัตโนมัติ", Default = false })
 AutoSpawnToggle:OnChanged(function(state)
     getgenv().AutoSpawnPack = state
@@ -711,19 +743,22 @@ AutoSpawnToggle:OnChanged(function(state)
                         end
                     end
                 end
+
+                local delaySec = math.max(0.05, (getgenv().AutoSpawnDelay or 10) / 100)
+
                 if getgenv().AutoBuyCards then
                     if activeCards == 0 then
                         pcall(fireclickdetector, cd)
-                        task.wait(0.3)
+                        task.wait(delaySec)
                     else
-                        task.wait(0.05)
+                        task.wait(math.max(0.05, delaySec * 0.5))
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(0.2)
+                        task.wait(math.max(0.15, delaySec * 1.5))
                     else
-                        task.wait(0.01)
+                        task.wait(delaySec)
                     end
                 end
             end
