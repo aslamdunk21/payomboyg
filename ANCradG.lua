@@ -2464,6 +2464,12 @@ local function collect4BestBaseCards()
                             or string.find(pText, "SELL") or string.find(pText, "ขาย")
                             or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
                             or string.find(pText, "JOIN") or string.find(pText, "ENTER")
+                            or string.find(pText, "SKIP") or string.find(pText, "ข้าม")
+                            or string.find(pText, "MASTER") or string.find(pText, "ROBUX")
+                            or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
+                            or string.find(pText, "LUCK") or string.find(pText, "CASH")
+                            or string.find(pText, "BOOST") or string.find(pText, "GEMS")
+                            or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP")
                         
                         if not isIgnoredPrompt then
                             local model = desc:FindFirstAncestorOfClass("Model")
@@ -2498,6 +2504,8 @@ local function collect4BestBaseCards()
 
         local originalCFrame = hrp.CFrame
         getgenv().CollectedCardPositions = {}
+        
+        task.wait(1)
 
         for i = 1, math.min(4, #allCards) do
             local card = allCards[i]
@@ -2515,24 +2523,30 @@ local function collect4BestBaseCards()
                     if targetPos and hrp then
                         table.insert(getgenv().CollectedCardPositions, { pos = targetPos, score = card.score, assumedName = card.item.Name })
                         hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
-                        task.wait(0.8)
+                        
+                        if i == 1 then
+                            task.wait(1.5)
+                        else
+                            task.wait(0.8)
+                        end
                         
                         if card.interact:IsA("ProximityPrompt") then
                             card.interact.RequiresLineOfSight = false
                             card.interact.MaxActivationDistance = 99999
                             card.interact.HoldDuration = 0
-                            for _ = 1, 5 do
+                            for _ = 1, 8 do
                                 if not card.interact or not card.interact.Parent then break end
                                 fireproximityprompt(card.interact)
-                                task.wait(0.3)
+                                task.wait(0.4)
                             end
                         elseif card.interact:IsA("ClickDetector") then
-                            for _ = 1, 5 do
+                            for _ = 1, 8 do
+                                if not card.interact or not card.interact.Parent then break end
                                 fireclickdetector(card.interact)
-                                task.wait(0.3)
+                                task.wait(0.4)
                             end
                         end
-                        task.wait(1.0)
+                        task.wait(0.5)
                     end
                 end)
             end
@@ -2791,6 +2805,7 @@ AutoTowerToggle:OnChanged(function(state)
                             placeCollectedCardsBack()
                         end
                         getgenv().TowerHasCollected = false
+                        getgenv().AutoReplayToggled = false
                     end
                     if autoReplayBtn and not getgenv().AutoReplayToggled then
                         fireButton(autoReplayBtn)
@@ -2799,12 +2814,21 @@ AutoTowerToggle:OnChanged(function(state)
                     end
                     if nextBtn then fireButton(nextBtn) task.wait(0.2) end
                     if playBtn then fireButton(playBtn) task.wait(0.2) end
+                    if hideBattleBtn then fireButton(hideBattleBtn) task.wait(0.2) end
 
                     -- Direct Remote Backup Triggers for Tower
                     pcall(function()
-                        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") or game:GetService("ReplicatedStorage")
                         if remotes then
                             local towerRE = remotes:FindFirstChild("TowerRE") or remotes:FindFirstChild("InfinityTowerRE") or remotes:FindFirstChild("TowerBattleRE")
+                            if not towerRE then
+                                for _, r in ipairs(remotes:GetDescendants()) do
+                                    if r:IsA("RemoteEvent") and string.find(string.lower(r.Name), "tower") then
+                                        towerRE = r
+                                        break
+                                    end
+                                end
+                            end
                             if towerRE and towerRE:IsA("RemoteEvent") then
                                 if inTowerUI or inBattle then
                                     towerRE:FireServer("EquipBest")
@@ -2821,6 +2845,51 @@ AutoTowerToggle:OnChanged(function(state)
         end)
     end
 end)
+
+Tabs.Raid:AddButton({
+    Title = "🛑 ปิดหอคอยตอนนี้ (Exit Tower)",
+    Callback = function()
+        getgenv().AutoTower = false
+        if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
+        
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local autoReplayBtn, exitBtn
+            for _, v in ipairs(playerGui:GetDescendants()) do
+                if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
+                    local cleanText = string.gsub(v.Text, "<[^>]+>", "")
+                    local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
+                    if text == "AUTO REPLAY" then
+                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                        if btn and btn.Parent and btn.Parent.Visible then autoReplayBtn = btn end
+                    elseif text == "EXIT" or text == "LEAVE" or text == "QUIT" or text == "CANCEL" or text == "ออก" then
+                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                        if btn and btn.Parent and btn.Parent.Visible then exitBtn = btn end
+                    end
+                end
+            end
+            
+            local vim = game:GetService("VirtualInputManager")
+            
+            if autoReplayBtn then
+                local center = autoReplayBtn.AbsolutePosition + (autoReplayBtn.AbsoluteSize / 2)
+                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+                task.wait(0.1)
+                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+                task.wait(0.5)
+            end
+            
+            if exitBtn then
+                local center = exitBtn.AbsolutePosition + (exitBtn.AbsoluteSize / 2)
+                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+                task.wait(0.1)
+                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+            end
+        end
+        getgenv().AutoReplayToggled = false
+        Fluent:Notify({ Title = "Tower", Content = "ยกเลิก Auto Replay และออกจากหอคอยแล้ว!", Duration = 3 })
+    end
+})
 
 local BossDiffDropdown = Tabs.Raid:AddDropdown("BossRaidDifficulty", {
     Title = "⚔️ ระดับความยากบอสเรด",
