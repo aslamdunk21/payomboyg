@@ -3252,20 +3252,40 @@ pcall(function()
     end)
 end)
 
-if SaveManager and ThemeManager then
-    ThemeManager:SetLibrary(Library)
-    SaveManager:SetLibrary(Library)
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetIgnoreIndexes({'MenuKeybind'})
-    ThemeManager:SetFolder("PayomboyZ_Config")
-    SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
+pcall(function()
+    if SaveManager then
+        pcall(function() SaveManager:SetLibrary(Library) end)
+        pcall(function() SaveManager:IgnoreThemeSettings() end)
+        pcall(function() SaveManager:SetIgnoreIndexes({'MenuKeybind'}) end)
+        pcall(function() SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm") end)
 
-    SaveManager:BuildConfigbox(rawTabs.Dashboard:AddRightGroupbox("บันทึกการตั้งค่า (Save)"))
-    ThemeManager:ApplyToTab(rawTabs.Dashboard:AddRightGroupbox("เปลี่ยนธีม UI (Theme)"))
+        local saveBox = rawTabs.Dashboard:AddRightGroupbox("บันทึกการตั้งค่า (Save)")
+        if type(SaveManager.BuildConfigbox) == "function" then
+            pcall(function() SaveManager:BuildConfigbox(saveBox) end)
+        elseif type(SaveManager.BuildConfigSection) == "function" then
+            pcall(function() SaveManager:BuildConfigSection(saveBox) end)
+        elseif type(SaveManager.BuildFolderSection) == "function" then
+            pcall(function() SaveManager:BuildFolderSection(saveBox) end)
+        end
 
-    pcall(function()
-        SaveManager:LoadAutoloadConfig()
-    end)
-end
+        pcall(function() SaveManager:LoadAutoloadConfig() end)
+    end
+end)
+
+pcall(function()
+    if ThemeManager then
+        pcall(function() ThemeManager:SetLibrary(Library) end)
+        pcall(function() ThemeManager:SetFolder("PayomboyZ_Config") end)
+
+        local themeBox = rawTabs.Dashboard:AddRightGroupbox("เปลี่ยนธีม UI (Theme)")
+        if type(ThemeManager.ApplyToTab) == "function" then
+            pcall(function() ThemeManager:ApplyToTab(themeBox) end)
+        elseif type(ThemeManager.ApplyToGroupbox) == "function" then
+            pcall(function() ThemeManager:ApplyToGroupbox(themeBox) end)
+        elseif type(ThemeManager.CreateThemeManager) == "function" then
+            pcall(function() ThemeManager:CreateThemeManager(themeBox) end)
+        end
+    end
+end)
 
 Library:Notify("PayomboyZ: เปลี่ยนระบบเป็น LinoriaLib เรียบร้อยแล้ว! ลื่นขึ้นและเปิดติด 100% ✅", 6)
