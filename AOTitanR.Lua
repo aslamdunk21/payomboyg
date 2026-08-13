@@ -942,46 +942,6 @@ if IsIngameLobby() then
     Tabs.AutoFarm = Window:AddTab("Auto Farm")
     Tabs.Webhook = Window:AddTab("Webhook")
     
-    local MiscGroup = Tabs.AutoFarm:AddLeftGroupbox("Misc")
-    MiscGroup:AddSlider("UIScale", { Text = "UI Scale (%)", Default = 100, Min = 10, Max = 200, Rounding = 0, Suffix = "%", Callback = function() end })
-    MiscGroup:AddToggle("PlayerStats", { Text = "Player Stats", Default = false, Callback = function() end })
-    MiscGroup:AddDropdown("FPSPerformance", { Text = "FPS Performance", Values = {"--"}, Default = "--", Callback = function() end })
-    MiscGroup:AddSlider("SetFPS", { Text = "Set FPS", Default = 60, Min = 10, Max = 120, Rounding = 0, Suffix = " FPS", Callback = function() end })
-
-    local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Farm Select")
-    FarmGroup:AddDropdown("FarmSelectOption", { Text = "Farm Select", Values = {"--", "Blade", "Thunder Spear"}, Default = "--", Callback = function() end })
-    FarmGroup:AddSlider("HoverSpeed", { Text = "Hover Speed", Default = 120, Min = 0, Max = 1000, Rounding = 0, Callback = function() end })
-    FarmGroup:AddSlider("HoverHeight", { Text = "Hover Height", Default = 120, Min = 0, Max = 400, Rounding = 0, Callback = function() end })
-    FarmGroup:AddSlider("KillHits", { Text = "Kill Hits", Default = 1, Min = 1, Max = 9, Rounding = 0, Callback = function() end })
-    FarmGroup:AddToggle("AutoFarmBlade", { Text = "Auto Farm Blade", Default = false, Callback = function() end })
-    FarmGroup:AddToggle("AutoReloadBlade", { Text = "Auto Reload Blade", Default = false, Callback = function() end })
-    FarmGroup:AddToggle("AutoRetry", { Text = "Auto Retry", Default = false, Callback = function() end })
-
-    local SafetyGroup = Tabs.AutoFarm:AddRightGroupbox("Safety Settings")
-    SafetyGroup:AddLabel("-- 60s is safe! --")
-    SafetyGroup:AddLabel("--- End Missions ---")
-    SafetyGroup:AddSlider("EndMissions", { Text = "End Missions", Default = 60, Min = 0, Max = 60, Rounding = 0, Callback = function() end })
-    SafetyGroup:AddSlider("StopAttacking", { Text = "Stop attacking when .. titans Left", Default = 10, Min = 0, Max = 25, Rounding = 0, Callback = function() end })
-
-    local TeleportGroup = Tabs.AutoFarm:AddRightGroupbox("วาร์ปด่วน")
-    TeleportGroup:AddButton("วาร์ปกลับหน้าหลัก", function() end)
-    TeleportGroup:AddButton("วาร์ปกลับล็อบบี้", function() end)
-    TeleportGroup:AddSlider("SetDelay", { Text = "หน่วงเวลาวาร์ป (วิ)", Default = 0, Min = 0, Max = 1200, Rounding = 0, Suffix = " sec", Callback = function() end })
-    TeleportGroup:AddDropdown("SelectMulti", { Text = "เลือก [ หลายทาง ]", Values = {"--"}, Default = "--", Callback = function() end })
-    TeleportGroup:AddToggle("EnableFailedSafe", { Text = "เปิดเซฟโหมดกันพลาด", Default = false, Callback = function() end })
-end
-
-local SettingsTab = Window:AddTab("Configuration")
-local MenuGroup = SettingsTab:AddLeftGroupbox("Menu")
-MenuGroup:AddToggle("AutoHideUI", { Text = "Auto Hide UI", Default = false, Callback = function() end })
-MenuGroup:AddToggle("EnableUIMobile", { Text = "Enable UI for Mobile", Default = false, Callback = function() end })
-MenuGroup:AddButton("Unload", function() Library:Unload() end)
-MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
-
-
-
-Library.ToggleKeybind = Options.MenuKeybind
-
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
@@ -990,11 +950,6 @@ SaveManager:SetIgnoreIndexes({"MenuKeybind"})
 
 ThemeManager:SetFolder("AOTRPayomboyZ")
 SaveManager:SetFolder(activeFolder)
-
-SaveManager:BuildConfigSection(SettingsTab)
-ThemeManager:ApplyToTab(SettingsTab)
-
-SaveManager:LoadAutoloadConfig()
 
 if IsMainmenuLobby() then
   
@@ -3248,7 +3203,15 @@ function SaveManager:BuildConfigSection(tab)
     end)
 end
 
-SaveManager:BuildConfigSection(UISettingsTab)
+pcall(function()
+    SaveManager:BuildConfigSection(UISettingsTab)
+end)
+
+pcall(function()
+    if ThemeManager and ThemeManager.ApplyToTab then
+        ThemeManager:ApplyToTab(UISettingsTab)
+    end
+end)
 
 pcall(function()
     if ThemeManager and ThemeManager.BuiltInThemes and ThemeManager.BuiltInThemes["Jester"] then
