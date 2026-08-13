@@ -1,195 +1,44 @@
--- [[ PayomboyZ - Anime Card Farm Script (LinoriaLib) ]]
--- Theme: LinoriaLib / Dark Mode (Super Fast & Reliable)
--- Controls: [LeftControl] Toggle UI Visibility | Mobile Floating Button
+-- [[ PayomboyZ - Anime Card Farm Script (Full Compatibility & Fixed Config) ]]
+-- Theme: Crimson Red / Dark Elegance (Fluent UI)
+-- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
-local function FetchLinoriaComponent(githubPath)
-    local urls = {
-        "https://cdn.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath,
-        "https://fastly.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath,
-        "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/" .. githubPath
-    }
-    for _, url in ipairs(urls) do
-        local ok, content = pcall(function() return game:HttpGet(url, true) end)
-        if ok and type(content) == "string" and #content > 100 then
-            local func, err = loadstring(content)
-            if func then
-                local execOk, res = pcall(func)
-                if execOk and res then
-                    return res
-                end
-            end
-        end
-    end
-    return nil
+local Fluent = nil
+local s, r = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+
+if s and r then
+    Fluent = r
+else
+    Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"))()
 end
 
-local Library = FetchLinoriaComponent("Library.lua")
-local ThemeManager = FetchLinoriaComponent("addons/ThemeManager.lua")
-local SaveManager = FetchLinoriaComponent("addons/SaveManager.lua")
+local UserInputService = game:GetService("UserInputService")
+local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
+local defaultWindowSize = isMobileDevice and UDim2.fromOffset(340, 260) or UDim2.fromOffset(540, 390)
+local defaultTabWidth = isMobileDevice and 90 or 145
 
-if not Library then
-    warn("[PayomboyZ] Failed to load LinoriaLib UI library from all sources!")
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "PayomboyZ UI Error",
-            Text = "ไม่สามารถโหลด LinoriaLib UI ได้ทุกช่องทาง!",
-            Duration = 10
-        })
-    end)
-    return
-end
-
-local Window = Library:CreateWindow({
-    Title = 'PayomboyZ | Anime Card Farm',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2
+local Window = Fluent:CreateWindow({
+    Title = "PayomboyZ",
+    SubTitle = "โดย Dexq | Anime Card Farm",
+    TabWidth = defaultTabWidth,
+    Size = defaultWindowSize,
+    Acrylic = false,
+    Theme = "Rose",
+    MinimizeKey = Enum.KeyCode.K
 })
-
-local rawTabs = {
-    Main = Window:AddTab('หลัก'),
-    Reroll = Window:AddTab('รีโรล'),
-    Potion = Window:AddTab('น้ำยา'),
-    Raid = Window:AddTab('เรด & ทาวเวอร์'),
-    Trade = Window:AddTab('แลกเปลี่ยน'),
-    FPS = Window:AddTab('ลด FPS'),
-    Dashboard = Window:AddTab('แดชบอร์ด & ตั้งค่า')
-}
-
--- Linoria Tab Wrapper to preserve Fluent API syntax across the entire script
-local function CreateTabWrapper(linoriaTab, defaultBoxName)
-    local mainBox = linoriaTab:AddLeftGroupbox(defaultBoxName or "การทำงานหลัก")
-    
-    local wrapper = {}
-    wrapper.LinoriaTab = linoriaTab
-    wrapper.MainBox = mainBox
-    
-    function wrapper:GetBox()
-        return self.MainBox
-    end
-    
-    function wrapper:AddSection(title)
-        return self.MainBox:AddLabel(title)
-    end
-
-    function wrapper:AddToggle(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local default = cfg.Default or false
-        local callback = cfg.Callback
-        
-        local toggleObj = self.MainBox:AddToggle(idx, {
-            Text = text,
-            Default = default,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return toggleObj
-    end
-    
-    function wrapper:AddSlider(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local default = cfg.Default or 0
-        local min = cfg.Min or 0
-        local max = cfg.Max or 100
-        local rounding = cfg.Rounding or 0
-        local callback = cfg.Callback
-        
-        local sliderObj = self.MainBox:AddSlider(idx, {
-            Text = text,
-            Default = default,
-            Min = min,
-            Max = max,
-            Rounding = rounding,
-            Compact = false,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return sliderObj
-    end
-    
-    function wrapper:AddDropdown(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local values = cfg.Values or {}
-        local multi = cfg.Multi or false
-        local default = cfg.Default
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local callback = cfg.Callback
-        
-        local dropdownObj = self.MainBox:AddDropdown(idx, {
-            Values = values,
-            Default = default,
-            Multi = multi,
-            Text = text,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return dropdownObj
-    end
-    
-    function wrapper:AddInput(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local default = cfg.Default or ""
-        local numeric = cfg.Numeric or false
-        local placeholder = cfg.Placeholder or ""
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local callback = cfg.Callback
-        
-        local inputObj = self.MainBox:AddInput(idx, {
-            Default = default,
-            Numeric = numeric,
-            Finished = false,
-            Text = text,
-            Placeholder = placeholder,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return inputObj
-    end
-
-    function wrapper:AddButton(cfg)
-        local text = cfg.Title or cfg.Text or "Button"
-        local func = cfg.Callback or cfg.Func
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        
-        local btnObj = self.MainBox:AddButton({
-            Text = text,
-            Func = func,
-            Tooltip = tooltip
-        })
-        return btnObj
-    end
-
-    return wrapper
-end
 
 local Tabs = {
-    Main = CreateTabWrapper(rawTabs.Main, "ระบบออโต้ฟาร์ม & สายพาน"),
-    Reroll = CreateTabWrapper(rawTabs.Reroll, "ระบบรีโรล Trait & Rank"),
-    Potion = CreateTabWrapper(rawTabs.Potion, "ระบบน้ำยา (Potions)"),
-    Raid = CreateTabWrapper(rawTabs.Raid, "เรดบอส & ทาวเวอร์"),
-    Trade = CreateTabWrapper(rawTabs.Trade, "ระบบส่งการ์ด & แลกเปลี่ยน"),
-    FPS = CreateTabWrapper(rawTabs.FPS, "เพิ่มความลื่น (FPS Boost)"),
-    Dashboard = CreateTabWrapper(rawTabs.Dashboard, "ตั้งค่าสคริปต์ & UI")
+    Main = Window:AddTab({ Title = "หลัก", Icon = "home" }),
+    Reroll = Window:AddTab({ Title = "รีโรล", Icon = "refresh-cw" }),
+    Potion = Window:AddTab({ Title = "น้ำยา", Icon = "flask-conical" }),
+    Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
+    Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
+    FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด & ตั้งค่า", Icon = "sliders" })
 }
 
-setmetatable(Options, {
-    __index = function(tbl, key)
-        return rawget(tbl, key) or Toggles[key]
-    end
-})
-
-local Fluent = {
-    Options = Options,
-    Notify = function(self, cfg)
-        local title = cfg.Title or "PayomboyZ"
-        local content = cfg.Content or cfg.Text or ""
-        local duration = cfg.Duration or 3
-        Library:Notify(title .. ": " .. content, duration)
-    end
-}
+local Options = Fluent.Options
 
 ---------------------------------------------------------
 -- CONSTANTS & FOLDER COMPATIBILITY
@@ -419,7 +268,7 @@ local function getCardRank(item)
 
     for _, txtObj in ipairs(item:GetDescendants()) do
         if txtObj:IsA("TextLabel") and txtObj.Text then
-            local cleanTxt = string.upper((string.gsub(txtObj.Text, "<[^>]+>", "")))
+            local cleanTxt = string.upper(string.gsub(txtObj.Text, "<[^>]+>", ""))
             cleanTxt = string.match(cleanTxt, "^%s*(.-)%s*$") or ""
             for _, r in ipairs(knownRankList) do
                 local escapedR = string.gsub(r, "%+", "%%+")
@@ -657,14 +506,13 @@ local function SendWebhook(url, rarity, mutation)
     url = string.match(url, "^%s*(.-)%s*$") or url
     if not string.find(url, "http") then return end
 
-    local g = (getgenv and getgenv()) or _G or {}
-    local req = (g.syn and g.syn.request) 
-             or (g.http and g.http.request) 
-             or g.http_request 
-             or (g.fluxus and g.fluxus.request) 
-             or g.request 
-             or (g.krnl and g.krnl.request) 
-             or (g.delta and g.delta.request)
+    local req = (syn and syn.request) 
+             or (http and http.request) 
+             or http_request 
+             or (fluxus and fluxus.request) 
+             or request 
+             or (krnl and krnl.request) 
+             or (delta and delta.request)
 
     if not req then return end
 
@@ -886,7 +734,7 @@ local function getCardModelRarityAndMutation(model)
     if rarity == "" then
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
-                local cl = string.lower((string.gsub(desc.Text, "<[^>]+>", "")))
+                local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
                 for _, rName in ipairs({"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
                     if cl:find(rName) then
                         rarity = rName
@@ -1694,7 +1542,7 @@ end
 
 local function getRarityScore(rarityText)
     if not rarityText then return 0 end
-    local clean = string.lower((string.gsub(rarityText, "<[^>]+>", "")))
+    local clean = string.lower(string.gsub(rarityText, "<[^>]+>", ""))
     for k, score in pairs(RarityTiers) do
         if string.find(clean, k) then return score end
     end
@@ -1710,7 +1558,7 @@ local function getUnifiedCardScore(item)
         if val > cashScore then cashScore = val end
         local s = getRarityScore(txt)
         if s > rarityScore then rarityScore = s end
-        local cleanMut = string.lower((string.gsub(txt, "<[^>]+>", "")))
+        local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
         cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
         local MutationScores = {
             ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
@@ -3244,48 +3092,28 @@ pcall(function()
     end)
 
     toggleWrapper.MouseButton1Click:Connect(function()
-        pcall(function()
-            if Library and Library.Toggle then
-                Library:Toggle()
-            end
-        end)
+        Window:Minimize()
     end)
 end)
 
+-- Profile Box removed as requested because Toggle now acts as the profile.
+
+-- Load InterfaceManager for Theme Customization
+local InterfaceManager = nil
 pcall(function()
-    if SaveManager then
-        pcall(function() SaveManager:SetLibrary(Library) end)
-        pcall(function() SaveManager:IgnoreThemeSettings() end)
-        pcall(function() SaveManager:SetIgnoreIndexes({'MenuKeybind'}) end)
-        pcall(function() SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm") end)
-
-        local saveBox = rawTabs.Dashboard:AddRightGroupbox("บันทึกการตั้งค่า (Save)")
-        if type(SaveManager.BuildConfigbox) == "function" then
-            pcall(function() SaveManager:BuildConfigbox(saveBox) end)
-        elseif type(SaveManager.BuildConfigSection) == "function" then
-            pcall(function() SaveManager:BuildConfigSection(saveBox) end)
-        elseif type(SaveManager.BuildFolderSection) == "function" then
-            pcall(function() SaveManager:BuildFolderSection(saveBox) end)
-        end
-
-        pcall(function() SaveManager:LoadAutoloadConfig() end)
-    end
+    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 end)
 
-pcall(function()
-    if ThemeManager then
-        pcall(function() ThemeManager:SetLibrary(Library) end)
-        pcall(function() ThemeManager:SetFolder("PayomboyZ_Config") end)
+if InterfaceManager then
+    InterfaceManager:SetLibrary(Fluent)
+    InterfaceManager:SetFolder("PayomboyZ_Config")
+    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+end
 
-        local themeBox = rawTabs.Dashboard:AddRightGroupbox("เปลี่ยนธีม UI (Theme)")
-        if type(ThemeManager.ApplyToTab) == "function" then
-            pcall(function() ThemeManager:ApplyToTab(themeBox) end)
-        elseif type(ThemeManager.ApplyToGroupbox) == "function" then
-            pcall(function() ThemeManager:ApplyToGroupbox(themeBox) end)
-        elseif type(ThemeManager.CreateThemeManager) == "function" then
-            pcall(function() ThemeManager:CreateThemeManager(themeBox) end)
-        end
-    end
-end)
+Fluent:Notify({
+    Title = "PayomboyZ",
+    Content = "ระบบธีมและสี UI พร้อมใช้งานแล้ว! ✅",
+    Duration = 6
+})
 
-Library:Notify("PayomboyZ: เปลี่ยนระบบเป็น LinoriaLib เรียบร้อยแล้ว! ลื่นขึ้นและเปิดติด 100% ✅", 6)
+Window:SelectTab(1)
