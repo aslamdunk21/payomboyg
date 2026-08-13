@@ -2,39 +2,52 @@
 -- Theme: WindUI / Dark Mode
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
-local WindUI = nil
-local loadError = nil
+local WindUI = getgenv().WindUI
+local loadError = ""
 
-local cdnUrls = {
-    "https://cdn.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
-    "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI",
-    "https://cdn.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
-    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
-}
+if not WindUI then
+    local urls = {
+        "https://cdn.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
+        "https://fastly.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
+        "https://gcore.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
+        "https://cdn.statically.io/gh/aslamdunk7/paypmboygang/main/WindUI",
+        "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI",
+        "https://cdn.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
+        "https://fastly.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
+        "https://rawcdn.githack.com/Footagesus/WindUI/main/dist/main.lua",
+        "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+    }
 
-for _, url in ipairs(cdnUrls) do
-    local s, r = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if s and r and (type(r) == "table" or type(r) == "userdata") then
-        WindUI = r
-        break
-    else
-        loadError = (loadError and (loadError .. " | ") or "") .. tostring(r)
+    for _, url in ipairs(urls) do
+        local s, res = pcall(function()
+            local code = game:HttpGet(url, true)
+            if code and #code > 500 then
+                local fn = loadstring(code)
+                if fn then return fn() end
+            end
+        end)
+        if s and res and (type(res) == "table" or type(res) == "userdata") then
+            WindUI = res
+            getgenv().WindUI = WindUI
+            break
+        else
+            loadError = loadError .. " | " .. tostring(res)
+        end
     end
 end
 
 if not WindUI then
-    -- Fallback 2: Local file reading
+    -- Local fallback reading from executor workspace
     pcall(function()
         if isfile and readfile then
             for _, filename in ipairs({"WindUI.txt", "WindUI.lua", "Dexq_AnimeCardFarm/WindUI.lua"}) do
                 if isfile(filename) then
                     local content = readfile(filename)
-                    if content and #content > 100 then
-                        local s, r = pcall(function() return loadstring(content)() end)
-                        if s and r then
-                            WindUI = r
+                    if content and #content > 500 then
+                        local fn = loadstring(content)
+                        if fn then
+                            WindUI = fn()
+                            getgenv().WindUI = WindUI
                             break
                         end
                     end
@@ -45,13 +58,12 @@ if not WindUI then
 end
 
 if not WindUI then
-    local errText = "Failed to load WindUI library! Error: " .. tostring(loadError)
-    warn("[PayomboyZ] " .. errText)
+    warn("[PayomboyZ] Failed to load WindUI from all CDNs. Errors: " .. tostring(loadError))
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "PayomboyZ UI Error",
-            Text = "ไม่สามารถโหลด WindUI ได้ กรุณาเช็คอินเทอร์เน็ตหรือ Executor",
-            Duration = 8
+            Text = "ไม่สามารถโหลด WindUI ได้ทุกช่องทาง! ก๊อปไฟล์ WindUI.txt ไปไว้ใน workspace ของ Executor",
+            Duration = 10
         })
     end)
     return
