@@ -2,15 +2,62 @@
 -- Theme: Crimson Red / Dark Elegance (Fluent UI)
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
-local Fluent = nil
-local s, r = pcall(function()
-    return loadstring(game:HttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua"))()
-end)
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
 
-if s and r then
-    Fluent = r
-else
-    Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua"))()
+-- [FIX] หยุดการทำงานของสคริปต์เก่าที่ค้างอยู่ (แก้ปัญหาปิงขึ้น/แลคก่อนที่ UI จะโหลด)
+if getgenv().PayomboyZ_Unload then pcall(getgenv().PayomboyZ_Unload) end
+getgenv().PayomboyZ_Unload = function()
+    getgenv().AutoSpawnPack = false
+    getgenv().AutoBuyCards = false
+    getgenv().AutoCarry = false
+    getgenv().AutoSellBox = false
+    getgenv().AutoClaimRewards = false
+    getgenv().InventoryBalancing = false
+    getgenv().SmartBase = false
+    getgenv().AutoOpenPack = false
+    getgenv().AutoUpgradeBase = false
+    getgenv().AutoReroll = false
+    getgenv().AutoRankReroll = false
+    getgenv().AutoMerchant = false
+    if getgenv().CardChildAddedConnection then pcall(function() getgenv().CardChildAddedConnection:Disconnect() end); getgenv().CardChildAddedConnection = nil end
+    if getgenv().BruteForceLoop then pcall(function() getgenv().BruteForceLoop:Disconnect() end); getgenv().BruteForceLoop = nil end
+    if getgenv().AntiAfkConnection then pcall(function() getgenv().AntiAfkConnection:Disconnect() end); getgenv().AntiAfkConnection = nil end
+end
+
+-- Multi-CDN Resilient Dependency Fetcher (Bypasses ISP / Executor Network Blocks)
+local function fetchDependency(urls, name)
+    for _, url in ipairs(urls) do
+        for i = 1, 2 do
+            local success, result = pcall(function()
+                return game:HttpGet(url)
+            end)
+            if success and result and type(result) == "string" and #result > 100 and not result:find("404") and not result:find("Curl error") then
+                local funcSuccess, func = pcall(loadstring, result)
+                if funcSuccess and type(func) == "function" then
+                    local execSuccess, lib = pcall(func)
+                    if execSuccess and lib then
+                        return lib
+                    end
+                end
+            end
+            task.wait(0.2)
+        end
+    end
+    warn("Failed to load dependency: " .. tostring(name))
+    return nil
+end
+
+local fluentUrls = {
+    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua"
+}
+
+local Fluent = fetchDependency(fluentUrls, "Fluent UI")
+
+if not Fluent then
+    warn("Failed to load Fluent UI from all sources! (SSL/Network Error)")
+    return
 end
 
 local UserInputService = game:GetService("UserInputService")
@@ -789,35 +836,12 @@ AutoSpawnToggle:OnChanged(function(state)
                         AutoSpawnToggle:SetValue(false)
                         return
                     end
-                    task.wait(1)
+                    task.wait(0.5)
                     continue
                 end
                 retryCount = 0
-                if not getgenv().CardFolder then findCardFolder() end
-                local activeCards = 0
-                if getgenv().CardFolder then
-                    for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-                        if model:IsA("Model") and model:GetAttribute("IgnoreTutoBeam") ~= nil and model:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                            if getgenv().AutoBuyCards and model:GetAttribute("Rejected") then continue end
-                            activeCards = activeCards + 1
-                        end
-                    end
-                end
-                if getgenv().AutoBuyCards then
-                    if activeCards == 0 then
-                        pcall(fireclickdetector, cd)
-                        task.wait(0.3)
-                    else
-                        task.wait(0.05)
-                    end
-                else
-                    pcall(fireclickdetector, cd)
-                    if activeCards >= 3 then
-                        task.wait(0.2)
-                    else
-                        task.wait(0.01)
-                    end
-                end
+                pcall(fireclickdetector, cd)
+                task.wait(0.01)
             end
         end)
     end
@@ -863,6 +887,12 @@ end)
 
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
+
+    local cachedRarity = model:GetAttribute("_CachedRarity")
+    local cachedMutation = model:GetAttribute("_CachedMutation")
+    if cachedRarity and cachedMutation then
+        return cachedRarity, cachedMutation
+    end
 
     local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
@@ -923,88 +953,118 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
+    pcall(function()
+        model:SetAttribute("_CachedRarity", rarity)
+        model:SetAttribute("_CachedMutation", mutation)
+    end)
+
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop
+local function processSingleCardModel(model)
+    if not getgenv().AutoBuyCards then return end
+    if not model or not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then return end
+    if model:GetAttribute("Rejected") == true then return end
+
+    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if not prompt then return end
+    
+    local promptTxt = (prompt.ActionText .. " " .. prompt.ObjectText .. " " .. prompt.Name):lower()
+    if promptTxt:find("robux") or promptTxt:find("r%$") or prompt:GetAttribute("IsRobux") or model:GetAttribute("IsRobux") then
+        model:SetAttribute("Rejected", true)
+        return
+    end
+
+    local firstSeen = model:GetAttribute("FirstSeen")
+    if not firstSeen then
+        firstSeen = tick()
+        model:SetAttribute("FirstSeen", firstSeen)
+    end
+
+    local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
+    if buyAttempts >= 25 or (tick() - firstSeen > 20) then
+        if getgenv().InsufficientFundsAction == "หยุดสายพาน" then
+            getgenv().AutoSpawnPack = false
+            if Options and Options.AutoSpawnPack then Options.AutoSpawnPack:SetValue(false) end
+            Fluent:Notify({ Title = "แจ้งเตือน", Content = "ซื้อการ์ดไม่สำเร็จ (เงินอาจไม่พอ) หยุดสายพานแล้ว", Duration = 5 })
+        end
+        model:SetAttribute("Rejected", true)
+        return
+    end
+
+    local cardRarity, cardMutation = getCardModelRarityAndMutation(model)
+
+    local matchRarity = (next(getgenv().SelectedRarities) == nil) or (cardRarity ~= "" and getgenv().SelectedRarities[string.lower(cardRarity)] == true)
+    local matchMutation = (next(getgenv().SelectedMutations) == nil) or (cardMutation ~= "" and getgenv().SelectedMutations[string.lower(cardMutation)] == true)
+
+    if next(getgenv().SelectedRarities) == nil and next(getgenv().SelectedMutations) == nil then
+        matchRarity = true
+        matchMutation = true
+    end
+
+    if matchRarity and matchMutation then
+        model:SetAttribute("BuyAttempts", buyAttempts + 1)
+        pcall(function()
+            prompt.RequiresLineOfSight = false
+            prompt.MaxActivationDistance = 99999
+            prompt.HoldDuration = 0
+            fireproximityprompt(prompt)
+        end)
+        if getgenv().DiscordWebhook and getgenv().DiscordWebhook ~= "" then
+            if not getgenv().NotifiedCards then getgenv().NotifiedCards = {} end
+            if not getgenv().NotifiedCards[prompt] then
+                getgenv().NotifiedCards[prompt] = true
+                task.spawn(function()
+                    SendWebhook(getgenv().DiscordWebhook, cardRarity ~= "" and cardRarity or "Card", cardMutation)
+                end)
+            end
+        end
+    else
+        model:SetAttribute("Rejected", true)
+    end
+end
+
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
     for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-        if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
-        if model:GetAttribute("Rejected") == true then continue end
-
-        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if not prompt then continue end
-        
-        -- Filter out Robux prompts
-        local promptTxt = (prompt.ActionText .. " " .. prompt.ObjectText .. " " .. prompt.Name):lower()
-        if promptTxt:find("robux") or promptTxt:find("r%$") or prompt:GetAttribute("IsRobux") or model:GetAttribute("IsRobux") then
-            model:SetAttribute("Rejected", true)
-            continue
-        end
-
-        local firstSeen = model:GetAttribute("FirstSeen")
-        if not firstSeen then
-            model:SetAttribute("FirstSeen", tick())
-            firstSeen = tick()
-        end
-
-        local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
-            if getgenv().InsufficientFundsAction == "หยุดสายพาน" then
-                getgenv().AutoSpawnPack = false
-                if Options and Options.AutoSpawnPack then Options.AutoSpawnPack:SetValue(false) end
-                Fluent:Notify({ Title = "แจ้งเตือน", Content = "ซื้อการ์ดไม่สำเร็จ (เงินอาจไม่พอ) หยุดสายพานแล้ว", Duration = 5 })
-            end
-            model:SetAttribute("Rejected", true)
-            continue
-        end
-
-        local cardRarity, cardMutation = getCardModelRarityAndMutation(model)
-
-        local matchRarity = (next(getgenv().SelectedRarities) == nil) or (cardRarity ~= "" and getgenv().SelectedRarities[string.lower(cardRarity)] == true)
-        local matchMutation = (next(getgenv().SelectedMutations) == nil) or (cardMutation ~= "" and getgenv().SelectedMutations[string.lower(cardMutation)] == true)
-
-        if next(getgenv().SelectedRarities) == nil and next(getgenv().SelectedMutations) == nil then
-            matchRarity = true
-            matchMutation = true
-        end
-
-        if matchRarity and matchMutation then
-            local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
-                getgenv().PromptCooldowns[prompt] = now
-                model:SetAttribute("BuyAttempts", buyAttempts + 1)
-                pcall(function()
-                    prompt.RequiresLineOfSight = false
-                    prompt.MaxActivationDistance = 99999
-                    fireproximityprompt(prompt)
-                end)
-                if getgenv().DiscordWebhook and getgenv().DiscordWebhook ~= "" then
-                    if not getgenv().NotifiedCards then getgenv().NotifiedCards = {} end
-                    if not getgenv().NotifiedCards[prompt] then
-                        getgenv().NotifiedCards[prompt] = true
-                        task.spawn(function()
-                            SendWebhook(getgenv().DiscordWebhook, cardRarity ~= "" and cardRarity or "Card", cardMutation)
-                        end)
-                    end
-                end
-            end
-        else
-            model:SetAttribute("Rejected", true)
-        end
+        processSingleCardModel(model)
     end
 end
 
-if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
-getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
+local function setupCardFolderWatcher()
+    if not getgenv().CardFolder then findCardFolder() end
+    if getgenv().CardFolder then
+        if getgenv().CardChildAddedConnection then
+            pcall(function() getgenv().CardChildAddedConnection:Disconnect() end)
+        end
+        getgenv().CardChildAddedConnection = getgenv().CardFolder.ChildAdded:Connect(function(child)
+            if getgenv().AutoBuyCards then
+                task.spawn(function()
+                    processSingleCardModel(child)
+                end)
+            end
+        end)
+    end
+end
+
+if getgenv().BruteForceLoop then pcall(function() getgenv().BruteForceLoop:Disconnect() end) end
+getgenv().BruteForceLoop = nil
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
+    if state then
+        setupCardFolderWatcher()
+        task.spawn(function()
+            while getgenv().AutoBuyCards do
+                pcall(instantBuyLoop)
+                task.wait(0.01)
+            end
+        end)
+    end
 end)
 
 getgenv().InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม"
@@ -1147,19 +1207,20 @@ AutoSellBoxToggle:OnChanged(function(state)
     end
 end)
 
-local antiAfkConnection
 local AntiAfkToggle = Tabs.Main:AddToggle("AntiAfkState", { Title = "🛡️ ป้องกันหลุด (Anti AFK)", Default = false })
 AntiAfkToggle:OnChanged(function(state)
     getgenv().AntiAfkState = state
     if state then
-        antiAfkConnection = LocalPlayer.Idled:Connect(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
+        if not getgenv().AntiAfkConnection then
+            getgenv().AntiAfkConnection = LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
     else
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
+        if getgenv().AntiAfkConnection then
+            getgenv().AntiAfkConnection:Disconnect()
+            getgenv().AntiAfkConnection = nil
         end
     end
 end)
@@ -4336,15 +4397,21 @@ end)
 -- Profile Box removed as requested because Toggle now acts as the profile.
 
 -- Load InterfaceManager & SaveManager for Customization and Configs
-local InterfaceManager = nil
-local SaveManager = nil
+local imUrls = {
+    "https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/Addons/InterfaceManager.lua",
+    "https://fastly.jsdelivr.net/gh/1dontgiveaf/Fluent@main/Addons/InterfaceManager.lua",
+    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua",
+    "https://statically.io/gh/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua"
+}
+local InterfaceManager = fetchDependency(imUrls, "InterfaceManager")
 
-pcall(function()
-    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua"))()
-end)
-pcall(function()
-    SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/SaveManager.lua"))()
-end)
+local smUrls = {
+    "https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/Addons/SaveManager.lua",
+    "https://fastly.jsdelivr.net/gh/1dontgiveaf/Fluent@main/Addons/SaveManager.lua",
+    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/SaveManager.lua",
+    "https://statically.io/gh/1dontgiveaf/Fluent/main/Addons/SaveManager.lua"
+}
+local SaveManager = fetchDependency(smUrls, "SaveManager")
 
 if SaveManager then
     pcall(function()
