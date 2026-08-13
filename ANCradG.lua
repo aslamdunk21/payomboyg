@@ -13,6 +13,18 @@ else
     Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"))()
 end
 
+local SaveManager = nil
+local s2, r2 = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+end)
+if s2 and r2 then SaveManager = r2 end
+
+local InterfaceManager = nil
+local s3, r3 = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+end)
+if s3 and r3 then InterfaceManager = r3 end
+
 local UserInputService = game:GetService("UserInputService")
 local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
 local defaultWindowSize = isMobileDevice and UDim2.fromOffset(340, 260) or UDim2.fromOffset(540, 390)
@@ -35,7 +47,8 @@ local Tabs = {
     Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
     Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
     FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
-    Dashboard = Window:AddTab({ Title = "แดชบอร์ด & ตั้งค่า", Icon = "sliders" })
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด", Icon = "sliders" }),
+    Settings = Window:AddTab({ Title = "ตั้งค่าระบบ", Icon = "settings" })
 }
 
 local Options = Fluent.Options
@@ -3098,22 +3111,47 @@ end)
 
 -- Profile Box removed as requested because Toggle now acts as the profile.
 
--- Load InterfaceManager for Theme Customization
-local InterfaceManager = nil
-pcall(function()
-    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-end)
+-- Hand the library over to our managers (SaveManager & InterfaceManager)
+if SaveManager and InterfaceManager then
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
 
-if InterfaceManager then
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({"SelectedRerollCard", "SelectedRankCard", "SelectedTradePlayer", "SelectedTradeCards", "ConfigNameInput"})
+
+    InterfaceManager:SetFolder("PayomboyZ_Config")
+    SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
+
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    SaveManager:BuildConfigSection(Tabs.Settings)
+
+    Window:SelectTab(1)
+
+    Fluent:Notify({
+        Title = "PayomboyZ",
+        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
+        Duration = 8
+    })
+
+    SaveManager:LoadAutoloadConfig()
+elseif InterfaceManager then
     InterfaceManager:SetLibrary(Fluent)
     InterfaceManager:SetFolder("PayomboyZ_Config")
-    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+
+    Window:SelectTab(1)
+
+    Fluent:Notify({
+        Title = "PayomboyZ",
+        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
+        Duration = 8
+    })
+else
+    Window:SelectTab(1)
+
+    Fluent:Notify({
+        Title = "PayomboyZ",
+        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
+        Duration = 8
+    })
 end
-
-Fluent:Notify({
-    Title = "PayomboyZ",
-    Content = "ระบบธีมและสี UI พร้อมใช้งานแล้ว! ✅",
-    Duration = 6
-})
-
-Window:SelectTab(1)
