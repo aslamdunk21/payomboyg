@@ -783,14 +783,14 @@ AutoSpawnToggle:OnChanged(function(state)
                         pcall(fireclickdetector, cd)
                         task.wait(0.3)
                     else
-                        task.wait(0.15)
+                        task.wait(0.05)
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(0.3)
+                        task.wait(0.2)
                     else
-                        task.wait(0.15)
+                        task.wait(0.01)
                     end
                 end
             end
@@ -974,19 +974,12 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then pcall(function() getgenv().BruteForceLoop:Disconnect() end) end
+if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
+getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
-    if state then
-        task.spawn(function()
-            while getgenv().AutoBuyCards do
-                instantBuyLoop()
-                task.wait(0.1)
-            end
-        end)
-    end
 end)
 
 getgenv().InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม"
@@ -1289,7 +1282,76 @@ AutoRerollToggle:OnChanged(function(state)
                     local TraitRollRE = Remotes and Remotes:FindFirstChild("TraitRollRE")
                     
                     if TraitRollRE and TraitRollRE:IsA("RemoteEvent") then
-                        pcall(function() TraitRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Select", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Equip", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Insert", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Select", {Tool = cardTool}) end)
+                        
+                        local rollArgs = {
+                            cardTool,
+                            { Tool = cardTool },
+                            { Card = cardTool },
+                            cId,
+                            { UUID = cId },
+                            { Id = cId },
+                            "Roll",
+                            "Reroll"
+                        }
+                        
+                        for _, arg in ipairs(rollArgs) do
+                            pcall(function() TraitRollRE:FireServer(arg) end)
+                            pcall(function() TraitRollRE:FireServer("Roll", arg) end)
+                            pcall(function() TraitRollRE:FireServer("Reroll", arg) end)
+                            pcall(function() TraitRollRE:FireServer(arg, "Roll") end)
+                        end
+                        
+                        pcall(function() TraitRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool = cardTool}) end)
+                        pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
+                    end
+                    
+                    local function fireAll(id)
+                        local argsToTry = {
+                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
+                        }
+                        local rs = game:GetService("ReplicatedStorage")
+                        for _, obj in ipairs(rs:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                                local name = string.lower(obj.Name)
+                                if string.find(name, "roll") or string.find(name, "trait") then
+                                    if obj:IsA("RemoteEvent") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            pcall(function() obj:FireServer(arg) end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    fireAll(cId)
+                    
+                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                    if playerGui then
+                        for _, v in ipairs(playerGui:GetDescendants()) do
+                            if v:IsA("TextButton") or v:IsA("ImageButton") then
+                                local text = ""
+                                if v:IsA("TextButton") then text = string.upper(v.Text)
+                                elseif v:FindFirstChildWhichIsA("TextLabel") then text = string.upper(v:FindFirstChildWhichIsA("TextLabel").Text) end
+                                
+                                if text == "ROLL" or text == "REROLL" or text == "SPIN" then
+                                    if v.Visible or (v.Parent and v.Parent.Visible) then
+                                        if getconnections then
+                                            for _, conn in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() conn:Fire() end) end
+                                            for _, conn in ipairs(getconnections(v.Activated)) do pcall(function() conn:Fire() end) end
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 else
                     Fluent:Notify({ Title = "Auto Reroll", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
@@ -1403,11 +1465,88 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end
                     
                     local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                    local RankRollRE = Remotes and (Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or Remotes:FindFirstChild("RollRankRE"))
+                    local RankRollRE = Remotes and (Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or Remotes:FindFirstChild("RollRankRE") or Remotes:FindFirstChild("RankRE") or Remotes:FindFirstChild("CardRankingRE") or Remotes:FindFirstChild("RankRerollRE") or Remotes:FindFirstChild("Rank"))
                     
                     if RankRollRE and RankRollRE:IsA("RemoteEvent") then
-                        pcall(function() RankRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Select", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Equip", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Insert", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Select", {Tool = cardTool}) end)
+                        
+                        local rollArgs = {
+                            cardTool,
+                            { Tool = cardTool },
+                            { Card = cardTool },
+                            cId,
+                            { UUID = cId },
+                            { Id = cId },
+                            "Roll",
+                            "Reroll",
+                            "Rank",
+                            "Grade"
+                        }
+                        
+                        for _, arg in ipairs(rollArgs) do
+                            pcall(function() RankRollRE:FireServer(arg) end)
+                            pcall(function() RankRollRE:FireServer("Roll", arg) end)
+                            pcall(function() RankRollRE:FireServer("Rank", arg) end)
+                            pcall(function() RankRollRE:FireServer("Grade", arg) end)
+                            pcall(function() RankRollRE:FireServer(arg, "Roll") end)
+                            pcall(function() RankRollRE:FireServer(arg, "Rank") end)
+                            pcall(function() RankRollRE:FireServer(arg, "Grade") end)
+                        end
+                        
+                        pcall(function() RankRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind = "Rank", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Rank", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Kind = "Grade", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer({Action = "Grade", Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollRank", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("RollResult", {Tool = cardTool}) end)
+                        pcall(function() RankRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Rank", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
                     end
+                    
+                    local function fireAll(id)
+                        local argsToTry = {
+                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
+                        }
+                        local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
+                        local rs = game:GetService("ReplicatedStorage")
+                        for _, obj in ipairs(rs:GetDescendants()) do
+                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                                local name = string.lower(obj.Name)
+                                local match = false
+                                for _, kw in ipairs(keywords) do
+                                    if string.find(name, kw) then
+                                        match = true
+                                        break
+                                    end
+                                end
+                                if match then
+                                    if obj:IsA("RemoteEvent") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            pcall(function() obj:FireServer(arg) end)
+                                            pcall(function() obj:FireServer("Roll", arg) end)
+                                            pcall(function() obj:FireServer("Rank", arg) end)
+                                        end
+                                    elseif obj:IsA("RemoteFunction") then
+                                        for _, arg in ipairs(argsToTry) do
+                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
+                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
+                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    fireAll(cId)
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
