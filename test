@@ -19,11 +19,9 @@ local function FetchComponent(sources)
 end
 
 local fluentSources = {
-    "https://raw.githubusercontent.com/x2Swiftz/UI-Library/main/Libraries/FluentUI-Example.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
-    "https://fastly.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
-    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua"
+    "https://cdn.jsdelivr.net/gh/x2Swiftz/UI-Library@main/Libraries/FluentUI-Example.lua",
+    "https://fastly.jsdelivr.net/gh/x2Swiftz/UI-Library@main/Libraries/FluentUI-Example.lua",
+    "https://raw.githubusercontent.com/x2Swiftz/UI-Library/main/Libraries/FluentUI-Example.lua"
 }
 
 local saveManagerSources = {
