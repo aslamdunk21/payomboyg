@@ -5,33 +5,43 @@
 local WindUI = nil
 local loadError = nil
 
--- 1. Try URL 1 (aslamdunk7 repository)
-local s1, r1 = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI"))()
-end)
+local cdnUrls = {
+    "https://cdn.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
+    "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI",
+    "https://cdn.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+}
 
-if s1 and r1 and type(r1) == "table" then
-    WindUI = r1
-else
-    loadError = tostring(r1)
-    -- 2. Try URL 2 (Footagesus main repository)
-    local s2, r2 = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+for _, url in ipairs(cdnUrls) do
+    local s, r = pcall(function()
+        return loadstring(game:HttpGet(url))()
     end)
-    if s2 and r2 and type(r2) == "table" then
-        WindUI = r2
+    if s and r and (type(r) == "table" or type(r) == "userdata") then
+        WindUI = r
+        break
     else
-        loadError = (loadError or "") .. " | " .. tostring(r2)
-        -- 3. Try local WindUI.txt if saved locally
-        pcall(function()
-            if isfile and isfile("WindUI.txt") and readfile then
-                local content = readfile("WindUI.txt")
-                if content and #content > 100 then
-                    WindUI = loadstring(content)()
+        loadError = (loadError and (loadError .. " | ") or "") .. tostring(r)
+    end
+end
+
+if not WindUI then
+    -- Fallback 2: Local file reading
+    pcall(function()
+        if isfile and readfile then
+            for _, filename in ipairs({"WindUI.txt", "WindUI.lua", "Dexq_AnimeCardFarm/WindUI.lua"}) do
+                if isfile(filename) then
+                    local content = readfile(filename)
+                    if content and #content > 100 then
+                        local s, r = pcall(function() return loadstring(content)() end)
+                        if s and r then
+                            WindUI = r
+                            break
+                        end
+                    end
                 end
             end
-        end)
-    end
+        end
+    end)
 end
 
 if not WindUI then
