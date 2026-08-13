@@ -4,13 +4,13 @@
 
 local Fluent = nil
 local s, r = pcall(function()
-    return loadstring(game:HttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua"))()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 end)
 
 if s and r then
     Fluent = r
 else
-    Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua"))()
+    Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"))()
 end
 
 local UserInputService = game:GetService("UserInputService")
@@ -268,7 +268,7 @@ local function getCardRank(item)
 
     for _, txtObj in ipairs(item:GetDescendants()) do
         if txtObj:IsA("TextLabel") and txtObj.Text then
-            local cleanTxt = string.upper((string.gsub(txtObj.Text, "<[^>]+>", "")))
+            local cleanTxt = string.upper(string.gsub(txtObj.Text, "<[^>]+>", ""))
             cleanTxt = string.match(cleanTxt, "^%s*(.-)%s*$") or ""
             for _, r in ipairs(knownRankList) do
                 local escapedR = string.gsub(r, "%+", "%%+")
@@ -506,14 +506,13 @@ local function SendWebhook(url, rarity, mutation)
     url = string.match(url, "^%s*(.-)%s*$") or url
     if not string.find(url, "http") then return end
 
-    local g = (getgenv and getgenv()) or _G or {}
-    local req = (g.syn and g.syn.request) 
-             or (g.http and g.http.request) 
-             or g.http_request 
-             or (g.fluxus and g.fluxus.request) 
-             or g.request 
-             or (g.krnl and g.krnl.request) 
-             or (g.delta and g.delta.request)
+    local req = (syn and syn.request) 
+             or (http and http.request) 
+             or http_request 
+             or (fluxus and fluxus.request) 
+             or request 
+             or (krnl and krnl.request) 
+             or (delta and delta.request)
 
     if not req then return end
 
@@ -735,7 +734,7 @@ local function getCardModelRarityAndMutation(model)
     if rarity == "" then
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
-                local cl = string.lower((string.gsub(desc.Text, "<[^>]+>", "")))
+                local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
                 for _, rName in ipairs({"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
                     if cl:find(rName) then
                         rarity = rName
@@ -1543,7 +1542,7 @@ end
 
 local function getRarityScore(rarityText)
     if not rarityText then return 0 end
-    local clean = string.lower((string.gsub(rarityText, "<[^>]+>", "")))
+    local clean = string.lower(string.gsub(rarityText, "<[^>]+>", ""))
     for k, score in pairs(RarityTiers) do
         if string.find(clean, k) then return score end
     end
@@ -1559,7 +1558,7 @@ local function getUnifiedCardScore(item)
         if val > cashScore then cashScore = val end
         local s = getRarityScore(txt)
         if s > rarityScore then rarityScore = s end
-        local cleanMut = string.lower((string.gsub(txt, "<[^>]+>", "")))
+        local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
         cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
         local MutationScores = {
             ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
@@ -3102,7 +3101,7 @@ end)
 -- Load InterfaceManager for Theme Customization
 local InterfaceManager = nil
 pcall(function()
-    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua"))()
+    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 end)
 
 if InterfaceManager then
