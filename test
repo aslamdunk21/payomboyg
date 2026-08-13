@@ -1,195 +1,85 @@
--- [[ PayomboyZ - Anime Card Farm Script (LinoriaLib) ]]
--- Theme: LinoriaLib / Dark Mode (Super Fast & Reliable)
--- Controls: [LeftControl] Toggle UI Visibility | Mobile Floating Button
+-- ============================================================
+--   ระบุแมพ — Map ID Verification
+-- ============================================================
+local MAP_NAME      = "Anime Card Farm"
+local MAP_PLACE_IDS = {
+    125039473548047,
+}
 
-local function FetchLinoriaComponent(githubPath)
-    local urls = {
-        "https://cdn.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath,
-        "https://fastly.jsdelivr.net/gh/violin-suzutsuki/LinoriaLib@main/" .. githubPath,
-        "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/" .. githubPath
-    }
-    for _, url in ipairs(urls) do
-        local ok, content = pcall(function() return game:HttpGet(url, true) end)
-        if ok and type(content) == "string" and #content > 100 then
-            local func, err = loadstring(content)
-            if func then
-                local execOk, res = pcall(func)
-                if execOk and res then
-                    return res
-                end
-            end
+local _currentPlaceId = game.PlaceId
+
+local function IsCorrectMap()
+    for _, id in ipairs(MAP_PLACE_IDS) do
+        if _currentPlaceId == id then
+            return true
         end
     end
-    return nil
+    return false
 end
 
-local Library = FetchLinoriaComponent("Library.lua")
-local ThemeManager = FetchLinoriaComponent("addons/ThemeManager.lua")
-local SaveManager = FetchLinoriaComponent("addons/SaveManager.lua")
+if not IsCorrectMap() then
+    warn(string.format(
+        "[PayomboyZ] สคริป '%s' ไม่ตรงกับแมพนี้ (PlaceId ปัจจุบัน: %d) — หยุดทำงาน",
+        MAP_NAME, _currentPlaceId
+    ))
+    return
+end
 
-if not Library then
-    warn("[PayomboyZ] Failed to load LinoriaLib UI library from all sources!")
+print(string.format("[PayomboyZ] ✓ แมพถูกต้อง: %s (PlaceId: %d)", MAP_NAME, _currentPlaceId))
+
+-- [[ PayomboyZ - Anime Card Farm Script (Fluent UI) ]]
+-- Theme: Fluent UI / Dark Mode
+-- Controls: [LeftControl] Toggle UI Visibility | Mobile Floating Button
+
+local Fluent = nil
+local fetchEndpoints = {
+    "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua",
+    "https://cdn.jsdelivr.net/gh/1dontgiveaf/Fluent@main/main.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"
+}
+
+for _, url in ipairs(fetchEndpoints) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if success and result then
+        Fluent = result
+        break
+    end
+end
+
+if not Fluent then
+    warn("[PayomboyZ] ไม่สามารถโหลด Fluent UI Library ได้")
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "PayomboyZ UI Error",
-            Text = "ไม่สามารถโหลด LinoriaLib UI ได้ทุกช่องทาง!",
+            Text = "ไม่สามารถโหลด Fluent UI ได้ทุกช่องทาง!",
             Duration = 10
         })
     end)
     return
 end
 
-local Window = Library:CreateWindow({
-    Title = 'PayomboyZ | Anime Card Farm',
-    Center = true,
-    AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2
+local Window = Fluent:CreateWindow({
+    Title = "PayomboyZ - Anime Card Farm",
+    SubTitle = "by PBGDumpZ Team",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
 })
-
-local rawTabs = {
-    Main = Window:AddTab('หลัก'),
-    Reroll = Window:AddTab('รีโรล'),
-    Potion = Window:AddTab('น้ำยา'),
-    Raid = Window:AddTab('เรด & ทาวเวอร์'),
-    Trade = Window:AddTab('แลกเปลี่ยน'),
-    FPS = Window:AddTab('ลด FPS'),
-    Dashboard = Window:AddTab('แดชบอร์ด & ตั้งค่า')
-}
-
--- Linoria Tab Wrapper to preserve Fluent API syntax across the entire script
-local function CreateTabWrapper(linoriaTab, defaultBoxName)
-    local mainBox = linoriaTab:AddLeftGroupbox(defaultBoxName or "การทำงานหลัก")
-    
-    local wrapper = {}
-    wrapper.LinoriaTab = linoriaTab
-    wrapper.MainBox = mainBox
-    
-    function wrapper:GetBox()
-        return self.MainBox
-    end
-    
-    function wrapper:AddSection(title)
-        return self.MainBox:AddLabel(title)
-    end
-
-    function wrapper:AddToggle(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local default = cfg.Default or false
-        local callback = cfg.Callback
-        
-        local toggleObj = self.MainBox:AddToggle(idx, {
-            Text = text,
-            Default = default,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return toggleObj
-    end
-    
-    function wrapper:AddSlider(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local default = cfg.Default or 0
-        local min = cfg.Min or 0
-        local max = cfg.Max or 100
-        local rounding = cfg.Rounding or 0
-        local callback = cfg.Callback
-        
-        local sliderObj = self.MainBox:AddSlider(idx, {
-            Text = text,
-            Default = default,
-            Min = min,
-            Max = max,
-            Rounding = rounding,
-            Compact = false,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return sliderObj
-    end
-    
-    function wrapper:AddDropdown(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local values = cfg.Values or {}
-        local multi = cfg.Multi or false
-        local default = cfg.Default
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local callback = cfg.Callback
-        
-        local dropdownObj = self.MainBox:AddDropdown(idx, {
-            Values = values,
-            Default = default,
-            Multi = multi,
-            Text = text,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return dropdownObj
-    end
-    
-    function wrapper:AddInput(idx, cfg)
-        local text = cfg.Title or cfg.Text or idx
-        local default = cfg.Default or ""
-        local numeric = cfg.Numeric or false
-        local placeholder = cfg.Placeholder or ""
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        local callback = cfg.Callback
-        
-        local inputObj = self.MainBox:AddInput(idx, {
-            Default = default,
-            Numeric = numeric,
-            Finished = false,
-            Text = text,
-            Placeholder = placeholder,
-            Tooltip = tooltip,
-            Callback = callback
-        })
-        return inputObj
-    end
-
-    function wrapper:AddButton(cfg)
-        local text = cfg.Title or cfg.Text or "Button"
-        local func = cfg.Callback or cfg.Func
-        local tooltip = cfg.Description or cfg.Tooltip or nil
-        
-        local btnObj = self.MainBox:AddButton({
-            Text = text,
-            Func = func,
-            Tooltip = tooltip
-        })
-        return btnObj
-    end
-
-    return wrapper
-end
 
 local Tabs = {
-    Main = CreateTabWrapper(rawTabs.Main, "ระบบออโต้ฟาร์ม & สายพาน"),
-    Reroll = CreateTabWrapper(rawTabs.Reroll, "ระบบรีโรล Trait & Rank"),
-    Potion = CreateTabWrapper(rawTabs.Potion, "ระบบน้ำยา (Potions)"),
-    Raid = CreateTabWrapper(rawTabs.Raid, "เรดบอส & ทาวเวอร์"),
-    Trade = CreateTabWrapper(rawTabs.Trade, "ระบบส่งการ์ด & แลกเปลี่ยน"),
-    FPS = CreateTabWrapper(rawTabs.FPS, "เพิ่มความลื่น (FPS Boost)"),
-    Dashboard = CreateTabWrapper(rawTabs.Dashboard, "ตั้งค่าสคริปต์ & UI")
+    Main = Window:AddTab({ Title = "⚡ หน้าหลัก", Icon = "home" }),
+    Reroll = Window:AddTab({ Title = "🎲 รีโรล (Reroll)", Icon = "refresh-cw" }),
+    Potion = Window:AddTab({ Title = "🧪 น้ำยา (Potion)", Icon = "flask-conical" }),
+    Raid = Window:AddTab({ Title = "🏰 เรด & หอคอย", Icon = "swords" }),
+    Trade = Window:AddTab({ Title = "🤝 แลกเปลี่ยน (Trade)", Icon = "repeat" }),
+    Dashboard = Window:AddTab({ Title = "📊 แดชบอร์ด & ตั้งค่า", Icon = "layout-dashboard" }),
+    FPS = Window:AddTab({ Title = "⚡ ลด FPS / ประหยัดจอ", Icon = "gauge" })
 }
-
-setmetatable(Options, {
-    __index = function(tbl, key)
-        return rawget(tbl, key) or Toggles[key]
-    end
-})
-
-local Fluent = {
-    Options = Options,
-    Notify = function(self, cfg)
-        local title = cfg.Title or "PayomboyZ"
-        local content = cfg.Content or cfg.Text or ""
-        local duration = cfg.Duration or 3
-        Library:Notify(title .. ": " .. content, duration)
-    end
-}
+local Options = Fluent.Options
 
 ---------------------------------------------------------
 -- CONSTANTS & FOLDER COMPATIBILITY
@@ -1144,12 +1034,6 @@ end)
 ---------------------------------------------------------
 -- 2. REROLL TAB (รีโรล)
 ---------------------------------------------------------
-local TraitsList = {
-    "Fortune I", "Vigor I", "Strength I", "Fortune II", "Vigor II", "Strength II",
-    "Fortune III", "Vigor III", "Strength III", "Assassin", "Berserk", "Tank",
-    "Rich", "Emperor", "Phoenix", "Almighty", "Sovereign"
-}
-
 local function GetInventoryCardsForReroll()
     local inventory = {}
     local function scanFolder(folder)
@@ -1366,8 +1250,6 @@ AutoRerollToggle:OnChanged(function(state)
 end)
 
 Tabs.Reroll:AddSection("🌟 ตั้งค่า Rank Reroll")
-
-local RankList = {"F", "E", "D", "C", "B", "A", "S", "SS", "SR", "UR", "LR"}
 
 getgenv().SelectedRanks = {}
 local RankDropdown = Tabs.Reroll:AddDropdown("SelectedRanks", {
@@ -3244,48 +3126,26 @@ pcall(function()
     end)
 
     toggleWrapper.MouseButton1Click:Connect(function()
-        pcall(function()
-            if Library and Library.Toggle then
-                Library:Toggle()
-            end
-        end)
+        Window:Minimize()
     end)
 end)
 
+-- Load InterfaceManager for Theme Customization
+local InterfaceManager = nil
 pcall(function()
-    if SaveManager then
-        pcall(function() SaveManager:SetLibrary(Library) end)
-        pcall(function() SaveManager:IgnoreThemeSettings() end)
-        pcall(function() SaveManager:SetIgnoreIndexes({'MenuKeybind'}) end)
-        pcall(function() SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm") end)
-
-        local saveBox = rawTabs.Dashboard:AddRightGroupbox("บันทึกการตั้งค่า (Save)")
-        if type(SaveManager.BuildConfigbox) == "function" then
-            pcall(function() SaveManager:BuildConfigbox(saveBox) end)
-        elseif type(SaveManager.BuildConfigSection) == "function" then
-            pcall(function() SaveManager:BuildConfigSection(saveBox) end)
-        elseif type(SaveManager.BuildFolderSection) == "function" then
-            pcall(function() SaveManager:BuildFolderSection(saveBox) end)
-        end
-
-        pcall(function() SaveManager:LoadAutoloadConfig() end)
-    end
+    InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua"))()
 end)
 
-pcall(function()
-    if ThemeManager then
-        pcall(function() ThemeManager:SetLibrary(Library) end)
-        pcall(function() ThemeManager:SetFolder("PayomboyZ_Config") end)
+if InterfaceManager then
+    InterfaceManager:SetLibrary(Fluent)
+    InterfaceManager:SetFolder("PayomboyZ_Config")
+    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+end
 
-        local themeBox = rawTabs.Dashboard:AddRightGroupbox("เปลี่ยนธีม UI (Theme)")
-        if type(ThemeManager.ApplyToTab) == "function" then
-            pcall(function() ThemeManager:ApplyToTab(themeBox) end)
-        elseif type(ThemeManager.ApplyToGroupbox) == "function" then
-            pcall(function() ThemeManager:ApplyToGroupbox(themeBox) end)
-        elseif type(ThemeManager.CreateThemeManager) == "function" then
-            pcall(function() ThemeManager:CreateThemeManager(themeBox) end)
-        end
-    end
-end)
+Fluent:Notify({
+    Title = "PayomboyZ",
+    Content = "ระบบธีมและสี UI พร้อมใช้งานแล้ว! ✅",
+    Duration = 6
+})
 
-Library:Notify("PayomboyZ: เปลี่ยนระบบเป็น LinoriaLib เรียบร้อยแล้ว! ลื่นขึ้นและเปิดติด 100% ✅", 6)
+Window:SelectTab(1)
