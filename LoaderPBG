@@ -10,10 +10,32 @@ pcall(function()
     end
 end)
 
--- 1. ดึงคีย์ที่ผู้เล่นใช้ล็อกอินเข้ามา (รับค่ามาจาก string.txt)
-local userKey = (getgenv and getgenv().PayomboyZ_InputKey) or (getgenv and getgenv().script_key) or _G.script_key or shared.script_key or script_key
+-- 1. ฟังก์ชันแจ้งเตือน Toast (เชื่อมต่อระบบแจ้งเตือนจาก start.txt.txt)
+local function Notify(title, message, isError)
+    if getgenv and getgenv().PayomboyZ_ShowToast then
+        getgenv().PayomboyZ_ShowToast(title, message, isError)
+    else
+        print(string.format("[%s] %s", title, message))
+    end
+end
 
--- 2. รายชื่อคีย์ VVIP (ดึงมาจากไฟล์ VVIP.txt)
+-- 2. ดึงและทำความสะอาดคีย์ที่ผู้เล่นใช้ล็อกอินเข้ามา (รับค่ามาจาก start.txt.txt)
+local userKey = ""
+pcall(function()
+    userKey = (getgenv and getgenv().PayomboyZ_InputKey) 
+        or (getgenv and getgenv().script_key) 
+        or _G.script_key 
+        or shared.script_key 
+        or ""
+end)
+
+if type(userKey) == "string" then
+    userKey = userKey:gsub("%s+", "")
+else
+    userKey = ""
+end
+
+-- 3. รายชื่อคีย์ VVIP (ดึงมาจากไฟล์ VVIP.txt)
 local VVIP_Keys = {
     ["HqknYxtQZPczCtbVnrrUDtpNVMLDltGD"] = true,
     ["yujPUHfzAUMbnlHSntOpRQusYurkNddT"] = true,
@@ -85,57 +107,108 @@ local VVIP_Keys = {
 
 -- เช็คว่าคีย์นี้เป็น VVIP หรือไม่
 local isVVIP = false
-if userKey and VVIP_Keys[userKey] then
+if userKey ~= "" and VVIP_Keys[userKey] then
     isVVIP = true
 end
 
--- 3. แมพทั่วไป (General Maps) - ทุกคนเล่นได้ 4 แมพ (รวม VVIP ด้วย)
+-- 4. แมพทั่วไป (General Maps) - ทุกคนเล่นได้ (รวม VVIP ด้วย)
 local NormalRouter = {
     -- 1. Attack On Titan Revolution (AOTR)
-    [13379208636] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
-    [14916516914] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua",
+    [13379208636] = { Name = "Attack On Titan Revolution", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua", Keywords = {"titan", "aotr"} },
+    [14916516914] = { Name = "Attack On Titan Revolution", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua", Keywords = {"titan", "aotr"} },
 
     -- 2. Anime Card Farm
-    [125039473548047] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ANCradG.lua",
+    [125039473548047] = { Name = "Anime Card Farm", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ANCradG.lua", Keywords = {"anime card"} },
     
     -- 3. Arena Sniper (Sniper Arena)
-    [122446657157717] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua",
-    [126042865144779] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua",
+    [122446657157717] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
+    [126042865144779] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
 
     -- 4. Roll Anime To Fight (RATF)
-    [107653945083776] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua",
+    [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
 }
 
--- 4. แมพ VVIP (Exclusive Maps) - เฉพาะคนที่มีคีย์ VVIP เท่านั้นเล่นได้ 3 แมพ
+-- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
 local VVIPRouter = {
     -- 1. Mine a Mountain (MaM)
-    [125927821145949] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain",
+    [125927821145949] = { Name = "Mine a Mountain", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MineOrMountain", Keywords = {"mine a mountain", "mine mountain"} },
 
-    -- 2. Master Mystery 2 (MM2)
-    [142823291] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua",
+    -- 2. Murder Mystery 2 (MM2)
+    [142823291] = { Name = "Murder Mystery 2", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua", Keywords = {"murder mystery", "mm2"} },
 
     -- 3. Capybara Vs Plant (CvsP)
-    [104973076655377] = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua",
+    [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua", Keywords = {"capybara"} },
 }
 
--- 5. ตรวจสอบ PlaceId ของเกมปัจจุบันและดำเนินการรันสคริปต์
+-- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
 local placeId = game.PlaceId
 local scriptTarget = NormalRouter[placeId]
 local vvipScriptTarget = VVIPRouter[placeId]
 
+-- หากไม่เจอเลข PlaceId ตรงๆ ให้ดึงข้อมูลชื่อเกมจาก Roblox API ในเกมสดๆ เพื่อระบุแมพทันที
+if not scriptTarget and not vvipScriptTarget then
+    pcall(function()
+        local MarketplaceService = game:GetService("MarketplaceService")
+        local info = MarketplaceService:GetProductInfo(placeId)
+        if info and info.Name then
+            local gName = info.Name:lower()
+            
+            -- ค้นหาในแมพธรรมดาจาก Keyword ในชื่อเกม
+            for _, data in pairs(NormalRouter) do
+                if data.Keywords then
+                    for _, kw in ipairs(data.Keywords) do
+                        if gName:find(kw:lower()) then
+                            scriptTarget = data
+                            break
+                        end
+                    end
+                end
+                if scriptTarget then break end
+            end
+            
+            -- ค้นหาในแมพ VVIP จาก Keyword ในชื่อเกม
+            if not scriptTarget then
+                for _, data in pairs(VVIPRouter) do
+                    if data.Keywords then
+                        for _, kw in ipairs(data.Keywords) do
+                            if gName:find(kw:lower()) then
+                                vvipScriptTarget = data
+                                break
+                            end
+                        end
+                    end
+                    if vvipScriptTarget then break end
+                end
+            end
+        end
+    end)
+end
+
+-- 7. สรุปผลและดำเนินการรันสคริปต์
 if vvipScriptTarget then
-    -- หากเป็นแมพสำหรับ VVIP
     if isVVIP then
-        -- ผ่าน! คีย์เป็น VVIP อนุญาตให้รัน
-        pcall(function()
-            loadstring(game:HttpGet(vvipScriptTarget))()
+        Notify("👑 PayomboyZ VVIP", "พบสิทธิ์ VVIP! กำลังโหลด " .. vvipScriptTarget.Name .. "...", false)
+        task.wait(0.3)
+        local success, err = pcall(function()
+            loadstring(game:HttpGet(vvipScriptTarget.URL .. "?t=" .. tostring(tick())))()
         end)
+        if not success then
+            Notify("❌ โหลดสคริปต์ล้มเหลว", "เกิดข้อผิดพลาดในการโหลดแมพ " .. vvipScriptTarget.Name, true)
+            warn("[PayomboyZ Loader Error]: " .. tostring(err))
+        end
     else
-        -- ไม่ผ่าน! คีย์ไม่ใช่ VVIP แค่ไม่รันสคริปต์ (ผู้เล่นเล่นแมพได้ปกติแบบไม่มีสคริปต์)
+        Notify("❌ สิทธิ์ไม่เพียงพอ", "แมพ '" .. vvipScriptTarget.Name .. "' ต้องใช้คีย์ระดับ VVIP เท่านั้น!", true)
     end
 elseif scriptTarget then
-    -- หากเป็นแมพธรรมดา ทุกคนเล่นได้
-    pcall(function()
-        loadstring(game:HttpGet(scriptTarget))()
+    Notify("🚀 PayomboyZ Hub", "กำลังโหลดสคริปต์: " .. scriptTarget.Name .. "...", false)
+    task.wait(0.3)
+    local success, err = pcall(function()
+        loadstring(game:HttpGet(scriptTarget.URL .. "?t=" .. tostring(tick())))()
     end)
+    if not success then
+        Notify("❌ โหลดสคริปต์ล้มเหลว", "เกิดข้อผิดพลาดในการโหลดแมพ " .. scriptTarget.Name, true)
+        warn("[PayomboyZ Loader Error]: " .. tostring(err))
+    end
+else
+    Notify("⚠️ ไม่พบสคริปต์", "ยังไม่มีสคริปต์รองรับ PlaceId: " .. tostring(placeId), true)
 end
