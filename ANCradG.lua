@@ -1371,13 +1371,6 @@ AutoRankRerollToggle:OnChanged(function(state)
                 
                 task.wait(math.max(0.15, tonumber(getgenv().RerollSpeed) or 1.5))
             end
-                    Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
-                    getgenv().AutoRankReroll = false
-                    if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
-                end
-                
-                task.wait(getgenv().RerollSpeed or 1.5)
-            end
         end)
     end
 end)
