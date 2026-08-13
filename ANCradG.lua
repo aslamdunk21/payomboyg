@@ -1034,7 +1034,6 @@ end)
 -- 2. REROLL TAB (รีโรล)
 ---------------------------------------------------------
 
-
 local function GetInventoryCardsForReroll()
     local inventory = {}
     local function scanFolder(folder)
@@ -1066,6 +1065,20 @@ local function GetInventoryCardsForReroll()
     return list
 end
 
+local RerollCardsDropdown, RankCardsDropdown
+
+Tabs.Reroll:AddButton({
+    Title = "🔄 รีเฟรชรายการการ์ดในกระเป๋า",
+    Callback = function()
+        getgenv().CachedTraitRemotes = nil
+        getgenv().CachedRankRemotes = nil
+        local newCards = GetInventoryCardsForReroll()
+        if RerollCardsDropdown then RerollCardsDropdown:SetValues(newCards) end
+        if RankCardsDropdown then RankCardsDropdown:SetValues(newCards) end
+        Fluent:Notify({ Title = "Reroll", Content = "รีเฟรชรายการการ์ดในกระเป๋าเรียบร้อย!", Duration = 3 })
+    end
+})
+
 Tabs.Reroll:AddSection("🎯 ตั้งค่า Trait Reroll")
 
 getgenv().SelectedTraits = {}
@@ -1091,7 +1104,7 @@ TraitDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRerollCardKey = nil
-local RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
+RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Trait",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -1100,15 +1113,6 @@ local RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
 RerollCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRerollCardKey = Value
 end)
-
-Tabs.Reroll:AddButton({
-    Title = "🔄 รีเฟรชรายการการ์ด (Trait)",
-    Callback = function()
-        getgenv().CachedTraitRemotes = nil
-        RerollCardsDropdown:SetValues(GetInventoryCardsForReroll())
-        Fluent:Notify({ Title = "Reroll", Content = "รีเฟรชรายการการ์ดแล้ว!", Duration = 3 })
-    end
-})
 
 getgenv().AutoReroll = false
 local AutoRerollToggle = Tabs.Reroll:AddToggle("AutoRerollTrait", { Title = "🔥 รีโรล Trait อัตโนมัติ", Default = false })
@@ -1205,8 +1209,6 @@ end)
 
 Tabs.Reroll:AddSection("🌟 ตั้งค่า Rank Reroll")
 
-
-
 getgenv().SelectedRanks = {}
 local RankDropdown = Tabs.Reroll:AddDropdown("SelectedRanks", {
     Title = "เลือก Rank ที่ต้องการหยุด (Rank Reroll)",
@@ -1230,7 +1232,7 @@ RankDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRankCardKey = nil
-local RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
+RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Rank",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -1239,15 +1241,6 @@ local RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
 RankCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRankCardKey = Value
 end)
-
-Tabs.Reroll:AddButton({
-    Title = "🔄 รีเฟรชรายการการ์ด (Rank)",
-    Callback = function()
-        getgenv().CachedRankRemotes = nil
-        RankCardsDropdown:SetValues(GetInventoryCardsForReroll())
-        Fluent:Notify({ Title = "Auto Rank", Content = "รีเฟรชรายการการ์ดแล้ว!", Duration = 3 })
-    end
-})
 
 getgenv().AutoRankReroll = false
 local AutoRankRerollToggle = Tabs.Reroll:AddToggle("AutoRerollRank", { Title = "💥 รีโรล Rank อัตโนมัติ", Default = false })
@@ -1267,7 +1260,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                     task.wait(1)
                     continue
                 end
-                local cardKey = getgenv().SelectedRankCardKey
+                local cardKey = getgenv().SelectedRankCardKey or getgenv().SelectedRerollCardKey
                 local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
                 
                 if cardTool and cardTool.Parent then
