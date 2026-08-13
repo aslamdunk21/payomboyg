@@ -1,53 +1,44 @@
--- [[ PayomboyZ - Anime Card Farm Script (WindUI Integrated) ]]
--- Theme: WindUI / Dark Mode
--- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
+-- [[ PayomboyZ - Anime Card Farm Script (Fluent UI) ]]
+-- Theme: Fluent UI / Dark Mode
+-- Controls: [LeftControl] Toggle UI Visibility | Mobile Floating Button
 
-local WindUI = getgenv().WindUI
-local loadError = ""
+local Fluent = getgenv().Fluent
+local SaveManager = nil
+local InterfaceManager = nil
 
-if not WindUI then
-    local urls = {
-        "https://cdn.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
-        "https://fastly.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
-        "https://gcore.jsdelivr.net/gh/aslamdunk7/paypmboygang@main/WindUI",
-        "https://cdn.statically.io/gh/aslamdunk7/paypmboygang/main/WindUI",
-        "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WindUI",
-        "https://cdn.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
-        "https://fastly.jsdelivr.net/gh/Footagesus/WindUI@main/dist/main.lua",
-        "https://rawcdn.githack.com/Footagesus/WindUI/main/dist/main.lua",
-        "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+if not Fluent then
+    local fluentUrls = {
+        "https://raw.githubusercontent.com/x2Swiftz/UI-Library/main/Libraries/FluentUI-Example.lua",
+        "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
+        "https://fastly.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
+        "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
+        "https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/main.lua",
     }
 
-    for _, url in ipairs(urls) do
-        local s, res = pcall(function()
-            local code = game:HttpGet(url, true)
-            if code and #code > 500 then
-                local fn = loadstring(code)
-                if fn then return fn() end
-            end
+    for _, url in ipairs(fluentUrls) do
+        local s, r = pcall(function()
+            return loadstring(game:HttpGet(url, true))()
         end)
-        if s and res and (type(res) == "table" or type(res) == "userdata") then
-            WindUI = res
-            getgenv().WindUI = WindUI
+        if s and r and type(r) == "table" then
+            Fluent = r
+            getgenv().Fluent = Fluent
             break
-        else
-            loadError = loadError .. " | " .. tostring(res)
         end
     end
 end
 
-if not WindUI then
-    -- Local fallback reading from executor workspace
+if not Fluent then
+    -- Fallback: Local workspace file reading
     pcall(function()
         if isfile and readfile then
-            for _, filename in ipairs({"WindUI.txt", "WindUI.lua", "Dexq_AnimeCardFarm/WindUI.lua"}) do
+            for _, filename in ipairs({"main (2).lua", "Fluent.txt", "Fluent.lua"}) do
                 if isfile(filename) then
                     local content = readfile(filename)
                     if content and #content > 500 then
-                        local fn = loadstring(content)
-                        if fn then
-                            WindUI = fn()
-                            getgenv().WindUI = WindUI
+                        local s, r = pcall(function() return loadstring(content)() end)
+                        if s and r and type(r) == "table" then
+                            Fluent = r
+                            getgenv().Fluent = Fluent
                             break
                         end
                     end
@@ -57,338 +48,62 @@ if not WindUI then
     end)
 end
 
-if not WindUI then
-    warn("[PayomboyZ] Failed to load WindUI from all CDNs. Errors: " .. tostring(loadError))
+if not Fluent then
+    warn("[PayomboyZ] Failed to load Fluent UI!")
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "PayomboyZ UI Error",
-            Text = "ไม่สามารถโหลด WindUI ได้ทุกช่องทาง! ก๊อปไฟล์ WindUI.txt ไปไว้ใน workspace ของ Executor",
-            Duration = 10
+            Text = "ไม่สามารถโหลด Fluent UI ได้ทุกช่องทาง!",
+            Duration = 8
         })
     end)
     return
 end
 
+-- Load SaveManager & InterfaceManager Addons
+local saveManagerUrls = {
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
+}
+for _, url in ipairs(saveManagerUrls) do
+    local s, r = pcall(function() return loadstring(game:HttpGet(url, true))() end)
+    if s and r then SaveManager = r break end
+end
+
+local interfaceManagerUrls = {
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
+}
+for _, url in ipairs(interfaceManagerUrls) do
+    local s, r = pcall(function() return loadstring(game:HttpGet(url, true))() end)
+    if s and r then InterfaceManager = r break end
+end
+
 local UserInputService = game:GetService("UserInputService")
 local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
-local defaultWindowSize = isMobileDevice and UDim2.fromOffset(360, 280) or UDim2.fromOffset(580, 420)
+local defaultWindowSize = isMobileDevice and UDim2.fromOffset(360, 280) or UDim2.fromOffset(580, 460)
 
-local rawWindow = nil
-local sWin, rWin = pcall(function()
-    return WindUI:CreateWindow({
-        Title = "PayomboyZ",
-        Author = "โดย Dexq | Anime Card Farm",
-        Folder = "PayomboyZ_Config",
-        Size = defaultWindowSize,
-        Transparent = false,
-        Theme = "Dark",
-        SideBarWidth = isMobileDevice and 120 or 170,
-        HasOutline = true,
-    })
-end)
-
-if sWin and rWin then
-    rawWindow = rWin
-else
-    warn("[PayomboyZ] CreateWindow Error: " .. tostring(rWin))
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "PayomboyZ UI Error",
-            Text = "CreateWindow error: " .. tostring(rWin),
-            Duration = 8
-        })
-    end)
-end
-
-local Options = {}
-local Fluent = {}
-
-function Fluent:Notify(cfg)
-    pcall(function()
-        WindUI:Notify({
-            Title = cfg.Title or "Notification",
-            Content = cfg.Content or cfg.Text or "",
-            Duration = cfg.Duration or 3,
-        })
-    end)
-end
-
--- Adapter wrapper for 100% compatibility with Fluent-style calls
-local function wrapElement(id, rawElem, elemType)
-    local wrapper = {}
-    wrapper.Raw = rawElem
-    wrapper.Value = nil
-    local callbacks = {}
-
-    function wrapper:OnChanged(fn)
-        table.insert(callbacks, fn)
-    end
-
-    function wrapper:Fire(val)
-        wrapper.Value = val
-        for _, fn in ipairs(callbacks) do
-            pcall(fn, val)
-        end
-    end
-
-    function wrapper:SetValue(val)
-        wrapper.Value = val
-        pcall(function()
-            if rawElem then
-                if rawElem.Set then
-                    rawElem:Set(val)
-                elseif rawElem.SetValue then
-                    rawElem:SetValue(val)
-                elseif rawElem.Select then
-                    rawElem:Select(val)
-                end
-            end
-        end)
-        wrapper:Fire(val)
-    end
-
-    function wrapper:SetValues(vals)
-        pcall(function()
-            if rawElem then
-                if rawElem.SetValues then
-                    rawElem:SetValues(vals)
-                elseif rawElem.SetOptions then
-                    rawElem:SetOptions(vals)
-                elseif rawElem.Refresh then
-                    rawElem:Refresh(vals)
-                elseif rawElem.Set then
-                    rawElem:Set(vals)
-                end
-            end
-        end)
-    end
-
-    if id then
-        Options[id] = wrapper
-    end
-    return wrapper
-end
-
-local function wrapTab(rawTab)
-    local tabObj = {}
-
-    function tabObj:AddSection(title)
-        pcall(function()
-            if rawTab and rawTab.Section then
-                rawTab:Section({ Title = title })
-            elseif rawTab and rawTab.AddSection then
-                rawTab:AddSection(title)
-            end
-        end)
-        return {
-            AddToggle = function(self, id, cfg) return tabObj:AddToggle(id, cfg) end,
-            AddButton = function(self, cfg) return tabObj:AddButton(cfg) end,
-            AddSlider = function(self, id, cfg) return tabObj:AddSlider(id, cfg) end,
-            AddDropdown = function(self, id, cfg) return tabObj:AddDropdown(id, cfg) end,
-            AddInput = function(self, id, cfg) return tabObj:AddInput(id, cfg) end,
-        }
-    end
-
-    function tabObj:AddToggle(id, cfg)
-        cfg = cfg or {}
-        local callback = cfg.Callback
-        local userOnChanged = nil
-
-        local raw = nil
-        pcall(function()
-            if rawTab then
-                local f = rawTab.Toggle or rawTab.AddToggle
-                if f then
-                    raw = f(rawTab, {
-                        Title = cfg.Title or id,
-                        Desc = cfg.Description or cfg.Desc or "",
-                        Value = cfg.Default or cfg.Value or false,
-                        Callback = function(state)
-                            if userOnChanged then userOnChanged(state) end
-                            if callback then callback(state) end
-                        end
-                    })
-                end
-            end
-        end)
-
-        local wrapper = wrapElement(id, raw, "Toggle")
-        wrapper.Value = cfg.Default or cfg.Value or false
-        userOnChanged = function(state)
-            wrapper:Fire(state)
-        end
-        return wrapper
-    end
-
-    function tabObj:AddButton(cfg)
-        cfg = cfg or {}
-        local raw = nil
-        pcall(function()
-            if rawTab then
-                local f = rawTab.Button or rawTab.AddButton
-                if f then
-                    raw = f(rawTab, {
-                        Title = cfg.Title or "Button",
-                        Desc = cfg.Description or cfg.Desc or "",
-                        Callback = cfg.Callback or function() end
-                    })
-                end
-            end
-        end)
-        return wrapElement(nil, raw, "Button")
-    end
-
-    function tabObj:AddSlider(id, cfg)
-        cfg = cfg or {}
-        local callback = cfg.Callback
-        local userOnChanged = nil
-
-        local raw = nil
-        pcall(function()
-            if rawTab then
-                local f = rawTab.Slider or rawTab.AddSlider
-                if f then
-                    raw = f(rawTab, {
-                        Title = cfg.Title or id,
-                        Desc = cfg.Description or cfg.Desc or "",
-                        Min = cfg.Min or 0,
-                        Max = cfg.Max or 100,
-                        Step = cfg.Rounding and (10 ^ (-cfg.Rounding)) or cfg.Step or 1,
-                        Value = cfg.Default or cfg.Value or cfg.Min or 0,
-                        Callback = function(val)
-                            if userOnChanged then userOnChanged(val) end
-                            if callback then callback(val) end
-                        end
-                    })
-                end
-            end
-        end)
-
-        local wrapper = wrapElement(id, raw, "Slider")
-        wrapper.Value = cfg.Default or cfg.Value or cfg.Min or 0
-        userOnChanged = function(val)
-            wrapper:Fire(val)
-        end
-        return wrapper
-    end
-
-    function tabObj:AddDropdown(id, cfg)
-        cfg = cfg or {}
-        local callback = cfg.Callback
-        local userOnChanged = nil
-
-        local raw = nil
-        pcall(function()
-            if rawTab then
-                local f = rawTab.Dropdown or rawTab.AddDropdown
-                if f then
-                    raw = f(rawTab, {
-                        Title = cfg.Title or id,
-                        Desc = cfg.Description or cfg.Desc or "",
-                        Values = cfg.Values or {},
-                        Value = cfg.Default or cfg.Value,
-                        Multi = cfg.Multi or false,
-                        Callback = function(val)
-                            if userOnChanged then userOnChanged(val) end
-                            if callback then callback(val) end
-                        end
-                    })
-                end
-            end
-        end)
-
-        local wrapper = wrapElement(id, raw, "Dropdown")
-        wrapper.Value = cfg.Default or cfg.Value
-        userOnChanged = function(val)
-            wrapper:Fire(val)
-        end
-        return wrapper
-    end
-
-    function tabObj:AddInput(id, cfg)
-        cfg = cfg or {}
-        local callback = cfg.Callback
-        local userOnChanged = nil
-
-        local raw = nil
-        pcall(function()
-            if rawTab then
-                local f = rawTab.Input or rawTab.AddInput
-                if f then
-                    raw = f(rawTab, {
-                        Title = cfg.Title or id,
-                        Desc = cfg.Description or cfg.Desc or "",
-                        Value = cfg.Default or cfg.Value or "",
-                        Placeholder = cfg.Placeholder or "",
-                        Callback = function(text)
-                            if userOnChanged then userOnChanged(text) end
-                            if callback then callback(text) end
-                        end
-                    })
-                end
-            end
-        end)
-
-        local wrapper = wrapElement(id, raw, "Input")
-        wrapper.Value = cfg.Default or cfg.Value or ""
-        userOnChanged = function(text)
-            wrapper:Fire(text)
-        end
-        return wrapper
-    end
-
-    return tabObj
-end
-
-local function createTab(cfg)
-    local raw = nil
-    pcall(function()
-        if rawWindow then
-            if rawWindow.Tab then
-                raw = rawWindow:Tab(cfg)
-            elseif rawWindow.AddTab then
-                raw = rawWindow:AddTab(cfg)
-            end
-        end
-    end)
-    return wrapTab(raw)
-end
-
-local WindowWrapper = {
-    Raw = rawWindow,
-    Minimize = function(self)
-        pcall(function()
-            if rawWindow then
-                if rawWindow.Minimize then
-                    rawWindow:Minimize()
-                elseif rawWindow.Toggle then
-                    rawWindow:Toggle()
-                end
-            elseif WindUI and WindUI.Toggle then
-                WindUI:Toggle()
-            end
-        end)
-    end,
-    SelectTab = function(self, idx)
-        pcall(function()
-            if rawWindow and rawWindow.SelectTab then
-                rawWindow:SelectTab(idx)
-            end
-        end)
-    end
-}
-
-local Window = WindowWrapper
+local Window = Fluent:CreateWindow({
+    Title = "PayomboyZ",
+    SubTitle = "โดย Dexq | Anime Card Farm",
+    TabWidth = isMobileDevice and 120 or 160,
+    Size = defaultWindowSize,
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
 
 local Tabs = {
-    Main = createTab({ Title = "หลัก", Icon = "home" }),
-    Reroll = createTab({ Title = "รีโรล", Icon = "refresh-cw" }),
-    Potion = createTab({ Title = "น้ำยา", Icon = "flask-conical" }),
-    Raid = createTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
-    Trade = createTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
-    FPS = createTab({ Title = "ลด FPS", Icon = "monitor-off" }),
-    Dashboard = createTab({ Title = "แดชบอร์ด & ตั้งค่า", Icon = "sliders" })
+    Main = Window:AddTab({ Title = "หลัก", Icon = "home" }),
+    Reroll = Window:AddTab({ Title = "รีโรล", Icon = "refresh-cw" }),
+    Potion = Window:AddTab({ Title = "น้ำยา", Icon = "flask-conical" }),
+    Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
+    Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
+    FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด & ตั้งค่า", Icon = "sliders" })
 }
+
+local Options = Fluent.Options
 
 ---------------------------------------------------------
 -- CONSTANTS & FOLDER COMPATIBILITY
@@ -3447,11 +3162,23 @@ pcall(function()
     end)
 end)
 
--- Profile Box removed as requested because Toggle now acts as the profile.
+if SaveManager and InterfaceManager then
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
+    InterfaceManager:SetFolder("PayomboyZ_Config")
+    SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
+
+    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+    SaveManager:BuildConfigSection(Tabs.Dashboard)
+
+    SaveManager:LoadAutoloadConfig()
+end
 
 Fluent:Notify({
     Title = "PayomboyZ",
-    Content = "เปลี่ยน UI เป็น WindUI เรียบร้อยแล้ว! ✅",
+    Content = "เปลี่ยนระบบกลับเป็น Fluent UI เรียบร้อยแล้ว! ✅",
     Duration = 6
 })
 
