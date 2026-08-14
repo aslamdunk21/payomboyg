@@ -145,7 +145,7 @@ local VVIPRouter = {
     [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua", Keywords = {"capybara"} },
 
     -- 4. Steal An Egg (SaE)
-    [107778070777162] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG", "ขโมยไข่"} },
+    [107778070777162] = { Name = "Steal An Egg", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG"} },
 }
 
 -- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
