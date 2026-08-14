@@ -4,9 +4,10 @@
 
 local Fluent = nil
 local fluentURLs = {
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
     "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua",
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/main.lua"
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"
 }
 for _, url in ipairs(fluentURLs) do
     local ok, res = pcall(function()
@@ -25,9 +26,9 @@ end
 
 local SaveManager = nil
 local saveManagerURLs = {
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua",
     "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua"
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua"
 }
 for _, url in ipairs(saveManagerURLs) do
     local ok, res = pcall(function()
@@ -41,9 +42,9 @@ end
 
 local InterfaceManager = nil
 local interfaceManagerURLs = {
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua",
     "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua"
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua"
 }
 for _, url in ipairs(interfaceManagerURLs) do
     local ok, res = pcall(function()
@@ -57,7 +58,7 @@ end
 
 pcall(function()
     local CoreGui = game:GetService("CoreGui")
-    local PlayerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    local PlayerGui = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
     local function cleanOldGuis(parent)
         if not parent then return end
         for _, v in ipairs(parent:GetChildren()) do
@@ -68,6 +69,64 @@ pcall(function()
     end
     cleanOldGuis(CoreGui)
     cleanOldGuis(PlayerGui)
+end)
+
+-- Fix & Prevent Screen Darkening / Blur Effects
+local function disableScreenDarkening()
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") then
+                local name = string.lower(v.Name)
+                if name:find("fluent") or name:find("acrylic") or name:find("blur") or name:find("dark") or name:find("dim") then
+                    v:Destroy()
+                end
+            end
+        end
+        if not getgenv().PayomboyZ_LightingConn then
+            getgenv().PayomboyZ_LightingConn = Lighting.ChildAdded:Connect(function(child)
+                if child:IsA("BlurEffect") or child:IsA("DepthOfFieldEffect") or child:IsA("ColorCorrectionEffect") then
+                    task.wait(0.05)
+                    local name = string.lower(child.Name)
+                    if name:find("fluent") or name:find("acrylic") or name:find("blur") or name:find("dark") or name:find("dim") then
+                        child:Destroy()
+                    end
+                end
+            end)
+        end
+
+        local CoreGui = game:GetService("CoreGui")
+        local PlayerGui = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        local containers = { CoreGui, PlayerGui }
+        for _, root in ipairs(containers) do
+            if root then
+                for _, gui in ipairs(root:GetChildren()) do
+                    if gui:IsA("ScreenGui") and (string.find(string.lower(gui.Name), "fluent") or string.find(string.lower(gui.Name), "payomboy")) then
+                        for _, desc in ipairs(gui:GetDescendants()) do
+                            if desc:IsA("Frame") or desc:IsA("CanvasGroup") or desc:IsA("ImageLabel") then
+                                local name = string.lower(desc.Name)
+                                if name == "overlay" or name == "darken" or name == "dimmer" or name == "acrylicpaint" or name == "acrylic" then
+                                    desc.BackgroundTransparency = 1
+                                    desc.Visible = false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    for _ = 1, 10 do
+        disableScreenDarkening()
+        task.wait(0.5)
+    end
+end)
+
+pcall(function()
+    if setfpscap then setfpscap(999) end
 end)
 
 local UserInputService = game:GetService("UserInputService")
@@ -117,13 +176,13 @@ local function dismissPurchasePrompt()
         GuiService:CloseInspectMenu()
     end)
     pcall(function()
-        local purchaseApp = CoreGui:FindFirstChild("PurchasePromptApp") or (LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("PurchasePromptApp"))
+        local purchaseApp = CoreGui:FindFirstChild("PurchasePromptApp")
         if purchaseApp then
             for _, v in ipairs(purchaseApp:GetDescendants()) do
                 if v:IsA("TextButton") or v:IsA("ImageButton") then
-                    local name = string.lower(v.Name)
-                    local text = v:IsA("TextButton") and string.lower(v.Text) or ""
-                    if name:find("cancel") or name:find("close") or text:find("cancel") or text:find("ยกเลิก") or text:find("ปิด") or v.Name == "CloseButton" or v.Name == "ErrorDismissButton" or v.Name == "ButtonContainer" then
+                    local name = string.lower(v.Name or "")
+                    local text = v:IsA("TextButton") and string.lower(v.Text or "") or ""
+                    if name == "cancelframe" or name == "cancelbutton" or name == "errordismissbutton" or text == "cancel" or text == "ok" or text == "ยกเลิก" then
                         if getconnections then
                             for _, c in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() c:Fire() end) end
                             for _, c in ipairs(getconnections(v.Activated)) do pcall(function() c:Fire() end) end
@@ -136,8 +195,6 @@ local function dismissPurchasePrompt()
 end
 
 local function rejectCurrentPromptCards()
-    -- แค่ปิด Robux prompt อย่างเดียว ไม่ reject การ์ดทุกใบบนสายพาน
-    -- (instantBuyLoop จะ reject เฉพาะการ์ดที่ fail ซ้ำๆ เองอยู่แล้ว)
     dismissPurchasePrompt()
 end
 
@@ -269,29 +326,98 @@ local function fireButton(btn)
     end)
 end
 
--- Enlarge Slider knobs for Mobile & Touch Ease
+-- Enlarge Slider knobs for Mobile & Touch Ease (Optimized Zero-Lag Cache)
+local enlargedCache = {}
 local function enlargeSliderKnobs()
     pcall(function()
-        local targets = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
-        for _, root in ipairs(targets) do
-            if root then
-                for _, obj in ipairs(root:GetDescendants()) do
-                    if obj:IsA("GuiObject") then
-                        local name = string.lower(obj.Name)
-                        local parentName = obj.Parent and string.lower(obj.Parent.Name) or ""
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        local coreGui = CoreGui
+        local roots = { playerGui, coreGui }
+        
+        for _, root in ipairs(roots) do
+            if not root then continue end
+            for _, obj in ipairs(root:GetDescendants()) do
+                if not obj:IsA("GuiObject") or enlargedCache[obj] then continue end
+                
+                local name = string.lower(obj.Name or "")
+                
+                -- 1. Explicitly ignore Window Header Controls (Close X, Minimize -, Maximize □)
+                local isHeaderControl = false
+                local ancestor = obj
+                while ancestor do
+                    local aName = string.lower(ancestor.Name or "")
+                    if aName:find("titlebar") or aName:find("header") or aName:find("windowcontrols") 
+                        or aName:find("close") or aName:find("minimize") or aName:find("maximize") 
+                        or aName == "controls" or aName == "topbar" or aName == "buttons"
+                    then
+                        isHeaderControl = true
+                        break
+                    end
+                    ancestor = ancestor.Parent
+                end
+                
+                if isHeaderControl or name == "close" or name == "minimize" or name == "maximize" or name == "closebutton" or name == "minimizebutton" or name == "maximizebutton" or name == "x" then
+                    enlargedCache[obj] = true
+                    continue
+                end
+                
+                -- 2. Target only Slider Knobs
+                local isInsideSlider = false
+                local sliderAncestor = obj.Parent
+                while sliderAncestor and sliderAncestor:IsA("GuiObject") do
+                    local sName = string.lower(sliderAncestor.Name or "")
+                    if sName:find("slider") then
+                        isInsideSlider = true
+                        break
+                    end
+                    sliderAncestor = sliderAncestor.Parent
+                end
+                
+                if isInsideSlider then
+                    if obj:IsA("TextLabel") or name:find("title") or name:find("value") or name:find("sub") 
+                        or name == "slider" or name == "slidercontainer" or name == "sliderframe" or name == "bar" or name == "rail" or name == "fill" or name == "track"
+                    then
+                        continue
+                    end
+                    
+                    local absSize = obj.AbsoluteSize
+                    if absSize.X > 40 then continue end
+                    
+                    local isKnobCandidate = (name == "knob" or name == "dot" or name == "thumb" or name == "handle" or name == "circle" or name == "sliderdot" or name == "sliderknob")
+                                         or (absSize.X > 1 and absSize.X <= 32 and absSize.Y > 1 and absSize.Y <= 32)
+                                         or (obj:FindFirstChildOfClass("UICorner") ~= nil and absSize.X <= 35)
+                    
+                    if isKnobCandidate then
+                        local targetSize = 36
                         
-                        if name == "knob" or name == "thumb" or name == "dot" or name == "sliderknob" or name == "sliderdot" or name == "handle"
-                            or parentName:find("slider") or name:find("slider")
-                        then
-                            if obj.AbsoluteSize.X > 0 and obj.AbsoluteSize.X <= 20 and obj.AbsoluteSize.Y <= 20 then
-                                obj.Size = UDim2.fromOffset(28, 28)
-                                obj.ZIndex = math.max(obj.ZIndex or 1, 10)
-                                local uiCorner = obj:FindFirstChildOfClass("UICorner")
-                                if uiCorner then
-                                    uiCorner.CornerRadius = UDim.new(1, 0)
-                                end
-                            end
+                        local p = obj.Parent
+                        while p and p:IsA("GuiObject") do
+                            p.ClipsDescendants = false
+                            if string.lower(p.Name):find("slider") then break end
+                            p = p.Parent
                         end
+                        
+                        obj.Size = UDim2.fromOffset(targetSize, targetSize)
+                        obj.AnchorPoint = Vector2.new(0.5, 0.5)
+                        obj.ZIndex = math.max(obj.ZIndex or 1, 40)
+                        
+                        local uiCorner = obj:FindFirstChildOfClass("UICorner")
+                        if uiCorner then
+                            uiCorner.CornerRadius = UDim.new(1, 0)
+                        else
+                            local newCorner = Instance.new("UICorner")
+                            newCorner.CornerRadius = UDim.new(1, 0)
+                            newCorner.Parent = obj
+                        end
+                        
+                        enlargedCache[obj] = true
+                        
+                        obj:GetPropertyChangedSignal("Size"):Connect(function()
+                            if obj.Size.X.Offset ~= targetSize or obj.Size.Y.Offset ~= targetSize then
+                                obj.Size = UDim2.fromOffset(targetSize, targetSize)
+                                obj.AnchorPoint = Vector2.new(0.5, 0.5)
+                            end
+                        end)
                     end
                 end
             end
@@ -300,11 +426,11 @@ local function enlargeSliderKnobs()
 end
 
 task.spawn(function()
-    for _ = 1, 15 do
+    for _ = 1, 5 do
         enlargeSliderKnobs()
         task.wait(0.5)
     end
-    while task.wait(3) do
+    while task.wait(10) do
         enlargeSliderKnobs()
     end
 end)
@@ -348,6 +474,59 @@ local function isPackCard(obj)
         end
     end)
     return isPackByText
+end
+
+-- Check if an object is a Boss Card/Ticket or Raid Card/Ticket
+local function isBossOrRaidCard(obj)
+    if not obj then return false end
+    
+    pcall(function()
+        if obj:GetAttribute("IsBoss") == true 
+            or obj:GetAttribute("IsBossCard") == true
+            or obj:GetAttribute("IsBossTicket") == true
+            or obj:GetAttribute("IsRaid") == true
+            or obj:GetAttribute("IsRaidCard") == true
+            or obj:GetAttribute("IsRaidTicket") == true
+            or obj:GetAttribute("BossValue") ~= nil
+            or obj:GetAttribute("RaidValue") ~= nil
+        then
+            return true
+        end
+        local cType = obj:GetAttribute("CardType") or obj:GetAttribute("TicketType") or obj:GetAttribute("Type")
+        if cType and (string.find(string.lower(tostring(cType)), "boss") or string.find(string.lower(tostring(cType)), "raid") or string.find(string.lower(tostring(cType)), "ticket")) then
+            return true
+        end
+    end)
+
+    local name = string.lower(obj.Name or "")
+    local templateAttr = obj:GetAttribute("TemplateName")
+    local template = templateAttr and string.lower(tostring(templateAttr)) or ""
+    local cardNameAttr = obj:GetAttribute("CardName")
+    local cardName = cardNameAttr and string.lower(tostring(cardNameAttr)) or ""
+    
+    local keywords = {"boss ticket", "raid ticket", "bossticket", "raidticket", "บัตรบอส", "บัตรเรด", "บัตร บอส", "บัตร เรด", "บอสการ์ด", "เรดการ์ด", "boss card", "raid card", "boss", "raid", "ticket", "ตั๋ว", "บัตร"}
+    for _, kw in ipairs(keywords) do
+        if string.find(name, kw) or (template ~= "" and string.find(template, kw)) or (cardName ~= "" and string.find(cardName, kw)) then
+            return true
+        end
+    end
+
+    local isBossRaid = false
+    pcall(function()
+        for _, descendant in ipairs(obj:GetDescendants()) do
+            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+                local txt = string.lower(descendant.Text or "")
+                for _, kw in ipairs(keywords) do
+                    if string.find(txt, kw) then
+                        isBossRaid = true
+                        break
+                    end
+                end
+            end
+            if isBossRaid then break end
+        end
+    end)
+    return isBossRaid
 end
 
 local function getCardRank(item)
@@ -737,32 +916,37 @@ local LimitFPSToggle = Tabs.Main:AddToggle("CapFPS30", { Title = "⚡ จำก�
 LimitFPSToggle:OnChanged(function(state)
     pcall(function()
         if setfpscap then
-            setfpscap(state and 30 or 60)
-            Fluent:Notify({ Title = "FPS Cap", Content = state and "จำกัด FPS เหลือ 30 แล้ว" or "ปลดล็อก FPS (60)", Duration = 3 })
+            setfpscap(state and 30 or 999)
+            Fluent:Notify({ Title = "FPS Cap", Content = state and "จำกัด FPS เหลือ 30 แล้ว" or "ปลดล็อก FPS (ไม่จำกัด Max)", Duration = 3 })
         else
             Fluent:Notify({ Title = "ข้อผิดพลาด", Content = "ตัวรันไม่รองรับ setfpscap!", Duration = 3 })
         end
     end)
 end)
 
-getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 10
+getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 30
+if tonumber(getgenv().AutoSpawnDelay) and tonumber(getgenv().AutoSpawnDelay) < 30 then
+    getgenv().AutoSpawnDelay = 30
+end
 
 local AutoSpawnDelaySlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
     Title = "⏱️ ความหน่วงการสุ่มแพ็ก (Auto Spawn Delay)",
-    Description = "1 = 0.01 วินาที (สุ่มไวสุด), 100 = 1.0 วินาที",
-    Default = getgenv().AutoSpawnDelay or 10,
-    Min = 1,
-    Max = 100,
+    Description = "30 = 0.3 วินาที (เร็วสุดแนะนำเพื่อลดปิง), 100 = 1.0 วินาที, 200 = 2.0 วินาที",
+    Default = getgenv().AutoSpawnDelay or 30,
+    Min = 30,
+    Max = 200,
     Rounding = 0
 })
 AutoSpawnDelaySlider:OnChanged(function(Value)
-    getgenv().AutoSpawnDelay = Value
+    getgenv().AutoSpawnDelay = math.max(30, tonumber(Value) or 30)
 end)
 
-local AntiLagToggle = Tabs.Main:AddToggle("PingSaver", { Title = "🚀 โหมดลดปิง & CPU (Reduce Ping & CPU Lag)", Default = true })
+local AntiLagToggle = Tabs.Main:AddToggle("PingSaver", { Title = "🚀 โหมดลดปิง & CPU (Reduce Ping & CPU Lag)", Default = false })
 AntiLagToggle:OnChanged(function(state)
     getgenv().PingSaver = state
-    Fluent:Notify({ Title = "Optimization", Content = state and "เปิดโหมดลดปิง & ประหยัด CPU แล้ว" or "ปิดโหมดลดปิง", Duration = 3 })
+    if state then
+        Fluent:Notify({ Title = "Optimization", Content = "เปิดโหมดลดปิง & ประหยัด CPU แล้ว", Duration = 3 })
+    end
 end)
 
 local AutoSpawnToggle = Tabs.Main:AddToggle("AutoSpawnPack", { Title = "🎲 สุ่มแพ็กอัตโนมัติ", Default = false })
@@ -772,11 +956,6 @@ AutoSpawnToggle:OnChanged(function(state)
         task.spawn(function()
             local cd = nil
             local retryCount = 0
-            local rs = game:GetService("ReplicatedStorage")
-            local cBoxRE = rs:FindFirstChild("CardBoxRE")
-            local remotes = rs:FindFirstChild("Remotes")
-            local conveyorRE = remotes and remotes:FindFirstChild("ConveyorRE")
-            local getMultiRF = remotes and remotes:FindFirstChild("GetMultipliersRF")
 
             while getgenv().AutoSpawnPack do
                 if not cd or not cd.Parent then
@@ -795,37 +974,12 @@ AutoSpawnToggle:OnChanged(function(state)
                 end
                 retryCount = 0
 
-                -- Ultra-Fast Conveyor & Spawn Bypass
-                local plot = findPlayerPlot()
-                if plot then
-                    local conveyorFolder = plot:FindFirstChild("Plot_N0") and plot.Plot_N0:FindFirstChild("LocalConveyorModels")
-                    if conveyorFolder then
-                        for _, model in ipairs(conveyorFolder:GetChildren()) do
-                            local fullPath = model:GetFullName()
-                            if cBoxRE then
-                                pcall(function() cBoxRE:FireServer("CardReachedArrival", fullPath) end)
-                                pcall(function() cBoxRE:FireServer("CardReachedArrival", model.Name) end)
-                                pcall(function() cBoxRE:FireServer("CardReachedArrival", model) end)
-                            end
-                            if conveyorRE then
-                                pcall(function() conveyorRE:FireServer("ReachedB", model) end)
-                                pcall(function() conveyorRE:FireServer("ReachedC", model) end)
-                            end
-                        end
-                    end
-                end
+                -- Fire ClickDetector without remote spamming to maintain low ping
+                pcall(fireclickdetector, cd)
 
-                if getMultiRF then
-                    pcall(function() getMultiRF:InvokeServer() end)
-                end
-
-                -- Multi-Click Spam (สแปมกด 5 ครั้งต่อรอบเพื่อข้ามแอนิเมชันปุ่มกด)
-                for _ = 1, 5 do
-                    pcall(fireclickdetector, cd)
-                end
-
-                local userDelay = getgenv().AutoSpawnDelay or 10
-                local delaySec = (userDelay <= 1) and 0.001 or (userDelay / 100)
+                local userVal = tonumber(getgenv().AutoSpawnDelay) or 30
+                if userVal < 30 then userVal = 30 end
+                local delaySec = userVal / 100
                 task.wait(delaySec)
             end
         end)
@@ -941,7 +1095,7 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop
+-- Throttled Instant Buy Loop (Low-Ping & High-Speed)
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
@@ -1002,7 +1156,7 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.04 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.15 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
@@ -1027,12 +1181,22 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
-getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
+if getgenv().BruteForceLoop then
+    getgenv().BruteForceLoop:Disconnect()
+    getgenv().BruteForceLoop = nil
+end
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
+    if state then
+        task.spawn(function()
+            while getgenv().AutoBuyCards do
+                pcall(instantBuyLoop)
+                task.wait(0.08)
+            end
+        end)
+    end
 end)
 
 getgenv().InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม"
@@ -1203,7 +1367,7 @@ local function GetInventoryCardsForReroll()
     local function scanFolder(folder)
         if not folder then return end
         for _, item in ipairs(folder:GetChildren()) do
-            if item:IsA("Tool") and not isPackCard(item) and (item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or string.find(item.Name, "Card")) then
+            if item:IsA("Tool") and not isPackCard(item) and not isBossOrRaidCard(item) and (item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or string.find(item.Name, "Card")) then
                 local cardName = item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or item.Name
                 local mutation = getCardMutation(item)
                 local trait = getCardTrait(item)
@@ -1402,7 +1566,7 @@ AutoRerollToggle:OnChanged(function(state)
                         pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAll(id)
+                    local function fireAllTraitRemotes(id)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
@@ -1420,7 +1584,7 @@ AutoRerollToggle:OnChanged(function(state)
                             end
                         end
                     end
-                    fireAll(cId)
+                    fireAllTraitRemotes(cId)
                     
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
@@ -1432,10 +1596,7 @@ AutoRerollToggle:OnChanged(function(state)
                                 
                                 if text == "ROLL" or text == "REROLL" or text == "SPIN" then
                                     if v.Visible or (v.Parent and v.Parent.Visible) then
-                                        if getconnections then
-                                            for _, conn in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() conn:Fire() end) end
-                                            for _, conn in ipairs(getconnections(v.Activated)) do pcall(function() conn:Fire() end) end
-                                        end
+                                        pcall(fireButton, v)
                                     end
                                 end
                             end
@@ -1624,7 +1785,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                         pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAll(id)
+                    local function fireAllRankRemotes(id)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
@@ -1658,7 +1819,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                             end
                         end
                     end
-                    fireAll(cId)
+                    fireAllRankRemotes(cId)
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
@@ -1859,8 +2020,8 @@ end
 -- 3.5 MANAGE TAB (ระบบจัดการ)
 ---------------------------------------------------------
 
-Tabs.Manage:AddSection("🎁 ระบบรับของรางวัล (Auto Claim)")
-local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "กดรับรางวัลอัตโนมัติ (Playtime/Daily)", Default = getgenv().AutoClaimRewards })
+getgenv().AutoClaimRewards = false
+local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "กดรับรางวัลอัตโนมัติ (Playtime/Daily)", Default = false })
 AutoClaimToggle:OnChanged(function(state)
     getgenv().AutoClaimRewards = state
     if state then
@@ -1881,8 +2042,8 @@ AutoClaimToggle:OnChanged(function(state)
                                 
                                 local name = string.upper(v.Name)
                                 if (btnText:find("CLAIM") or btnText:find("COLLECT") or btnText:find("รับ") or name:find("CLAIM") or name:find("COLLECT")) then
-                                    -- กรองปุ่มหลอก หรือปุ่ม Robux
-                                    if not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") then
+                                    -- กรองปุ่มหลอก หรือปุ่ม Robux หรือ Guild
+                                    if not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") and not name:find("GUILD") and not btnText:find("GUILD") and not btnText:find("กิลด์") then
                                         local fired = false
                                         if getconnections then
                                             for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire(); fired = true end
@@ -2562,7 +2723,7 @@ local function collect4BestBaseCards()
         local function scanInv(container)
             if not container then return end
             for _, t in ipairs(container:GetChildren()) do
-                if t:IsA("Tool") and not isPackCard(t) then
+                if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then
                     local score = getUnifiedCardScore(t)
                     table.insert(allCards, { item = t, score = score, source = "Inv", uuid = t.Name })
                 end
@@ -2593,12 +2754,15 @@ local function collect4BestBaseCards()
                             or string.find(pText, "LUCK") or string.find(pText, "CASH")
                             or string.find(pText, "BOOST") or string.find(pText, "GEMS")
                             or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP")
+                            or string.find(pText, "RAID") or string.find(pText, "บอส") or string.find(pText, "เรด") or string.find(pText, "ตั๋ว") or string.find(pText, "บัตร")
                         
                         if not isIgnoredPrompt then
                             local model = desc:FindFirstAncestorOfClass("Model")
                             if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
                                 local isPack = isPackCard(model)
-                                if not isPack then
+                                local isBossRaid = isBossOrRaidCard(model)
+                                
+                                if not isPack and not isBossRaid then
                                     for _, txtObj in ipairs(model:GetDescendants()) do
                                         if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
                                             local txtUpper = string.upper(txtObj.Text or "")
@@ -2606,10 +2770,15 @@ local function collect4BestBaseCards()
                                                 isPack = true
                                                 break
                                             end
+                                            if string.find(txtUpper, "BOSS") or string.find(txtUpper, "RAID") or string.find(txtUpper, "บอส") or string.find(txtUpper, "เรด") or string.find(txtUpper, "บัตร") or string.find(txtUpper, "ตั๋ว") then
+                                                isBossRaid = true
+                                                break
+                                            end
                                         end
                                     end
                                 end
-                                if not isPack then
+                                
+                                if not isPack and not isBossRaid then
                                     local score = getUnifiedCardScore(model)
                                     if score > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
                                         table.insert(allCards, { item = model, score = score, source = "Plot", interact = desc })
@@ -2705,7 +2874,7 @@ local function placeCollectedCardsBack()
                 local function checkContainer(container)
                     if not container then return end
                     for _, t in ipairs(container:GetChildren()) do
-                        if t:IsA("Tool") and not isPackCard(t) then
+                        if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then
                             local s = getUnifiedCardScore(t)
                             if s == record.score or t.Name == record.assumedName then
                                 tool = t
@@ -2725,7 +2894,7 @@ local function placeCollectedCardsBack()
                     local backpack = LocalPlayer:FindFirstChild("Backpack")
                     if backpack then
                         for _, t in ipairs(backpack:GetChildren()) do
-                            if t:IsA("Tool") and not isPackCard(t) then tool = t; break; end
+                            if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then tool = t; break; end
                         end
                     end
                 end
@@ -2984,6 +3153,7 @@ AutoTowerToggle:OnChanged(function(state)
 
                     if openPrompt and not inTowerUI and not inBattle then
                         if not getgenv().TowerHasCollected then
+                            closeBossRaidUI()
                             collect4BestBaseCards()
                             getgenv().TowerHasCollected = true
                             task.wait(0.5)
@@ -4397,6 +4567,28 @@ DisableEffectsToggle:OnChanged(function(state)
     end
 end)
 
+Tabs.FPS:AddButton({
+    Title = "☀️ ฟื้นฟูแสงและสีหน้าจอ (Restore Screen Brightness)",
+    Description = "ลบเอฟเฟกต์มืด/เบลอ และคืนค่าความสว่างปกติของเกมทันที",
+    Callback = function()
+        pcall(function()
+            disableScreenDarkening()
+            local Lighting = game:GetService("Lighting")
+            for _, v in ipairs(Lighting:GetChildren()) do
+                if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") then
+                    v:Destroy()
+                end
+            end
+            Lighting.GlobalShadows = true
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 100000
+            Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+            Fluent:Notify({ Title = "แสงสว่าง", Content = "ฟื้นฟูแสงและสีหน้าจอปกติเรียบร้อยแล้ว!", Duration = 3 })
+        end)
+    end
+})
+
 
 ---------------------------------------------------------
 -- UI SCALE & MOBILE POPUP DRAGGABLE BUTTON
@@ -4538,17 +4730,12 @@ pcall(function()
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
     fpsLabel.Parent = toggleWrapper
 
-    -- ระบบนับ FPS & Ping (ทำงานพื้นหลัง)
-    local RunService = game:GetService("RunService")
-    local Stats = game:GetService("Stats")
-    local frames = 0
-    local timer = 0
-    RunService.RenderStepped:Connect(function(dt)
-        frames = frames + 1
-        timer = timer + dt
-        if timer >= 1 then
-            local currentFps = math.floor(frames / timer)
-            
+    -- Lightweight 1s Background Performance Counter
+    task.spawn(function()
+        local Stats = game:GetService("Stats")
+        while task.wait(1) do
+            if not fpsLabel or not fpsLabel.Parent then break end
+            local currentFps = math.floor(workspace:GetRealPhysicsFPS() or 60)
             local pingValue = 0
             pcall(function()
                 pingValue = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
@@ -4556,17 +4743,13 @@ pcall(function()
             
             fpsLabel.Text = "FPS: " .. tostring(currentFps) .. " • Ping: " .. tostring(pingValue) .. "ms"
             
-            -- ไล่สีตามความลื่นไหล
             if currentFps >= 50 and pingValue < 150 then
-                fpsLabel.TextColor3 = Color3.fromRGB(80, 255, 120) -- เขียว
+                fpsLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
             elseif currentFps >= 30 and pingValue < 300 then
-                fpsLabel.TextColor3 = Color3.fromRGB(255, 200, 50) -- เหลือง
+                fpsLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
             else
-                fpsLabel.TextColor3 = Color3.fromRGB(255, 80, 80) -- แดง
+                fpsLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
             end
-            
-            frames = 0
-            timer = 0
         end
     end)
 
@@ -4589,6 +4772,7 @@ if SaveManager and InterfaceManager then
     SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
 
     InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+    SaveManager:BuildConfigSection(Tabs.Dashboard)
 
     Window:SelectTab(1)
 
