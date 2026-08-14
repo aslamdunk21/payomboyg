@@ -61,6 +61,173 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
+-- Rich Floating Toggle & Profile HUD for Mobile & PC
+task.spawn(function()
+    local Stats = game:GetService("Stats")
+    local oldGui = CoreGui:FindFirstChild("PayomboyZToggleGui") or playerGui:FindFirstChild("PayomboyZToggleGui")
+    if oldGui then oldGui:Destroy() end
+
+    local toggleGui = Instance.new("ScreenGui")
+    toggleGui.Name = "PayomboyZToggleGui"
+    toggleGui.ResetOnSpawn = false
+
+    pcall(function() toggleGui.Parent = CoreGui end)
+    if not toggleGui.Parent or toggleGui.Parent ~= CoreGui then
+        toggleGui.Parent = playerGui
+    end
+
+    local mainWidget = Instance.new("Frame")
+    mainWidget.Name = "ProfileToggleWidget"
+    mainWidget.Size = UDim2.fromOffset(230, 54)
+    mainWidget.Position = UDim2.new(0, 15, 0.35, 0)
+    mainWidget.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    mainWidget.BackgroundTransparency = 0.15
+    mainWidget.BorderSizePixel = 0
+    mainWidget.Active = true
+    mainWidget.Draggable = true
+    mainWidget.Parent = toggleGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = mainWidget
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(0, 170, 255)
+    stroke.Thickness = 1.5
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = mainWidget
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 32, 48)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 16, 26))
+    })
+    gradient.Rotation = 45
+    gradient.Parent = mainWidget
+
+    -- Logo Image from GitHub
+    local logoImage = Instance.new("ImageLabel")
+    logoImage.Name = "LogoImage"
+    logoImage.Size = UDim2.fromOffset(38, 38)
+    logoImage.Position = UDim2.new(0, 8, 0.5, -19)
+    logoImage.BackgroundTransparency = 1
+    logoImage.ScaleType = Enum.ScaleType.Fit
+    logoImage.Image = "rbxassetid://0"
+    logoImage.Parent = mainWidget
+
+    local logoCorner = Instance.new("UICorner")
+    logoCorner.CornerRadius = UDim.new(0, 8)
+    logoCorner.Parent = logoImage
+
+    -- Fetch custom logo image safely
+    task.spawn(function()
+        local logoUrl = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+        local fileName = "543199739_2812856088914181_3062917809445648175_n.jpg"
+        if getcustomasset and writefile then
+            if not (isfile and isfile(fileName)) then
+                pcall(function()
+                    writefile(fileName, game:HttpGet(logoUrl))
+                end)
+            end
+            if isfile and isfile(fileName) then
+                pcall(function()
+                    logoImage.Image = getcustomasset(fileName)
+                end)
+            end
+        end
+    end)
+
+    -- Avatar Headshot Image
+    local avatarImage = Instance.new("ImageLabel")
+    avatarImage.Name = "AvatarImage"
+    avatarImage.Size = UDim2.fromOffset(38, 38)
+    avatarImage.Position = UDim2.new(0, 50, 0.5, -19)
+    avatarImage.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    avatarImage.BackgroundTransparency = 0.5
+    avatarImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
+    avatarImage.Parent = mainWidget
+
+    local avatarCorner = Instance.new("UICorner")
+    avatarCorner.CornerRadius = UDim.new(1, 0)
+    avatarCorner.Parent = avatarImage
+
+    local avatarStroke = Instance.new("UIStroke")
+    avatarStroke.Color = Color3.fromRGB(0, 200, 255)
+    avatarStroke.Thickness = 1
+    avatarStroke.Parent = avatarImage
+
+    -- Player Name Label
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "NameLabel"
+    nameLabel.Size = UDim2.new(1, -96, 0, 20)
+    nameLabel.Position = UDim2.new(0, 94, 0, 8)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = player.DisplayName
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 13
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLabel.Parent = mainWidget
+
+    -- FPS & Ping Label
+    local statsLabel = Instance.new("TextLabel")
+    statsLabel.Name = "StatsLabel"
+    statsLabel.Size = UDim2.new(1, -96, 0, 16)
+    statsLabel.Position = UDim2.new(0, 94, 0, 28)
+    statsLabel.BackgroundTransparency = 1
+    statsLabel.Text = "FPS: -- | Ping: --ms"
+    statsLabel.Font = Enum.Font.GothamMedium
+    statsLabel.TextSize = 11
+    statsLabel.TextColor3 = Color3.fromRGB(0, 225, 255)
+    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statsLabel.Parent = mainWidget
+
+    -- Transparent Click Overlay Button for toggling UI
+    local clickOverlay = Instance.new("TextButton")
+    clickOverlay.Name = "ClickOverlay"
+    clickOverlay.Size = UDim2.new(1, 0, 1, 0)
+    clickOverlay.BackgroundTransparency = 1
+    clickOverlay.Text = ""
+    clickOverlay.Parent = mainWidget
+
+    clickOverlay.MouseButton1Click:Connect(function()
+        if Window then
+            if type(Window.Minimize) == "function" then
+                Window:Minimize()
+            elseif Window.Root then
+                Window.Root.Visible = not Window.Root.Visible
+            end
+        end
+    end)
+
+    -- Realtime FPS & Ping Update Loop
+    local fpsCount = 0
+    local lastFpsTick = tick()
+    local currentFps = 60
+
+    RunService.RenderStepped:Connect(function()
+        fpsCount = fpsCount + 1
+        if tick() - lastFpsTick >= 1 then
+            currentFps = fpsCount
+            fpsCount = 0
+            lastFpsTick = tick()
+        end
+    end)
+
+    task.spawn(function()
+        while task.wait(0.5) do
+            pcall(function()
+                local ping = 0
+                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") and Stats.Network.ServerStatsItem:FindFirstChild("Data Ping") then
+                    ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+                end
+                statsLabel.Text = string.format("FPS: %d | Ping: %dms", currentFps, ping)
+            end)
+        end
+    end)
+end)
+
 local Tabs = {
     Main = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" }),
     Filter = Window:AddTab({ Title = "ตัวละคร / Rarity", Icon = "users" }),
