@@ -937,24 +937,12 @@ if IsLobbyLobby() then
     Tabs.Lobby = Window:AddTab("Lobby")
     Tabs.Session = Window:AddTab("Equipment")
     Tabs.Trade = Window:AddTab("Trade")
-    Tabs.Webhook = Window:AddTab("Webhook")
 end
 if IsIngameLobby() then
     Tabs.AutoFarm = Window:AddTab("Auto Farm")
     Tabs.Webhook = Window:AddTab("Webhook")
 end
-
-local SettingsTab = Window:AddTab("Configuration")
-local MenuGroup = SettingsTab:AddLeftGroupbox("Menu")
-MenuGroup:AddToggle("AutoHideUI", { Text = "Auto Hide UI", Default = false, Callback = function() end })
-MenuGroup:AddToggle("EnableUIMobile", { Text = "Enable UI for Mobile", Default = false, Callback = function() end })
-MenuGroup:AddButton("Unload", function() Library:Unload() end)
-MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "End", NoUI = true, Text = "Menu keybind" })
-
-
-
-Library.ToggleKeybind = Options.MenuKeybind
-
+    
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
@@ -963,11 +951,6 @@ SaveManager:SetIgnoreIndexes({"MenuKeybind"})
 
 ThemeManager:SetFolder("AOTRPayomboyZ")
 SaveManager:SetFolder(activeFolder)
-
-SaveManager:BuildConfigSection(SettingsTab)
-ThemeManager:ApplyToTab(SettingsTab)
-
-SaveManager:LoadAutoloadConfig()
 
 if IsMainmenuLobby() then
   
@@ -3221,7 +3204,15 @@ function SaveManager:BuildConfigSection(tab)
     end)
 end
 
-SaveManager:BuildConfigSection(UISettingsTab)
+pcall(function()
+    SaveManager:BuildConfigSection(UISettingsTab)
+end)
+
+pcall(function()
+    if ThemeManager and ThemeManager.ApplyToTab then
+        ThemeManager:ApplyToTab(UISettingsTab)
+    end
+end)
 
 pcall(function()
     if ThemeManager and ThemeManager.BuiltInThemes and ThemeManager.BuiltInThemes["Jester"] then
@@ -7481,7 +7472,7 @@ local function IsInCutscene()
     return ok and result or false
 end
 
-if not ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then
+if ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then return end
 
 if not TitansFolder then
     TitansFolder = SafeGetTitansFolder()
@@ -8655,11 +8646,10 @@ task.spawn(function()
         end
     end
 end)
-end
 
 
 
-if not ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then
+if ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then return end
 
 local SpearCurrentEntry = nil
 local LastSpearAttackTime = 0
@@ -9242,7 +9232,6 @@ task.spawn(function()
         task.wait(0.1)
     end
 end)
-end
 if Tabs.Webhook then
     local WebhookGroup = Tabs.Webhook:AddLeftGroupbox("Discord Webhook")
     
