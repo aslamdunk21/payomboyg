@@ -24,16 +24,36 @@ if not Fluent then
 end
 
 local SaveManager = nil
-local s2, r2 = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-end)
-if s2 and r2 then SaveManager = r2 end
+local saveManagerURLs = {
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua"
+}
+for _, url in ipairs(saveManagerURLs) do
+    local ok, res = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if ok and res and type(res) == "table" then
+        SaveManager = res
+        break
+    end
+end
 
 local InterfaceManager = nil
-local s3, r3 = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-end)
-if s3 and r3 then InterfaceManager = r3 end
+local interfaceManagerURLs = {
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua"
+}
+for _, url in ipairs(interfaceManagerURLs) do
+    local ok, res = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if ok and res and type(res) == "table" then
+        InterfaceManager = res
+        break
+    end
+end
 
 local UserInputService = game:GetService("UserInputService")
 local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
@@ -58,8 +78,7 @@ local Tabs = {
     Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
     Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
     FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
-    Dashboard = Window:AddTab({ Title = "แดชบอร์ด", Icon = "sliders" }),
-    Settings = Window:AddTab({ Title = "ตั้งค่าระบบ", Icon = "settings" })
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด", Icon = "sliders" })
 }
 
 local Options = Fluent.Options
@@ -216,15 +235,64 @@ local function fireButton(btn)
         end
         if not fired then
             local vim = game:GetService("VirtualInputManager")
+            local guiService = game:GetService("GuiService")
+            local insetY = guiService and guiService:GetGuiInset().Y or 36
             local absPos = btn.AbsolutePosition
             local absSize = btn.AbsoluteSize
             local center = absPos + (absSize / 2)
-            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-            task.wait(0.1)
-            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+            
+            vim:SendMouseButtonEvent(center.X, center.Y + insetY, 0, true, game, 1)
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(center.X, center.Y + insetY, 0, false, game, 1)
+            
+            -- Fallback click without inset if inset offset missed
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
         end
     end)
 end
+
+-- Enlarge Slider knobs for Mobile & Touch Ease
+local function enlargeSliderKnobs()
+    pcall(function()
+        local targets = { CoreGui, LocalPlayer:FindFirstChild("PlayerGui") }
+        for _, root in ipairs(targets) do
+            if root then
+                for _, obj in ipairs(root:GetDescendants()) do
+                    if obj:IsA("GuiObject") then
+                        local name = string.lower(obj.Name)
+                        local parentName = obj.Parent and string.lower(obj.Parent.Name) or ""
+                        
+                        if name == "knob" or name == "thumb" or name == "dot" or name == "sliderknob" or name == "sliderdot" or name == "handle"
+                            or parentName:find("slider") or name:find("slider")
+                        then
+                            if obj.AbsoluteSize.X > 0 and obj.AbsoluteSize.X <= 20 and obj.AbsoluteSize.Y <= 20 then
+                                obj.Size = UDim2.fromOffset(28, 28)
+                                obj.ZIndex = math.max(obj.ZIndex or 1, 10)
+                                local uiCorner = obj:FindFirstChildOfClass("UICorner")
+                                if uiCorner then
+                                    uiCorner.CornerRadius = UDim.new(1, 0)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    for _ = 1, 15 do
+        enlargeSliderKnobs()
+        task.wait(0.5)
+    end
+    while task.wait(3) do
+        enlargeSliderKnobs()
+    end
+end)
 
 -- Check if an object is a Pack/Box Card
 local function isPackCard(obj)
@@ -300,7 +368,7 @@ local function getCardRank(item)
 
     for _, txtObj in ipairs(item:GetDescendants()) do
         if txtObj:IsA("TextLabel") and txtObj.Text then
-            local cleanTxt = string.upper(string.gsub(txtObj.Text, "<[^>]+>", ""))
+            local cleanTxt = string.upper((string.gsub(txtObj.Text, "<[^>]+>", "")))
             cleanTxt = string.match(cleanTxt, "^%s*(.-)%s*$") or ""
             for _, r in ipairs(knownRankList) do
                 local escapedR = string.gsub(r, "%+", "%%+")
@@ -2651,6 +2719,60 @@ local function isBossTimeWindow()
     return min <= 5 or min >= 58
 end
 
+local function exitTowerNow()
+    getgenv().AutoReplayToggled = false
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        local exitButtons = {}
+        local autoReplayButtons = {}
+
+        for _, v in ipairs(playerGui:GetDescendants()) do
+            if v:IsA("TextButton") or v:IsA("ImageButton") or v:IsA("TextLabel") then
+                local cleanText = (v:IsA("TextLabel") or v:IsA("TextButton")) and string.gsub(v.Text or "", "<[^>]+>", "") or ""
+                local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
+                local name = string.upper(v.Name or "")
+
+                local btn = (v:IsA("TextButton") or v:IsA("ImageButton")) and v 
+                    or v:FindFirstAncestorWhichIsA("TextButton") 
+                    or v:FindFirstAncestorWhichIsA("ImageButton")
+
+                if btn then
+                    if text == "AUTO REPLAY" or name:find("AUTOREPLAY") or name:find("REPLAY") then
+                        table.insert(autoReplayButtons, btn)
+                    end
+
+                    if text:find("EXIT") or text:find("LEAVE") or text:find("QUIT") or text:find("ABANDON") 
+                        or text:find("CANCEL") or text:find("ออก") or text:find("ถอนตัว")
+                        or name:find("EXIT") or name:find("LEAVE") or name:find("QUIT") or name:find("CLOSE")
+                        or name:find("ABANDON") or name:find("CANCEL") or name:find("RETURN")
+                    then
+                        table.insert(exitButtons, btn)
+                    end
+                end
+            end
+        end
+
+        for _, btn in ipairs(autoReplayButtons) do
+            fireButton(btn)
+            task.wait(0.2)
+        end
+
+        for _, btn in ipairs(exitButtons) do
+            fireButton(btn)
+            task.wait(0.2)
+        end
+    end
+
+    local character = LocalPlayer.Character
+    if getgenv().TowerOriginalCFrame and character then
+        character:PivotTo(getgenv().TowerOriginalCFrame)
+        getgenv().TowerOriginalCFrame = nil
+    end
+
+    pcall(placeCollectedCardsBack)
+    getgenv().TowerHasCollected = false
+end
+
 
 -- UI Component Setup
 
@@ -2668,6 +2790,12 @@ end)
 local AutoTowerToggle = Tabs.Raid:AddToggle("AutoTower", { Title = "🏰 ลงหอคอยอัตโนมัติ (Auto Tower)", Default = false })
 AutoTowerToggle:OnChanged(function(state)
     getgenv().AutoTower = state
+    if state then
+        getgenv().AutoBossRaid = false
+        getgenv().AutoTowerAndBoss = false
+        if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
+        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
+    end
     if not state then
         local cam = workspace.CurrentCamera
         local character = LocalPlayer.Character
@@ -2814,47 +2942,24 @@ Tabs.Raid:AddButton({
     Title = "🛑 ปิดหอคอยตอนนี้ (Exit Tower)",
     Callback = function()
         getgenv().AutoTower = false
+        getgenv().AutoTowerAndBoss = false
         if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
-        
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if playerGui then
-            local autoReplayBtn, exitBtn
-            for _, v in ipairs(playerGui:GetDescendants()) do
-                if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
-                    local cleanText = string.gsub(v.Text, "<[^>]+>", "")
-                    local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
-                    if text == "AUTO REPLAY" then
-                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                        if btn and btn.Parent and btn.Parent.Visible then autoReplayBtn = btn end
-                    elseif text == "EXIT" or text == "LEAVE" or text == "QUIT" then
-                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                        if btn and btn.Parent and btn.Parent.Visible then exitBtn = btn end
-                    end
-                end
-            end
-            
-            local vim = game:GetService("VirtualInputManager")
-            
-            if autoReplayBtn then
-                local center = autoReplayBtn.AbsolutePosition + (autoReplayBtn.AbsoluteSize / 2)
-                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                task.wait(0.1)
-                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-                task.wait(0.5)
-            end
-            
-            if exitBtn then
-                local center = exitBtn.AbsolutePosition + (exitBtn.AbsoluteSize / 2)
-                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                task.wait(0.1)
-                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-            end
-        end
-        getgenv().AutoReplayToggled = false
+        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
+        exitTowerNow()
         Fluent:Notify({ Title = "Tower", Content = "ยกเลิก Auto Replay และออกจากหอคอยแล้ว!", Duration = 3 })
     end
 })
 
+getgenv().BossCardSource = getgenv().BossCardSource or "จากบนฐาน (Plot)"
+local BossSourceDropdown = Tabs.Raid:AddDropdown("BossCardSource", {
+    Title = "แหล่งที่มาของการ์ดบอสเรด",
+    Values = {"จากบนฐาน (Plot)", "จากในกระเป๋า (Inventory)"},
+    Multi = false,
+    Default = getgenv().BossCardSource
+})
+BossSourceDropdown:OnChanged(function(Value)
+    getgenv().BossCardSource = Value
+end)
 
 local BossDiffDropdown = Tabs.Raid:AddDropdown("BossRaidDifficulty", {
     Title = "⚔️ ระดับความยากบอสเรด",
@@ -2871,7 +2976,10 @@ AutoBossToggle:OnChanged(function(state)
     getgenv().AutoBossRaid = state
     if state then
         getgenv().AutoTower = false
+        getgenv().AutoTowerAndBoss = false
         if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
+        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
+        getgenv().BossHasCollected = false
         
         task.spawn(function()
             while getgenv().AutoBossRaid do
@@ -2942,6 +3050,10 @@ AutoBossToggle:OnChanged(function(state)
                         getgenv().AutoBossRaid = false
                         if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
                         Fluent:Notify({ Title = "บอสเรด", Content = "คุณสู้บอสไปแล้วในชั่วโมงนี้! หยุดลงบอสเรด", Duration = 5 })
+                        if getgenv().BossHasCollected then
+                            placeCollectedCardsBack()
+                            getgenv().BossHasCollected = false
+                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -2952,6 +3064,15 @@ AutoBossToggle:OnChanged(function(state)
 
                     local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
                     if not inBattle then
+                        if getgenv().BossCardSource == "จากบนฐาน (Plot)" and not getgenv().BossHasCollected then
+                            if not getgenv().BossOriginalCFrame and LocalPlayer.Character then
+                                getgenv().BossOriginalCFrame = LocalPlayer.Character:GetPivot()
+                            end
+                            collect4BestBaseCards()
+                            getgenv().BossHasCollected = true
+                            task.wait(0.5)
+                        end
+
                         local bossPrompt, portalPrompt
                         for _, p in ipairs(workspace:GetDescendants()) do
                             if p:IsA("ProximityPrompt") then
@@ -2998,6 +3119,10 @@ AutoBossToggle:OnChanged(function(state)
                     if battleBtn then
                         fireButton(battleBtn)
                         task.wait(0.2)
+                        if getgenv().BossHasCollected then
+                            placeCollectedCardsBack()
+                            getgenv().BossHasCollected = false
+                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -3028,6 +3153,10 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     if autoReplayBtn or showBattleBtn then
+                        if getgenv().BossHasCollected then
+                            placeCollectedCardsBack()
+                            getgenv().BossHasCollected = false
+                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -3043,10 +3172,365 @@ AutoBossToggle:OnChanged(function(state)
             end
         end)
     else
+        if getgenv().BossHasCollected then
+            placeCollectedCardsBack()
+            getgenv().BossHasCollected = false
+        end
         local character = LocalPlayer.Character
         if getgenv().BossOriginalCFrame and character then
             character:PivotTo(getgenv().BossOriginalCFrame)
             getgenv().BossOriginalCFrame = nil
+        end
+        getgenv().AutoReplayToggledBoss = false
+    end
+end)
+
+local AutoTowerAndBossToggle = Tabs.Raid:AddToggle("AutoTowerAndBoss", { Title = "⚔️🔄 ลงออโต้หอคอย & เรดบอส (Auto Tower & Boss Raid)", Default = false })
+AutoTowerAndBossToggle:OnChanged(function(state)
+    getgenv().AutoTowerAndBoss = state
+    if state then
+        getgenv().AutoTower = false
+        getgenv().AutoBossRaid = false
+        if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
+        if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
+
+        task.spawn(function()
+            local lastBossHour = -1
+            getgenv().BossDoneThisHour = false
+
+            while getgenv().AutoTowerAndBoss do
+                local currentHour = tonumber(os.date("!%H"))
+                local currentMin = tonumber(os.date("!%M"))
+
+                if currentHour ~= lastBossHour and currentMin > 5 and currentMin < 58 then
+                    lastBossHour = currentHour
+                    getgenv().BossDoneThisHour = false
+                end
+
+                local bossWindow = isBossTimeWindow()
+
+                if bossWindow and not getgenv().BossDoneThisHour then
+                    Fluent:Notify({ Title = "ออโต้ผสม", Content = "ถึงเวลาบอสเรดเกิด! ออกจากหอคอยเพื่อไปสู้บอส...", Duration = 4 })
+                    
+                    exitTowerNow()
+                    task.wait(1)
+
+                    getgenv().BossHasCollected = false
+                    local bossFinished = false
+
+                    while getgenv().AutoTowerAndBoss and not bossFinished do
+                        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                        if playerGui then
+                            local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
+                            local alreadyFought = false
+
+                            local function isGuiVisible(gui)
+                                if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
+                                local current = gui.Parent
+                                while current and current:IsA("GuiObject") do
+                                    if not current.Visible then return false end
+                                    current = current.Parent
+                                end
+                                return not (current and current:IsA("ScreenGui")) or current.Enabled
+                            end
+
+                            for _, v in ipairs(playerGui:GetDescendants()) do
+                                if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
+                                    local cleanText = string.gsub(v.Text, "<[^>]+>", "")
+                                    local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
+                                    
+                                    if string.find(text, "ALREADY FOUGHT THE BOSS") and isGuiVisible(v) then
+                                        alreadyFought = true
+                                    end
+
+                                    local isInventoryBtn = false
+                                    local parentObj = v.Parent
+                                    while parentObj and parentObj:IsA("GuiObject") do
+                                        local pName = string.lower(parentObj.Name)
+                                        if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
+                                            isInventoryBtn = true
+                                            break
+                                        end
+                                        parentObj = parentObj.Parent
+                                    end
+
+                                    if (text == "EQUIP BEST" or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then equipBtn = btn end
+                                    elseif text == "BATTLE" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then battleBtn = btn end
+                                    elseif text == getgenv().BossRaidDifficulty then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then diffBtn = btn end
+                                    elseif text == "AUTO REPLAY" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then autoReplayBtn = btn end
+                                    elseif text == "SHOW BATTLE" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then showBattleBtn = btn end
+                                    elseif text == "HIDE BATTLE" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then hideBattleBtn = btn end
+                                    elseif text == "NEXT" or text == "NEXT FLOOR" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then nextBtn = btn end
+                                    elseif text == "PLAY" then
+                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                        if btn and isGuiVisible(btn) then playBtn = btn end
+                                    end
+                                end
+                            end
+
+                            if alreadyFought then
+                                getgenv().BossDoneThisHour = true
+                                bossFinished = true
+                                Fluent:Notify({ Title = "ออโต้ผสม", Content = "สู้บอสเรดเรียบร้อยแล้ว! กำลังกลับไปลงหอคอยต่อ...", Duration = 4 })
+                                if getgenv().BossHasCollected then
+                                    placeCollectedCardsBack()
+                                    getgenv().BossHasCollected = false
+                                end
+                                local character = LocalPlayer.Character
+                                if getgenv().BossOriginalCFrame and character then
+                                    character:PivotTo(getgenv().BossOriginalCFrame)
+                                    getgenv().BossOriginalCFrame = nil
+                                end
+                                break
+                            end
+
+                            local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
+                            if not inBattle then
+                                if getgenv().BossCardSource == "จากบนฐาน (Plot)" and not getgenv().BossHasCollected then
+                                    if not getgenv().BossOriginalCFrame and LocalPlayer.Character then
+                                        getgenv().BossOriginalCFrame = LocalPlayer.Character:GetPivot()
+                                    end
+                                    collect4BestBaseCards()
+                                    getgenv().BossHasCollected = true
+                                    task.wait(0.5)
+                                end
+
+                                local bossPrompt, portalPrompt
+                                for _, p in ipairs(workspace:GetDescendants()) do
+                                    if p:IsA("ProximityPrompt") then
+                                        local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or "") .. " " .. p.Name)
+                                        if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
+                                            portalPrompt = p
+                                        elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
+                                            if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") or string.find(pText, "ENTER") then
+                                                bossPrompt = p
+                                            end
+                                        end
+                                    end
+                                end
+
+                                local targetPrompt = bossPrompt or portalPrompt
+                                if targetPrompt then
+                                    pcall(function()
+                                        local character = LocalPlayer.Character
+                                        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                                        if hrp then
+                                            local targetPos = targetPrompt.Parent:IsA("BasePart") and targetPrompt.Parent.Position
+                                                or (targetPrompt.Parent:IsA("Attachment") and targetPrompt.Parent.WorldPosition)
+                                                or (targetPrompt.Parent:IsA("Model") and targetPrompt.Parent.PrimaryPart and targetPrompt.Parent.PrimaryPart.Position)
+                                            if targetPos then
+                                                if (hrp.Position - targetPos).Magnitude > 15 then
+                                                    if not getgenv().BossOriginalCFrame then
+                                                        getgenv().BossOriginalCFrame = character:GetPivot()
+                                                    end
+                                                    character:PivotTo(CFrame.new(targetPos) + Vector3.new(0, 3, 0))
+                                                    task.wait(0.1)
+                                                end
+                                            end
+                                        end
+                                        targetPrompt.RequiresLineOfSight = false
+                                        targetPrompt.MaxActivationDistance = 99999
+                                        fireproximityprompt(targetPrompt)
+                                    end)
+                                    task.wait(0.5)
+                                end
+                            end
+
+                            if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn); task.wait(0.1) end
+                            if equipBtn then fireButton(equipBtn); task.wait(0.1) end
+                            if battleBtn then
+                                fireButton(battleBtn)
+                                task.wait(0.2)
+                                if getgenv().BossHasCollected then
+                                    placeCollectedCardsBack()
+                                    getgenv().BossHasCollected = false
+                                end
+                                local character = LocalPlayer.Character
+                                if getgenv().BossOriginalCFrame and character then
+                                    character:PivotTo(getgenv().BossOriginalCFrame)
+                                    getgenv().BossOriginalCFrame = nil
+                                end
+                            end
+
+                            if autoReplayBtn then
+                                local color = autoReplayBtn.BackgroundColor3
+                                if autoReplayBtn.BackgroundTransparency > 0.5 and autoReplayBtn.Parent and autoReplayBtn.Parent:IsA("GuiObject") then
+                                    color = autoReplayBtn.Parent.BackgroundColor3
+                                end
+                                if autoReplayBtn:IsA("ImageButton") and autoReplayBtn.ImageColor3 ~= Color3.new(1, 1, 1) then
+                                    color = autoReplayBtn.ImageColor3
+                                end
+                                local isGreen = (color.G > color.R + 0.1)
+                                if isGreen then
+                                    getgenv().AutoReplayToggledBoss = true
+                                elseif not getgenv().AutoReplayToggledBoss then
+                                    fireButton(autoReplayBtn)
+                                    getgenv().AutoReplayToggledBoss = true
+                                    task.wait(0.2)
+                                end
+                            end
+
+                            if autoReplayBtn or showBattleBtn then
+                                if getgenv().BossHasCollected then
+                                    placeCollectedCardsBack()
+                                    getgenv().BossHasCollected = false
+                                end
+                                local character = LocalPlayer.Character
+                                if getgenv().BossOriginalCFrame and character then
+                                    character:PivotTo(getgenv().BossOriginalCFrame)
+                                    getgenv().BossOriginalCFrame = nil
+                                end
+                            end
+
+                            if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
+                            if nextBtn then fireButton(nextBtn); task.wait(0.2); end
+                            if playBtn then fireButton(playBtn); task.wait(0.2); end
+                        end
+                        task.wait(0.3)
+                    end
+                else
+                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                    if playerGui then
+                        local equipBtn, battleBtn, nextBtn, playBtn, openBtn, autoReplayBtn, hideBattleBtn, showBattleBtn
+                        local function isGuiVisible(gui)
+                            if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
+                            local current = gui.Parent
+                            while current and current:IsA("GuiObject") do
+                                if not current.Visible then return false end
+                                current = current.Parent
+                            end
+                            return not (current and current:IsA("ScreenGui")) or current.Enabled
+                        end
+                        
+                        for _, v in ipairs(playerGui:GetDescendants()) do
+                            if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
+                                local cleanText = string.gsub(v.Text, "<[^>]+>", "")
+                                local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
+                                
+                                local isInventoryBtn = false
+                                local parentObj = v.Parent
+                                while parentObj and parentObj:IsA("GuiObject") do
+                                    local pName = string.lower(parentObj.Name)
+                                    if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
+                                        isInventoryBtn = true
+                                        break
+                                    end
+                                    parentObj = parentObj.Parent
+                                end
+
+                                if (text == "EQUIP BEST" or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then equipBtn = btn end
+                                elseif text == "BATTLE" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then battleBtn = btn end
+                                elseif text == "NEXT" or text == "NEXT FLOOR" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then nextBtn = btn end
+                                elseif text == "PLAY" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then playBtn = btn end
+                                elseif text == "AUTO REPLAY" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then autoReplayBtn = btn end
+                                elseif text == "HIDE BATTLE" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then hideBattleBtn = btn end
+                                elseif text == "SHOW BATTLE" then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then showBattleBtn = btn end
+                                elseif string.find(text, "OPEN INFINITY TOWER") then
+                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn then openBtn = btn end
+                                end
+                            end
+                        end
+
+                        local openPrompt
+                        for _, p in ipairs(workspace:GetDescendants()) do
+                            if p:IsA("ProximityPrompt") then
+                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText)
+                                if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") then
+                                    openPrompt = p
+                                    break
+                                end
+                            end
+                        end
+
+                        local inTowerUI = equipBtn or battleBtn
+                        local inBattle = autoReplayBtn or showBattleBtn
+
+                        if openPrompt and not inTowerUI and not inBattle then
+                            if getgenv().TowerCardSource == "จากบนฐาน (Plot)" and not getgenv().TowerHasCollected then
+                                collect4BestBaseCards()
+                                getgenv().TowerHasCollected = true
+                                task.wait(0.5)
+                            end
+                            pcall(function()
+                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    local targetPos = openPrompt.Parent:IsA("BasePart") and openPrompt.Parent.Position
+                                        or (openPrompt.Parent:IsA("Attachment") and openPrompt.Parent.WorldPosition)
+                                        or (openPrompt.Parent:IsA("Model") and openPrompt.Parent.PrimaryPart and openPrompt.Parent.PrimaryPart.Position)
+                                    if targetPos and (hrp.Position - targetPos).Magnitude > 15 then
+                                        if not getgenv().TowerOriginalCFrame then getgenv().TowerOriginalCFrame = LocalPlayer.Character:GetPivot() end
+                                        LocalPlayer.Character:PivotTo(CFrame.new(targetPos) + Vector3.new(0, 3, 0))
+                                        task.wait(0.2)
+                                    end
+                                end
+                                openPrompt.RequiresLineOfSight = false
+                                openPrompt.MaxActivationDistance = 99999
+                                fireproximityprompt(openPrompt)
+                            end)
+                            task.wait(0.4)
+                        end
+
+                        if openBtn and not inTowerUI and not inBattle then fireButton(openBtn); task.wait(0.4) end
+                        if equipBtn then fireButton(equipBtn); task.wait(0.4) end
+                        if battleBtn then
+                            fireButton(battleBtn)
+                            task.wait(0.5)
+                            if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
+                                LocalPlayer.Character:PivotTo(getgenv().TowerOriginalCFrame)
+                                getgenv().TowerOriginalCFrame = nil
+                                placeCollectedCardsBack()
+                            end
+                            getgenv().TowerHasCollected = false
+                            getgenv().AutoReplayToggled = false
+                        end
+                        if autoReplayBtn and not getgenv().AutoReplayToggled then
+                            fireButton(autoReplayBtn)
+                            getgenv().AutoReplayToggled = true
+                            task.wait(0.3)
+                        end
+                        if nextBtn then fireButton(nextBtn); task.wait(0.2); end
+                        if playBtn then fireButton(playBtn); task.wait(0.2); end
+                        if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
+                    end
+                end
+
+                task.wait(0.3)
+            end
+        end)
+    else
+        exitTowerNow()
+        if getgenv().BossHasCollected then
+            placeCollectedCardsBack()
+            getgenv().BossHasCollected = false
         end
     end
 end)
@@ -4001,8 +4485,30 @@ if SaveManager and InterfaceManager then
     InterfaceManager:SetFolder("PayomboyZ_Config")
     SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
 
-    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-    SaveManager:BuildConfigSection(Tabs.Settings)
+    Tabs.Dashboard:AddButton({
+        Title = "💾 บันทึกการตั้งค่าทุกแท็บ (Save Config)",
+        Description = "บันทึกการตั้งค่า (Toggle, Slider, Dropdown) ของทุกแท็บลง Config",
+        Callback = function()
+            pcall(function()
+                SaveManager:Save("default")
+                Fluent:Notify({ Title = "Save Config", Content = "บันทึกการตั้งค่าทั้งหมดทุกแท็บเรียบร้อยแล้ว! ✅", Duration = 4 })
+            end)
+        end
+    })
+
+    Tabs.Dashboard:AddButton({
+        Title = "📂 โหลดการตั้งค่าทุกแท็บ (Load Config)",
+        Description = "ดึงการตั้งค่าทั้งหมดที่บันทึกไว้กลับมาใช้งาน",
+        Callback = function()
+            pcall(function()
+                SaveManager:Load("default")
+                Fluent:Notify({ Title = "Load Config", Content = "โหลดการตั้งค่าทั้งหมดทุกแท็บเรียบร้อยแล้ว! ✅", Duration = 4 })
+            end)
+        end
+    })
+
+    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
+    SaveManager:BuildConfigSection(Tabs.Dashboard)
 
     Window:SelectTab(1)
 
@@ -4012,11 +4518,13 @@ if SaveManager and InterfaceManager then
         Duration = 8
     })
 
-    SaveManager:LoadAutoloadConfig()
+    pcall(function()
+        SaveManager:LoadAutoloadConfig()
+    end)
 elseif InterfaceManager then
     InterfaceManager:SetLibrary(Fluent)
     InterfaceManager:SetFolder("PayomboyZ_Config")
-    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
 
     Window:SelectTab(1)
 
