@@ -1,0 +1,1107 @@
+--[[
+    พยอมบอยนักเลงเว้ย (Fluent UI Version)
+    สคริปต์รวมคอมแบต & ปรับแต่งตัวละคร ( gakuran.lua + gakuran2.lua )
+    แปลภาษาไทยทั้งหมด 100% พร้อมระบบป้องกันการรันซ้ำและตั้งค่าอัตโนมัติ
+--]]
+
+-- ── 0. ล้างการทำงานเดิมก่อนหน้า (ป้องกันรันซ้ำ) ──────────────────────────────
+if _G.GakuranCleanup then
+    pcall(_G.GakuranCleanup)
+end
+
+local cleanupTasks = {}
+local function registerCleanup(item)
+    table.insert(cleanupTasks, item)
+end
+
+_G.GakuranCleanup = function()
+    for _, item in ipairs(cleanupTasks) do
+        if type(item) == "table" and item.Disconnect then
+            pcall(function() item:Disconnect() end)
+        elseif type(item) == "thread" then
+            pcall(function() task.cancel(item) end)
+        elseif type(item) == "userdata" and item.Destroy then
+            pcall(function() item:Destroy() end)
+        end
+    end
+    cleanupTasks = {}
+end
+
+-- ── 1. บริการและตัวแปรหลักของ Roblox ──────────────────────────────────────────
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- ── 2. โหลด Fluent UI Framework & Addons ───────────────────────────────────────
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "พยอมบอยนักเลงเว้ย",
+    SubTitle = "สคริปต์รวมคอมแบต & ปรับแต่งตัวละคร",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Combat     = Window:AddTab({ Title = "ระบบต่อสู้", Icon = "swords" }),
+    Automation = Window:AddTab({ Title = "ระบบอัตโนมัติ", Icon = "bot" }),
+    Character  = Window:AddTab({ Title = "ปรับแต่งตัวละคร", Icon = "user" }),
+    Visuals    = Window:AddTab({ Title = "การแสดงผล & UI", Icon = "eye" }),
+    Settings   = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+-- ── 3. ข้อมูลสไตล์การต่อสู้ & ข้อมูลตัวละคร ─────────────────────────────────────
+local allStyles = {"Basic", "Boxing", "Capoeira", "Hakari", "Karate", "Kure", "Muay Thai", "Slugger", "Striker", "Wrestling"}
+local ok, CombatAnimUtils = pcall(function()
+    return require(ReplicatedStorage:WaitForChild("Shared", 2):WaitForChild("Utils", 2):WaitForChild("CombatAnimationUtils", 2))
+end)
+if ok and CombatAnimUtils and type(CombatAnimUtils.GetAllCombatStyles) == "function" then
+    local fetched = CombatAnimUtils.GetAllCombatStyles()
+    if type(fetched) == "table" and #fetched > 0 then
+        allStyles = fetched
+    end
+end
+
+local function getPlayerData(char)
+    char = char or LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("PlayerData") or char:WaitForChild("PlayerData", 3)
+end
+
+local initChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local initPD = getPlayerData(initChar)
+local initialStyle = initPD and initPD:GetAttribute("CombatStyle") or "Basic"
+
+-- ── 4. สร้างปุ่มและ UI Element ภาษาไทย ────────────────────────────────────────
+
+-- [แท็บ: ระบบต่อสู้]
+Tabs.Combat:AddParagraph({ Title = "ระบบป้องกัน & หลบหลีก", Content = "ป้องกันอัตโนมัติ, หลบหลีกการโจมตี และหันล็อกเป้าบล็อก" })
+
+local ToggleAutoDefense = Tabs.Combat:AddToggle("AutoDefense", { Title = "ป้องกันอัตโนมัติ (Auto Parry)", Default = false })
+local ToggleAutoEvasive = Tabs.Combat:AddToggle("AutoEvasive", { Title = "หลบหลีกอัตโนมัติ (Auto Dodge)", Default = false })
+local ToggleAutoLook    = Tabs.Combat:AddToggle("AutoLook",    { Title = "ช่วยบล็อก (หันมองศัตรูตอนบล็อก)", Default = false })
+
+Tabs.Combat:AddParagraph({ Title = "ระบบโจมตี & ล็อกเป้า", Content = "ต่อยอัตโนมัติ, จับทุ่ม (M2) อัตโนมัติ และหันมองศัตรูตอนโจมตี" })
+
+local ToggleAutoAttack  = Tabs.Combat:AddToggle("AutoAttack",  { Title = "ต่อยอัตโนมัติ (Auto M1)", Default = false })
+local ToggleAutoGrapple = Tabs.Combat:AddToggle("AutoGrapple", { Title = "ใช้ท่าจับ/ทุ่มอัตโนมัติ (Auto M2)", Default = false })
+local TogglePunchAssist = Tabs.Combat:AddToggle("PunchAssist", { Title = "ช่วยล็อกเป้าตอนต่อย (Punch Assist)", Default = false })
+local ToggleAntiGrapple = Tabs.Combat:AddToggle("AntiGrapple", { Title = "ดิ้นหลุดจากการโดนจับ (Anti Grapple)", Default = false })
+
+-- [แท็บ: ระบบอัตโนมัติ]
+Tabs.Automation:AddParagraph({ Title = "ระบบซ้ำ & แบกผู้เล่นที่ล้ม", Content = "ซ้ำผู้เล่นที่ล้มอัตโนมัติ, แบกผู้เล่น หรือเกิดใหม่อัตโนมัติ" })
+
+local ToggleAutoGrip  = Tabs.Automation:AddToggle("AutoGrip",  { Title = "ซ้ำอัตโนมัติ (กด B)", Default = false })
+local ToggleAutoCarry = Tabs.Automation:AddToggle("AutoCarry", { Title = "แบกอัตโนมัติ (กด V)", Default = false })
+local ToggleAutoRestart = Tabs.Automation:AddToggle("AutoRestart", { Title = "เกิดใหม่อัตโนมัติ (Auto Restart UI)", Default = false })
+
+-- [แท็บ: ปรับแต่งตัวละคร]
+Tabs.Character:AddParagraph({ Title = "การเคลื่อนที่ & ปรับแต่งฟิสิกส์", Content = "ยกเลิกอาการสโลว์ และเดินทะลุสิ่งกีดขวาง" })
+
+local ToggleNoSlow = Tabs.Character:AddToggle("NoSlow", { Title = "ยกเลิกสโลว์ (No-Slow)", Default = false })
+local ToggleNoclip = Tabs.Character:AddToggle("Noclip", { Title = "เดินทะลุสิ่งกีดขวาง (Noclip)", Default = false })
+
+Tabs.Character:AddParagraph({ Title = "เปลี่ยนสายวิชา & ขนาดตัวละคร", Content = "เปลี่ยนสไตล์การต่อสู้ และปรับขนาดความสูงตัวละคร" })
+
+local StyleDropdown = Tabs.Character:AddDropdown("CombatStyle", {
+    Title = "เปลี่ยนสไตล์การต่อสู้",
+    Description = "เลือกสายวิชาการต่อสู้ที่ต้องการใช้",
+    Values = allStyles,
+    Multi = false,
+    Default = initialStyle,
+})
+
+local HeightSlider = Tabs.Character:AddSlider("HeightScale", {
+    Title = "ปรับขนาดความสูงตัวละคร",
+    Description = "ปรับขนาดย่อ/ขยายตัวละคร (70% ถึง 130%)",
+    Default = 50,
+    Min = 0,
+    Max = 100,
+    Rounding = 0,
+})
+
+-- [แท็บ: การแสดงผล & UI]
+Tabs.Visuals:AddParagraph({ Title = "ปรับแต่งหน้าจอ & หลอดคูลดาวน์", Content = "ซ่อนป้ายชื่อบนหัว และเปิดหลอดแสดงคูลดาวน์ M2" })
+
+local ToggleHideName = Tabs.Visuals:AddToggle("HideName", { Title = "ซ่อนป้ายชื่อบนหัว (Hide Name)", Default = false })
+local ToggleM2HUD    = Tabs.Visuals:AddToggle("M2CooldownDisplay", { Title = "แสดงหลอดคูลดาวน์ M2 (HUD)", Default = false })
+
+-- ── 5. ดึง Pointer Recovery Function (callClientFunction) ─────────────────────
+local callClientFunction
+for _, sandbox in pairs(getgc(true)) do
+    if type(sandbox) == "table" and rawget(sandbox, "callClientFunction") then
+        callClientFunction = sandbox.callClientFunction
+        break
+    end
+end
+
+if not callClientFunction then
+    local CombatSystemClient = ReplicatedStorage:WaitForChild("CombatSystemClient", 5)
+    callClientFunction = function(actionType, moduleName, funcName, ...)
+        local character = LocalPlayer.Character
+        if not character then return end
+        local playerData = getPlayerData(character)
+        local combatType = playerData and playerData:GetAttribute("CombatType") or "Base"
+
+        if CombatSystemClient then
+            local folder = CombatSystemClient:FindFirstChild(actionType)
+            local style = folder and folder:FindFirstChild(combatType)
+            local mod = style and style:FindFirstChild(moduleName)
+            if mod then
+                local loaded = require(mod)
+                if loaded and type(loaded[funcName]) == "function" then
+                    return loaded[funcName](...)
+                end
+            end
+        end
+    end
+end
+
+-- ── 6. ระบบแอนิเมชัน & ฟังก์ชันช่วยต่อสู้ ─────────────────────────────────────
+local MAX_REACH_DISTANCE = 14.0
+local StrictCombatMovements = {}
+
+local function indexStrictCombatAnimations()
+    local animationsFolder = ReplicatedStorage:WaitForChild("Animations", 5)
+    if not animationsFolder then return end
+
+    local foldersToScan = {}
+    local combatFolder = animationsFolder:FindFirstChild("Combat")
+    if combatFolder then
+        for _, f in pairs(combatFolder:GetChildren()) do
+            table.insert(foldersToScan, f)
+        end
+    end
+    local baseCombatDirect = animationsFolder:FindFirstChild("BaseCombat")
+    if baseCombatDirect then
+        table.insert(foldersToScan, baseCombatDirect)
+    end
+
+    for _, styleFolder in pairs(foldersToScan) do
+        if styleFolder.Name == "BlunderFolder" or styleFolder.Name == "Blocks"
+        or styleFolder.Name == "Emotes" or styleFolder.Name == "Dodges" then continue end
+
+        for _, anim in pairs(styleFolder:GetDescendants()) do
+            if not anim:IsA("Animation") or anim.AnimationId == "" then continue end
+            local cleanId = string.match(anim.AnimationId, "%d+")
+            if not cleanId then continue end
+            local nameUpper = string.upper(anim.Name)
+            local isM2   = not not (string.find(nameUpper, "M2") or string.find(nameUpper, "BREAK"))
+            local isEHit = not not string.find(nameUpper, "EHIT")
+            local isM1   = not not string.find(nameUpper, "M1")
+            if isM2 or isEHit or isM1
+            or string.find(nameUpper, "ATTACK")
+            or string.find(nameUpper, "PUNCH")
+            or string.find(nameUpper, "KICK") then
+                StrictCombatMovements[cleanId] = {
+                    Style      = styleFolder.Name,
+                    Name       = anim.Name,
+                    IsHeavy    = isM2,
+                    IsEHit     = isEHit,
+                    ComboIndex = tonumber(string.match(anim.Name, "^(%d+)")) or 1,
+                }
+            end
+        end
+    end
+end
+indexStrictCombatAnimations()
+
+local function getEvasiveDirectionRelative(myHRP, enemyHRP)
+    local headingVector = Vector3.new(enemyHRP.Position.X - myHRP.Position.X, 0, enemyHRP.Position.Z - myHRP.Position.Z)
+    if headingVector.Magnitude < 0.1 then return "Forward" end
+    headingVector = headingVector.Unit
+
+    local localDirection = myHRP.CFrame:VectorToObjectSpace(headingVector)
+
+    if math.abs(localDirection.Z) > math.abs(localDirection.X) then
+        if localDirection.Z < 0 then return "Forward" else return "Backward" end
+    else
+        if localDirection.X < 0 then return "Left" else return "Right" end
+    end
+end
+
+local FORCE_LOOK_PRIORITY = Enum.RenderPriority.Camera.Value + 1
+
+local function forceLookAt(myHRP, enemyHRP, duration)
+    if not myHRP or not enemyHRP then return end
+    local bindName = "GSE_ForceLook_" .. tostring(math.random(1, 1e9))
+    local startTime = os.clock()
+
+    RunService:BindToRenderStep(bindName, FORCE_LOOK_PRIORITY, function()
+        if not myHRP.Parent or not enemyHRP.Parent or (os.clock() - startTime) >= duration then
+            RunService:UnbindFromRenderStep(bindName)
+            return
+        end
+        local myChar = LocalPlayer.Character
+        if myChar then
+            if myChar:GetAttribute("Ragdoll") == true
+            or myChar:GetAttribute("Downed") == true
+            or myChar:GetAttribute("Stunned") == true
+            or myChar:GetAttribute("Grappling") == true then
+                RunService:UnbindFromRenderStep(bindName)
+                return
+            end
+        end
+        local targetPos = Vector3.new(enemyHRP.Position.X, myHRP.Position.Y, enemyHRP.Position.Z)
+        myHRP.CFrame = CFrame.new(myHRP.Position, targetPos)
+    end)
+end
+
+-- ── 7. ลูปทำงาน Auto Grip / Auto Carry ────────────────────────────────────────
+local knockedActionDebounce = {}
+local isActionInProgress = false
+
+local function simulateKeyPress(keyCode, holdTime)
+    holdTime = holdTime or 0.05
+    VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+    task.wait(holdTime)
+    VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+end
+
+local function getDownedPlayerBelow(myHRP)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = { LocalPlayer.Character }
+
+    local result = workspace:Raycast(myHRP.Position, Vector3.new(0, -6, 0), rayParams)
+    if not (result and result.Instance) then return nil end
+
+    local char = result.Instance:FindFirstAncestorOfClass("Model")
+    if not char then return nil end
+
+    local plr = Players:GetPlayerFromCharacter(char)
+    if plr and char:GetAttribute("Downed") == true then
+        return plr, char
+    end
+    return nil
+end
+
+local function isAlreadyActionActive(myChar, actionType)
+    if not myChar then return false end
+    local states = myChar:FindFirstChild("States")
+    if not states then return false end
+    if actionType == "grip" then
+        local beingGripped = states:FindFirstChild("BeingGripped")
+        if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return true end
+    elseif actionType == "carry" then
+        local beingCarried = states:FindFirstChild("BeingCarried")
+        if beingCarried and beingCarried:IsA("ObjectValue") and beingCarried.Value ~= nil then return true end
+    end
+    return false
+end
+
+ToggleAutoGrip:OnChanged(function(Value)
+    if Value and Options.AutoCarry and Options.AutoCarry.Value then
+        Options.AutoCarry:SetValue(false)
+    end
+end)
+
+ToggleAutoCarry:OnChanged(function(Value)
+    if Value and Options.AutoGrip and Options.AutoGrip.Value then
+        Options.AutoGrip:SetValue(false)
+    end
+end)
+
+local autoGripThread = task.spawn(function()
+    while true do
+        task.wait(0.15)
+        local autoGrip  = Options.AutoGrip and Options.AutoGrip.Value
+        local autoCarry = Options.AutoCarry and Options.AutoCarry.Value
+
+        if not (autoGrip or autoCarry) then
+            isActionInProgress = false
+            continue
+        end
+
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then continue end
+
+        local actionType = autoGrip and "grip" or "carry"
+        if isAlreadyActionActive(myChar, actionType) then
+            isActionInProgress = false
+            continue
+        end
+
+        if isActionInProgress then continue end
+
+        local targetPlr, targetChar = getDownedPlayerBelow(myHRP)
+        if not targetPlr then
+            isActionInProgress = false
+            continue
+        end
+
+        local key = targetChar
+        if knockedActionDebounce[key] and os.clock() - knockedActionDebounce[key] < 2 then continue end
+        knockedActionDebounce[key] = os.clock()
+
+        isActionInProgress = true
+
+        if autoGrip then
+            simulateKeyPress(Enum.KeyCode.B)
+        elseif autoCarry then
+            simulateKeyPress(Enum.KeyCode.V)
+        end
+
+        task.wait(0.5)
+        isActionInProgress = false
+    end
+end)
+registerCleanup(autoGripThread)
+
+-- ── 8. ลูปทำงาน Auto Grapple (M2) ─────────────────────────────────────────────
+local GRAPPLE_REACH_DISTANCE = 10.0
+
+local autoGrappleThread = task.spawn(function()
+    while true do
+        task.wait(0.15)
+        if not (Options.AutoGrapple and Options.AutoGrapple.Value) then continue end
+
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP or myChar:GetAttribute("M2Cooldown") == true then continue end
+
+        local nearestEnemyHRP = nil
+        local nearestDist = GRAPPLE_REACH_DISTANCE
+
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr == LocalPlayer then continue end
+            local enemyChar = plr.Character
+            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+            if enemyHRP then
+                local dist = (myHRP.Position - enemyHRP.Position).Magnitude
+                if dist <= nearestDist then
+                    nearestDist = dist
+                    nearestEnemyHRP = enemyHRP
+                end
+            end
+        end
+
+        if nearestEnemyHRP then
+            if myChar:GetAttribute("Grappling") == true then continue end
+            local states = myChar:FindFirstChild("States")
+            local gripped = states and states:FindFirstChild("BeingGripped")
+            if gripped and gripped:IsA("ObjectValue") and gripped.Value ~= nil then continue end
+            pcall(function() callClientFunction("Combat", "M2", "OnM2Activated") end)
+        end
+    end
+end)
+registerCleanup(autoGrappleThread)
+
+-- ── 9. ลูปทำงาน Auto Attack (M1 / Auto Punch) ─────────────────────────────────
+local AUTO_ATTACK_REACH = 14.0
+local autoAttackM1Holding = false
+
+local function canAttack(myChar)
+    if not myChar then return false end
+    if myChar:GetAttribute("Ragdoll") == true then return false end
+    if myChar:GetAttribute("Downed") == true then return false end
+    if myChar:GetAttribute("Stunned") == true then return false end
+    if myChar:GetAttribute("Blocking") == true then return false end
+    local states = myChar:FindFirstChild("States")
+    if states then
+        local beingGripped = states:FindFirstChild("BeingGripped")
+        if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return false end
+        local beingCarried = states:FindFirstChild("BeingCarried")
+        if beingCarried and beingCarried:IsA("ObjectValue") and beingCarried.Value ~= nil then return false end
+    end
+    return true
+end
+
+local function getNearestEnemy(myHRP, maxDist)
+    local nearest = nil
+    local nearestDist = maxDist
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local d = (myHRP.Position - hrp.Position).Magnitude
+            if d < nearestDist then
+                nearestDist = d
+                nearest = hrp
+            end
+        end
+    end
+    return nearest, nearestDist
+end
+
+ToggleAutoAttack:OnChanged(function(Value)
+    if not Value then
+        pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+        autoAttackM1Holding = false
+    end
+end)
+
+local autoAttackThread = task.spawn(function()
+    while true do
+        task.wait(0.08)
+
+        local autoAttackActive = Options.AutoAttack and Options.AutoAttack.Value
+
+        if not autoAttackActive then
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+            continue
+        end
+
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+        if not myHRP or not canAttack(myChar) then
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+            continue
+        end
+
+        local enemyHRP, dist = getNearestEnemy(myHRP, AUTO_ATTACK_REACH)
+
+        if enemyHRP then
+            if myChar:GetAttribute("Grappling") == true then continue end
+            local states = myChar:FindFirstChild("States")
+            local gripped = states and states:FindFirstChild("BeingGripped")
+            if gripped and gripped:IsA("ObjectValue") and gripped.Value ~= nil then continue end
+
+            if not autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Start") end)
+                autoAttackM1Holding = true
+            end
+            task.wait(0.18)
+            pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+            autoAttackM1Holding = false
+            task.wait(0.05)
+        else
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+        end
+    end
+end)
+registerCleanup(autoAttackThread)
+
+-- ── 10. ระบบตรวจจับ Auto Defense (Parry) & Auto Dodge (Evasive) ───────────────
+local M1_BASE_DELAY = {
+    BaseCombat=0.22, BasicAnims=0.22, BoxingAnims=0.19, CaipoeiraAnims=0.25,
+    HakariAnims=0.21, HakariOtherAnims=0.21, KarateAnims=0.22, KureAnims=0.20,
+    MuayThaiAnims=0.20, SluggerAnims=0.24, StrikerAnims=0.21, WrestlingAnims=0.28, Grappling=0.30,
+}
+local M2_BASE_DELAY = {
+    BaseCombat=0.38, BasicAnims=0.38, BoxingAnims=0.32, CaipoeiraAnims=0.40,
+    HakariAnims=0.35, HakariOtherAnims=0.35, KarateAnims=0.36, KureAnims=0.34,
+    MuayThaiAnims=0.33, SluggerAnims=0.36, StrikerAnims=0.34, WrestlingAnims=0.42, Grappling=0.42,
+}
+local COMBO_SHAVE = {0, -0.015, -0.028, -0.038}
+
+local function monitorAnimator(enemyPlayer, animator)
+    local conn = animator.AnimationPlayed:Connect(function(track)
+        if enemyPlayer == LocalPlayer then return end
+        local autoDefense = Options.AutoDefense and Options.AutoDefense.Value
+        local autoEvasive = Options.AutoEvasive and Options.AutoEvasive.Value
+
+        if not autoDefense and not autoEvasive then return end
+
+        local trackId = string.match(track.Animation.AnimationId, "%d+")
+        if not trackId then return end
+
+        local moveData = StrictCombatMovements[trackId]
+        if not moveData then return end
+
+        local myChar  = LocalPlayer.Character
+        local myHRP   = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local enemyChar = enemyPlayer.Character
+        local enemyHRP  = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP or not enemyHRP then return end
+        if (myHRP.Position - enemyHRP.Position).Magnitude > MAX_REACH_DISTANCE then return end
+
+        local isM2       = moveData.IsHeavy
+        local isEHit     = moveData.IsEHit
+        local comboIndex = moveData.ComboIndex
+        local styleName  = moveData.Style
+
+        local fired = false
+        local markerConns = {}
+        local stopConn
+        local fallbackThread
+
+        local function cleanup()
+            for _, c in ipairs(markerConns) do pcall(c.Disconnect, c) end
+            if stopConn then pcall(stopConn.Disconnect, stopConn) end
+            if fallbackThread then pcall(task.cancel, fallbackThread) end
+        end
+
+        local function doDefense()
+            if fired then return end
+            fired = true
+            cleanup()
+
+            local mc = LocalPlayer.Character
+            local mh = mc and mc:FindFirstChild("HumanoidRootPart")
+            local ec = enemyPlayer.Character
+            local eh = ec and ec:FindFirstChild("HumanoidRootPart")
+            if not mh or not eh then return end
+            if mc:GetAttribute("Grappling") == true then return end
+
+            local states = mc:FindFirstChild("States")
+            if states then
+                local beingGripped = states:FindFirstChild("BeingGripped")
+                if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return end
+            end
+
+            local autoLook = Options.AutoLook and Options.AutoLook.Value
+            if autoLook then
+                forceLookAt(mh, eh, 0.35)
+            else
+                if mc:GetAttribute("Grappling") ~= true then
+                    mh.CFrame = CFrame.lookAt(mh.Position, Vector3.new(eh.Position.X, mh.Position.Y, eh.Position.Z))
+                end
+            end
+
+            if Options.AutoEvasive and Options.AutoEvasive.Value then
+                task.spawn(function()
+                    local c = LocalPlayer.Character
+                    if c:GetAttribute("EvasiveCooldown") then return end
+                    if c:GetAttribute("Grappling") == true then return end
+                    local dir = getEvasiveDirectionRelative(mh, eh)
+                    pcall(function() callClientFunction("Combat", "Evasive", "Evasive", dir) end)
+                end)
+            end
+
+            if Options.AutoDefense and Options.AutoDefense.Value then
+                task.spawn(function()
+                    local c = LocalPlayer.Character
+                    if c:GetAttribute("Grappling") == true then return end
+                    local sigs = {
+                        {"Combat","Block","Block"},
+                        {"Combat","Block","OnBlockActivated"},
+                        {"Combat","Block","StartBlock"},
+                        {"Block","Block","Block"},
+                        {"Block","Block","OnBlockActivated"},
+                    }
+                    local worked = nil
+                    for _, s in ipairs(sigs) do
+                        local ok, err = pcall(function() callClientFunction(s[1], s[2], s[3]) end)
+                        if ok and not worked then worked = s end
+                    end
+                    local holdTime = isM2 and 0.55 or 0.25
+                    task.wait(holdTime)
+                    pcall(function() callClientFunction("Combat", "Block", "Unblock") end)
+                    pcall(function() callClientFunction("Combat", "Block", "OnBlockDeactivated") end)
+                    pcall(function() callClientFunction("Block", "Block", "Unblock") end)
+                end)
+            end
+        end
+
+        for _, markerName in ipairs({"Hitbox", "Hit", "HitboxOpen", "Attack", "Strike", "Impact", "Fire"}) do
+            local c = track:GetMarkerReachedSignal(markerName):Connect(function()
+                doDefense()
+            end)
+            table.insert(markerConns, c)
+        end
+
+        stopConn = track.Stopped:Connect(cleanup)
+
+        local fireAt
+        if isM2 then
+            fireAt = math.max(0.03, (M2_BASE_DELAY[styleName] or 0.37) - 0.045)
+        else
+            local base = M1_BASE_DELAY[styleName] or 0.22
+            if isEHit then base = base * 0.82 end
+            local shave = COMBO_SHAVE[math.clamp(comboIndex, 1, 4)] or -0.038
+            fireAt = math.max(0.03, math.max(0.07, base + shave) - 0.045)
+        end
+
+        fallbackThread = task.delay(fireAt, doDefense)
+    end)
+    registerCleanup(conn)
+end
+
+local function setupPlayerTracking(player)
+    if player == LocalPlayer then return end
+    local cAdded = player.CharacterAdded:Connect(function(char)
+        local humanoid = char:WaitForChild("Humanoid", 5)
+        local animator = humanoid and humanoid:WaitForChild("Animator", 5)
+        if animator then monitorAnimator(player, animator) end
+    end)
+    registerCleanup(cAdded)
+
+    if player.Character then
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if animator then monitorAnimator(player, animator) end
+    end
+end
+
+local pAdded = Players.PlayerAdded:Connect(setupPlayerTracking)
+registerCleanup(pAdded)
+for _, p in pairs(Players:GetPlayers()) do setupPlayerTracking(p) end
+
+-- ── 11. ฟังก์ชัน No-Slow ───────────────────────────────────────────────────────
+local _lastGrappleEnd = 0
+local POSTGRAPPLE_GRACE = 1.2
+local _noSlowConn = nil
+
+local function activateNoSlow()
+    if _noSlowConn then return end
+    local myChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hum = myChar:WaitForChild("Humanoid")
+    local baseWalk = hum.WalkSpeed
+    local baseJump = hum.JumpPower
+
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+
+    local badAttrs = {"Stunned", "GuardBroken", "CantAnything"}
+
+    _noSlowConn = RunService.Heartbeat:Connect(function()
+        if not (Options.NoSlow and Options.NoSlow.Value) then
+            if _noSlowConn then
+                _noSlowConn:Disconnect()
+                _noSlowConn = nil
+            end
+            return
+        end
+        local char = LocalPlayer.Character
+        local h = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not h then return end
+
+        if char:GetAttribute("Grappling") == true then
+            _lastGrappleEnd = os.clock()
+            return
+        end
+        if (os.clock() - _lastGrappleEnd) < POSTGRAPPLE_GRACE then return end
+        local states = char:FindFirstChild("States")
+        if states then
+            local beingGripped = states:FindFirstChild("BeingGripped")
+            if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return end
+        end
+
+        if h.WalkSpeed ~= baseWalk then h.WalkSpeed = baseWalk end
+        if h.JumpPower ~= baseJump then h.JumpPower = baseJump end
+        if h.PlatformStand then h.PlatformStand = false end
+
+        local st = h:GetState()
+        if st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.Ragdoll then
+            h:ChangeState(Enum.HumanoidStateType.Running)
+        end
+
+        for _, attr in ipairs(badAttrs) do
+            if char:GetAttribute(attr) == true then
+                char:SetAttribute(attr, false)
+            end
+        end
+    end)
+    registerCleanup(_noSlowConn)
+end
+
+ToggleNoSlow:OnChanged(function(Value)
+    if Value then
+        activateNoSlow()
+    end
+end)
+
+-- ── 12. ฟังก์ชัน Noclip (เดินทะลุ) ──────────────────────────────────────────────
+local _noclipConn = nil
+local _noclipChar = nil
+
+local function _noclipSetup(char)
+    _noclipChar = char
+    if _noclipConn then _noclipConn:Disconnect() end
+    _noclipConn = RunService.Heartbeat:Connect(function()
+        if not (Options.Noclip and Options.Noclip.Value) or not _noclipChar then return end
+        for _, part in ipairs(_noclipChar:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end)
+    registerCleanup(_noclipConn)
+end
+
+local function _noclipRestore()
+    if not _noclipChar then return end
+    for _, part in ipairs(_noclipChar:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+end
+
+ToggleNoclip:OnChanged(function(Value)
+    if not Value then
+        _noclipRestore()
+    else
+        local c = LocalPlayer.Character
+        if c then _noclipSetup(c) end
+    end
+end)
+
+do
+    local c = LocalPlayer.Character
+    if c then _noclipSetup(c) end
+    local ncConn = LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.5)
+        _noclipSetup(char)
+    end)
+    registerCleanup(ncConn)
+end
+
+-- ── 13. ฟังก์ชันซ่อนชื่อบนหัว (Hide Name Billboard) ─────────────────────────────
+local function findMyBillboard()
+    local myChar = LocalPlayer.Character
+    if not myChar then return nil end
+    local playersFolder = myChar:FindFirstChild("Players")
+    if playersFolder then
+        local billboard = playersFolder:FindFirstChild("PlayerInfoBillboard")
+        if billboard then return billboard end
+    end
+    return myChar:FindFirstChild("PlayerInfoBillboard", true)
+end
+
+local function setNameVisibility(visible)
+    local bill = findMyBillboard()
+    if bill then
+        bill.Enabled = visible
+    end
+end
+
+ToggleHideName:OnChanged(function(Value)
+    setNameVisibility(not Value)
+end)
+
+local hnConn = LocalPlayer.CharacterAdded:Connect(function(char)
+    if not (Options.HideName and Options.HideName.Value) then return end
+    local playersFolder = char:WaitForChild("Players", 10)
+    if not playersFolder then return end
+    local billboard = playersFolder:WaitForChild("PlayerInfoBillboard", 10)
+    if billboard then
+        billboard.Enabled = false
+    end
+end)
+registerCleanup(hnConn)
+
+-- ── 14. ฟังก์ชันเกิดใหม่อัตโนมัติ (Auto Restart UI) ────────────────────────────
+local function doAutoRestart()
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+    task.spawn(function()
+        while Options.AutoRestart and Options.AutoRestart.Value do
+            local deathUI = playerGui:FindFirstChild("DeathUI")
+            if deathUI then
+                local frame = deathUI:FindFirstChildOfClass("Frame")
+                local heartBtn = frame and frame:FindFirstChild("HeartButton")
+                if heartBtn and heartBtn.Visible and heartBtn.Active then
+                    for i = 1, 7 do
+                        if not (Options.AutoRestart and Options.AutoRestart.Value) then break end
+                        local pos = heartBtn.AbsolutePosition + (heartBtn.AbsoluteSize / 2)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 1)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 1)
+                        task.wait(0.75)
+                    end
+                    task.wait(3)
+                end
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
+ToggleAutoRestart:OnChanged(function(Value)
+    if Value then doAutoRestart() end
+end)
+
+-- ── 15. Punch Assist (หันล็อกเป้าเมื่อกดต่อยเอง) ──────────────────────────────
+local PUNCH_ASSIST_REACH = 18.0
+local PUNCH_ASSIST_SNAP_DURATION = 0.35
+
+local function getNearest_PunchAssist(myHRP)
+    local nearest, nearestDist = nil, PUNCH_ASSIST_REACH
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local char = plr.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local d = (myHRP.Position - hrp.Position).Magnitude
+            if d < nearestDist then
+                nearestDist = d
+                nearest = hrp
+            end
+        end
+    end
+    return nearest
+end
+
+local function punchAssistGuardCheck(myChar)
+    if not myChar then return false end
+    if myChar:GetAttribute("Grappling") == true then return false end
+    if myChar:GetAttribute("Ragdoll") == true then return false end
+    if myChar:GetAttribute("Downed") == true then return false end
+    local states = myChar:FindFirstChild("States")
+    if states then
+        local beingGripped = states:FindFirstChild("BeingGripped")
+        if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return false end
+        local beingCarried = states:FindFirstChild("BeingCarried")
+        if beingCarried and beingCarried:IsA("ObjectValue") and beingCarried.Value ~= nil then return false end
+    end
+    return true
+end
+
+local function setupPunchAssistSelf()
+    local myChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = myChar:WaitForChild("Humanoid")
+    local animator = humanoid:WaitForChild("Animator")
+
+    local conn = animator.AnimationPlayed:Connect(function(track)
+        if not (Options.PunchAssist and Options.PunchAssist.Value) then return end
+
+        local trackId = string.match(track.Animation.AnimationId, "%d+")
+        if not trackId then return end
+
+        local moveData = StrictCombatMovements[trackId]
+        if not moveData then return end
+
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return end
+        if not punchAssistGuardCheck(myChar) then return end
+
+        local enemyHRP = getNearest_PunchAssist(myHRP)
+        if not enemyHRP then return end
+
+        local lockDuration = moveData.IsHeavy and 0.45 or PUNCH_ASSIST_SNAP_DURATION
+
+        local targetPos = Vector3.new(enemyHRP.Position.X, myHRP.Position.Y, enemyHRP.Position.Z)
+        myHRP.CFrame = CFrame.new(myHRP.Position, targetPos)
+
+        forceLookAt(myHRP, enemyHRP, lockDuration)
+    end)
+    registerCleanup(conn)
+end
+
+setupPunchAssistSelf()
+local paConn = LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    setupPunchAssistSelf()
+end)
+registerCleanup(paConn)
+
+-- ── 16. ลูป Anti Grapple (ดิ้นหลุด) ──────────────────────────────────────────
+local antiGrappleThread = task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if not (Options.AntiGrapple and Options.AntiGrapple.Value) then continue end
+
+        local myChar = LocalPlayer.Character
+        if not myChar then continue end
+
+        local states = myChar:FindFirstChild("States")
+        if not states then continue end
+
+        local beingGripped = states:FindFirstChild("BeingGripped")
+        if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then
+            pcall(function() callClientFunction("Combat", "Grapple", "Escape") end)
+        end
+    end
+end)
+registerCleanup(antiGrappleThread)
+
+-- ── 17. หลอดคูลดาวน์ M2 (M2 Cooldown HUD) ────────────────────────────────────
+local m2CooldownStart = nil
+local m2CooldownDuration = 3.0
+local m2Refilling = false
+
+local function getM2CooldownDuration(char)
+    local pd = getPlayerData(char)
+    if pd then
+        local live = pd:GetAttribute("M2CooldownDuration")
+            or pd:GetAttribute("HeavyCooldown")
+            or pd:GetAttribute("M2Duration")
+            or pd:GetAttribute("GrappleCooldown")
+        if live and type(live) == "number" and live > 0 then
+            return live
+        end
+        local style = pd:GetAttribute("CombatType") or "BaseCombat"
+        local M2_COOLDOWN_DURATION = {
+            BaseCombat=3.0, BasicAnims=3.0, BoxingAnims=2.8, CaipoeiraAnims=3.2,
+            HakariAnims=3.0, HakariOtherAnims=3.0, KarateAnims=3.0, KureAnims=2.9,
+            MuayThaiAnims=2.8, SluggerAnims=3.1, StrikerAnims=2.9, WrestlingAnims=3.5, Grappling=4.0,
+        }
+        return M2_COOLDOWN_DURATION[style] or 3.0
+    end
+    return 3.0
+end
+
+local M2ScreenGui = Instance.new("ScreenGui")
+M2ScreenGui.Name = "PayomBoy_M2HUDGui"
+M2ScreenGui.ResetOnSpawn = false
+M2ScreenGui.DisplayOrder = 999
+M2ScreenGui.Parent = CoreGui
+registerCleanup(M2ScreenGui)
+
+local M2DisplayFrame = Instance.new("Frame")
+M2DisplayFrame.Name = "M2DisplayFrame"
+M2DisplayFrame.Parent = M2ScreenGui
+M2DisplayFrame.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
+M2DisplayFrame.BorderSizePixel = 0
+M2DisplayFrame.Position = UDim2.new(0.5, -60, 0, 8)
+M2DisplayFrame.Size = UDim2.new(0, 120, 0, 28)
+M2DisplayFrame.ZIndex = 10
+M2DisplayFrame.Visible = false
+M2DisplayFrame.Active = true
+M2DisplayFrame.Draggable = true
+
+local M2UIStroke = Instance.new("UIStroke")
+M2UIStroke.Color = Color3.fromRGB(80, 220, 80)
+M2UIStroke.Thickness = 1
+M2UIStroke.Parent = M2DisplayFrame
+
+local M2TopLabel = Instance.new("TextLabel")
+M2TopLabel.Parent = M2DisplayFrame
+M2TopLabel.BackgroundTransparency = 1
+M2TopLabel.Size = UDim2.new(1, 0, 0, 12)
+M2TopLabel.Position = UDim2.new(0, 0, 0, 2)
+M2TopLabel.Font = Enum.Font.Code
+M2TopLabel.Text = "คูลดาวน์ M2"
+M2TopLabel.TextColor3 = Color3.fromRGB(80, 220, 80)
+M2TopLabel.TextSize = 8
+M2TopLabel.TextXAlignment = Enum.TextXAlignment.Center
+M2TopLabel.ZIndex = 11
+
+local M2BarBG = Instance.new("Frame")
+M2BarBG.Parent = M2DisplayFrame
+M2BarBG.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+M2BarBG.BorderSizePixel = 0
+M2BarBG.Size = UDim2.new(1, -8, 0, 8)
+M2BarBG.Position = UDim2.new(0, 4, 1, -12)
+M2BarBG.ZIndex = 11
+
+local M2BarFill = Instance.new("Frame")
+M2BarFill.Parent = M2BarBG
+M2BarFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
+M2BarFill.BorderSizePixel = 0
+M2BarFill.Size = UDim2.new(1, 0, 1, 0)
+M2BarFill.ZIndex = 12
+
+local m2Conn = RunService.Heartbeat:Connect(function()
+    if not (Options.M2CooldownDisplay and Options.M2CooldownDisplay.Value) then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local onCooldown = char:GetAttribute("M2Cooldown") == true
+
+    if onCooldown and not m2CooldownStart then
+        m2Refilling = false
+        m2CooldownStart = os.clock()
+        m2CooldownDuration = getM2CooldownDuration(char)
+    elseif not onCooldown and m2CooldownStart then
+        m2CooldownStart = nil
+        if not m2Refilling then
+            m2Refilling = true
+            task.spawn(function()
+                local steps = 12
+                for i = 1, steps do
+                    if not m2Refilling then break end
+                    local ratio = i / steps
+                    M2BarFill.Size = UDim2.new(ratio, 0, 1, 0)
+                    M2BarFill.BackgroundColor3 = Color3.fromRGB(
+                        math.floor(255 * (1 - ratio)),
+                        math.floor(220 * ratio), 0
+                    )
+                    task.wait(0.015)
+                end
+                M2BarFill.Size = UDim2.new(1, 0, 1, 0)
+                M2BarFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
+                m2Refilling = false
+            end)
+        end
+    end
+
+    if m2CooldownStart then
+        local ratio = math.clamp(1 - ((os.clock() - m2CooldownStart) / m2CooldownDuration), 0, 1)
+        M2BarFill.Size = UDim2.new(ratio, 0, 1, 0)
+        M2BarFill.BackgroundColor3 = Color3.fromRGB(
+            math.floor(255 * (1 - ratio)),
+            math.floor(220 * ratio), 0
+        )
+    end
+end)
+registerCleanup(m2Conn)
+
+ToggleM2HUD:OnChanged(function(Value)
+    M2DisplayFrame.Visible = Value
+end)
+
+-- ── 18. อัปเดตสไตล์และขนาดตัวละครเมื่อตัวละครเกิดใหม่ ─────────────────────────────
+StyleDropdown:OnChanged(function(Value)
+    if not Value then return end
+    local char = LocalPlayer.Character
+    local pd = getPlayerData(char)
+    if pd then
+        pd:SetAttribute("CombatStyle", Value)
+    end
+end)
+
+HeightSlider:OnChanged(function(Value)
+    local frac = math.clamp(Value / 100, 0, 1)
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if char and hum then
+        char:ScaleTo(0.7 + frac * 0.6)
+    end
+end)
+
+local charAddedChanger = LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5)
+    local pd = getPlayerData(newChar)
+    if pd and Options.CombatStyle and Options.CombatStyle.Value then
+        pd:SetAttribute("CombatStyle", Options.CombatStyle.Value)
+    end
+    if Options.HeightScale and Options.HeightScale.Value then
+        local frac = math.clamp(Options.HeightScale.Value / 100, 0, 1)
+        newChar:ScaleTo(0.7 + frac * 0.6)
+    end
+    if Options.NoSlow and Options.NoSlow.Value then
+        local hum = newChar:WaitForChild("Humanoid", 5)
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        end
+    end
+end)
+registerCleanup(charAddedChanger)
+
+-- ── 19. ระบบ SaveManager & InterfaceManager ─────────────────────────────────
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+
+InterfaceManager:SetFolder("PayomBoyScriptHub")
+SaveManager:SetFolder("PayomBoyScriptHub/rbxl")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "พยอมบอยนักเลงเว้ย",
+    Content = "โหลดสคริปต์สำเร็จแล้ว พร้อมใช้งาน!",
+    Duration = 5
+})
+
+SaveManager:LoadAutoloadConfig()
