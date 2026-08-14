@@ -937,38 +937,11 @@ if IsLobbyLobby() then
     Tabs.Lobby = Window:AddTab("Lobby")
     Tabs.Session = Window:AddTab("Equipment")
     Tabs.Trade = Window:AddTab("Trade")
+    Tabs.Webhook = Window:AddTab("Webhook")
 end
 if IsIngameLobby() then
     Tabs.AutoFarm = Window:AddTab("Auto Farm")
     Tabs.Webhook = Window:AddTab("Webhook")
-    
-    local MiscGroup = Tabs.AutoFarm:AddLeftGroupbox("Misc")
-    MiscGroup:AddSlider("UIScale", { Text = "UI Scale (%)", Default = 100, Min = 10, Max = 200, Rounding = 0, Suffix = "%", Callback = function() end })
-    MiscGroup:AddToggle("PlayerStats", { Text = "Player Stats", Default = false, Callback = function() end })
-    MiscGroup:AddDropdown("FPSPerformance", { Text = "FPS Performance", Values = {"--"}, Default = "--", Callback = function() end })
-    MiscGroup:AddSlider("SetFPS", { Text = "Set FPS", Default = 60, Min = 10, Max = 120, Rounding = 0, Suffix = " FPS", Callback = function() end })
-
-    local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Farm Select")
-    FarmGroup:AddDropdown("FarmSelectOption", { Text = "Farm Select", Values = {"--", "Blade", "Thunder Spear"}, Default = "--", Callback = function() end })
-    FarmGroup:AddSlider("HoverSpeed", { Text = "Hover Speed", Default = 120, Min = 0, Max = 1000, Rounding = 0, Callback = function() end })
-    FarmGroup:AddSlider("HoverHeight", { Text = "Hover Height", Default = 120, Min = 0, Max = 400, Rounding = 0, Callback = function() end })
-    FarmGroup:AddSlider("KillHits", { Text = "Kill Hits", Default = 1, Min = 1, Max = 9, Rounding = 0, Callback = function() end })
-    FarmGroup:AddToggle("AutoFarmBlade", { Text = "Auto Farm Blade", Default = false, Callback = function() end })
-    FarmGroup:AddToggle("AutoReloadBlade", { Text = "Auto Reload Blade", Default = false, Callback = function() end })
-    FarmGroup:AddToggle("AutoRetry", { Text = "Auto Retry", Default = false, Callback = function() end })
-
-    local SafetyGroup = Tabs.AutoFarm:AddRightGroupbox("Safety Settings")
-    SafetyGroup:AddLabel("-- 60s is safe! --")
-    SafetyGroup:AddLabel("--- End Missions ---")
-    SafetyGroup:AddSlider("EndMissions", { Text = "End Missions", Default = 60, Min = 0, Max = 60, Rounding = 0, Callback = function() end })
-    SafetyGroup:AddSlider("StopAttacking", { Text = "Stop attacking when .. titans Left", Default = 10, Min = 0, Max = 25, Rounding = 0, Callback = function() end })
-
-    local TeleportGroup = Tabs.AutoFarm:AddRightGroupbox("วาร์ปด่วน")
-    TeleportGroup:AddButton("วาร์ปกลับหน้าหลัก", function() end)
-    TeleportGroup:AddButton("วาร์ปกลับล็อบบี้", function() end)
-    TeleportGroup:AddSlider("SetDelay", { Text = "หน่วงเวลาวาร์ป (วิ)", Default = 0, Min = 0, Max = 1200, Rounding = 0, Suffix = " sec", Callback = function() end })
-    TeleportGroup:AddDropdown("SelectMulti", { Text = "เลือก [ หลายทาง ]", Values = {"--"}, Default = "--", Callback = function() end })
-    TeleportGroup:AddToggle("EnableFailedSafe", { Text = "เปิดเซฟโหมดกันพลาด", Default = false, Callback = function() end })
 end
 
 local SettingsTab = Window:AddTab("Configuration")
@@ -1678,9 +1651,8 @@ end
 if IsMainmenuLobby() then
     local _wWaitTab = tick()
     while not Tabs.Webhook and (tick() - _wWaitTab < 5) do task.wait(0.1) end
-    if not Tabs.Webhook then return end
-
-    local PopupGroup = Tabs.Webhook:AddLeftGroupbox("Show Family")
+    if Tabs.Webhook then
+        local PopupGroup = Tabs.Webhook:AddLeftGroupbox("Show Family")
     local popupEnabled = false
     local popupGui = nil
     local updateConnection = nil
@@ -2049,6 +2021,7 @@ if IsMainmenuLobby() then
             Library:Notify("Deposit failed! " .. currentFamily .. " could not be deposited", 3)
         end
     end)
+    end
 end
 
 
@@ -7508,7 +7481,7 @@ local function IsInCutscene()
     return ok and result or false
 end
 
-if ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then return end
+if not ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then
 
 if not TitansFolder then
     TitansFolder = SafeGetTitansFolder()
@@ -8682,10 +8655,11 @@ task.spawn(function()
         end
     end
 end)
+end
 
 
 
-if ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then return end
+if not ({[MAIN_MENU_ID]=true,[LOBBY_ID]=true})[game.PlaceId] then
 
 local SpearCurrentEntry = nil
 local LastSpearAttackTime = 0
@@ -9268,6 +9242,7 @@ task.spawn(function()
         task.wait(0.1)
     end
 end)
+end
 if Tabs.Webhook then
     local WebhookGroup = Tabs.Webhook:AddLeftGroupbox("Discord Webhook")
     
