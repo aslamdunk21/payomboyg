@@ -277,11 +277,17 @@ end)
 
 local Tabs = {
     Main = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" }),
+    AutoPlacement = Window:AddTab({ Title = "ออโต้วางยูนิต (Auto Play)", Icon = "sword" }),
+    Tower = Window:AddTab({ Title = "ออโต้ทาวเวอร์ (Auto Tower)", Icon = "shield" }),
+    Clone = Window:AddTab({ Title = "เครื่องโคลน (Clone Machine)", Icon = "copy" }),
+    Trait = Window:AddTab({ Title = "ปรับแต่ง Trait (Trait Machine)", Icon = "sparkles" }),
     Filter = Window:AddTab({ Title = "ตัวละคร / Rarity", Icon = "users" }),
+    Upgrade = Window:AddTab({ Title = "อัปเกรด (Upgrade)", Icon = "trending-up" }),
     Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
 }
 
 local Options = Fluent.Options
+local isUiInitialized = false
 
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
@@ -311,6 +317,374 @@ local function getModule(...)
         return current
     end
     return nil
+end
+
+local function safeFindPath(root, ...)
+    local current = root
+    for _, name in ipairs({...}) do
+        if not current then return nil end
+        current = current:FindFirstChild(name)
+    end
+    return current
+end
+
+local function findPrompt(root)
+    if not root then return nil end
+    local buyUI = root:FindFirstChild("BuyUI", true)
+    if buyUI then
+        local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt then return prompt end
+    end
+    local preferredNames = { "BuyPrompt", "PlacementPrompt", "RollPrompt", "GiftPrompt", "ProximityPrompt", "Prox", "Prompt" }
+    for _, name in ipairs(preferredNames) do
+        local inst = root:FindFirstChild(name, true)
+        if inst and inst:IsA("ProximityPrompt") then return inst end
+    end
+    return root:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+local function firePrompt(prompt)
+    if not prompt then return false end
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = 999999
+        if prompt.Enabled == false then prompt.Enabled = true end
+    end)
+    return pcall(function()
+        if fireproximityprompt then
+            fireproximityprompt(prompt, 0)
+            fireproximityprompt(prompt, 1)
+            fireproximityprompt(prompt)
+        end
+    end)
+end
+
+local cachedPlot = nil
+local function getPlotOwner(plot)
+    if not plot then return nil end
+    return plot:GetAttribute("OwnerUserId")
+        or plot:GetAttribute("OwnerId")
+        or plot:GetAttribute("Owner")
+        or plot:GetAttribute("OwnerName")
+        or plot:GetAttribute("Player")
+        or plot:GetAttribute("UserId")
+end
+
+local function getBestPlot()
+    if cachedPlot and cachedPlot.Parent then return cachedPlot end
+    local plotsFolder = workspace:FindFirstChild("Plots")
+    if not plotsFolder then return nil end
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    for _, plot in ipairs(plotsFolder:GetChildren()) do
+        local owner = getPlotOwner(plot)
+        if owner == player.UserId or owner == player.Name then
+            cachedPlot = plot
+            return plot
+        end
+
+        local ok, pivot = pcall(function() return plot:GetPivot() end)
+        local dist = (ok and hrp) and (hrp.Position - pivot.Position).Magnitude or math.huge
+        if dist < 50 then
+            cachedPlot = plot
+            return plot
+        end
+    end
+    return cachedPlot
+end
+
+local function triggerEquipBest()
+    pcall(function()
+        local mainUi = safeFindPath(playerGui, "MainUI")
+        local animesFrame = safeFindPath(playerGui, "MainUI", "Frames", "Animes")
+                            or (mainUi and mainUi:FindFirstChild("Animes", true))
+        local wasVisible = animesFrame and animesFrame.Visible or false
+
+        local equipBestBtn = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "Buttons", "EquipBest", "Button")
+                           or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "Buttons", "EquipBest")
+                           or (mainUi and mainUi:FindFirstChild("EquipBest", true))
+
+        if equipBestBtn then
+            local btn = equipBestBtn:IsA("GuiButton") and equipBestBtn or equipBestBtn:FindFirstChildWhichIsA("GuiButton", true) or equipBestBtn
+            if firesignal then
+                pcall(function() firesignal(btn.MouseButton1Click) end)
+                pcall(function() firesignal(btn.MouseButton1Down) end)
+                pcall(function() firesignal(btn.MouseButton1Up) end)
+                if btn:IsA("GuiButton") and btn.Activated then
+                    pcall(function() firesignal(btn.Activated) end)
+                end
+            end
+            if firebutton then
+                pcall(function() firebutton(btn) end)
+            end
+        end
+
+        task.delay(0.3, function()
+            pcall(function()
+                if animesFrame then
+                    animesFrame.Visible = wasVisible
+                end
+            end)
+        end)
+    end)
+end
+
+local function stopFight()
+    pcall(function()
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        if fightStartRemote then
+            fightStartRemote:FireServer("Stop")
+        end
+    end)
+    pcall(function()
+        local mainUi = safeFindPath(playerGui, "MainUI")
+        local stopBtn = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Start", "Start")
+                     or safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Start")
+                     or (mainUi and mainUi:FindFirstChild("Start", true))
+        if stopBtn then
+            local btn = stopBtn:IsA("GuiButton") and stopBtn or stopBtn:FindFirstChildWhichIsA("GuiButton", true) or stopBtn
+            if firesignal then
+                pcall(function() firesignal(btn.MouseButton1Click) end)
+                if btn:IsA("GuiButton") and btn.Activated then
+                    pcall(function() firesignal(btn.Activated) end)
+                end
+            end
+            if firebutton then
+                pcall(function() firebutton(btn) end)
+            end
+        end
+    end)
+end
+
+local isEquippingBest = false
+local lastEquipBestTime = 0
+
+local function runEquipBestSequence()
+    if isEquippingBest then return end
+    isEquippingBest = true
+    lastEquipBestTime = tick()
+
+    task.spawn(function()
+        local doStart = Options and Options.AutoStartFight and Options.AutoStartFight.Value
+        local doAutoPlay = Options and Options.AutoPlayMode and Options.AutoPlayMode.Value
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+
+        -- Step 1: Stop fight first so units can be swapped safely
+        stopFight()
+        task.wait(0.6)
+
+        -- Step 2: Trigger Equip Best
+        triggerEquipBest()
+        task.wait(0.8)
+
+        -- Step 3: Restart fight if Auto Start or Auto Play enabled
+        if (doStart or doAutoPlay) and fightStartRemote then
+            if doStart then
+                pcall(function() fightStartRemote:FireServer("Start") end)
+                task.wait(0.3)
+            end
+            if doAutoPlay then
+                pcall(function() fightStartRemote:FireServer("AutoPlay") end)
+            end
+        end
+
+        isEquippingBest = false
+    end)
+end
+
+local function selectHotbarSlot(slotIndex)
+    if not slotIndex or slotIndex < 1 or slotIndex > 8 then return end
+
+    pcall(function()
+        local hotbar = safeFindPath(playerGui, "MainUI", "Hotbar") or safeFindPath(playerGui, "Hotbar")
+        if hotbar then
+            local slots = {}
+            for _, child in ipairs(hotbar:GetChildren()) do
+                if child:IsA("Frame") or child:IsA("GuiButton") or child:IsA("ImageButton") then
+                    table.insert(slots, child)
+                end
+            end
+            table.sort(slots, function(a, b)
+                local numA = tonumber(a.Name:match("%d+")) or 99
+                local numB = tonumber(b.Name:match("%d+")) or 99
+                return numA < numB
+            end)
+            local targetUiSlot = slots[slotIndex]
+            if targetUiSlot then
+                local btn = targetUiSlot:FindFirstChildWhichIsA("GuiButton", true) or targetUiSlot
+                if btn and btn:IsA("GuiButton") then
+                    if firesignal then
+                        pcall(function() firesignal(btn.MouseButton1Click) end)
+                        pcall(function() firesignal(btn.MouseButton1Down) end)
+                        pcall(function() firesignal(btn.MouseButton1Up) end)
+                    elseif firebutton then
+                        pcall(function() firebutton(btn) end)
+                    end
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+        local keyEnum = Enum.KeyCode["Key" .. tostring(slotIndex)]
+        if keyEnum and VirtualInputManager then
+            VirtualInputManager:SendKeyEvent(true, keyEnum, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, keyEnum, false, game)
+        end
+    end)
+    task.wait(0.1)
+end
+
+local function equipUnitTool(tool)
+    if not tool then return false end
+    local char = player.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    if not char or not humanoid then return false end
+
+    if tool.Parent == char then
+        return true
+    end
+
+    pcall(function()
+        humanoid:EquipTool(tool)
+    end)
+    task.wait(0.15)
+
+    if tool.Parent ~= char then
+        pcall(function()
+            tool.Parent = char
+        end)
+    end
+    return tool.Parent == char
+end
+
+local function teleportToCloneMachine()
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not char or not hrp then return false end
+
+    local ppPart = safeFindPath(workspace, "Machines", "Clone", "PP")
+
+    if not ppPart then
+        local cloneMachine = safeFindPath(workspace, "Machines", "Clone")
+                          or workspace:FindFirstChild("Clone", true)
+        if cloneMachine then
+            ppPart = cloneMachine:FindFirstChild("PP")
+                  or cloneMachine:FindFirstChild("Tube1")
+                  or cloneMachine.PrimaryPart
+                  or cloneMachine:FindFirstChildWhichIsA("BasePart", true)
+        end
+    end
+
+    if not ppPart then
+        for _, prompt in ipairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") and prompt.Parent and prompt.Parent:IsA("BasePart") then
+                local pName = prompt.Parent.Name
+                local mName = prompt.Parent.Parent and prompt.Parent.Parent.Name
+                if pName == "PP" or (mName and mName:lower():find("clone")) then
+                    ppPart = prompt.Parent
+                    break
+                end
+            end
+        end
+    end
+
+    if ppPart and ppPart:IsA("BasePart") then
+        pcall(function()
+            hrp.CFrame = ppPart.CFrame * CFrame.new(0, 3, 3)
+        end)
+        return true
+    end
+
+    return false
+end
+
+local function getGameWave()
+    local waveVal = player:FindFirstChild("leaderstats") and (player.leaderstats:FindFirstChild("🚩 Waves") or player.leaderstats:FindFirstChild("Waves") or player.leaderstats:FindFirstChild("Wave"))
+    if waveVal and waveVal.Value then
+        return tonumber(waveVal.Value) or 1
+    end
+
+    local waveLabel = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Wave", "Frame", "TextLabel")
+                   or safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Wave", "TextLabel")
+    if waveLabel and waveLabel.Text then
+        local num = waveLabel.Text:match("%d+")
+        if num then return tonumber(num) end
+    end
+
+    local myPlot = getBestPlot()
+    if myPlot then
+        local attrWave = myPlot:GetAttribute("Wave") or myPlot:GetAttribute("CurrentWave")
+        if attrWave then return tonumber(attrWave) end
+    end
+
+    return 1
+end
+
+local function getOwnInventoryUnits()
+    local unitNames = {}
+    local seen = {}
+
+    local function addUnit(name)
+        if name and type(name) == "string" and name ~= "" and not seen[name] then
+            seen[name] = true
+            table.insert(unitNames, name)
+        end
+    end
+
+    pcall(function()
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") then
+                    addUnit(item.Name)
+                end
+            end
+        end
+
+        local char = player.Character
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") then
+                    addUnit(item.Name)
+                end
+            end
+        end
+
+        local hotbar = safeFindPath(playerGui, "MainUI", "Hotbar") or safeFindPath(playerGui, "Hotbar")
+        if hotbar then
+            for _, slot in ipairs(hotbar:GetChildren()) do
+                local textLabel = slot:FindFirstChildWhichIsA("TextLabel", true)
+                if textLabel and textLabel.Text and textLabel.Text ~= "" and not tonumber(textLabel.Text) then
+                    addUnit(textLabel.Text)
+                end
+            end
+        end
+
+        local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
+                      or safeFindPath(playerGui, "MainUI", "Frames", "Animes")
+        if invSlots then
+            for _, slot in ipairs(invSlots:GetDescendants()) do
+                if slot:IsA("TextLabel") and (slot.Name == "UnitName" or slot.Name == "Title" or slot.Name == "Name") then
+                    if slot.Text and slot.Text ~= "" then
+                        addUnit(slot.Text)
+                    end
+                end
+            end
+        end
+    end)
+
+    table.sort(unitNames)
+    if #unitNames == 0 then
+        for _, name in ipairs(CharacterFallbackValues) do
+            addUnit(name)
+        end
+    end
+    return unitNames
 end
 
 local function sortedValues(set)
@@ -680,6 +1054,353 @@ local AutoClaimPremiumBattlepass = Tabs.Main:AddToggle("AutoClaimPremiumBattlepa
     Default = false,
 })
 
+Tabs.Upgrade:AddSection("ระบบออโต้อัปเกรด (Auto Upgrade)")
+
+local AutoUpgradeGold = Tabs.Upgrade:AddToggle("AutoUpgradeGold", {
+    Title = "Auto Upgrade Gold",
+    Description = "ออโต้อัปเกรดเพิ่มเงิน (Gold Upgrade)",
+    Default = false,
+})
+
+local AutoUpgradeLuck = Tabs.Upgrade:AddToggle("AutoUpgradeLuck", {
+    Title = "Auto Upgrade Luck",
+    Description = "ออโต้อัปเกรดเพิ่มดวง (Luck Upgrade)",
+    Default = false,
+})
+
+local AutoUpgradeSlots = Tabs.Upgrade:AddToggle("AutoUpgradeSlots", {
+    Title = "Auto Upgrade Slots",
+    Description = "ออโต้อัปเกรดเพิ่มช่องวางยูนิต (Slot Upgrade)",
+    Default = false,
+})
+
+local AutoUpgradeInventory = Tabs.Upgrade:AddToggle("AutoUpgradeInventory", {
+    Title = "Auto Upgrade Inventory",
+    Description = "ออโต้อัปเกรดเพิ่มความจุกระเป๋า (Inventory Upgrade)",
+    Default = false,
+})
+
+local AutoUpgradeAll = Tabs.Upgrade:AddToggle("AutoUpgradeAll", {
+    Title = "Auto Upgrade All",
+    Description = "ออโต้อัปเกรดทั้งหมดทุกรายการ",
+    Default = false,
+})
+
+local UpgradeDelaySlider = Tabs.Upgrade:AddSlider("UpgradeDelay", {
+    Title = "Upgrade Delay",
+    Description = "ดีเลย์การตรวจเช็คอัปเกรด (วินาที)",
+    Default = 6.0,
+    Min = 2.0,
+    Max = 15.0,
+    Rounding = 1,
+})
+
+Tabs.AutoPlacement:AddSection("ระบบออโต้วางยูนิต & Auto Play")
+
+local AutoSlotPlacement = Tabs.AutoPlacement:AddToggle("AutoSlotPlacement", {
+    Title = "Auto Equip Best Units",
+    Description = "ออโต้กด Equip Best เมื่อจบรอบ หรือทุกๆ 3 นาที (หยุดสู้แล้วเริ่มใหม่ให้)",
+    Default = false,
+})
+
+AutoSlotPlacement:OnChanged(function(enabled)
+    if not isUiInitialized then return end
+    if enabled then
+        runEquipBestSequence()
+        Fluent:Notify({
+            Title = "Auto Equip Best Units",
+            Content = "หยุดสู้ -> กด Equip Best -> เริ่มสู้ใหม่ให้อัตโนมัติ! ⚔️",
+            Duration = 3
+        })
+    end
+end)
+
+local AutoStartFight = Tabs.AutoPlacement:AddToggle("AutoStartFight", {
+    Title = "Auto Start Fight",
+    Description = "ออโต้เริ่มต่อสู้เมื่อจบแต่ละรอบ",
+    Default = false,
+})
+
+AutoStartFight:OnChanged(function(enabled)
+    if not isUiInitialized then return end
+    if enabled then
+        pcall(function()
+            local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+            if fightStartRemote then fightStartRemote:FireServer("Start") end
+        end)
+        Fluent:Notify({
+            Title = "Auto Start Fight",
+            Content = "เปิด Auto Start Fight เรียบร้อย ⚔️",
+            Duration = 2
+        })
+    else
+        stopFight()
+        Fluent:Notify({
+            Title = "Auto Start Fight",
+            Content = "ปิด Auto Start Fight และสั่งหยุดการต่อสู้เรียบร้อย 🛑",
+            Duration = 2
+        })
+    end
+end)
+
+local AutoPlayMode = Tabs.AutoPlacement:AddToggle("AutoPlayMode", {
+    Title = "Auto Play Mode",
+    Description = "ออโต้เปิดโหมด Auto Play ในเกม",
+    Default = false,
+})
+
+AutoPlayMode:OnChanged(function(enabled)
+    if not isUiInitialized then return end
+    if enabled then
+        pcall(function()
+            local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+            if fightStartRemote then fightStartRemote:FireServer("AutoPlay") end
+        end)
+        Fluent:Notify({
+            Title = "Auto Play Mode",
+            Content = "เปิดโหมด Auto Play เรียบร้อย 🎮",
+            Duration = 2
+        })
+    else
+        stopFight()
+        Fluent:Notify({
+            Title = "Auto Play Mode",
+            Content = "ปิด Auto Play Mode และสั่งหยุดการต่อสู้เรียบร้อย 🛑",
+            Duration = 2
+        })
+    end
+end)
+
+Tabs.AutoPlacement:AddButton({
+    Title = "กดใช้ Equip Best ทันที (Equip Best Now)",
+    Description = "กดใช้คำสั่ง Equip Best ใส่ยูนิตที่ดีที่สุดทันที 1 ครั้ง",
+    Callback = function()
+        triggerEquipBest()
+        Fluent:Notify({
+            Title = "Auto Equip Best",
+            Content = "ส่งคำสั่ง Equip Best เรียบร้อยแล้ว! ⚔️",
+            Duration = 3
+        })
+    end
+})
+
+Tabs.AutoPlacement:AddButton({
+    Title = "หยุดการต่อสู้ทันที (Stop Fight Now)",
+    Description = "ส่งคำสั่ง Stop เพื่อหยุดการต่อสู้ในเกมทันที",
+    Callback = function()
+        stopFight()
+        Fluent:Notify({
+            Title = "Auto Play",
+            Content = "ส่งคำสั่งหยุดการต่อสู้ (Stop) เรียบร้อยแล้ว! 🛑",
+            Duration = 3
+        })
+    end
+})
+
+Tabs.Tower:AddSection("ระบบออโต้ทาวเวอร์ (Auto Tower System)")
+
+local AutoJoinTower = Tabs.Tower:AddToggle("AutoJoinTower", {
+    Title = "Auto Join Tower",
+    Description = "ออโต้ส่งคำสั่งเข้าทาวเวอร์ (Join Tower) อัตโนมัติ",
+    Default = false,
+})
+
+Tabs.Tower:AddButton({
+    Title = "เข้าทาวเวอร์ทันที (Join Tower Now)",
+    Description = "ส่งคำสั่งเข้าทาวเวอร์ทันที 1 ครั้ง",
+    Callback = function()
+        local towerRemote = safeFindPath(ReplicatedStorage, "Remotes", "JoinTower")
+        if towerRemote then
+            pcall(function() towerRemote:FireServer() end)
+            Fluent:Notify({
+                Title = "Auto Tower",
+                Content = "ส่งคำสั่ง Join Tower เรียบร้อยแล้ว! 🏰",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Clone:AddSection("ระบบเครื่องโคลนยูนิต (Clone Machine System)")
+
+local initialUnits = getOwnInventoryUnits()
+
+local SelectCloneUnit = Tabs.Clone:AddDropdown("SelectCloneUnit", {
+    Title = "เลือกยูนิตที่จะโคลน (Select Clone Unit)",
+    Description = "เลือกตัวละครจากในกระเป๋าของคุณเท่านั้น",
+    Values = initialUnits,
+    Default = initialUnits[1] or "",
+})
+
+Tabs.Clone:AddButton({
+    Title = "รีเฟรชรายชื่อยูนิตในกระเป๋า (Refresh Inventory Units)",
+    Description = "อัปเดตรายชื่อตัวละครที่มีอยู่ในกระเป๋าจริง",
+    Callback = function()
+        local currentUnits = getOwnInventoryUnits()
+        SelectCloneUnit:SetValues(currentUnits)
+        if #currentUnits > 0 then
+            SelectCloneUnit:SetValue(currentUnits[1])
+        end
+    end
+})
+
+local AutoClone = Tabs.Clone:AddToggle("AutoClone", {
+    Title = "Auto Clone Machine",
+    Description = "ออโต้โคลนตัวละครที่เลือกอัตโนมัติเมื่อเครื่องพร้อม",
+    Default = false,
+})
+
+local AutoCloneHalfTime = Tabs.Clone:AddToggle("AutoCloneHalfTime", {
+    Title = "Auto -50% Time",
+    Description = "ออโต้กดปุ่มลดเวลาโคลนลง 50% อัตโนมัติ",
+    Default = false,
+})
+
+Tabs.Clone:AddButton({
+    Title = "วาร์ปไปเครื่องโคลน (Teleport to Clone Machine)",
+    Description = "วาร์ปตัวละครไปยังหน้าเครื่องโคลนยูนิตทันที",
+    Callback = function()
+        local ok = teleportToCloneMachine()
+        if ok then
+            Fluent:Notify({
+                Title = "เครื่องโคลน (Clone Machine)",
+                Content = "วาร์ปไปหน้าเครื่องโคลนสำเร็จ! ✨",
+                Duration = 3
+            })
+        else
+            Fluent:Notify({
+                Title = "แจ้งเตือน",
+                Content = "ไม่พบตำแหน่งเครื่องโคลนยูนิต!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Trait:AddSection("ระบบสุ่ม & ล็อค Trait (Trait Machine)")
+
+local TraitValues = {
+    "Viking", "Cursed", "Superior", "Ghost", "Cloner",
+    "Reaper", "Entrepreneur", "Royal", "Lethal", "Juggernaut",
+    "Deadeye", "Powerful", "Rush", "Deadly", "Strong", "Swift"
+}
+
+local initialTraitUnits = getOwnInventoryUnits()
+
+local SelectTraitUnit = Tabs.Trait:AddDropdown("SelectTraitUnit", {
+    Title = "เลือกตัวละครจากกระเป๋า (Select Trait Unit)",
+    Description = "เลือกตัวละครจากในกระเป๋าเพื่อสุ่ม Trait",
+    Values = initialTraitUnits,
+    Default = initialTraitUnits[1] or "",
+})
+
+Tabs.Trait:AddButton({
+    Title = "รีเฟรชรายชื่อยูนิตในกระเป๋า (Refresh Inventory Units)",
+    Description = "อัปเดตรายชื่อตัวละครที่มีอยู่ในกระเป๋าจริง",
+    Callback = function()
+        local currentUnits = getOwnInventoryUnits()
+        SelectTraitUnit:SetValues(currentUnits)
+        if #currentUnits > 0 then
+            SelectTraitUnit:SetValue(currentUnits[1])
+        end
+        Fluent:Notify({
+            Title = "Trait Machine",
+            Content = "อัปเดตรายชื่อตัวละครเรียบร้อย (" .. tostring(#currentUnits) .. " ตัว)",
+            Duration = 3
+        })
+    end
+})
+
+Tabs.Trait:AddSection("ตั้งค่า Trait ที่ต้องการล็อค/เป้าหมาย (Target Trait Locks)")
+
+local TargetTraitLocks = Tabs.Trait:AddDropdown("TargetTraitLocks", {
+    Title = "เลือก Trait ที่ต้องการล็อค (Select Target Trait Locks)",
+    Description = "เลือก Trait ที่ต้องการ (เมื่อสุ่มได้แล้วจะหยุดสุ่มให้อัตโนมัติ)",
+    Values = TraitValues,
+    Multi = true,
+    Default = {},
+})
+
+TargetTraitLocks:OnChanged(function(selected)
+    pcall(function()
+        local settingsRemote = safeFindPath(ReplicatedStorage, "Remotes", "Settings")
+        if settingsRemote and type(selected) == "table" then
+            for traitName, isSelected in pairs(selected) do
+                if isSelected then
+                    pcall(function() settingsRemote:FireServer("TraitLock", traitName) end)
+                end
+            end
+        end
+    end)
+end)
+
+local AutoRollTrait = Tabs.Trait:AddToggle("AutoRollTrait", {
+    Title = "Auto Roll Trait Machine",
+    Description = "ออโต้สุ่ม Trait สำหรับตัวละครที่เลือก (จะหยุดเมื่อได้ Trait ที่ล็อค)",
+    Default = false,
+})
+
+AutoRollTrait:OnChanged(function(enabled)
+    if enabled then
+        pcall(function()
+            local machine = safeFindPath(workspace, "Machines", "Trait")
+                         or safeFindPath(workspace, "Machines", "Traits")
+                         or workspace:FindFirstChild("Trait", true)
+                         or workspace:FindFirstChild("Traits", true)
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if machine and hrp then
+                local targetCFrame = machine:IsA("Model") and machine:GetPivot() or (machine:IsA("BasePart") and machine.CFrame or CFrame.new(machine.Position))
+                hrp.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+                Fluent:Notify({
+                    Title = "Trait Machine",
+                    Content = "วาร์ปไปหน้าเครื่อง Trait Machine เรียบร้อย! ✨",
+                    Duration = 3
+                })
+            end
+        end)
+    end
+end)
+
+local TraitRollDelay = Tabs.Trait:AddSlider("TraitRollDelay", {
+    Title = "ความเร็วในการสุ่ม (Roll Delay)",
+    Description = "ดีเลย์การกดสุ่ม Trait (วินาที)",
+    Default = 0.5,
+    Min = 0.2,
+    Max = 3.0,
+    Rounding = 1,
+})
+
+Tabs.Trait:AddButton({
+    Title = "วาร์ปไปเครื่อง Trait Machine (Teleport)",
+    Description = "วาร์ปตัวละครไปยังหน้าเครื่องสุ่ม Trait ทันที",
+    Callback = function()
+        pcall(function()
+            local machine = safeFindPath(workspace, "Machines", "Trait")
+                         or safeFindPath(workspace, "Machines", "Traits")
+                         or workspace:FindFirstChild("Trait", true)
+                         or workspace:FindFirstChild("Traits", true)
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if machine and hrp then
+                local targetCFrame = machine:IsA("Model") and machine:GetPivot() or (machine:IsA("BasePart") and machine.CFrame or CFrame.new(machine.Position))
+                hrp.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+                Fluent:Notify({
+                    Title = "Trait Machine",
+                    Content = "วาร์ปไปหน้าเครื่อง Trait Machine สำเร็จ! ✨",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "แจ้งเตือน",
+                    Content = "ไม่พบตำแหน่งเครื่อง Trait Machine ในแมพ!",
+                    Duration = 3
+                })
+            end
+        end)
+    end
+})
+
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
@@ -695,6 +1416,10 @@ SaveManager:LoadAutoloadConfig()
 Window:SelectTab(1)
 rebuildTargetLookup()
 
+task.delay(0.5, function()
+    isUiInitialized = true
+end)
+
 Fluent:Notify({
     Title = "PayomboyZ HUB",
     Content = "โหลด Fluent UI สำเร็จแล้ว! ❤️",
@@ -703,16 +1428,290 @@ Fluent:Notify({
 
 -- ===== BACKGROUND AUTOMATION THREADS (NON-BLOCKING & THROTTLED) =====
 
-local function safeFindPath(root, ...)
-    local current = root
-    for _, name in ipairs({...}) do
-        if not current then return nil end
-        current = current:FindFirstChild(name)
-    end
-    return current
+local function parseStatValue(text)
+    if not text then return 0 end
+    text = tostring(text):gsub("<.->", ""):gsub(",", "")
+    local num = text:match("([%d%.]+)")
+    return tonumber(num) or 0
 end
 
--- Refresh Dynamic Values
+local function getUnitPower(model)
+    if not model then return 0 end
+
+    -- 1. Direct attributes check
+    local atk = model:GetAttribute("Attack") or model:GetAttribute("Atk") or model:GetAttribute("Damage")
+    local def = model:GetAttribute("Defense") or model:GetAttribute("Def")
+    local hp = model:GetAttribute("Health") or model:GetAttribute("Hp") or model:GetAttribute("HP")
+    local power = model:GetAttribute("Power") or model:GetAttribute("StatPower")
+
+    if power and tonumber(power) then return tonumber(power) end
+
+    if atk and tonumber(atk) then
+        local nAtk = tonumber(atk) or 0
+        local nDef = tonumber(def) or 1
+        local nHp = tonumber(hp) or 1
+        return nAtk * (nDef > 0 and nDef or 1) * (nHp > 0 and nHp or 1)
+    end
+
+    -- 2. Check Head.PlaceUI
+    local head = model:FindFirstChild("Head")
+    local placeUI = head and head:FindFirstChild("PlaceUI")
+    if placeUI then
+        local buffs = placeUI:FindFirstChild("Buffs") or placeUI:FindFirstChild("Frame")
+        local atkFrame = buffs and (buffs:FindFirstChild("Attack") or buffs:FindFirstChild("Atk"))
+        local atkText = atkFrame and atkFrame:FindFirstChild("Text") and atkFrame.Text.Text
+
+        local defFrame = buffs and (buffs:FindFirstChild("Defense") or buffs:FindFirstChild("Def"))
+        local defText = defFrame and defFrame:FindFirstChild("Text") and defFrame.Text.Text
+
+        local hpFrame = placeUI:FindFirstChild("HPBar", true)
+        local hpText = hpFrame and hpFrame:FindFirstChild("TextLabel") and hpFrame.TextLabel.Text
+
+        local nAtk = parseStatValue(atkText)
+        local nDef = parseStatValue(defText)
+        if nDef <= 0 then nDef = 1 end
+        local nHp = parseStatValue(hpText)
+        if nHp <= 0 then nHp = 1 end
+
+        if nAtk > 0 then
+            return nAtk * nDef * nHp
+        end
+    end
+
+    -- 3. Fallback to Tool / Model name
+    return 100
+end
+
+local function isGamePlaying(plot)
+    if not plot then return false end
+    local playing = plot:GetAttribute("Playing") or plot:GetAttribute("Fighting") or plot:GetAttribute("InBattle") or plot:GetAttribute("State")
+    if playing == true or playing == "Fighting" or playing == "Playing" or playing == "InBattle" then
+        return true
+    end
+    local enemiesFolder = plot:FindFirstChild("EnemiesSlots") or plot:FindFirstChild("Enemies")
+    if enemiesFolder then
+        for _, child in ipairs(enemiesFolder:GetChildren()) do
+            if child:FindFirstChild("Character") or child:FindFirstChildWhichIsA("Humanoid") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Throttled Auto Tower Thread
+task.spawn(function()
+    while task.wait(1.5) do
+        local doTower = Options.AutoJoinTower and Options.AutoJoinTower.Value
+        if doTower then
+            local joinTowerRemote = safeFindPath(ReplicatedStorage, "Remotes", "JoinTower")
+            if joinTowerRemote then
+                pcall(function() joinTowerRemote:FireServer() end)
+            end
+        end
+    end
+end)
+
+-- Throttled Auto Placement & Fight Start Thread (Equip Best & Auto Start logic)
+task.spawn(function()
+    local lastWave = 1
+    local wasPlaying = false
+
+    while task.wait(1.0) do
+        local doStart = Options.AutoStartFight and Options.AutoStartFight.Value
+        local doAutoPlay = Options.AutoPlayMode and Options.AutoPlayMode.Value
+        local doPlace = Options.AutoSlotPlacement and Options.AutoSlotPlacement.Value
+
+        if not (doStart or doAutoPlay or doPlace) then
+            continue
+        end
+
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        local myPlot = getBestPlot()
+        local currentWave = getGameWave()
+        local playing = myPlot and isGamePlaying(myPlot) or false
+
+        -- Detect Round end conditions:
+        local waveResetTo1 = (lastWave > 1 and currentWave == 1)
+        local roundEnded = (wasPlaying and not playing) or waveResetTo1
+        wasPlaying = playing
+        lastWave = currentWave
+
+        -- Timer condition for Equip Best: 3 minutes (180 seconds)
+        local timeSinceLastEquip = tick() - lastEquipBestTime
+        local is3MinutesPassed = (lastEquipBestTime > 0 and timeSinceLastEquip >= 180)
+
+        if doPlace and not isEquippingBest and (roundEnded or is3MinutesPassed) then
+            runEquipBestSequence()
+        elseif roundEnded and not isEquippingBest and doStart then
+            if fightStartRemote then
+                pcall(function() fightStartRemote:FireServer("Start") end)
+            end
+        end
+    end
+end)
+
+
+
+-- Throttled Auto Clone Machine Thread
+task.spawn(function()
+    local lastCloneAttempt = 0
+    while task.wait(3.0) do
+        local doClone = Options.AutoClone and Options.AutoClone.Value
+        local doHalfTime = Options.AutoCloneHalfTime and Options.AutoCloneHalfTime.Value
+
+        if not (doClone or doHalfTime) then continue end
+
+        local cloneMachine = safeFindPath(workspace, "Machines", "Clone")
+                          or workspace:FindFirstChild("Clone", true)
+        local prompt = cloneMachine and (safeFindPath(cloneMachine, "PP", "ProximityPrompt") or cloneMachine:FindFirstChildWhichIsA("ProximityPrompt", true))
+
+        if prompt then
+            pcall(function() firePrompt(prompt) end)
+            task.wait(0.3)
+        end
+
+        local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone", "Frame", "Main")
+        if cloneFrame then
+            if doHalfTime then
+                local halfBtn = safeFindPath(cloneFrame, "Buttons", "TimerHalf", "Button")
+                if halfBtn then
+                    pcall(function()
+                        if firesignal then firesignal(halfBtn.MouseButton1Click)
+                        elseif firebutton then firebutton(halfBtn) end
+                    end)
+                    task.wait(0.3)
+                end
+            end
+
+            if doClone and (tick() - lastCloneAttempt > 10) then
+                local cloneBtn = safeFindPath(cloneFrame, "Buttons", "Clone", "Button")
+                if cloneBtn then
+                    pcall(function()
+                        if firesignal then firesignal(cloneBtn.MouseButton1Click)
+                        elseif firebutton then firebutton(cloneBtn) end
+                    end)
+                    lastCloneAttempt = tick()
+                    task.wait(0.5)
+                end
+            end
+        end
+    end
+end)
+
+-- Throttled Auto Trait Machine Thread
+task.spawn(function()
+    local lastPromptTime = 0
+
+    while task.wait(0.4) do
+        local doRoll = Options.AutoRollTrait and Options.AutoRollTrait.Value
+        if not doRoll then continue end
+
+        local selectedUnitName = Options.SelectTraitUnit and Options.SelectTraitUnit.Value
+        local delayVal = (Options.TraitRollDelay and Options.TraitRollDelay.Value) or 0.5
+
+        local traitsFrame = safeFindPath(playerGui, "MainUI", "Frames", "Traits")
+        local isUiVisible = traitsFrame and (traitsFrame.Visible or (traitsFrame:IsA("CanvasGroup") and traitsFrame.GroupTransparency < 0.9))
+
+        -- Step 1: Only trigger ProximityPrompt if UI is NOT open yet (avoid pressing E repeatedly!)
+        if not isUiVisible and (tick() - lastPromptTime > 4) then
+            lastPromptTime = tick()
+            local traitMachine = safeFindPath(workspace, "Machines", "Trait")
+                              or safeFindPath(workspace, "Machines", "Traits")
+                              or workspace:FindFirstChild("Trait", true)
+                              or workspace:FindFirstChild("Traits", true)
+            local prompt = traitMachine and (safeFindPath(traitMachine, "PP", "ProximityPrompt") or traitMachine:FindFirstChildWhichIsA("ProximityPrompt", true))
+
+            if prompt then
+                pcall(function() firePrompt(prompt) end)
+                task.wait(0.8)
+            end
+        end
+
+        -- Step 2: Hold/equip selected unit tool in hand if present
+        local targetUnitObj = nil
+        local backpack = player:FindFirstChild("Backpack")
+        local char = player.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+        if selectedUnitName then
+            if backpack then
+                targetUnitObj = backpack:FindFirstChild(selectedUnitName)
+            end
+            if not targetUnitObj and char then
+                targetUnitObj = char:FindFirstChild(selectedUnitName)
+            end
+            if targetUnitObj and targetUnitObj:IsA("Tool") and humanoid and targetUnitObj.Parent ~= char then
+                pcall(function() humanoid:EquipTool(targetUnitObj) end)
+            end
+        end
+
+        -- Step 3: Check current trait of unit to see if target lock is reached
+        local targetLocks = (Options.TargetTraitLocks and Options.TargetTraitLocks.Value) or {}
+        if targetUnitObj then
+            local currentTrait = targetUnitObj:GetAttribute("Trait")
+                              or targetUnitObj:GetAttribute("CurrentTrait")
+
+            local isMatched = false
+            if currentTrait then
+                if type(targetLocks) == "table" then
+                    if targetLocks[currentTrait] == true or table.find(targetLocks, currentTrait) then
+                        isMatched = true
+                    end
+                elseif targetLocks == currentTrait then
+                    isMatched = true
+                end
+            end
+
+            if isMatched then
+                -- Target Trait matched! Stop auto roll & notify user
+                pcall(function()
+                    AutoRollTrait:SetValue(false)
+                    Fluent:Notify({
+                        Title = "Trait Machine Success! 🎉",
+                        Content = "ได้รับ Trait ล็อคเป้าหมาย: " .. tostring(currentTrait) .. " ให้กับ " .. tostring(selectedUnitName) .. " เรียบร้อยแล้ว!",
+                        Duration = 8
+                    })
+                end)
+                continue
+            end
+        end
+
+        -- Step 4: Execute Roll via RemoteEvent
+        local traitRemote = safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Request")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Roll")
+        if traitRemote then
+            pcall(function()
+                if targetUnitObj then
+                    traitRemote:FireServer("Roll", targetUnitObj)
+                else
+                    traitRemote:FireServer("Roll")
+                end
+            end)
+        end
+
+        -- Step 5: Also click ROLL button in UI
+        pcall(function()
+            local mainUi = safeFindPath(playerGui, "MainUI")
+            local rollBtn = safeFindPath(playerGui, "MainUI", "Frames", "Traits", "Frame", "Main", "Buttons", "Roll", "Button")
+                         or safeFindPath(playerGui, "MainUI", "Frames", "Traits", "Frame", "Main", "Buttons", "Roll")
+                         or (mainUi and mainUi:FindFirstChild("Roll", true))
+            if rollBtn then
+                local clickable = rollBtn:IsA("GuiButton") and rollBtn or rollBtn:FindFirstChildWhichIsA("GuiButton", true) or rollBtn
+                if firesignal then
+                    pcall(function() firesignal(clickable.Activated) end)
+                    pcall(function() firesignal(clickable.MouseButton1Click) end)
+                end
+                if firebutton then
+                    pcall(function() firebutton(clickable) end)
+                end
+            end
+        end)
+
+        task.wait(delayVal)
+    end
+end)
+
 task.spawn(function()
     local function valuesSignature(values) return table.concat(values, "\31") end
     local raritySignature = valuesSignature(RarityValues)
@@ -827,16 +1826,77 @@ task.spawn(function()
     end
 end)
 
+-- Smart & Throttled Auto Upgrade (Gold, Luck, Slots, Inventory)
+task.spawn(function()
+    local upgradeRemote = nil
+
+    local function getUpgradeRemote()
+        if upgradeRemote and upgradeRemote.Parent then return upgradeRemote end
+        upgradeRemote = safeFindPath(ReplicatedStorage, "Remotes", "Upgrade")
+                     or ReplicatedStorage:FindFirstChild("Upgrade", true)
+        return upgradeRemote
+    end
+
+    local function getUpgradePrice(category)
+        local frame = safeFindPath(playerGui, "MainUI", "Frames", "Upgrade", "Frame", "Main", category)
+        if frame then
+            local textLabel = safeFindPath(frame, "Buttons", "Gold", "Frame", "TextLabel")
+                           or safeFindPath(frame, "Buttons", "Gold", "TextLabel")
+                           or frame:FindFirstChild("TextLabel", true)
+            if textLabel and textLabel:IsA("TextLabel") then
+                return parseMoney(textLabel.Text)
+            end
+        end
+        return nil
+    end
+
+    while true do
+        local delayTime = (Options.UpgradeDelay and tonumber(Options.UpgradeDelay.Value)) or 6.0
+        task.wait(delayTime)
+
+        local remote = getUpgradeRemote()
+        if not remote then continue end
+
+        local doGold = (Options.AutoUpgradeGold and Options.AutoUpgradeGold.Value) or (Options.AutoUpgradeAll and Options.AutoUpgradeAll.Value)
+        local doLuck = (Options.AutoUpgradeLuck and Options.AutoUpgradeLuck.Value) or (Options.AutoUpgradeAll and Options.AutoUpgradeAll.Value)
+        local doSlots = (Options.AutoUpgradeSlots and Options.AutoUpgradeSlots.Value) or (Options.AutoUpgradeAll and Options.AutoUpgradeAll.Value)
+        local doInv = (Options.AutoUpgradeInventory and Options.AutoUpgradeInventory.Value) or (Options.AutoUpgradeAll and Options.AutoUpgradeAll.Value)
+
+        if not (doGold or doLuck or doSlots or doInv) then continue end
+
+        local currentCash = readCash()
+
+        local categories = {
+            { name = "Gold", enabled = doGold },
+            { name = "Luck", enabled = doLuck },
+            { name = "Slots", enabled = doSlots },
+            { name = "Inventory", enabled = doInv },
+        }
+
+        for _, cat in ipairs(categories) do
+            if cat.enabled then
+                local price = getUpgradePrice(cat.name)
+                -- Only fire remote if player actually has enough cash (or price is unreadable)
+                if not price or currentCash >= price then
+                    pcall(function() remote:FireServer("Gold", cat.name) end)
+                    task.wait(0.5)
+                    currentCash = readCash()
+                end
+            end
+        end
+    end
+end)
+
 -- Optimized & Throttled Auto Roll / Buy System
 task.spawn(function()
     local character = player.Character or player.CharacterAdded:Wait()
     local hrp = character:WaitForChild("HumanoidRootPart", 10) or character:FindFirstChild("HumanoidRootPart")
     local plotsFolder = workspace:WaitForChild("Plots", 10) or workspace:FindFirstChild("Plots")
-    local cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+    local cashLabel = nil
 
     if not hrp or not plotsFolder then return end
 
-    local state = { buying = false }
+    local state = { buying = false, hasBoughtThisRoll = false }
 
     local function normalizeKey(value)
         return tostring(value or ""):lower():gsub("%s+", "")
@@ -1010,11 +2070,15 @@ task.spawn(function()
         return value * (scale[suffix] or 1)
     end
 
+    local lastCashSearch = 0
     local function readCash()
         if not cashLabel or not cashLabel.Parent then
-            cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
-                     or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
-                     or playerGui:FindFirstChild("CashLabel", true)
+            if tick() - lastCashSearch > 5 then
+                lastCashSearch = tick()
+                cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+                         or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
+                         or playerGui:FindFirstChild("CashLabel", true)
+            end
         end
         if cashLabel and cashLabel:IsA("TextLabel") then
             local val = parseMoney(cashLabel.Text)
@@ -1044,34 +2108,6 @@ task.spawn(function()
         return nil
     end
 
-    local function findPrompt(root)
-        if not root then return nil end
-        
-        local buyUI = root:FindFirstChild("BuyUI", true)
-        if buyUI then
-            local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
-            if prompt then return prompt end
-        end
-
-        local preferredNames = { "BuyPrompt", "PlacementPrompt", "RollPrompt", "GiftPrompt", "ProximityPrompt", "Prox", "Prompt" }
-        for _, name in ipairs(preferredNames) do
-            local inst = root:FindFirstChild(name, true)
-            if inst and inst:IsA("ProximityPrompt") then return inst end
-        end
-
-        return root:FindFirstChildWhichIsA("ProximityPrompt", true)
-    end
-
-    local function firePrompt(prompt)
-        if not prompt then return false end
-        return pcall(function()
-            if fireproximityprompt then
-                fireproximityprompt(prompt, 0)
-                fireproximityprompt(prompt)
-            end
-        end)
-    end
-
     local function getRollPrompt(plot)
         local roll = plot:FindFirstChild("Roll")
         local button = roll and roll:FindFirstChild("RollButton")
@@ -1083,26 +2119,6 @@ task.spawn(function()
         end
 
         return plot:FindFirstChild("RollPrompt", true)
-    end
-
-    local function getBestPlot()
-        local bestPlot = nil
-        local bestDist = math.huge
-
-        for _, plot in ipairs(plotsFolder:GetChildren()) do
-            local owner = getPlotOwner(plot)
-            if owner == player.UserId or owner == player.Name then
-                return plot
-            end
-
-            local ok, pivot = pcall(function() return plot:GetPivot() end)
-            local dist = ok and (hrp.Position - pivot.Position).Magnitude or math.huge
-            if dist < bestDist then
-                bestDist = dist
-                bestPlot = plot
-            end
-        end
-        return bestPlot
     end
 
     local function getBuyCandidates(plot)
