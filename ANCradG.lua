@@ -55,6 +55,21 @@ for _, url in ipairs(interfaceManagerURLs) do
     end
 end
 
+pcall(function()
+    local CoreGui = game:GetService("CoreGui")
+    local PlayerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+    local function cleanOldGuis(parent)
+        if not parent then return end
+        for _, v in ipairs(parent:GetChildren()) do
+            if v:IsA("ScreenGui") and (v.Name == "Fluent" or v.Name == "PayomboyZ" or v:FindFirstChild("Main") or v:FindFirstChild("CanvasGroup")) then
+                v:Destroy()
+            end
+        end
+    end
+    cleanOldGuis(CoreGui)
+    cleanOldGuis(PlayerGui)
+end)
+
 local UserInputService = game:GetService("UserInputService")
 local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
 local defaultWindowSize = isMobileDevice and UDim2.fromOffset(340, 260) or UDim2.fromOffset(540, 390)
@@ -66,7 +81,7 @@ local Window = Fluent:CreateWindow({
     TabWidth = defaultTabWidth,
     Size = defaultWindowSize,
     Acrylic = false,
-    Theme = "Rose",
+    Theme = "Dark",
     MinimizeKey = Enum.KeyCode.K
 })
 
@@ -936,20 +951,22 @@ local function instantBuyLoop()
         if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
         if model:GetAttribute("Rejected") == true then continue end
 
-        -- Fast Conveyor Arrival Signal
-        pcall(function()
-            local rs = game:GetService("ReplicatedStorage")
-            local cBoxRE = rs:FindFirstChild("CardBoxRE")
-            local conveyorRE = rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("ConveyorRE")
-            if cBoxRE then
-                cBoxRE:FireServer("CardReachedArrival", model)
-                cBoxRE:FireServer("CardReachedArrival", tostring(model:GetFullName()))
-            end
-            if conveyorRE then
-                conveyorRE:FireServer("ReachedB", model)
-                conveyorRE:FireServer("ReachedC", model)
-            end
-        end)
+        -- Fast Conveyor Arrival Signal (Fire once per model to prevent ping spikes)
+        if not model:GetAttribute("SignalSent") then
+            model:SetAttribute("SignalSent", true)
+            pcall(function()
+                local rs = game:GetService("ReplicatedStorage")
+                local cBoxRE = rs:FindFirstChild("CardBoxRE")
+                local conveyorRE = rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("ConveyorRE")
+                if cBoxRE then
+                    cBoxRE:FireServer("CardReachedArrival", model)
+                end
+                if conveyorRE then
+                    conveyorRE:FireServer("ReachedB", model)
+                    conveyorRE:FireServer("ReachedC", model)
+                end
+            end)
+        end
 
         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
         if not prompt then continue end
@@ -985,12 +1002,13 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.04 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
                     prompt.RequiresLineOfSight = false
                     prompt.MaxActivationDistance = 99999
+                    prompt.HoldDuration = 0
                     fireproximityprompt(prompt)
                 end)
                 if getgenv().DiscordWebhook and getgenv().DiscordWebhook ~= "" then
@@ -2052,12 +2070,25 @@ local function GetInventoryPackCards()
     return list
 end
 
+getgenv().SelectedSmartBasePacks = {}
 local SmartBasePackRanks = Tabs.Manage:AddDropdown("SmartBasePackRanks", {
     Title = "เลือกแพ็คที่จะวาง (ตามที่มีในกระเป๋า)",
     Values = GetInventoryPackCards(),
     Multi = true,
     Default = {}
 })
+SmartBasePackRanks:OnChanged(function(Value)
+    getgenv().SelectedSmartBasePacks = {}
+    if type(Value) == "table" then
+        for k, v in pairs(Value) do
+            if type(k) == "number" then
+                getgenv().SelectedSmartBasePacks[string.lower(tostring(v))] = true
+            elseif v == true then
+                getgenv().SelectedSmartBasePacks[string.lower(tostring(k))] = true
+            end
+        end
+    end
+end)
 
 Tabs.Manage:AddButton({
     Title = "🔄 รีเฟรชรายการแพ็คการ์ด",
@@ -2130,18 +2161,23 @@ SmartBaseToggle:OnChanged(function(state)
                         local bp = LocalPlayer:FindFirstChild("Backpack")
                         local char = LocalPlayer.Character
                         
-                        local allowedRarities = SmartBasePackRanks.Value or {}
+                        local selectedPacks = getgenv().SelectedSmartBasePacks or {}
                         local function isAllowed(t)
-                            if type(allowedRarities) ~= "table" then return false end
-                            local count = 0
-                            for _, _ in pairs(allowedRarities) do count = count + 1 end
-                            if count == 0 then return false end
+                            local hasFilter = false
+                            for _, _ in pairs(selectedPacks) do
+                                hasFilter = true
+                                break
+                            end
+                            
+                            -- ถ้าไม่ได้เลือกกรองแพ็คเฉพาะใน Dropdown ให้ถือว่าอนุญาตวางได้ทุกแพ็คการ์ดในกระเป๋า
+                            if not hasFilter then return true end
                             
                             local tName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
-                            if allowedRarities[tName] then return true end
+                            local lowerTName = string.lower(tName)
+                            if selectedPacks[lowerTName] then return true end
                             
-                            for k, selected in pairs(allowedRarities) do
-                                if selected and string.find(string.lower(tName), string.lower(tostring(k))) then
+                            for k, selected in pairs(selectedPacks) do
+                                if selected and string.find(lowerTName, string.lower(tostring(k))) then
                                     return true
                                 end
                             end
@@ -4523,7 +4559,6 @@ if SaveManager and InterfaceManager then
     SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
 
     InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
-    SaveManager:BuildConfigSection(Tabs.Dashboard)
 
     Window:SelectTab(1)
 
