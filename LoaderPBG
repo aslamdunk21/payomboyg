@@ -130,7 +130,7 @@ local NormalRouter = {
     [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
 
     -- 5. Gakuran (GKR)
-    [128736949265057] = { Name = "Gakuran", URL = https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
+    [128736949265057] = { Name = "Gakuran", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
