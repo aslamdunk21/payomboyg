@@ -2105,196 +2105,226 @@ SmartBaseToggle:OnChanged(function(state)
         task.spawn(function()
             while getgenv().SmartBase do
                 pcall(function()
-                    local plot = findPlayerPlot()
-                    if plot and plot:FindFirstChild("Plot_N0") then
-                        -- 1. หาเป้าหมายบนแท่นทั้งหมด (รวมแท่นว่าง) และนับจำนวนแพ็คที่วางไปแล้ว
-                        local replaceTargets = {}
-                        local packsOnBaseCount = 0
+                    local plotFolder = findPlayerPlot()
+                    if plotFolder then
+                        local baseDescendants = plotFolder:GetDescendants()
                         
-                        for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
+                        -- 1. นับจำนวน Pack Card ที่กำลังเปิด/วางอยู่บนฐานจริงในปัจจุบัน (เช็คจาก ProximityPrompt OPEN/SKIP)
+                        local countedModels = {}
+                        local packsOnBaseCount = 0
+                        for _, desc in ipairs(baseDescendants) do
                             if desc:IsA("ProximityPrompt") then
-                                local txt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
-                                local isIgnored = txt:find("SELL") or txt:find("ขาย") or txt:find("OPEN") or txt:find("เปิด") 
-                                    or txt:find("ARTIFACT") or txt:find("อาร์ติแฟกต์") or txt:find("SKIP") or txt:find("ข้าม") 
-                                    or txt:find("BOSS") or txt:find("บอส") or txt:find("MASTER") or txt:find("ROBUX") 
-                                    or txt:find("BUY") or txt:find("PURCHASE") or txt:find("LUCK") or txt:find("CASH") 
-                                    or txt:find("BOOST") or txt:find("GEMS") or txt:find("PASS") or txt:find("PREMIUM") or txt:find("VIP")
-                                if not isIgnored then
+                                local actTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
+                                if actTxt:find("OPEN") or actTxt:find("เปิด") or actTxt:find("SKIP") or actTxt:find("ข้าม") then
                                     local model = desc:FindFirstAncestorOfClass("Model")
-                                    local score = -1 -- แท่นว่างให้คะแนน -1 เพื่อให้อยู่อันดับแรก
-                                    
-                                    if model and model.Name ~= "Plot_N0" and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
-                                        score = getUnifiedCardScore(model)
-                                        local isPack = false
+                                    if model and model ~= plotFolder and model.Name ~= "SellPart" and not countedModels[model] then
                                         local mName = string.upper(model.Name)
-                                        if string.find(mName, "PACK") or string.find(mName, "BOX") or string.find(mName, "แพ็ค") or string.find(mName, "กล่อง") then
-                                            isPack = true
-                                        else
-                                            for _, txtObj in ipairs(model:GetDescendants()) do
-                                                if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-                                                    local txtUpper = string.upper(txtObj.Text or "")
-                                                    if string.find(txtUpper, "PACK") or string.find(txtUpper, "แพ็ค") or string.find(txtUpper, "BOX") or string.find(txtUpper, "กล่อง") then
-                                                        isPack = true
-                                                        break
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        if isPack then 
-                                            score = 9999999 -- ป้องกันการทับแพ็คที่รอเปิด
+                                        if not mName:find("SKIP ALL") and not mName:find("SELL") and not mName:find("SHOP") and not mName:find("PLOT") and not mName:find("REBIRTH") then
+                                            countedModels[model] = true
                                             packsOnBaseCount = packsOnBaseCount + 1
                                         end
                                     end
-                                    table.insert(replaceTargets, { prompt = desc, score = score, model = model, text = txt })
                                 end
                             end
                         end
                         
-                        -- 2. จัดอันดับเป้าหมายที่จะทับ (แท่นว่าง -1 ขึ้นก่อน ตามด้วยการ์ดที่เงินน้อยสุด)
-                        table.sort(replaceTargets, function(a, b) return a.score < b.score end)
-                        
-                        -- 3. คำนวณโควต้าที่สามารถวางแพ็คได้ (ไม่เกิน 15 ใบ)
-                        local maxPlace = 15 - packsOnBaseCount
-                        
-                        -- 4. หา Pack Cards ในกระเป๋า (ที่ยังไม่ได้เปิด)
-                        local packsToPlace = {}
-                        local bp = LocalPlayer:FindFirstChild("Backpack")
-                        local char = LocalPlayer.Character
-                        
-                        local selectedPacks = getgenv().SelectedSmartBasePacks or {}
-                        local function isAllowed(t)
-                            local hasFilter = false
-                            for _, _ in pairs(selectedPacks) do
-                                hasFilter = true
-                                break
-                            end
+                        -- โควต้า Pack Card ที่อนุญาตให้วางเพิ่มได้ (จำกัดไม่เกิน 10 ใบ)
+                        local maxPlace = math.max(0, 10 - packsOnBaseCount)
+                        if maxPlace > 0 then
+                            -- 2. ค้นหา Pack Cards ในกระเป๋าที่เข้าเงื่อนไข
+                            local packsToPlace = {}
+                            local bp = LocalPlayer:FindFirstChild("Backpack")
+                            local char = LocalPlayer.Character
                             
-                            -- ถ้าไม่ได้เลือกกรองแพ็คเฉพาะใน Dropdown ให้ถือว่าอนุญาตวางได้ทุกแพ็คการ์ดในกระเป๋า
-                            if not hasFilter then return true end
-                            
-                            local tName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
-                            local lowerTName = string.lower(tName)
-                            if selectedPacks[lowerTName] then return true end
-                            
-                            for k, selected in pairs(selectedPacks) do
-                                if selected and string.find(lowerTName, string.lower(tostring(k))) then
-                                    return true
+                            local selectedPacks = getgenv().SelectedSmartBasePacks or {}
+                            local function isAllowed(t)
+                                local hasFilter = false
+                                for _, sel in pairs(selectedPacks) do
+                                    if sel then hasFilter = true; break end
                                 end
-                            end
-                            return false
-                        end
-                        
-                        local function scanForPacks(folder)
-                            if not folder then return end
-                            for _, t in ipairs(folder:GetChildren()) do
-                                if t:IsA("Tool") and isPackCard(t) and isAllowed(t) then
-                                    table.insert(packsToPlace, t)
-                                end
-                            end
-                        end
-                        scanForPacks(bp)
-                        if char then scanForPacks(char) end
-                        
-                        if #packsToPlace == 0 then
-                            if not getgenv().LastPackNotify or tick() - getgenv().LastPackNotify > 10 then
-                                Fluent:Notify({ Title = "Smart Base", Content = "ไม่พบ Pack Card ในกระเป๋าที่ตรงกับระดับที่เลือก", Duration = 3 })
-                                getgenv().LastPackNotify = tick()
-                            end
-                        end
-                        
-                        -- 5. วางแพ็คบนฐาน
-                        local placedCount = 0
-                        local originalCFrame = char and char:GetPivot()
-                        
-                        if maxPlace > 0 and #packsToPlace > 0 then
-                            for i = 1, math.min(#packsToPlace, #replaceTargets, maxPlace) do
-                                local packTool = packsToPlace[i]
-                                local target = replaceTargets[i]
-                                if target.score >= 9999999 then break end -- หยุดถ้าเป้าหมายต่อไปคือแพ็ค
+                                if not hasFilter then return true end
                                 
-                                if char and char:FindFirstChild("Humanoid") then
-                                    -- วาร์ปไปหาเป้าหมาย
-                                    local targetPos
-                                    if target.prompt.Parent:IsA("BasePart") then targetPos = target.prompt.Parent.Position
-                                    elseif target.prompt.Parent:IsA("Attachment") then targetPos = target.prompt.Parent.WorldPosition
-                                    elseif target.model and target.model.PrimaryPart then targetPos = target.model.PrimaryPart.Position end
-                                    
-                                    if targetPos and char:FindFirstChild("HumanoidRootPart") then
-                                        char.HumanoidRootPart.CFrame = CFrame.new(targetPos) + Vector3.new(0, 3, 0)
-                                        task.wait(0.5) -- รอเซิร์ฟเวอร์ sync
-                                    end
-                                    
-                                    -- หยิบแพ็คขึ้นมาถือ (เพิ่มดีเลย์ให้เซิร์ฟเวอร์รับรู้)
-                                    char.Humanoid:EquipTool(packTool)
-                                    task.wait(0.5)
-                                    
-                                    local isRemove = target.text:find("REMOVE") or target.text:find("ลบ") or target.text:find("ถอด") or target.text:find("เอาออก") or target.text:find("เก็บ")
-                                    if isRemove then
-                                        -- ถอนการ์ดเดิมออกก่อน (สแปมกดเผื่อติดคูลดาวน์)
-                                        target.prompt.RequiresLineOfSight = false
-                                        target.prompt.MaxActivationDistance = 99999
-                                        target.prompt.HoldDuration = 0
-                                        for _ = 1, 4 do
-                                            if not target.prompt or not target.prompt.Parent then break end
-                                            fireproximityprompt(target.prompt)
-                                            task.wait(0.3)
+                                local tName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
+                                local lowerTName = string.lower(tName)
+                                
+                                for k, selected in pairs(selectedPacks) do
+                                    if selected then
+                                        local keyStr = string.lower(tostring(k))
+                                        keyStr = string.gsub(keyStr, "%.%.%.", "")
+                                        keyStr = string.gsub(keyStr, "%s*%(x%d+%)", "")
+                                        keyStr = string.match(keyStr, "^%s*(.-)%s*$") or ""
+                                        if keyStr ~= "" and (string.find(lowerTName, keyStr, 1, true) or string.find(keyStr, lowerTName, 1, true)) then
+                                            return true
                                         end
+                                    end
+                                end
+                                return false
+                            end
+                            
+                            local function scanForPacks(folder)
+                                if not folder then return end
+                                for _, t in ipairs(folder:GetChildren()) do
+                                    if t:IsA("Tool") then
+                                        local name = string.upper(t.Name)
+                                        local isPack = string.find(name, "PACK") or string.find(name, "BOX") or string.find(name, "แพ็ค") or string.find(name, "กล่อง")
+                                        if not isPack then
+                                            isPack = isPackCard(t)
+                                        end
+                                        if isPack and isAllowed(t) then
+                                            table.insert(packsToPlace, t)
+                                        end
+                                    end
+                                end
+                            end
+                            scanForPacks(bp)
+                            if char then scanForPacks(char) end
+                            
+                            if #packsToPlace > 0 then
+                                -- 3. สแกนหาแท่นวาง (แท่นว่าง Place ให้คะแนน -1 หรือการ์ดธรรมดาที่เงินน้อยที่สุด)
+                                local candidates = {}
+                                
+                                for _, desc in ipairs(baseDescendants) do
+                                    if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                                        local actTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name or "")
                                         
-                                        -- ค้นหา Prompt วางการ์ดอันใหม่ที่โผล่ขึ้นมาแทนที่
-                                        local newPrompt = nil
-                                        for retry = 1, 6 do
-                                            task.wait(0.4)
-                                            for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
-                                                if desc:IsA("ProximityPrompt") then
-                                                    local nTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or ""))
-                                                    if not nTxt:find("SELL") and not nTxt:find("OPEN") and not nTxt:find("REMOVE") and not nTxt:find("ลบ") and not nTxt:find("ถอด") and not nTxt:find("เก็บ") then
-                                                        local nPos
-                                                        if desc.Parent:IsA("BasePart") then nPos = desc.Parent.Position
-                                                        elseif desc.Parent:IsA("Attachment") then nPos = desc.Parent.WorldPosition end
-                                                        
-                                                        if nPos and targetPos and (nPos - targetPos).Magnitude < 3 then
-                                                            newPrompt = desc
-                                                            break
+                                        local isIgnored = actTxt:find("SELL") or actTxt:find("ขาย") or actTxt:find("OPEN") or actTxt:find("เปิด") 
+                                            or actTxt:find("ARTIFACT") or actTxt:find("อาร์ติแฟกต์") or actTxt:find("SKIP") or actTxt:find("ข้าม") 
+                                            or actTxt:find("BOSS") or actTxt:find("บอส") or actTxt:find("MASTER") or actTxt:find("ROBUX") 
+                                            or actTxt:find("BUY") or actTxt:find("PURCHASE") or actTxt:find("LUCK") or actTxt:find("CASH") 
+                                            or actTxt:find("BOOST") or actTxt:find("GEMS") or actTxt:find("PASS") or actTxt:find("PREMIUM") or actTxt:find("VIP")
+                                            or actTxt:find("UPGRADE") or actTxt:find("SHOP") or actTxt:find("REBIRTH") or actTxt:find("JOIN") or actTxt:find("ENTER")
+                                            
+                                        if not isIgnored then
+                                            local model = desc:FindFirstAncestorOfClass("Model")
+                                            local targetPos
+                                            if desc.Parent and desc.Parent:IsA("BasePart") then targetPos = desc.Parent.Position
+                                            elseif desc.Parent and desc.Parent:IsA("Attachment") then targetPos = desc.Parent.WorldPosition
+                                            elseif model and model.PrimaryPart then targetPos = model.PrimaryPart.Position end
+                                            
+                                            if targetPos then
+                                                local isPlacePrompt = actTxt:find("PLACE") or actTxt:find("วาง") or actTxt:find("EQUIP")
+                                                local isRemovePrompt = actTxt:find("REMOVE") or actTxt:find("ถอด") or actTxt:find("เอาออก") or actTxt:find("เก็บ") or actTxt:find("ลบ")
+                                                
+                                                if isPlacePrompt or not model or model == plotFolder or string.find(string.upper(model.Name), "PLOT") then
+                                                    table.insert(candidates, { prompt = desc, score = -1, pos = targetPos, isEmpty = true })
+                                                elseif (isRemovePrompt or (model and model ~= plotFolder)) and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
+                                                    local isAlreadyPack = isPackCard(model)
+                                                    if not isAlreadyPack then
+                                                        for _, tObj in ipairs(model:GetDescendants()) do
+                                                            if desc:IsA("ProximityPrompt") then
+                                                                local pName = string.upper(tObj.Name or "")
+                                                                if pName:find("OPEN") or pName:find("SKIP") then isAlreadyPack = true; break end
+                                                            end
+                                                            if (tObj:IsA("TextLabel") or tObj:IsA("TextButton")) and tObj.Text then
+                                                                local tUpper = string.upper(tObj.Text)
+                                                                if tUpper:find("PACK") or tUpper:find("BOX") or tUpper:find("OPENING") or tUpper:find("SKIP") or tUpper:find("แพ็ค") or tUpper:find("กล่อง") then
+                                                                    isAlreadyPack = true
+                                                                    break
+                                                                end
+                                                            end
                                                         end
+                                                    end
+                                                    
+                                                    if not isAlreadyPack then
+                                                        local score = getUnifiedCardScore(model)
+                                                        table.insert(candidates, { prompt = desc, score = score, pos = targetPos, isRemove = true, model = model })
                                                     end
                                                 end
                                             end
-                                            if newPrompt then break end
                                         end
+                                    end
+                                end
+                                
+                                table.sort(candidates, function(a, b) return a.score < b.score end)
+                                
+                                local countToPlace = math.min(#packsToPlace, #candidates, maxPlace)
+                                if countToPlace > 0 then
+                                    local originalCFrame = char and char:GetPivot()
+                                    
+                                    for i = 1, countToPlace do
+                                        local packTool = packsToPlace[i]
+                                        local target = candidates[i]
                                         
-                                        if newPrompt then
-                                            newPrompt.RequiresLineOfSight = false
-                                            newPrompt.MaxActivationDistance = 99999
-                                            newPrompt.HoldDuration = 0
-                                            for _ = 1, 4 do
-                                                if not newPrompt or not newPrompt.Parent then break end
-                                                fireproximityprompt(newPrompt)
+                                        if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+                                            if target.isEmpty then
+                                                char.Humanoid:EquipTool(packTool)
+                                                task.wait(0.4)
+                                                
+                                                char.HumanoidRootPart.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
+                                                task.wait(0.4)
+                                                
+                                                if target.prompt and target.prompt.Parent then
+                                                    if target.prompt:IsA("ProximityPrompt") then
+                                                        target.prompt.RequiresLineOfSight = false
+                                                        target.prompt.MaxActivationDistance = 99999
+                                                        target.prompt.HoldDuration = 0
+                                                        fireproximityprompt(target.prompt)
+                                                    elseif target.prompt:IsA("ClickDetector") then
+                                                        fireclickdetector(target.prompt)
+                                                    end
+                                                    task.wait(0.5)
+                                                end
+                                            elseif target.isRemove then
+                                                char.HumanoidRootPart.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
                                                 task.wait(0.3)
+                                                
+                                                if target.prompt and target.prompt.Parent then
+                                                    if target.prompt:IsA("ProximityPrompt") then
+                                                        target.prompt.RequiresLineOfSight = false
+                                                        target.prompt.MaxActivationDistance = 99999
+                                                        target.prompt.HoldDuration = 0
+                                                        fireproximityprompt(target.prompt)
+                                                    elseif target.prompt:IsA("ClickDetector") then
+                                                        fireclickdetector(target.prompt)
+                                                    end
+                                                end
+                                                
+                                                task.wait(1.5)
+                                                
+                                                char.Humanoid:EquipTool(packTool)
+                                                task.wait(0.4)
+                                                
+                                                local newPlacePrompt = nil
+                                                for retry = 1, 6 do
+                                                    for _, desc in ipairs(plotFolder:GetDescendants()) do
+                                                        if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                                                            local nTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name)
+                                                            if nTxt:find("PLACE") or nTxt:find("วาง") or nTxt:find("EQUIP") or not desc:FindFirstAncestorOfClass("Model") then
+                                                                local nPos
+                                                                if desc.Parent:IsA("BasePart") then nPos = desc.Parent.Position
+                                                                elseif desc.Parent:IsA("Attachment") then nPos = desc.Parent.WorldPosition end
+                                                                
+                                                                if nPos and (nPos - target.pos).Magnitude < 5 then
+                                                                    newPlacePrompt = desc
+                                                                    break
+                                                                end
+                                                            end
+                                                        end
+                                                    end
+                                                    if newPlacePrompt then break end
+                                                    task.wait(0.3)
+                                                end
+                                                
+                                                if newPlacePrompt then
+                                                    if newPlacePrompt:IsA("ProximityPrompt") then
+                                                        newPlacePrompt.RequiresLineOfSight = false
+                                                        newPlacePrompt.MaxActivationDistance = 99999
+                                                        newPlacePrompt.HoldDuration = 0
+                                                        fireproximityprompt(newPlacePrompt)
+                                                    elseif newPlacePrompt:IsA("ClickDetector") then
+                                                        fireclickdetector(newPlacePrompt)
+                                                    end
+                                                    task.wait(0.5)
+                                                end
                                             end
-                                            task.wait(0.5)
-                                        else
-                                            Fluent:Notify({ Title = "Smart Base", Content = "ไม่พบจุดวางการ์ดหลังจากถอน!", Duration = 3 })
                                         end
-                                    else
-                                        -- ถ้าเป็นแท่นว่างอยู่แล้ว วางได้เลย (สแปมกดเผื่อไม่ติด)
-                                        target.prompt.RequiresLineOfSight = false
-                                        target.prompt.MaxActivationDistance = 99999
-                                        target.prompt.HoldDuration = 0
-                                        for _ = 1, 4 do
-                                            if not target.prompt or not target.prompt.Parent then break end
-                                            fireproximityprompt(target.prompt)
-                                            task.wait(0.3)
-                                        end
-                                        task.wait(0.5)
                                     end
                                     
-                                    placedCount = placedCount + 1
+                                    if originalCFrame and char and char:FindFirstChild("HumanoidRootPart") then
+                                        char.HumanoidRootPart.CFrame = originalCFrame
+                                    end
                                 end
                             end
-                        end
-                        
-                        if placedCount > 0 and originalCFrame and char and char:FindFirstChild("HumanoidRootPart") then
-                            char.HumanoidRootPart.CFrame = originalCFrame
                         end
                     end
                 end)
