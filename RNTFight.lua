@@ -5,146 +5,105 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+while not player do task.wait(0.1); player = Players.LocalPlayer end
+local playerGui = player:WaitForChild("PlayerGui", 10) or player.PlayerGui
 
-local Fluent = loadstring(game:HttpGet("https://github.com/1dontgiveaf/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/1dontgiveaf/Fluent/main/Addons/InterfaceManager.lua"))()
+-- Fast CDN HTTP Loader for Fluent UI
+local function safeHttpGet(urls)
+    for _, url in ipairs(urls) do
+        local ok, res = pcall(function() return game:HttpGet(url) end)
+        if ok and type(res) == "string" and #res > 500 then
+            return res
+        end
+    end
+    return nil
+end
+
+local fluentCode = safeHttpGet({
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/main.lua",
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+})
+
+local saveManagerCode = safeHttpGet({
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua"
+})
+
+local interfaceManagerCode = safeHttpGet({
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua"
+})
+
+if not fluentCode or not saveManagerCode or not interfaceManagerCode then
+    StarterGui:SetCore("SendNotification", {
+        Title = "PayomboyZ HUB",
+        Text = "ไม่สามารถโหลด Fluent UI ได้ กรุณาลองใหม่อีกครั้ง",
+        Duration = 10
+    })
+    return
+end
+
+local Fluent = loadstring(fluentCode)()
+local SaveManager = loadstring(saveManagerCode)()
+local InterfaceManager = loadstring(interfaceManagerCode)()
+
 local Window = Fluent:CreateWindow({
     Title = "Roll Anime to Fight! ⚔️",
-    SubTitle = "Made by PayomboyZ HUB",
-    TabWidth = 200,
-    Size = UDim2.fromOffset(580, 400),
+    SubTitle = "by PayomboyZ HUB",
+    TabWidth = 180,
+    Size = UDim2.fromOffset(600, 460),
     Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
-task.spawn(function()
-    local titleLabel
-    local subLabel
+local Tabs = {
+    Main = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" }),
+    Filter = Window:AddTab({ Title = "ตัวละคร / Rarity", Icon = "users" }),
+    Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
+}
 
-    local attempts = 0
-    repeat
-        for _, v in ipairs(CoreGui:GetDescendants()) do
-            if v:IsA("TextLabel") then
-                if v.Text == "Roll Anime to Fight! ⚔️" then
-                    titleLabel = v
-                    titleLabel.RichText = true
-                elseif v.Text == "Made by PayomboyZ HUB" then
-                    subLabel = v
-                    subLabel.RichText = true
-                end
-            end
-        end
-        if titleLabel and subLabel then break end
-        attempts += 1
-        task.wait(0.5)
-    until attempts >= 10 or (titleLabel and subLabel)
-
-    if titleLabel and subLabel then
-        while titleLabel.Parent and subLabel.Parent do
-            local hue = (tick() * 0.15) % 1
-            local color = Color3.fromHSV(hue, 1, 1)
-
-            local r = math.floor(color.R * 255)
-            local g = math.floor(color.G * 255)
-            local b = math.floor(color.B * 255)
-
-            titleLabel.Text = string.format(
-                '<b><font color="rgb(%d,%d,%d)">Roll Anime to Fight! ⚔️</font></b>',
-                r, g, b
-            )
-
-            subLabel.Text = string.format(
-                '<b><font color="rgb(%d,%d,%d)">Made by PayomboyZ HUB</font></b>',
-                r, g, b
-            )
-
-            task.wait(0.2)
-        end
-    end
-end)
+local Options = Fluent.Options
 
 player.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
 
-StarterGui:SetCore("SendNotification", {
-    Title = "PayomboyZ HUB",
-    Text = "AntiAFK Active",
-    Duration = 5
-})
-
-local MainTab = Window:AddTab({ Title = "Main", Icon = "pin" })
-local Setting = Window:AddTab({ Title = "Setting", Icon = "settings" })
-local Options = Fluent.Options
-
-local ConfigFolder = "PayomboyZ"
-local ConfigFile = ConfigFolder .. "/config.json"
-
 local CharacterFallbackValues = {
-    "Zoro",
-    "Krillin",
-    "Luffy",
-    "Ussop",
-    "Itadori",
-    "Maki",
-    "Goku",
-    "Sakura",
-    "Mob",
-    "Junwoo",
-    "Tanjiro",
-    "Shinra",
+    "Zoro", "Krillin", "Luffy", "Ussop", "Itadori", "Maki",
+    "Goku", "Sakura", "Mob", "Junwoo", "Tanjiro", "Shinra",
 }
 
 local RarityFallbackValues = {
-    "Common",
-    "Rare",
-    "Epic",
-    "Legendary",
-    "Mythic",
-    "God",
-    "Secret",
-    "Limited",
+    "Common", "Rare", "Epic", "Legendary", "Mythic", "God", "Secret", "Limited",
 }
 
 local MutationFallbackValues = {
-    "Normal",
-    "Gold",
-    "Diamond",
-    "Demon",
-    "Destroyer",
-    "Hollow",
-    "Slayer",
-    "Cursed",
-    "Astronaut",
+    "Normal", "Gold", "Diamond", "Demon", "Destroyer",
+    "Hollow", "Slayer", "Cursed", "Astronaut",
 }
 
 local function getModule(...)
     local current = ReplicatedStorage
-
     for _, name in ipairs({ ... }) do
         current = current and current:FindFirstChild(name)
     end
-
     if current and current:IsA("ModuleScript") then
         return current
     end
-
     return nil
 end
 
 local function sortedValues(set)
     local values = {}
-
     for value in pairs(set) do
         table.insert(values, value)
     end
-
     table.sort(values)
     return values
 end
@@ -175,6 +134,28 @@ local function getRarityValues()
     return sortedValues(values)
 end
 
+local function addWorkspaceModelName(model, values)
+    if not model then return end
+    local name = model.Name
+    if name and name ~= "" then
+        values[name:gsub("<.->", ""):match("^%s*(.-)%s*$")] = true
+    end
+
+    local head = model:FindFirstChild("Head")
+    local buyUI = head and head:FindFirstChild("BuyUI") or model:FindFirstChild("BuyUI")
+    if buyUI then
+        local frame = buyUI:FindFirstChild("Frame")
+        local nameFrame = frame and frame:FindFirstChild("Name") or buyUI:FindFirstChild("Name")
+        local label = nameFrame and (nameFrame:FindFirstChild("TextLabel") or nameFrame:FindFirstChildWhichIsA("TextLabel"))
+        if label and label.Text and label.Text ~= "" then
+            local cleanName = label.Text:gsub("<.->", ""):match("^%s*(.-)%s*$")
+            if cleanName and cleanName ~= "" then
+                values[cleanName] = true
+            end
+        end
+    end
+end
+
 local function getCharacterValues()
     local values = {}
 
@@ -187,34 +168,7 @@ local function getCharacterValues()
         end
     end
 
-    local function addWorkspaceModelName(model)
-        addName(model.Name)
-
-        local head = model:FindFirstChild("Head")
-        local buyUI = head and head:FindFirstChild("BuyUI")
-        local frame = buyUI and buyUI:FindFirstChild("Frame")
-        local nameFrame = frame and frame:FindFirstChild("Name")
-        local label = nameFrame and nameFrame:FindFirstChild("TextLabel")
-
-        if label and label:IsA("TextLabel") then
-            addName(label.Text)
-            return
-        end
-
-        local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-        if fallbackBuyUI then
-            local fallbackName = fallbackBuyUI:FindFirstChild("Name", true)
-            if fallbackName then
-                label = fallbackName:FindFirstChildWhichIsA("TextLabel", true)
-                if label then
-                    addName(label.Text)
-                end
-            end
-        end
-    end
-
     local module = getModule("Modules", "Characters", "CharactersInfo")
-
     if module then
         local ok, data = pcall(require, module)
         local characters = ok and type(data) == "table" and (data.Characters or data)
@@ -240,7 +194,7 @@ local function getCharacterValues()
                 if characters then
                     for _, model in ipairs(characters:GetChildren()) do
                         if model:IsA("Model") then
-                            addWorkspaceModelName(model)
+                            addWorkspaceModelName(model, values)
                         end
                     end
                 end
@@ -248,10 +202,8 @@ local function getCharacterValues()
         end
     end
 
-    if not next(values) then
-        for _, name in ipairs(CharacterFallbackValues) do
-            values[name] = true
-        end
+    for _, name in ipairs(CharacterFallbackValues) do
+        values[name] = true
     end
 
     return sortedValues(values)
@@ -292,11 +244,6 @@ local function getMutationValues()
         end
     end
 
-    local fallbackDamage = {}
-    for index, mutation in ipairs(MutationFallbackValues) do
-        fallbackDamage[mutation:lower()] = index - 1
-    end
-
     values.Normal = values.Normal or {
         Name = "Normal",
         Damage = -math.huge,
@@ -311,7 +258,6 @@ local function getMutationValues()
         if a.Damage ~= b.Damage then
             return a.Damage < b.Damage
         end
-
         return a.Name < b.Name
     end)
 
@@ -326,218 +272,6 @@ end
 local RarityValues = getRarityValues()
 local CharacterValues = getCharacterValues()
 local MutationValues = getMutationValues()
-
-local function normalizeMultiValue(value, allowedValues)
-    local selected = {}
-
-    if type(value) ~= "table" then
-        return selected
-    end
-
-    for _, item in ipairs(allowedValues) do
-        if value[item] == true or table.find(value, item) then
-            selected[item] = true
-        end
-    end
-
-    return selected
-end
-
-local function selectedToList(selectedValues, allowedValues)
-    local selected = {}
-
-    for _, item in ipairs(allowedValues) do
-        if selectedValues[item] then
-            table.insert(selected, item)
-        end
-    end
-
-    return selected
-end
-
-local AutoBuyPlotEnabled = false
-local AutoSpinWheelEnabled = false
-local AutoClaimBattlepassEnabled = false
-local AutoClaimPremiumBattlepassEnabled = false
-local SelectedRarities = {}
-local SelectedMutations = {}
-local SelectedRarities2 = {}
-local SelectedMutations2 = {}
-local SelectedNames3 = {}
-local SelectedMutations3 = {}
-local SelectedNames4 = {}
-local SelectedMutations4 = {}
-
-local function getOptionValue(optionName, fallback)
-    local value = fallback
-
-    pcall(function()
-        if Options and Options[optionName] and Options[optionName].Value ~= nil then
-            value = Options[optionName].Value
-        end
-    end)
-
-    return value
-end
-
-local function saveConfig()
-    if not isfolder(ConfigFolder) then
-        makefolder(ConfigFolder)
-    end
-
-    local configTable = {
-        Rarities1 = getOptionValue("Rarities1", SelectedRarities),
-        Mutations1 = getOptionValue("Mutations1", SelectedMutations),
-        Rarities2 = getOptionValue("Rarities2", SelectedRarities2),
-        Mutations2 = getOptionValue("Mutations2", SelectedMutations2),
-        Names3 = getOptionValue("Names3", SelectedNames3),
-        Mutations3 = getOptionValue("Mutations3", SelectedMutations3),
-        Names4 = getOptionValue("Names4", SelectedNames4),
-        Mutations4 = getOptionValue("Mutations4", SelectedMutations4),
-        AutoBuyPlot = getOptionValue("AutoBuyPlot", AutoBuyPlotEnabled),
-        AutoSpinWheel = getOptionValue("AutoSpinWheel", AutoSpinWheelEnabled),
-        AutoClaimBattlepass = getOptionValue("AutoClaimBattlepass", AutoClaimBattlepassEnabled),
-        AutoClaimPremiumBattlepass = getOptionValue("AutoClaimPremiumBattlepass", AutoClaimPremiumBattlepassEnabled),
-    }
-
-    local success, jsonString = pcall(function()
-        return HttpService:JSONEncode(configTable)
-    end)
-
-    if success then
-        writefile(ConfigFile, jsonString)
-    end
-end
-
-local function loadConfig()
-    if not isfile(ConfigFile) then
-        return
-    end
-
-    local success, decoded = pcall(function()
-        return HttpService:JSONDecode(readfile(ConfigFile))
-    end)
-
-    if not success or type(decoded) ~= "table" then
-        return
-    end
-
-    local loadedRarities = normalizeMultiValue(decoded.Rarities1, RarityValues)
-    local loadedMutations = normalizeMultiValue(decoded.Mutations1 or decoded.Mutations, MutationValues)
-    local loadedRarities2 = normalizeMultiValue(decoded.Rarities2, RarityValues)
-    local loadedMutations2 = normalizeMultiValue(decoded.Mutations2, MutationValues)
-    local loadedNames3 = normalizeMultiValue(decoded.Names3, CharacterValues)
-    local loadedMutations3 = normalizeMultiValue(decoded.Mutations3, MutationValues)
-    local loadedNames4 = normalizeMultiValue(decoded.Names4, CharacterValues)
-    local loadedMutations4 = normalizeMultiValue(decoded.Mutations4, MutationValues)
-
-    if next(loadedRarities) then
-        SelectedRarities = loadedRarities
-    end
-
-    if next(loadedMutations) then
-        SelectedMutations = loadedMutations
-    end
-
-    if next(loadedRarities2) then
-        SelectedRarities2 = loadedRarities2
-    end
-
-    if next(loadedMutations2) then
-        SelectedMutations2 = loadedMutations2
-    end
-
-    if next(loadedNames3) then
-        SelectedNames3 = loadedNames3
-    end
-
-    if next(loadedMutations3) then
-        SelectedMutations3 = loadedMutations3
-    end
-
-    if next(loadedNames4) then
-        SelectedNames4 = loadedNames4
-    end
-
-    if next(loadedMutations4) then
-        SelectedMutations4 = loadedMutations4
-    end
-
-    AutoBuyPlotEnabled = decoded.AutoBuyPlot == true
-    AutoSpinWheelEnabled = decoded.AutoSpinWheel == true
-    AutoClaimBattlepassEnabled = decoded.AutoClaimBattlepass == true
-    AutoClaimPremiumBattlepassEnabled = decoded.AutoClaimPremiumBattlepass == true
-
-    task.spawn(function()
-        repeat
-            task.wait()
-        until Options
-            and Options.Rarities1
-            and Options.Mutations1
-            and Options.Rarities2
-            and Options.Mutations2
-            and Options.Names3
-            and Options.Mutations3
-            and Options.Names4
-            and Options.Mutations4
-            and Options.AutoBuyPlot
-            and Options.AutoSpinWheel
-            and Options.AutoClaimBattlepass
-            and Options.AutoClaimPremiumBattlepass
-
-        if decoded.Rarities1 ~= nil then
-            Options.Rarities1:SetValue(decoded.Rarities1)
-        end
-
-        if decoded.Mutations1 ~= nil then
-            Options.Mutations1:SetValue(decoded.Mutations1)
-        elseif decoded.Mutations ~= nil then
-            Options.Mutations1:SetValue(decoded.Mutations)
-        end
-
-        if decoded.Rarities2 ~= nil then
-            Options.Rarities2:SetValue(decoded.Rarities2)
-        end
-
-        if decoded.Mutations2 ~= nil then
-            Options.Mutations2:SetValue(decoded.Mutations2)
-        end
-
-        if decoded.Names3 ~= nil then
-            Options.Names3:SetValue(decoded.Names3)
-        end
-
-        if decoded.Mutations3 ~= nil then
-            Options.Mutations3:SetValue(decoded.Mutations3)
-        end
-
-        if decoded.Names4 ~= nil then
-            Options.Names4:SetValue(decoded.Names4)
-        end
-
-        if decoded.Mutations4 ~= nil then
-            Options.Mutations4:SetValue(decoded.Mutations4)
-        end
-
-        if decoded.AutoBuyPlot ~= nil then
-            Options.AutoBuyPlot:SetValue(decoded.AutoBuyPlot)
-        end
-
-        if decoded.AutoSpinWheel ~= nil then
-            Options.AutoSpinWheel:SetValue(decoded.AutoSpinWheel)
-        end
-
-        if decoded.AutoClaimBattlepass ~= nil then
-            Options.AutoClaimBattlepass:SetValue(decoded.AutoClaimBattlepass)
-        end
-
-        if decoded.AutoClaimPremiumBattlepass ~= nil then
-            Options.AutoClaimPremiumBattlepass:SetValue(decoded.AutoClaimPremiumBattlepass)
-        end
-    end)
-end
-
-loadConfig()
 
 local targetConfig = {}
 
@@ -559,13 +293,13 @@ local function buildTargetConfig()
 
     local function collectSelectedValues(selectedValues, allowedValues)
         local list = {}
-
-        for _, value in ipairs(allowedValues) do
-            if selectedValues[value] then
-                table.insert(list, value)
+        if type(selectedValues) == "table" then
+            for _, value in ipairs(allowedValues) do
+                if selectedValues[value] or table.find(selectedValues, value) then
+                    table.insert(list, value)
+                end
             end
         end
-
         return list
     end
 
@@ -577,10 +311,11 @@ local function buildTargetConfig()
         end
 
         local mutations = {}
-
-        for _, mutation in ipairs(MutationValues) do
-            if selectedMutations[mutation] then
-                table.insert(mutations, mutation)
+        if type(selectedMutations) == "table" then
+            for _, mutation in ipairs(MutationValues) do
+                if selectedMutations[mutation] or table.find(selectedMutations, mutation) then
+                    table.insert(mutations, mutation)
+                end
             end
         end
 
@@ -595,10 +330,18 @@ local function buildTargetConfig()
         end
     end
 
-    addSelectedTargets("Rarity", SelectedRarities, SelectedMutations)
-    addSelectedTargets("Rarity", SelectedRarities2, SelectedMutations2)
-    addSelectedTargets("Name", SelectedNames3, SelectedMutations3)
-    addSelectedTargets("Name", SelectedNames4, SelectedMutations4)
+    if Options.Rarities1 and Options.Mutations1 then
+        addSelectedTargets("Rarity", Options.Rarities1.Value, Options.Mutations1.Value)
+    end
+    if Options.Rarities2 and Options.Mutations2 then
+        addSelectedTargets("Rarity", Options.Rarities2.Value, Options.Mutations2.Value)
+    end
+    if Options.Names3 and Options.Mutations3 then
+        addSelectedTargets("Name", Options.Names3.Value, Options.Mutations3.Value)
+    end
+    if Options.Names4 and Options.Mutations4 then
+        addSelectedTargets("Name", Options.Names4.Value, Options.Mutations4.Value)
+    end
 
     return config
 end
@@ -606,801 +349,566 @@ end
 local function rebuildTargetLookup()
     targetConfig = buildTargetConfig()
 end
-local Section = MainTab:AddSection("Select Unit Type Rarity")
-local RarityDropdown1 = MainTab:AddDropdown("Rarities1", {
+
+-- ===== FLUENT UI COMPONENTS =====
+
+Tabs.Filter:AddSection("Select Unit Type Rarity")
+
+local Rarities1 = Tabs.Filter:AddDropdown("Rarities1", {
     Title = "Rarity 1",
     Description = "เลือกระดับที่ต้องการ 1",
     Values = RarityValues,
     Multi = true,
-    Default = selectedToList(SelectedRarities, RarityValues),
+    Default = {},
 })
 
-local MutationDropdown1 = MainTab:AddDropdown("Mutations1", {
+local Mutations1 = Tabs.Filter:AddDropdown("Mutations1", {
     Title = "Mutation 1",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
     Multi = true,
-    Default = selectedToList(SelectedMutations, MutationValues),
+    Default = {},
 })
 
-local RarityDropdown2 = MainTab:AddDropdown("Rarities2", {
+local Rarities2 = Tabs.Filter:AddDropdown("Rarities2", {
     Title = "Rarity 2",
     Description = "เลือกระดับที่ต้องการ 2",
     Values = RarityValues,
     Multi = true,
-    Default = selectedToList(SelectedRarities2, RarityValues),
+    Default = {},
 })
 
-local MutationDropdown2 = MainTab:AddDropdown("Mutations2", {
+local Mutations2 = Tabs.Filter:AddDropdown("Mutations2", {
     Title = "Mutation 2",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
     Multi = true,
-    Default = selectedToList(SelectedMutations2, MutationValues),
+    Default = {},
 })
-local Section = MainTab:AddSection("Select Unit Type Name")
-local NameDropdown3 = MainTab:AddDropdown("Names3", {
+
+Tabs.Filter:AddSection("Select Unit Type Name")
+
+local Names3 = Tabs.Filter:AddDropdown("Names3", {
     Title = "Name 1",
     Description = "เลือกชื่อที่ต้องการ 1",
     Values = CharacterValues,
     Multi = true,
-    Default = selectedToList(SelectedNames3, CharacterValues),
+    Default = {},
 })
 
-local MutationDropdown3 = MainTab:AddDropdown("Mutations3", {
+local Mutations3 = Tabs.Filter:AddDropdown("Mutations3", {
     Title = "Mutation 1",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
     Multi = true,
-    Default = selectedToList(SelectedMutations3, MutationValues),
+    Default = {},
 })
 
-local NameDropdown4 = MainTab:AddDropdown("Names4", {
-    Title = "Name 4",
+local Names4 = Tabs.Filter:AddDropdown("Names4", {
+    Title = "Name 2",
     Description = "เลือกชื่อที่ต้องการ 2",
     Values = CharacterValues,
     Multi = true,
-    Default = selectedToList(SelectedNames4, CharacterValues),
+    Default = {},
 })
 
-local MutationDropdown4 = MainTab:AddDropdown("Mutations4", {
-    Title = "Mutation 4",
+local Mutations4 = Tabs.Filter:AddDropdown("Mutations4", {
+    Title = "Mutation 2",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
     Multi = true,
-    Default = selectedToList(SelectedMutations4, MutationValues),
+    Default = {},
 })
 
-local AutoBuyPlotToggle = MainTab:AddToggle("AutoBuyPlot", {
+Rarities1:OnChanged(rebuildTargetLookup)
+Mutations1:OnChanged(rebuildTargetLookup)
+Rarities2:OnChanged(rebuildTargetLookup)
+Mutations2:OnChanged(rebuildTargetLookup)
+Names3:OnChanged(rebuildTargetLookup)
+Mutations3:OnChanged(rebuildTargetLookup)
+Names4:OnChanged(rebuildTargetLookup)
+Mutations4:OnChanged(rebuildTargetLookup)
+
+Tabs.Main:AddSection("ระบบออโต้หลัก (Main Auto)")
+
+local AutoBuyPlot = Tabs.Main:AddToggle("AutoBuyPlot", {
     Title = "Auto Roll/Buy",
     Description = "ออโต้โรลและซื้อ",
-    Default = AutoBuyPlotEnabled,
-})
-local Section = MainTab:AddSection("Auto Misc")
-local AutoSpinWheelToggle = MainTab:AddToggle("AutoSpinWheel", {
-    Title = "Auto Spin Wheel",
-    Description = "ออโต้สปิน",
-    Default = AutoSpinWheelEnabled,
+    Default = false,
 })
 
-local AutoClaimBattlepassToggle = MainTab:AddToggle("AutoClaimBattlepass", {
+local RollDelaySlider = Tabs.Main:AddSlider("RollDelay", {
+    Title = "Roll Delay",
+    Description = "ดีเลย์การสุ่ม (วินาที)",
+    Default = 0.8,
+    Min = 0.3,
+    Max = 3.0,
+    Rounding = 1,
+})
+
+Tabs.Main:AddSection("ฟังชั่นอื่นๆ (Misc)")
+
+local AutoSpinWheel = Tabs.Main:AddToggle("AutoSpinWheel", {
+    Title = "Auto Spin Wheel",
+    Description = "ออโต้วงล้อ",
+    Default = false,
+})
+
+local AutoClaimBattlepass = Tabs.Main:AddToggle("AutoClaimBattlepass", {
     Title = "Auto Claim Battlepass (Free)",
     Description = "ออโต้เคลมแบทเทิลพาส (ฟรี)",
-    Default = AutoClaimBattlepassEnabled,
+    Default = false,
 })
 
-local AutoClaimPremiumBattlepassToggle = MainTab:AddToggle("AutoClaimPremiumBattlepass", {
+local AutoClaimPremiumBattlepass = Tabs.Main:AddToggle("AutoClaimPremiumBattlepass", {
     Title = "Auto Claim Battlepass (Premium)",
     Description = "ออโต้เคลมแบทเทิลพาส (พรีเมียม)",
-    Default = AutoClaimPremiumBattlepassEnabled,
+    Default = false,
 })
 
-RarityDropdown1:OnChanged(function(value)
-    SelectedRarities = normalizeMultiValue(value, RarityValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown1:OnChanged(function(value)
-    SelectedMutations = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-RarityDropdown2:OnChanged(function(value)
-    SelectedRarities2 = normalizeMultiValue(value, RarityValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown2:OnChanged(function(value)
-    SelectedMutations2 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-NameDropdown3:OnChanged(function(value)
-    SelectedNames3 = normalizeMultiValue(value, CharacterValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown3:OnChanged(function(value)
-    SelectedMutations3 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-NameDropdown4:OnChanged(function(value)
-    SelectedNames4 = normalizeMultiValue(value, CharacterValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-MutationDropdown4:OnChanged(function(value)
-    SelectedMutations4 = normalizeMultiValue(value, MutationValues)
-    rebuildTargetLookup()
-    saveConfig()
-end)
-
-AutoBuyPlotToggle:OnChanged(function(value)
-    AutoBuyPlotEnabled = value == true
-    saveConfig()
-end)
-
-AutoSpinWheelToggle:OnChanged(function(value)
-    AutoSpinWheelEnabled = value == true
-    saveConfig()
-end)
-
-AutoClaimBattlepassToggle:OnChanged(function(value)
-    AutoClaimBattlepassEnabled = value == true
-    saveConfig()
-end)
-
-AutoClaimPremiumBattlepassToggle:OnChanged(function(value)
-    AutoClaimPremiumBattlepassEnabled = value == true
-    saveConfig()
-end)
-
-RarityDropdown1:SetValue(selectedToList(SelectedRarities, RarityValues))
-MutationDropdown1:SetValue(selectedToList(SelectedMutations, MutationValues))
-RarityDropdown2:SetValue(selectedToList(SelectedRarities2, RarityValues))
-MutationDropdown2:SetValue(selectedToList(SelectedMutations2, MutationValues))
-NameDropdown3:SetValue(selectedToList(SelectedNames3, CharacterValues))
-MutationDropdown3:SetValue(selectedToList(SelectedMutations3, MutationValues))
-NameDropdown4:SetValue(selectedToList(SelectedNames4, CharacterValues))
-MutationDropdown4:SetValue(selectedToList(SelectedMutations4, MutationValues))
-AutoBuyPlotToggle:SetValue(AutoBuyPlotEnabled)
-AutoSpinWheelToggle:SetValue(AutoSpinWheelEnabled)
-AutoClaimBattlepassToggle:SetValue(AutoClaimBattlepassEnabled)
-AutoClaimPremiumBattlepassToggle:SetValue(AutoClaimPremiumBattlepassEnabled)
-rebuildTargetLookup()
-
-local function valuesSignature(values)
-    return table.concat(values, "\31")
-end
-
-local raritySignature = valuesSignature(RarityValues)
-local mutationSignature = valuesSignature(MutationValues)
-
-local function refreshDynamicValues()
-    local latestRarities = getRarityValues()
-    local latestMutations = getMutationValues()
-    local latestRaritySignature = valuesSignature(latestRarities)
-    local latestMutationSignature = valuesSignature(latestMutations)
-
-    if latestRaritySignature ~= raritySignature then
-        raritySignature = latestRaritySignature
-        RarityValues = latestRarities
-        RarityDropdown1:SetValues(RarityValues)
-        RarityDropdown2:SetValues(RarityValues)
-        SelectedRarities = normalizeMultiValue(SelectedRarities, RarityValues)
-        SelectedRarities2 = normalizeMultiValue(SelectedRarities2, RarityValues)
-        RarityDropdown1:SetValue(selectedToList(SelectedRarities, RarityValues))
-        RarityDropdown2:SetValue(selectedToList(SelectedRarities2, RarityValues))
-        rebuildTargetLookup()
-    end
-
-    if latestMutationSignature ~= mutationSignature then
-        mutationSignature = latestMutationSignature
-        MutationValues = latestMutations
-        MutationDropdown1:SetValues(MutationValues)
-        MutationDropdown2:SetValues(MutationValues)
-        MutationDropdown3:SetValues(MutationValues)
-        MutationDropdown4:SetValues(MutationValues)
-        SelectedMutations = normalizeMultiValue(SelectedMutations, MutationValues)
-        SelectedMutations2 = normalizeMultiValue(SelectedMutations2, MutationValues)
-        SelectedMutations3 = normalizeMultiValue(SelectedMutations3, MutationValues)
-        SelectedMutations4 = normalizeMultiValue(SelectedMutations4, MutationValues)
-        MutationDropdown1:SetValue(selectedToList(SelectedMutations, MutationValues))
-        MutationDropdown2:SetValue(selectedToList(SelectedMutations2, MutationValues))
-        MutationDropdown3:SetValue(selectedToList(SelectedMutations3, MutationValues))
-        MutationDropdown4:SetValue(selectedToList(SelectedMutations4, MutationValues))
-        rebuildTargetLookup()
-    end
-end
-
-task.spawn(function()
-    while task.wait(30) do
-        refreshDynamicValues()
-    end
-end)
-
-task.spawn(function()
-    local label = playerGui
-        :WaitForChild("MainUI")
-        :WaitForChild("Frames")
-        :WaitForChild("SpinWheel")
-        :WaitForChild("Content")
-        :WaitForChild("Buttons")
-        :WaitForChild("Spin")
-        :WaitForChild("Label")
-    local remote = ReplicatedStorage
-        :WaitForChild("Remotes")
-        :WaitForChild("SpinWheel")
-        :WaitForChild("Spin")
-
-    local running = false
-
-    local function getSpinCount()
-        local text = label.Text
-        local num = tonumber(text:match("%((%d+)%)"))
-        return num or 0
-    end
-
-    while task.wait(0.2) do
-        if not AutoSpinWheelEnabled then
-            running = false
-            continue
-        end
-
-        local count = getSpinCount()
-
-        if count > 0 then
-            if not running then
-                running = true
-            end
-
-            remote:FireServer("Spin")
-        else
-            running = false
-        end
-    end
-end)
-
-task.spawn(function()
-    local rewards = playerGui
-        :WaitForChild("MainUI")
-        :WaitForChild("Frames")
-        :WaitForChild("Battlepass")
-        :WaitForChild("Frame")
-        :WaitForChild("Main")
-        :WaitForChild("Battlepass")
-        :WaitForChild("ScrollingFrame")
-        :WaitForChild("Content")
-        :WaitForChild("Rewards")
-
-    local remote = ReplicatedStorage
-        :WaitForChild("Modules")
-        :WaitForChild("Battlepass")
-        :WaitForChild("Claim")
-
-    while task.wait(1) do
-        if not AutoClaimBattlepassEnabled then
-            continue
-        end
-
-        local index = 0
-
-        for _, reward in pairs(rewards:GetChildren()) do
-            if reward.Name == "BattlepassReward" then
-                index += 1
-
-                local free = reward:FindFirstChild("Free")
-
-                if free then
-                    local locked = free:FindFirstChild("Locked")
-                    local checked = free:FindFirstChild("Checked")
-
-                    if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
-                        if locked.Visible == false and checked.Visible == false then
-                            remote:FireServer(index, "Free")
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
-task.spawn(function()
-    local rewards = playerGui
-        :WaitForChild("MainUI")
-        :WaitForChild("Frames")
-        :WaitForChild("Battlepass")
-        :WaitForChild("Frame")
-        :WaitForChild("Main")
-        :WaitForChild("Battlepass")
-        :WaitForChild("ScrollingFrame")
-        :WaitForChild("Content")
-        :WaitForChild("Rewards")
-
-    local remote = ReplicatedStorage
-        :WaitForChild("Modules")
-        :WaitForChild("Battlepass")
-        :WaitForChild("Claim")
-
-    while task.wait(1) do
-        if not AutoClaimPremiumBattlepassEnabled then
-            continue
-        end
-
-        local index = 0
-
-        for _, reward in pairs(rewards:GetChildren()) do
-            if reward.Name == "BattlepassReward" then
-                index += 1
-
-                local premium = reward:FindFirstChild("Premium")
-
-                if premium then
-                    local locked = premium:FindFirstChild("Locked")
-                    local checked = premium:FindFirstChild("Checked")
-
-                    if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
-                        if locked.Visible == false and checked.Visible == false then
-                            remote:FireServer(index, "Premium")
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
-local plotsFolder = workspace:WaitForChild("Plots")
-
-local cashLabel = playerGui
-    :WaitForChild("MainUI")
-    :WaitForChild("UILeft")
-    :WaitForChild("TopButtons")
-    :WaitForChild("Cash")
-    :WaitForChild("CashLabel")
-
-local state = {
-    buying = false,
-}
-
-local function normalizeKey(value)
-    local key = tostring(value or ""):lower():gsub("%s+", "")
-    return key
-end
-
-local function getAttributes(model)
-    local ok, attributes = pcall(function()
-        return model:GetAttributes()
-    end)
-
-    if ok and type(attributes) == "table" then
-        return attributes
-    end
-
-    return {}
-end
-
-local function getModelMutation(model)
-    local attributes = getAttributes(model)
-    local mutation = attributes.Mutation
-    if mutation == nil or tostring(mutation) == "" then
-        return "Normal"
-    end
-
-    return mutation
-end
-
-local function getRarityLabel(model)
-    local head = model:FindFirstChild("Head")
-    local buyUI = head and head:FindFirstChild("BuyUI")
-    local frame = buyUI and buyUI:FindFirstChild("Frame")
-    local chance = frame and frame:FindFirstChild("Chance")
-    local label = chance and chance:FindFirstChild("TextLabel")
-
-    if label and label:IsA("TextLabel") then
-        return label
-    end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local fallbackChance = fallbackBuyUI:FindFirstChild("Chance", true)
-        if fallbackChance then
-            label = fallbackChance:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
-    return nil
-end
-
-local function getModelRarity(model)
-    local label = getRarityLabel(model)
-    local rarity = label and tostring(label.Text or ""):gsub("<.->", ""):match("^%s*(.-)%s*$") or ""
-
-    if rarity == "" then
-        return nil
-    end
-
-    rarity = rarity:match("^(%S+)") or rarity
-    return rarity
-end
-
-local function getCharacterNameLabel(model)
-    local head = model:FindFirstChild("Head")
-    local buyUI = head and head:FindFirstChild("BuyUI")
-    local frame = buyUI and buyUI:FindFirstChild("Frame")
-    local nameFrame = frame and frame:FindFirstChild("Name")
-    local label = nameFrame and nameFrame:FindFirstChild("TextLabel")
-
-    if label and label:IsA("TextLabel") then
-        return label
-    end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local fallbackName = fallbackBuyUI:FindFirstChild("Name", true)
-        if fallbackName then
-            label = fallbackName:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
-    return nil
-end
-
-local function getModelCharacterName(model)
-    local label = getCharacterNameLabel(model)
-    local characterName = label and tostring(label.Text or ""):gsub("<.->", ""):match("^%s*(.-)%s*$") or tostring(model.Name or "")
-
-    if characterName == "" then
-        return nil
-    end
-
-    return characterName
-end
-
-local function getModelCharacterNameAliases(model)
-    local aliases = {}
-    local added = {}
-
-    local function addAlias(name)
-        if name ~= nil then
-            name = tostring(name):gsub("<.->", ""):match("^%s*(.-)%s*$")
-            if name and name ~= "" then
-                local key = normalizeKey(name)
-                if not added[key] then
-                    added[key] = true
-                    table.insert(aliases, name)
-                end
-            end
-        end
-    end
-
-    addAlias(getModelCharacterName(model))
-    addAlias(model.Name)
-
-    return aliases
-end
-
-local function hasAttackAttribute(model)
-    local attributes = getAttributes(model)
-    return attributes.Attack ~= nil
-end
-
-local function isBoughtCharacterModel(model, scanRoot)
-    local current = model
-
-    while current and current ~= scanRoot do
-        if current:IsA("Model") and hasAttackAttribute(current) then
-            return true
-        end
-
-        current = current.Parent
-    end
-
-    return false
-end
-
-local function getTargetIndex(model)
-    local nameAliases = getModelCharacterNameAliases(model)
-    local rarity = getModelRarity(model)
-
-    local mutation = getModelMutation(model)
-    if not mutation then
-        return nil
-    end
-
-    local normalizedMutation = normalizeKey(mutation)
-    local normalizedRarity = rarity and normalizeKey(rarity) or nil
-    local normalizedNames = {}
-
-    for _, alias in ipairs(nameAliases) do
-        normalizedNames[normalizeKey(alias)] = alias
-    end
-
-    for index, config in ipairs(targetConfig) do
-        if normalizeKey(config.Mutation) == normalizedMutation then
-            if config.Mode == "Rarity" and normalizedRarity and normalizeKey(config.Value) == normalizedRarity then
-                return index, rarity, mutation, "Rarity"
-            end
-
-            local matchedName = normalizedNames[normalizeKey(config.Value)]
-            if config.Mode == "Name" and matchedName then
-                return index, matchedName, mutation, "Name"
-            end
-        end
-    end
-
-    return nil
-end
-
-local function getPlotOwner(plot)
-    return plot:GetAttribute("OwnerUserId")
-        or plot:GetAttribute("OwnerId")
-        or plot:GetAttribute("Owner")
-        or plot:GetAttribute("OwnerName")
-        or plot:GetAttribute("Player")
-        or plot:GetAttribute("UserId")
-end
-
-local function parseMoney(text)
-    text = tostring(text or ""):lower()
-    if text:find("free", 1, true) then
-        return 0
-    end
-
-    local numberText, suffix = text:match("([%d,%.]+)%s*([kmbtq]?)")
-
-    if not numberText then
-        return nil
-    end
-
-    local value = tonumber((numberText:gsub(",", "")))
-    if not value then
-        return nil
-    end
-
-    local scale = {
-        k = 1e3,
-        m = 1e6,
-        b = 1e9,
-        t = 1e12,
-        q = 1e15,
-    }
-
-    return value * (scale[suffix] or 1)
-end
-
-local function readCash()
-    return parseMoney(cashLabel.Text)
-end
-
-local function getPriceLabel(model)
-    local head = model:FindFirstChild("Head")
-    local buyUI = head and head:FindFirstChild("BuyUI")
-
-    if buyUI then
-        local frame = buyUI:FindFirstChild("Frame")
-        local price = frame and frame:FindFirstChild("Price")
-        local label = price and price:FindFirstChild("TextLabel")
-
-        if label and label:IsA("TextLabel") then
-            return label
-        end
-    end
-
-    local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
-    if fallbackBuyUI then
-        local price = fallbackBuyUI:FindFirstChild("Price", true)
-        if price then
-            local label = price:FindFirstChildWhichIsA("TextLabel", true)
-            if label then
-                return label
-            end
-        end
-    end
-
-    return nil
-end
-
-local function findPrompt(root)
-    if not root then
-        return nil
-    end
-
-    local buyUI = root:FindFirstChild("BuyUI", true)
-    if buyUI then
-        local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prompt then
-            return prompt
-        end
-    end
-
-    local preferredPromptNames = {
-        "BuyPrompt",
-        "PlacementPrompt",
-        "RollPrompt",
-        "GiftPrompt",
-        "ProximityPrompt",
-        "Prox",
-        "Prompt",
-    }
-
-    for _, name in ipairs(preferredPromptNames) do
-        local inst = root:FindFirstChild(name, true)
-        if inst and inst:IsA("ProximityPrompt") then
-            return inst
-        end
-    end
-
-    return root:FindFirstChildWhichIsA("ProximityPrompt", true)
-end
-
-local function getFullName(inst)
-    local ok, name = pcall(function()
-        return inst:GetFullName()
-    end)
-
-    return ok and name or tostring(inst)
-end
-
-local function firePrompt(prompt)
-    if not prompt then
-        return false
-    end
-
-    return pcall(function()
-        fireproximityprompt(prompt)
-    end)
-end
-
-local function getRollPrompt(plot)
-    local roll = plot:FindFirstChild("Roll")
-    local button = roll and roll:FindFirstChild("RollButton")
-    local buttonPart = button and button:FindFirstChild("Button")
-    local prompt = buttonPart and buttonPart:FindFirstChild("RollPrompt")
-
-    if prompt and prompt:IsA("ProximityPrompt") then
-        return prompt
-    end
-
-    return plot:FindFirstChild("RollPrompt", true)
-end
-
-local function getBestPlot()
-    local bestPlot = nil
-    local bestDist = math.huge
-
-    for _, plot in ipairs(plotsFolder:GetChildren()) do
-        local owner = getPlotOwner(plot)
-        if owner == player.UserId or owner == player.Name then
-            return plot
-        end
-
-        local ok, pivot = pcall(function()
-            return plot:GetPivot()
-        end)
-
-        local dist = ok and (hrp.Position - pivot.Position).Magnitude or math.huge
-        if dist < bestDist then
-            bestDist = dist
-            bestPlot = plot
-        end
-    end
-
-    return bestPlot
-end
-
-local function getBuyCandidates(plot)
-    local candidates = {}
-    local scanRoot = plot:FindFirstChild("Characters") or plot
-
-    local models = scanRoot == plot and scanRoot:GetDescendants() or scanRoot:GetChildren()
-    for _, inst in ipairs(models) do
-        if inst:IsA("Model") then
-            if isBoughtCharacterModel(inst, scanRoot) then
-                continue
-            end
-
-            local priceLabel = getPriceLabel(inst)
-            local prompt = findPrompt(inst)
-            local targetIndex, characterName, mutation = getTargetIndex(inst)
-
-            if priceLabel and prompt and targetIndex then
-                local price = parseMoney(priceLabel.Text)
-                if price then
-                    local entry = {
-                        model = inst,
-                        characterName = characterName,
-                        mutation = mutation,
-                        targetIndex = targetIndex,
-                        price = price,
-                        priceLabel = priceLabel,
-                        prompt = prompt,
-                    }
-
-                    table.insert(candidates, entry)
-                end
-            end
-        end
-    end
-
-    table.sort(candidates, function(a, b)
-        if a.targetIndex ~= b.targetIndex then
-            return a.targetIndex < b.targetIndex
-        end
-
-        return a.price < b.price
-    end)
-
-    return candidates
-end
-
-local myPlot = getBestPlot()
-
-if myPlot then
-    task.spawn(function()
-        while task.wait(0.35) do
-            if not AutoBuyPlotEnabled then
-                continue
-            end
-
-            local boughtOrBlocked = false
-
-            if not state.buying then
-                local candidates = getBuyCandidates(myPlot)
-                local cash = readCash() or 0
-
-                for _, candidate in ipairs(candidates) do
-                    if cash < candidate.price then
-                        boughtOrBlocked = true
-                        continue
-                    end
-
-                    state.buying = true
-
-                    firePrompt(candidate.prompt)
-
-                    task.wait(0.75)
-                    state.buying = false
-                    boughtOrBlocked = true
-                    break
-                end
-            end
-
-            if not state.buying and not boughtOrBlocked then
-                local rollPrompt = getRollPrompt(myPlot)
-                if rollPrompt then
-                    firePrompt(rollPrompt)
-                end
-            end
-        end
-    end)
-end
-
-SaveManager:LoadAutoloadConfig()
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("FluentScriptHub")
-SaveManager:SetFolder("FluentScriptHub/specific-game")
-InterfaceManager:BuildInterfaceSection(Setting)
-SaveManager:BuildConfigSection(Setting)
+
+InterfaceManager:SetFolder("PayomboyZ")
+SaveManager:SetFolder("PayomboyZ/RollAnimeToFight")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+SaveManager:LoadAutoloadConfig()
 Window:SelectTab(1)
-return myPlot
+rebuildTargetLookup()
+
+Fluent:Notify({
+    Title = "PayomboyZ HUB",
+    Content = "โหลด Fluent UI สำเร็จแล้ว! ❤️",
+    Duration = 5
+})
+
+-- ===== BACKGROUND AUTOMATION THREADS (NON-BLOCKING & THROTTLED) =====
+
+local function safeFindPath(root, ...)
+    local current = root
+    for _, name in ipairs({...}) do
+        if not current then return nil end
+        current = current:FindFirstChild(name)
+    end
+    return current
+end
+
+-- Refresh Dynamic Values
+task.spawn(function()
+    local function valuesSignature(values) return table.concat(values, "\31") end
+    local raritySignature = valuesSignature(RarityValues)
+    local mutationSignature = valuesSignature(MutationValues)
+
+    while task.wait(120) do
+        local latestRarities = getRarityValues()
+        local latestMutations = getMutationValues()
+        local latestRaritySignature = valuesSignature(latestRarities)
+        local latestMutationSignature = valuesSignature(latestMutations)
+
+        if latestRaritySignature ~= raritySignature then
+            raritySignature = latestRaritySignature
+            RarityValues = latestRarities
+            pcall(function()
+                if Rarities1 then Rarities1:SetValues(RarityValues) end
+                if Rarities2 then Rarities2:SetValues(RarityValues) end
+            end)
+            rebuildTargetLookup()
+        end
+
+        if latestMutationSignature ~= mutationSignature then
+            mutationSignature = latestMutationSignature
+            MutationValues = latestMutations
+            pcall(function()
+                if Mutations1 then Mutations1:SetValues(MutationValues) end
+                if Mutations2 then Mutations2:SetValues(MutationValues) end
+                if Mutations3 then Mutations3:SetValues(MutationValues) end
+                if Mutations4 then Mutations4:SetValues(MutationValues) end
+            end)
+            rebuildTargetLookup()
+        end
+    end
+end)
+
+-- Throttled Auto Spin Wheel
+task.spawn(function()
+    while task.wait(1.5) do
+        if not Options.AutoSpinWheel or not Options.AutoSpinWheel.Value then continue end
+
+        local label = safeFindPath(playerGui, "MainUI", "Frames", "SpinWheel", "Content", "Buttons", "Spin", "Label")
+        local remote = safeFindPath(ReplicatedStorage, "Remotes", "SpinWheel", "Spin")
+
+        if label and remote then
+            local text = label.Text or ""
+            local count = tonumber(text:match("%((%d+)%)")) or 0
+            if count > 0 then
+                remote:FireServer("Spin")
+                task.wait(2.5)
+            end
+        end
+    end
+end)
+
+-- Throttled Auto Claim Battlepass (Free)
+task.spawn(function()
+    while task.wait(10) do
+        if not Options.AutoClaimBattlepass or not Options.AutoClaimBattlepass.Value then continue end
+
+        local rewards = safeFindPath(playerGui, "MainUI", "Frames", "Battlepass", "Frame", "Main", "Battlepass", "ScrollingFrame", "Content", "Rewards")
+        local remote = safeFindPath(ReplicatedStorage, "Modules", "Battlepass", "Claim")
+
+        if rewards and remote then
+            local index = 0
+            for _, reward in ipairs(rewards:GetChildren()) do
+                if reward.Name == "BattlepassReward" then
+                    index += 1
+                    local free = reward:FindFirstChild("Free")
+                    if free then
+                        local locked = free:FindFirstChild("Locked")
+                        local checked = free:FindFirstChild("Checked")
+                        if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
+                            if locked.Visible == false and checked.Visible == false then
+                                remote:FireServer(index, "Free")
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Throttled Auto Claim Battlepass (Premium)
+task.spawn(function()
+    while task.wait(10) do
+        if not Options.AutoClaimPremiumBattlepass or not Options.AutoClaimPremiumBattlepass.Value then continue end
+
+        local rewards = safeFindPath(playerGui, "MainUI", "Frames", "Battlepass", "Frame", "Main", "Battlepass", "ScrollingFrame", "Content", "Rewards")
+        local remote = safeFindPath(ReplicatedStorage, "Modules", "Battlepass", "Claim")
+
+        if rewards and remote then
+            local index = 0
+            for _, reward in ipairs(rewards:GetChildren()) do
+                if reward.Name == "BattlepassReward" then
+                    index += 1
+                    local premium = reward:FindFirstChild("Premium")
+                    if premium then
+                        local locked = premium:FindFirstChild("Locked")
+                        local checked = premium:FindFirstChild("Checked")
+                        if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
+                            if locked.Visible == false and checked.Visible == false then
+                                remote:FireServer(index, "Premium")
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Optimized & Throttled Auto Roll / Buy System
+task.spawn(function()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart", 10) or character:FindFirstChild("HumanoidRootPart")
+    local plotsFolder = workspace:WaitForChild("Plots", 10) or workspace:FindFirstChild("Plots")
+    local cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+
+    if not hrp or not plotsFolder then return end
+
+    local state = { buying = false }
+
+    local function normalizeKey(value)
+        return tostring(value or ""):lower():gsub("%s+", "")
+    end
+
+    local function getModelMutation(model)
+        local ok, mutation = pcall(function() return model:GetAttribute("Mutation") end)
+        if not ok or mutation == nil or tostring(mutation) == "" then
+            return "Normal"
+        end
+        return mutation
+    end
+
+    local function getRarityLabel(model)
+        local head = model:FindFirstChild("Head")
+        local buyUI = head and head:FindFirstChild("BuyUI")
+        if buyUI then
+            local frame = buyUI:FindFirstChild("Frame")
+            local chance = frame and frame:FindFirstChild("Chance")
+            local label = chance and chance:FindFirstChild("TextLabel")
+            if label then return label end
+        end
+        return nil
+    end
+
+    local function getModelRarity(model)
+        local label = getRarityLabel(model)
+        local rarity = label and tostring(label.Text or ""):gsub("<.->", ""):match("^%s*(.-)%s*$") or ""
+        if rarity == "" then return nil end
+        return rarity:match("^(%S+)") or rarity
+    end
+
+    local function getCharacterNameLabel(model)
+        local head = model:FindFirstChild("Head")
+        local buyUI = head and head:FindFirstChild("BuyUI")
+        if buyUI then
+            local frame = buyUI:FindFirstChild("Frame")
+            local nameFrame = frame and frame:FindFirstChild("Name")
+            local label = nameFrame and nameFrame:FindFirstChild("TextLabel")
+            if label then return label end
+        end
+        return nil
+    end
+
+    local function getModelCharacterName(model)
+        local label = getCharacterNameLabel(model)
+        local characterName = label and tostring(label.Text or ""):gsub("<.->", ""):match("^%s*(.-)%s*$") or tostring(model.Name or "")
+        if characterName == "" then return nil end
+        return characterName
+    end
+
+    local function getModelCharacterNameAliases(model)
+        local aliases = {}
+        local added = {}
+        local function addAlias(name)
+            if name ~= nil then
+                name = tostring(name):gsub("<.->", ""):match("^%s*(.-)%s*$")
+                if name and name ~= "" then
+                    local key = normalizeKey(name)
+                    if not added[key] then
+                        added[key] = true
+                        table.insert(aliases, name)
+                    end
+                end
+            end
+        end
+        addAlias(getModelCharacterName(model))
+        addAlias(model.Name)
+        return aliases
+    end
+
+    local function hasAttackAttribute(model)
+        local ok, attack = pcall(function() return model:GetAttribute("Attack") end)
+        return ok and attack ~= nil
+    end
+
+    local function isBoughtCharacterModel(model, scanRoot)
+        local current = model
+        while current and current ~= scanRoot do
+            if current:IsA("Model") and hasAttackAttribute(current) then
+                return true
+            end
+            current = current.Parent
+        end
+        return false
+    end
+
+    local function getTargetIndex(model)
+        local nameAliases = getModelCharacterNameAliases(model)
+        local rarity = getModelRarity(model)
+        local mutation = getModelMutation(model)
+        if not mutation then return nil end
+
+        local normalizedMutation = normalizeKey(mutation)
+        local normalizedRarity = rarity and normalizeKey(rarity) or nil
+        local normalizedNames = {}
+
+        for _, alias in ipairs(nameAliases) do
+            normalizedNames[normalizeKey(alias)] = alias
+        end
+
+        for index, config in ipairs(targetConfig) do
+            if normalizeKey(config.Mutation) == normalizedMutation then
+                if config.Mode == "Rarity" and normalizedRarity and normalizeKey(config.Value) == normalizedRarity then
+                    return index, rarity, mutation, "Rarity"
+                end
+
+                local matchedName = normalizedNames[normalizeKey(config.Value)]
+                if config.Mode == "Name" and matchedName then
+                    return index, matchedName, mutation, "Name"
+                end
+            end
+        end
+        return nil
+    end
+
+    local function getPlotOwner(plot)
+        return plot:GetAttribute("OwnerUserId")
+            or plot:GetAttribute("OwnerId")
+            or plot:GetAttribute("Owner")
+            or plot:GetAttribute("OwnerName")
+            or plot:GetAttribute("Player")
+            or plot:GetAttribute("UserId")
+    end
+
+    local function parseMoney(text)
+        text = tostring(text or ""):lower()
+        if text:find("free", 1, true) then return 0 end
+        local numberText, suffix = text:match("([%d,%.]+)%s*([kmbtq]?)")
+        if not numberText then return nil end
+        local value = tonumber((numberText:gsub(",", "")))
+        if not value then return nil end
+        local scale = { k = 1e3, m = 1e6, b = 1e9, t = 1e12, q = 1e15 }
+        return value * (scale[suffix] or 1)
+    end
+
+    local function readCash()
+        if not cashLabel then
+            cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+        end
+        if not cashLabel then return 0 end
+        return parseMoney(cashLabel.Text) or 0
+    end
+
+    local function getPriceLabel(model)
+        local head = model:FindFirstChild("Head")
+        local buyUI = head and head:FindFirstChild("BuyUI")
+        if buyUI then
+            local frame = buyUI:FindFirstChild("Frame")
+            local price = frame and frame:FindFirstChild("Price")
+            local label = price and price:FindFirstChild("TextLabel")
+            if label then return label end
+        end
+        return nil
+    end
+
+    local function findPrompt(root)
+        if not root then return nil end
+        local head = root:FindFirstChild("Head")
+        local buyUI = head and head:FindFirstChild("BuyUI")
+        if buyUI then
+            local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt")
+            if prompt then return prompt end
+        end
+        return root:FindFirstChildWhichIsA("ProximityPrompt")
+    end
+
+    local function firePrompt(prompt)
+        if not prompt then return false end
+        return pcall(function() fireproximityprompt(prompt) end)
+    end
+
+    local function getRollPrompt(plot)
+        local roll = plot:FindFirstChild("Roll")
+        local button = roll and roll:FindFirstChild("RollButton")
+        local buttonPart = button and button:FindFirstChild("Button")
+        local prompt = buttonPart and buttonPart:FindFirstChild("RollPrompt")
+
+        if prompt and prompt:IsA("ProximityPrompt") then
+            return prompt
+        end
+
+        return plot:FindFirstChild("RollPrompt", true)
+    end
+
+    local function getBestPlot()
+        local bestPlot = nil
+        local bestDist = math.huge
+
+        for _, plot in ipairs(plotsFolder:GetChildren()) do
+            local owner = getPlotOwner(plot)
+            if owner == player.UserId or owner == player.Name then
+                return plot
+            end
+
+            local ok, pivot = pcall(function() return plot:GetPivot() end)
+            local dist = ok and (hrp.Position - pivot.Position).Magnitude or math.huge
+            if dist < bestDist then
+                bestDist = dist
+                bestPlot = plot
+            end
+        end
+        return bestPlot
+    end
+
+    local function getBuyCandidates(plot)
+        local candidates = {}
+        local scanRoot = plot:FindFirstChild("Characters") or plot
+        local models = scanRoot == plot and scanRoot:GetDescendants() or scanRoot:GetChildren()
+
+        for _, inst in ipairs(models) do
+            if inst:IsA("Model") then
+                local head = inst:FindFirstChild("Head")
+                if not head or not head:FindFirstChild("BuyUI") then
+                    continue
+                end
+
+                if isBoughtCharacterModel(inst, scanRoot) then
+                    continue
+                end
+
+                local priceLabel = getPriceLabel(inst)
+                local prompt = findPrompt(inst)
+                local targetIndex, characterName, mutation = getTargetIndex(inst)
+
+                if priceLabel and prompt and prompt.Enabled and targetIndex then
+                    local price = parseMoney(priceLabel.Text)
+                    if price then
+                        table.insert(candidates, {
+                            model = inst,
+                            characterName = characterName,
+                            mutation = mutation,
+                            targetIndex = targetIndex,
+                            price = price,
+                            priceLabel = priceLabel,
+                            prompt = prompt,
+                        })
+                    end
+                end
+            end
+        end
+
+        table.sort(candidates, function(a, b)
+            if a.targetIndex ~= b.targetIndex then
+                return a.targetIndex < b.targetIndex
+            end
+            return a.price < b.price
+        end)
+
+        return candidates
+    end
+
+    while task.wait(0.35) do
+        if not Options.AutoBuyPlot or not Options.AutoBuyPlot.Value then continue end
+
+        local myPlot = getBestPlot()
+        if not myPlot then continue end
+
+        local boughtOrBlocked = false
+
+        if not state.buying then
+            local candidates = getBuyCandidates(myPlot)
+            local cash = readCash() or 0
+
+            for _, candidate in ipairs(candidates) do
+                if cash < candidate.price then
+                    boughtOrBlocked = true
+                    continue
+                end
+
+                state.buying = true
+                firePrompt(candidate.prompt)
+                task.wait(0.75)
+                state.buying = false
+                boughtOrBlocked = true
+                break
+            end
+        end
+
+        if not state.buying and not boughtOrBlocked then
+            local rollPrompt = getRollPrompt(myPlot)
+            if rollPrompt and rollPrompt.Enabled then
+                firePrompt(rollPrompt)
+                local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 0.8
+                task.wait(delayTime)
+            end
+        end
+    end
+end)
