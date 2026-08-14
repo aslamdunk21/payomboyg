@@ -78,7 +78,7 @@ local Tabs = {
     Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
     Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
     FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
-    Dashboard = Window:AddTab({ Title = "แดชบอร์ด", Icon = "sliders" })
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด&ตั้งค่า", Icon = "sliders" })
 }
 
 local Options = Fluent.Options
@@ -2719,8 +2719,39 @@ local function isBossTimeWindow()
     return min <= 5 or min >= 58
 end
 
+local function closeBossRaidUI()
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return end
+        for _, v in ipairs(playerGui:GetDescendants()) do
+            if (v:IsA("TextButton") or v:IsA("ImageButton")) and v.Visible then
+                local txt = v:IsA("TextButton") and v.Text or ""
+                local cleanTxt = string.upper(string.match(string.gsub(txt, "<[^>]+>", ""), "^%s*(.-)%s*$") or "")
+                local name = string.upper(v.Name or "")
+                if cleanTxt == "X" or name == "CLOSE" or name == "CLOSEBUTTON" or name == "EXIT" or name == "XBUTTON" or name == "XBTN" then
+                    local p = v.Parent
+                    local isRaidUI = false
+                    while p and p:IsA("GuiObject") do
+                        local pName = string.upper(p.Name)
+                        if pName:find("RAID") or pName:find("BOSS") then
+                            isRaidUI = true
+                            break
+                        end
+                        p = p.Parent
+                    end
+                    if isRaidUI or cleanTxt == "X" then
+                        fireButton(v)
+                        task.wait(0.1)
+                    end
+                end
+            end
+        end
+    end)
+end
+
 local function exitTowerNow()
     getgenv().AutoReplayToggled = false
+    closeBossRaidUI()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if playerGui then
         local exitButtons = {}
@@ -2961,11 +2992,12 @@ BossSourceDropdown:OnChanged(function(Value)
     getgenv().BossCardSource = Value
 end)
 
+getgenv().BossRaidDifficulty = getgenv().BossRaidDifficulty or "NIGHTMARE"
 local BossDiffDropdown = Tabs.Raid:AddDropdown("BossRaidDifficulty", {
     Title = "⚔️ ระดับความยากบอสเรด",
     Values = { "EASY", "MEDIUM", "HARD", "NIGHTMARE" },
     Multi = false,
-    Default = "NIGHTMARE"
+    Default = getgenv().BossRaidDifficulty
 })
 BossDiffDropdown:OnChanged(function(Value)
     getgenv().BossRaidDifficulty = Value
@@ -2987,6 +3019,7 @@ AutoBossToggle:OnChanged(function(state)
                 if playerGui then
                     local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
                     local alreadyFought = false
+                    local targetDiff = string.upper(tostring(getgenv().BossRaidDifficulty or "NIGHTMARE"))
 
                     local function isGuiVisible(gui)
                         if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
@@ -3024,7 +3057,7 @@ AutoBossToggle:OnChanged(function(state)
                             elseif text == "BATTLE" then
                                 local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                 if btn and isGuiVisible(btn) then battleBtn = btn end
-                            elseif text == getgenv().BossRaidDifficulty then
+                            elseif text == targetDiff then
                                 local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                 if btn and isGuiVisible(btn) then diffBtn = btn end
                             elseif text == "AUTO REPLAY" then
@@ -3047,6 +3080,7 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     if alreadyFought then
+                        closeBossRaidUI()
                         getgenv().AutoBossRaid = false
                         if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
                         Fluent:Notify({ Title = "บอสเรด", Content = "คุณสู้บอสไปแล้วในชั่วโมงนี้! หยุดลงบอสเรด", Duration = 5 })
@@ -3223,6 +3257,7 @@ AutoTowerAndBossToggle:OnChanged(function(state)
                         if playerGui then
                             local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
                             local alreadyFought = false
+                            local targetDiff = string.upper(tostring(getgenv().BossRaidDifficulty or "NIGHTMARE"))
 
                             local function isGuiVisible(gui)
                                 if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
@@ -3260,7 +3295,7 @@ AutoTowerAndBossToggle:OnChanged(function(state)
                                     elseif text == "BATTLE" then
                                         local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                         if btn and isGuiVisible(btn) then battleBtn = btn end
-                                    elseif text == getgenv().BossRaidDifficulty then
+                                    elseif text == targetDiff then
                                         local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                         if btn and isGuiVisible(btn) then diffBtn = btn end
                                     elseif text == "AUTO REPLAY" then
@@ -3283,6 +3318,7 @@ AutoTowerAndBossToggle:OnChanged(function(state)
                             end
 
                             if alreadyFought then
+                                closeBossRaidUI()
                                 getgenv().BossDoneThisHour = true
                                 bossFinished = true
                                 Fluent:Notify({ Title = "ออโต้ผสม", Content = "สู้บอสเรดเรียบร้อยแล้ว! กำลังกลับไปลงหอคอยต่อ...", Duration = 4 })
@@ -3475,6 +3511,7 @@ AutoTowerAndBossToggle:OnChanged(function(state)
                         local inBattle = autoReplayBtn or showBattleBtn
 
                         if openPrompt and not inTowerUI and not inBattle then
+                            closeBossRaidUI()
                             if getgenv().TowerCardSource == "จากบนฐาน (Plot)" and not getgenv().TowerHasCollected then
                                 collect4BestBaseCards()
                                 getgenv().TowerHasCollected = true
@@ -4484,28 +4521,6 @@ if SaveManager and InterfaceManager then
 
     InterfaceManager:SetFolder("PayomboyZ_Config")
     SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
-
-    Tabs.Dashboard:AddButton({
-        Title = "💾 บันทึกการตั้งค่าทุกแท็บ (Save Config)",
-        Description = "บันทึกการตั้งค่า (Toggle, Slider, Dropdown) ของทุกแท็บลง Config",
-        Callback = function()
-            pcall(function()
-                SaveManager:Save("default")
-                Fluent:Notify({ Title = "Save Config", Content = "บันทึกการตั้งค่าทั้งหมดทุกแท็บเรียบร้อยแล้ว! ✅", Duration = 4 })
-            end)
-        end
-    })
-
-    Tabs.Dashboard:AddButton({
-        Title = "📂 โหลดการตั้งค่าทุกแท็บ (Load Config)",
-        Description = "ดึงการตั้งค่าทั้งหมดที่บันทึกไว้กลับมาใช้งาน",
-        Callback = function()
-            pcall(function()
-                SaveManager:Load("default")
-                Fluent:Notify({ Title = "Load Config", Content = "โหลดการตั้งค่าทั้งหมดทุกแท็บเรียบร้อยแล้ว! ✅", Duration = 4 })
-            end)
-        end
-    })
 
     InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
     SaveManager:BuildConfigSection(Tabs.Dashboard)
