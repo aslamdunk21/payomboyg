@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
 
 local player = Players.LocalPlayer
 while not player do task.wait(0.1); player = Players.LocalPlayer end
@@ -63,7 +64,6 @@ local Window = Fluent:CreateWindow({
 
 -- Rich Floating Toggle & Profile HUD for Mobile & PC
 task.spawn(function()
-    local Stats = game:GetService("Stats")
     local oldGui = CoreGui:FindFirstChild("PayomboyZToggleGui") or playerGui:FindFirstChild("PayomboyZToggleGui")
     if oldGui then oldGui:Destroy() end
 
@@ -84,7 +84,6 @@ task.spawn(function()
     mainWidget.BackgroundTransparency = 0.15
     mainWidget.BorderSizePixel = 0
     mainWidget.Active = true
-    mainWidget.Draggable = true
     mainWidget.Parent = toggleGui
 
     local corner = Instance.new("UICorner")
@@ -119,20 +118,35 @@ task.spawn(function()
     logoCorner.CornerRadius = UDim.new(0, 8)
     logoCorner.Parent = logoImage
 
-    -- Fetch custom logo image safely
+    -- Non-blocking Async Image Download
     task.spawn(function()
         local logoUrl = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/main/543199739_2812856088914181_3062917809445648175_n.jpg"
         local fileName = "543199739_2812856088914181_3062917809445648175_n.jpg"
-        if getcustomasset and writefile then
-            if not (isfile and isfile(fileName)) then
-                pcall(function()
-                    writefile(fileName, game:HttpGet(logoUrl))
-                end)
-            end
+        if getcustomasset then
             if isfile and isfile(fileName) then
-                pcall(function()
-                    logoImage.Image = getcustomasset(fileName)
-                end)
+                pcall(function() logoImage.Image = getcustomasset(fileName) end)
+            else
+                local req = (syn and syn.request) or (http and http.request) or http_request or request
+                if req then
+                    pcall(function()
+                        local res = req({ Url = logoUrl, Method = "GET" })
+                        if res and res.Body and writefile then
+                            writefile(fileName, res.Body)
+                            if isfile and isfile(fileName) then
+                                logoImage.Image = getcustomasset(fileName)
+                            end
+                        end
+                    end)
+                else
+                    pcall(function()
+                        if writefile then
+                            writefile(fileName, game:HttpGet(logoUrl))
+                            if isfile and isfile(fileName) then
+                                logoImage.Image = getcustomasset(fileName)
+                            end
+                        end
+                    end)
+                end
             end
         end
     end)
@@ -183,25 +197,50 @@ task.spawn(function()
     statsLabel.TextXAlignment = Enum.TextXAlignment.Left
     statsLabel.Parent = mainWidget
 
-    -- Transparent Click Overlay Button for toggling UI
-    local clickOverlay = Instance.new("TextButton")
-    clickOverlay.Name = "ClickOverlay"
-    clickOverlay.Size = UDim2.new(1, 0, 1, 0)
-    clickOverlay.BackgroundTransparency = 1
-    clickOverlay.Text = ""
-    clickOverlay.Parent = mainWidget
+    -- Custom Dragging & Click-Toggle System (No blocking overlay)
+    local dragging = false
+    local dragStart = Vector3.new()
+    local startPos = UDim2.new()
+    local totalDragDist = 0
 
-    clickOverlay.MouseButton1Click:Connect(function()
-        if Window then
-            if type(Window.Minimize) == "function" then
-                Window:Minimize()
-            elseif Window.Root then
-                Window.Root.Visible = not Window.Root.Visible
+    mainWidget.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainWidget.Position
+            totalDragDist = 0
+        end
+    end)
+
+    mainWidget.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then
+                dragging = false
+                if totalDragDist < 6 then
+                    if Window then
+                        if type(Window.Minimize) == "function" then
+                            Window:Minimize()
+                        elseif Window.Root then
+                            Window.Root.Visible = not Window.Root.Visible
+                        end
+                    end
+                end
             end
         end
     end)
 
-    -- Realtime FPS & Ping Update Loop
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            totalDragDist = totalDragDist + math.abs(delta.X) + math.abs(delta.Y)
+            mainWidget.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    -- Low-overhead FPS & Ping Update Loop
     local fpsCount = 0
     local lastFpsTick = tick()
     local currentFps = 60
@@ -215,15 +254,23 @@ task.spawn(function()
         end
     end)
 
+    local function getPing()
+        local ok, p = pcall(function() return player:GetNetworkPing() end)
+        if ok and p then
+            return math.floor(p * 1000)
+        end
+        local ping = 0
+        pcall(function()
+            local s = Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem")
+            local item = s and s:FindFirstChild("Data Ping")
+            if item then ping = math.floor(item:GetValue()) end
+        end)
+        return ping
+    end
+
     task.spawn(function()
-        while task.wait(0.5) do
-            pcall(function()
-                local ping = 0
-                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") and Stats.Network.ServerStatsItem:FindFirstChild("Data Ping") then
-                    ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
-                end
-                statsLabel.Text = string.format("FPS: %d | Ping: %dms", currentFps, ping)
-            end)
+        while task.wait(1) do
+            statsLabel.Text = string.format("FPS: %d | Ping: %dms", currentFps, getPing())
         end
     end)
 end)
@@ -877,11 +924,42 @@ task.spawn(function()
         return false
     end
 
+    local RarityRanks = {
+        common = 1,
+        uncommon = 2,
+        rare = 3,
+        epic = 4,
+        legendary = 5,
+        mythic = 6,
+        god = 7,
+        secret = 8,
+        limited = 9,
+    }
+
+    local function getRarityScore(model)
+        local rarityText = getModelRarity(model) or ""
+        local lowerRarity = rarityText:lower()
+
+        for key, rank in pairs(RarityRanks) do
+            if lowerRarity:find(key, 1, true) then
+                return rank * 1000000
+            end
+        end
+
+        local chanceStr = rarityText:match("/([%d,%.]+)")
+        if chanceStr then
+            local num = tonumber((chanceStr:gsub(",", "")))
+            if num then return num end
+        end
+
+        return 0
+    end
+
     local function getTargetIndex(model)
         local nameAliases = getModelCharacterNameAliases(model)
         local rarity = getModelRarity(model)
         local mutation = getModelMutation(model)
-        if not mutation then return nil end
+        if not mutation then mutation = "Normal" end
 
         local normalizedMutation = normalizeKey(mutation)
         local normalizedRarity = rarity and normalizeKey(rarity) or nil
@@ -891,19 +969,25 @@ task.spawn(function()
             normalizedNames[normalizeKey(alias)] = alias
         end
 
-        for index, config in ipairs(targetConfig) do
-            if normalizeKey(config.Mutation) == normalizedMutation then
-                if config.Mode == "Rarity" and normalizedRarity and normalizeKey(config.Value) == normalizedRarity then
-                    return index, rarity, mutation, "Rarity"
-                end
+        if targetConfig and #targetConfig > 0 then
+            for index, config in ipairs(targetConfig) do
+                if normalizeKey(config.Mutation) == normalizedMutation then
+                    if config.Mode == "Rarity" and normalizedRarity and normalizeKey(config.Value) == normalizedRarity then
+                        return index, rarity, mutation, "Rarity"
+                    end
 
-                local matchedName = normalizedNames[normalizeKey(config.Value)]
-                if config.Mode == "Name" and matchedName then
-                    return index, matchedName, mutation, "Name"
+                    local matchedName = normalizedNames[normalizeKey(config.Value)]
+                    if config.Mode == "Name" and matchedName then
+                        return index, matchedName, mutation, "Name"
+                    end
                 end
             end
+            return nil
+        else
+            -- DEFAULT: Score unit rarity so candidates[1] is ALWAYS the single best unit on the plot
+            local score = getRarityScore(model)
+            return (1000000000 - score), rarity or "Unknown", mutation, "Best"
         end
-        return nil
     end
 
     local function getPlotOwner(plot)
@@ -927,11 +1011,16 @@ task.spawn(function()
     end
 
     local function readCash()
-        if not cashLabel then
+        if not cashLabel or not cashLabel.Parent then
             cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+                     or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
+                     or playerGui:FindFirstChild("CashLabel", true)
         end
-        if not cashLabel then return 0 end
-        return parseMoney(cashLabel.Text) or 0
+        if cashLabel and cashLabel:IsA("TextLabel") then
+            local val = parseMoney(cashLabel.Text)
+            if val then return val end
+        end
+        return math.huge
     end
 
     local function getPriceLabel(model)
@@ -941,25 +1030,46 @@ task.spawn(function()
             local frame = buyUI:FindFirstChild("Frame")
             local price = frame and frame:FindFirstChild("Price")
             local label = price and price:FindFirstChild("TextLabel")
-            if label then return label end
+            if label and label:IsA("TextLabel") then return label end
+        end
+
+        local fallbackBuyUI = model:FindFirstChild("BuyUI", true)
+        if fallbackBuyUI then
+            local price = fallbackBuyUI:FindFirstChild("Price", true)
+            if price then
+                local label = price:FindFirstChildWhichIsA("TextLabel", true)
+                if label then return label end
+            end
         end
         return nil
     end
 
     local function findPrompt(root)
         if not root then return nil end
-        local head = root:FindFirstChild("Head")
-        local buyUI = head and head:FindFirstChild("BuyUI")
+        
+        local buyUI = root:FindFirstChild("BuyUI", true)
         if buyUI then
-            local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt")
+            local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
             if prompt then return prompt end
         end
-        return root:FindFirstChildWhichIsA("ProximityPrompt")
+
+        local preferredNames = { "BuyPrompt", "PlacementPrompt", "RollPrompt", "GiftPrompt", "ProximityPrompt", "Prox", "Prompt" }
+        for _, name in ipairs(preferredNames) do
+            local inst = root:FindFirstChild(name, true)
+            if inst and inst:IsA("ProximityPrompt") then return inst end
+        end
+
+        return root:FindFirstChildWhichIsA("ProximityPrompt", true)
     end
 
     local function firePrompt(prompt)
         if not prompt then return false end
-        return pcall(function() fireproximityprompt(prompt) end)
+        return pcall(function()
+            if fireproximityprompt then
+                fireproximityprompt(prompt, 0)
+                fireproximityprompt(prompt)
+            end
+        end)
     end
 
     local function getRollPrompt(plot)
@@ -1002,11 +1112,6 @@ task.spawn(function()
 
         for _, inst in ipairs(models) do
             if inst:IsA("Model") then
-                local head = inst:FindFirstChild("Head")
-                if not head or not head:FindFirstChild("BuyUI") then
-                    continue
-                end
-
                 if isBoughtCharacterModel(inst, scanRoot) then
                     continue
                 end
@@ -1015,19 +1120,17 @@ task.spawn(function()
                 local prompt = findPrompt(inst)
                 local targetIndex, characterName, mutation = getTargetIndex(inst)
 
-                if priceLabel and prompt and prompt.Enabled and targetIndex then
-                    local price = parseMoney(priceLabel.Text)
-                    if price then
-                        table.insert(candidates, {
-                            model = inst,
-                            characterName = characterName,
-                            mutation = mutation,
-                            targetIndex = targetIndex,
-                            price = price,
-                            priceLabel = priceLabel,
-                            prompt = prompt,
-                        })
-                    end
+                if priceLabel and prompt and targetIndex then
+                    local price = parseMoney(priceLabel.Text) or 0
+                    table.insert(candidates, {
+                        model = inst,
+                        characterName = characterName,
+                        mutation = mutation,
+                        targetIndex = targetIndex,
+                        price = price,
+                        priceLabel = priceLabel,
+                        prompt = prompt,
+                    })
                 end
             end
         end
@@ -1042,7 +1145,9 @@ task.spawn(function()
         return candidates
     end
 
-    while task.wait(0.35) do
+    state.hasBoughtThisRoll = false
+
+    while task.wait(0.2) do
         if not Options.AutoBuyPlot or not Options.AutoBuyPlot.Value then continue end
 
         local myPlot = getBestPlot()
@@ -1050,31 +1155,56 @@ task.spawn(function()
 
         local boughtOrBlocked = false
 
-        if not state.buying then
+        if not state.buying and not state.hasBoughtThisRoll then
             local candidates = getBuyCandidates(myPlot)
-            local cash = readCash() or 0
+            local cash = readCash()
 
-            for _, candidate in ipairs(candidates) do
-                if cash < candidate.price then
+            -- Buy ONLY the SINGLE BEST candidate from this roll round!
+            if #candidates > 0 then
+                local bestCandidate = candidates[1]
+                if cash >= bestCandidate.price then
+                    state.buying = true
+                    firePrompt(bestCandidate.prompt)
+                    task.wait(0.5)
+                    state.buying = false
+                    state.hasBoughtThisRoll = true
                     boughtOrBlocked = true
-                    continue
+                else
+                    -- Cannot afford the best unit yet, hold and wait until cash accumulates
+                    boughtOrBlocked = true
                 end
-
-                state.buying = true
-                firePrompt(candidate.prompt)
-                task.wait(0.75)
-                state.buying = false
-                boughtOrBlocked = true
-                break
             end
         end
 
-        if not state.buying and not boughtOrBlocked then
+        -- If we already bought 1 unit from this roll (or if nothing to buy), Roll next round!
+        if not state.buying and (state.hasBoughtThisRoll or not boughtOrBlocked) then
             local rollPrompt = getRollPrompt(myPlot)
             if rollPrompt and rollPrompt.Enabled then
                 firePrompt(rollPrompt)
+                state.hasBoughtThisRoll = false
+                
+                -- Wait for server to spawn/update the model & BuyUI on plot
+                task.wait(0.4)
+
+                -- Scan immediately after roll spawn
+                local postRollCandidates = getBuyCandidates(myPlot)
+                local cash = readCash()
+                if #postRollCandidates > 0 then
+                    local bestCandidate = postRollCandidates[1]
+                    if cash >= bestCandidate.price then
+                        state.buying = true
+                        firePrompt(bestCandidate.prompt)
+                        task.wait(0.5)
+                        state.buying = false
+                        state.hasBoughtThisRoll = true
+                    end
+                end
+
+                -- Respect user configured Roll Delay
                 local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 0.8
-                task.wait(delayTime)
+                if delayTime > 0.4 then
+                    task.wait(delayTime - 0.4)
+                end
             end
         end
     end
