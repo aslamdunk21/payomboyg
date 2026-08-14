@@ -26,6 +26,7 @@ task.spawn(function()
     local titleLabel
     local subLabel
 
+    local attempts = 0
     repeat
         for _, v in ipairs(CoreGui:GetDescendants()) do
             if v:IsA("TextLabel") then
@@ -38,28 +39,32 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(0.2)
-    until titleLabel and subLabel
+        if titleLabel and subLabel then break end
+        attempts += 1
+        task.wait(0.5)
+    until attempts >= 10 or (titleLabel and subLabel)
 
-    while titleLabel.Parent and subLabel.Parent do
-        local hue = (tick() * 0.15) % 1
-        local color = Color3.fromHSV(hue, 1, 1)
+    if titleLabel and subLabel then
+        while titleLabel.Parent and subLabel.Parent do
+            local hue = (tick() * 0.15) % 1
+            local color = Color3.fromHSV(hue, 1, 1)
 
-        local r = math.floor(color.R * 255)
-        local g = math.floor(color.G * 255)
-        local b = math.floor(color.B * 255)
+            local r = math.floor(color.R * 255)
+            local g = math.floor(color.G * 255)
+            local b = math.floor(color.B * 255)
 
-        titleLabel.Text = string.format(
-            '<b><font color="rgb(%d,%d,%d)">Roll Anime to Fight! ⚔️</font></b>',
-            r, g, b
-        )
+            titleLabel.Text = string.format(
+                '<b><font color="rgb(%d,%d,%d)">Roll Anime to Fight! ⚔️</font></b>',
+                r, g, b
+            )
 
-        subLabel.Text = string.format(
-            '<b><font color="rgb(%d,%d,%d)">Made by PayomboyZ HUB</font></b>',
-            r, g, b
-        )
+            subLabel.Text = string.format(
+                '<b><font color="rgb(%d,%d,%d)">Made by PayomboyZ HUB</font></b>',
+                r, g, b
+            )
 
-        task.wait(0.1)
+            task.wait(0.2)
+        end
     end
 end)
 
@@ -227,14 +232,16 @@ local function getCharacterValues()
         end
     end
 
-    local plots = workspace:FindFirstChild("Plots")
-    if plots then
-        for _, plot in ipairs(plots:GetChildren()) do
-            local characters = plot:FindFirstChild("Characters")
-            if characters then
-                for _, model in ipairs(characters:GetChildren()) do
-                    if model:IsA("Model") then
-                        addWorkspaceModelName(model)
+    if not next(values) then
+        local plots = workspace:FindFirstChild("Plots")
+        if plots then
+            for _, plot in ipairs(plots:GetChildren()) do
+                local characters = plot:FindFirstChild("Characters")
+                if characters then
+                    for _, model in ipairs(characters:GetChildren()) do
+                        if model:IsA("Model") then
+                            addWorkspaceModelName(model)
+                        end
                     end
                 end
             end
