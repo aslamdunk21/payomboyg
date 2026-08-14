@@ -666,9 +666,9 @@ getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 10
 
 local AutoSpawnDelaySlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
     Title = "⏱️ ความหน่วงการสุ่มแพ็ก (Auto Spawn Delay)",
-    Description = "10 = 0.1 วินาที, 100 = 1.0 วินาที",
-    Default = getgenv().AutoSpawnDelay,
-    Min = 10,
+    Description = "1 = 0.01 วินาที (สุ่มไวสุด), 100 = 1.0 วินาที",
+    Default = getgenv().AutoSpawnDelay or 10,
+    Min = 1,
     Max = 100,
     Rounding = 0
 })
@@ -712,21 +712,28 @@ AutoSpawnToggle:OnChanged(function(state)
                         if model:IsA("Model") and model:GetAttribute("IgnoreTutoBeam") ~= nil and model:FindFirstChildWhichIsA("ProximityPrompt", true) then
                             if getgenv().AutoBuyCards and model:GetAttribute("Rejected") then continue end
                             activeCards = activeCards + 1
+
+                            -- Fast Arrival Bypass
+                            pcall(function()
+                                local rs = game:GetService("ReplicatedStorage")
+                                local cBoxRE = rs:FindFirstChild("CardBoxRE")
+                                if cBoxRE then cBoxRE:FireServer("CardReachedArrival", model) end
+                            end)
                         end
                     end
                 end
-                local delaySec = math.max(0.05, (getgenv().AutoSpawnDelay or 10) / 100)
+                local delaySec = math.max(0.01, (getgenv().AutoSpawnDelay or 10) / 100)
                 if getgenv().AutoBuyCards then
                     if activeCards == 0 then
                         pcall(fireclickdetector, cd)
                         task.wait(delaySec)
                     else
-                        task.wait(0.05)
+                        task.wait(0.02)
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(math.max(0.1, delaySec * 2))
+                        task.wait(math.max(0.05, delaySec * 1.5))
                     else
                         task.wait(delaySec)
                     end
@@ -1169,6 +1176,39 @@ local AutoRerollToggle = Tabs.Reroll:AddToggle("AutoRerollTrait", { Title = "�
 AutoRerollToggle:OnChanged(function(state)
     getgenv().AutoReroll = state
     if state then
+        if not getgenv().SelectedTraits or next(getgenv().SelectedTraits) == nil then
+            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือก Trait ที่ต้องการหยุดก่อน!", Duration = 3 })
+            getgenv().AutoReroll = false
+            AutoRerollToggle:SetValue(false)
+            return
+        end
+
+        local cardKey = getgenv().SelectedRerollCardKey
+        local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+        if not cardTool or not cardTool.Parent then
+            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือกการ์ดที่ต้องการรีโรลก่อน!", Duration = 3 })
+            getgenv().AutoReroll = false
+            AutoRerollToggle:SetValue(false)
+            return
+        end
+
+        cardTool:SetAttribute("CachedTrait", nil)
+        local initialTrait = getCardTrait(cardTool)
+        local alreadyHasTrait = false
+        for trait, _ in pairs(getgenv().SelectedTraits) do
+            if string.find(string.lower(initialTrait), string.lower(trait)) then
+                alreadyHasTrait = true
+                break
+            end
+        end
+
+        if alreadyHasTrait then
+            Fluent:Notify({ Title = "🔒 ล็อคสถานะ", Content = "การ์ดใบนี้มี Trait ที่เลือกไว้อยู่แล้ว (" .. initialTrait .. ") ไม่อนุญาตให้สุ่ม!", Duration = 4 })
+            getgenv().AutoReroll = false
+            AutoRerollToggle:SetValue(false)
+            return
+        end
+
         task.spawn(function()
             getgenv().NotifiedRerollStart = nil
             while getgenv().AutoReroll do
@@ -1182,11 +1222,12 @@ AutoRerollToggle:OnChanged(function(state)
                     task.wait(1)
                     continue
                 end
-                local cardKey = getgenv().SelectedRerollCardKey
-                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                local currentCardKey = getgenv().SelectedRerollCardKey
+                local currentCardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[currentCardKey]
                 
-                if cardTool and cardTool.Parent then
-                    local currentTrait = getCardTrait(cardTool)
+                if currentCardTool and currentCardTool.Parent then
+                    currentCardTool:SetAttribute("CachedTrait", nil)
+                    local currentTrait = getCardTrait(currentCardTool)
                     
                     local hasSelected = false
                     for trait, _ in pairs(getgenv().SelectedTraits) do
@@ -1345,6 +1386,39 @@ local AutoRankRerollToggle = Tabs.Reroll:AddToggle("AutoRerollRank", { Title = "
 AutoRankRerollToggle:OnChanged(function(state)
     getgenv().AutoRankReroll = state
     if state then
+        if not getgenv().SelectedRanks or next(getgenv().SelectedRanks) == nil then
+            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือก Rank ที่ต้องการหยุดก่อน!", Duration = 3 })
+            getgenv().AutoRankReroll = false
+            AutoRankRerollToggle:SetValue(false)
+            return
+        end
+
+        local cardKey = getgenv().SelectedRankCardKey
+        local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+        if not cardTool or not cardTool.Parent then
+            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือกการ์ดที่ต้องการรีโรลก่อน!", Duration = 3 })
+            getgenv().AutoRankReroll = false
+            AutoRankRerollToggle:SetValue(false)
+            return
+        end
+
+        cardTool:SetAttribute("CachedRank", nil)
+        local initialRank = getCardRank(cardTool)
+        local alreadyHasRank = false
+        for rank, _ in pairs(getgenv().SelectedRanks) do
+            if string.lower(initialRank) == string.lower(rank) then
+                alreadyHasRank = true
+                break
+            end
+        end
+
+        if alreadyHasRank then
+            Fluent:Notify({ Title = "🔒 ล็อคสถานะ", Content = "การ์ดใบนี้มี Rank ที่เลือกไว้อยู่แล้ว (" .. initialRank .. ") ไม่อนุญาตให้สุ่ม!", Duration = 4 })
+            getgenv().AutoRankReroll = false
+            AutoRankRerollToggle:SetValue(false)
+            return
+        end
+
         task.spawn(function()
             getgenv().NotifiedRankRerollStart = nil
             while getgenv().AutoRankReroll do
@@ -1358,11 +1432,12 @@ AutoRankRerollToggle:OnChanged(function(state)
                     task.wait(1)
                     continue
                 end
-                local cardKey = getgenv().SelectedRankCardKey
-                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                local currentCardKey = getgenv().SelectedRankCardKey
+                local currentCardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[currentCardKey]
                 
-                if cardTool and cardTool.Parent then
-                    local currentRank = getCardRank(cardTool)
+                if currentCardTool and currentCardTool.Parent then
+                    currentCardTool:SetAttribute("CachedRank", nil)
+                    local currentRank = getCardRank(currentCardTool)
                     
                     local hasSelected = false
                     for rank, _ in pairs(getgenv().SelectedRanks) do
