@@ -128,6 +128,9 @@ local NormalRouter = {
 
     -- 4. Roll Anime To Fight (RATF)
     [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
+
+    -- 5. Gakuran (GKR)
+    [128736949265057] = { Name = "Gakuran", URL = https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
@@ -140,6 +143,9 @@ local VVIPRouter = {
 
     -- 3. Capybara Vs Plant (CvsP)
     [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua", Keywords = {"capybara"} },
+
+    -- 4. Steal An Egg (SaE)
+    [107778070777162] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG", "ขโมยไข่"} },
 }
 
 -- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
