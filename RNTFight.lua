@@ -1483,21 +1483,82 @@ local function getUnitPower(model)
 end
 
 local function isGamePlaying(plot)
-    if not plot then return false end
-    local playing = plot:GetAttribute("Playing") or plot:GetAttribute("Fighting") or plot:GetAttribute("InBattle") or plot:GetAttribute("State")
-    if playing == true or playing == "Fighting" or playing == "Playing" or playing == "InBattle" then
-        return true
-    end
-    local enemiesFolder = plot:FindFirstChild("EnemiesSlots") or plot:FindFirstChild("Enemies")
-    if enemiesFolder then
-        for _, child in ipairs(enemiesFolder:GetChildren()) do
-            if child:FindFirstChild("Character") or child:FindFirstChildWhichIsA("Humanoid") then
+    -- 1. Check UI Button (Most Direct Indicator: "STOP" vs "START")
+    local startFrame = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Start")
+    if startFrame then
+        local textLabel = safeFindPath(startFrame, "Frame", "TextLabel")
+                       or startFrame:FindFirstChild("TextLabel", true)
+        if textLabel and textLabel.Text and textLabel.Text ~= "" then
+            local txt = textLabel.Text:upper()
+            if txt:find("STOP") or txt:find("PAUSE") then
                 return true
+            elseif txt:find("START") or txt:find("PLAY") then
+                return false
+            end
+        end
+        local redGradient = safeFindPath(startFrame, "Frame", "Color", "Red")
+                         or startFrame:FindFirstChild("Red", true)
+        if redGradient and redGradient:IsA("UIGradient") and redGradient.Enabled then
+            return true
+        end
+    end
+
+    -- 2. Check Plot Attributes & Enemies
+    if plot then
+        local playing = plot:GetAttribute("Playing") or plot:GetAttribute("Fighting") or plot:GetAttribute("InBattle") or plot:GetAttribute("State")
+        if playing == true or playing == "Fighting" or playing == "Playing" or playing == "InBattle" then
+            return true
+        end
+
+        local enemiesFolder = plot:FindFirstChild("EnemiesSlots") or plot:FindFirstChild("Enemies")
+        if enemiesFolder then
+            for _, child in ipairs(enemiesFolder:GetChildren()) do
+                if child:FindFirstChild("Character") or child:FindFirstChildWhichIsA("Humanoid") then
+                    return true
+                end
             end
         end
     end
+
     return false
 end
+
+-- Dedicated PlayEnd & Round State Event Watcher
+task.spawn(function()
+    task.wait(2)
+    local startFrame = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Start")
+    local textLabel = startFrame and (safeFindPath(startFrame, "Frame", "TextLabel") or startFrame:FindFirstChild("TextLabel", true))
+
+    if textLabel then
+        textLabel:GetPropertyChangedSignal("Text"):Connect(function()
+            local txt = textLabel.Text:upper()
+            -- When text changes to START/PLAY, it indicates PlayEnd (round finished / lost / won)
+            if txt:find("START") or txt:find("PLAY") then
+                if isUiInitialized and Options and Options.AutoSlotPlacement and Options.AutoSlotPlacement.Value then
+                    task.delay(0.3, function()
+                        runEquipBestSequence()
+                    end)
+                end
+            end
+        end)
+    end
+
+    -- Remote Event PlayEnd Listener
+    local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+    if fightStartRemote and fightStartRemote:IsA("RemoteEvent") then
+        pcall(function()
+            fightStartRemote.OnClientEvent:Connect(function(action, ...)
+                if action == "End" or action == "PlayEnd" or action == "Stop" or action == "Win" or action == "Defeat" then
+                    if isUiInitialized and Options and Options.AutoSlotPlacement and Options.AutoSlotPlacement.Value then
+                        task.delay(0.3, function()
+                            runEquipBestSequence()
+                        end)
+                    end
+                end
+            end)
+        end)
+    end
+end)
 
 -- Throttled Auto Tower Thread
 task.spawn(function()
