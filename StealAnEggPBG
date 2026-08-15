@@ -19,6 +19,7 @@ local Lighting          = game:GetService("Lighting")
 -- Pre-declare top-level variables for zero Luau compiler errors
 local Fluent, SaveManager, InterfaceManager, Window, Options, UIWindow, Notify
 local syn, http, http_request, request
+local startFlying, stopFlying
 
 local LocalPlayer = Players.LocalPlayer
 while not LocalPlayer do task.wait(0.1); LocalPlayer = Players.LocalPlayer end
@@ -378,9 +379,12 @@ local Cfg = {
     GuardSafeGap     = 26,
     BoostWalkSpeed   = 900,
 
-    -- survival
+    -- survival & movement
     GodMode          = true,
     AntiAFK          = true,
+    FlyEnabled       = false,
+    FlySpeed         = 50,
+    FlyNoclip        = false,
 
     -- selling pets
     AutoSellPets     = false,
@@ -798,6 +802,36 @@ local DropMoveMode = Tabs.Sys:AddDropdown("MoveMode", {
     Default = Cfg.MoveMode
 })
 DropMoveMode:OnChanged(function(v) Cfg.MoveMode = v saveConfigSoon() end)
+
+Tabs.Sys:AddSection("ระบบบิน (Fly System)")
+
+local ToggleFly = Tabs.Sys:AddToggle("FlyEnabled", {
+    Title = "เปิด/ปิด ระบบบิน (Fly)",
+    Default = Cfg.FlyEnabled
+})
+ToggleFly:OnChanged(function(v)
+    Cfg.FlyEnabled = v
+    saveConfigSoon()
+    if startFlying then startFlying() end
+end)
+
+local SliderFlySpeed = Tabs.Sys:AddSlider("FlySpeed", {
+    Title = "ความเร็วในการบิน (Fly Speed)",
+    Min = 10, Max = 200, Default = Cfg.FlySpeed, Rounding = 0
+})
+SliderFlySpeed:OnChanged(function(v)
+    Cfg.FlySpeed = v
+    saveConfigSoon()
+end)
+
+local ToggleFlyNoclip = Tabs.Sys:AddToggle("FlyNoclip", {
+    Title = "บินทะลุกำแพง (Noclip)",
+    Default = Cfg.FlyNoclip
+})
+ToggleFlyNoclip:OnChanged(function(v)
+    Cfg.FlyNoclip = v
+    saveConfigSoon()
+end)
 
 Tabs.Sys:AddSection("แก้แลค")
 
@@ -1290,6 +1324,82 @@ task.spawn(function()
             return blinkHold(gy and Vector3.new(pos.X, gy + MIN_HOVER, pos.Z) or (pos + Vector3.new(0, 3, 0)), 0.12)
         end
         return warpChain(pos, 5, { ignoreGuards = true })
+    end
+
+    ----------------------------------------------------------------
+    -- Fly System Engine (ระบบบิน)
+    ----------------------------------------------------------------
+    local flyBV, flyBG, flyConn
+
+    function stopFlying()
+        if flyConn then pcall(function() flyConn:Disconnect() end) flyConn = nil end
+        if flyBV then pcall(function() flyBV:Destroy() end) flyBV = nil end
+        if flyBG then pcall(function() flyBG:Destroy() end) flyBG = nil end
+        local hum = humanoid()
+        if hum then hum.PlatformStand = false end
+    end
+
+    function startFlying()
+        stopFlying()
+        if not Cfg.FlyEnabled then return end
+
+        local character = char()
+        local root = hrp()
+        local hum = humanoid()
+        if not (character and root and hum) then return end
+
+        hum.PlatformStand = true
+
+        flyBV = Instance.new("BodyVelocity")
+        flyBV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        flyBV.Velocity = Vector3.zero
+        flyBV.Parent = root
+
+        flyBG = Instance.new("BodyGyro")
+        flyBG.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        flyBG.P = 9e4
+        flyBG.CFrame = root.CFrame
+        flyBG.Parent = root
+
+        flyConn = RunService.RenderStepped:Connect(function()
+            if not (alive() and Cfg.FlyEnabled) then
+                stopFlying()
+                return
+            end
+            local cRoot = hrp()
+            local cHum = humanoid()
+            local cam = Workspace.CurrentCamera
+            if not (cRoot and cHum and cam) then return end
+
+            cHum.PlatformStand = true
+            local speed = Cfg.FlySpeed or 50
+            local moveDir = cHum.MoveDirection
+
+            local flyVec = Vector3.zero
+            if moveDir.Magnitude > 0 then
+                local camCF = cam.CFrame
+                local forward = camCF.LookVector
+                local right = camCF.RightVector
+                flyVec = (forward * -moveDir.Z + right * moveDir.X).Unit * speed
+            end
+
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                flyVec = flyVec + Vector3.new(0, speed, 0)
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                flyVec = flyVec + Vector3.new(0, -speed, 0)
+            end
+
+            if flyBV and flyBV.Parent then flyBV.Velocity = flyVec end
+            if flyBG and flyBG.Parent then flyBG.CFrame = cam.CFrame end
+
+            if Cfg.FlyNoclip then
+                for _, part in ipairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
     end
 
     ----------------------------------------------------------------
@@ -2607,6 +2717,14 @@ task.spawn(function()
     -- Delayed full anti-lag pass to let UI finish building smoothly
     if Cfg.AntiLag then
         task.delay(5, function() if alive() and Cfg.AntiLag then antiLagFullPass() end end)
+    end
+
+    -- Clean up previous flight & connections on reload
+    ENV.NyxCleanup = function()
+        pcall(function() stopFlying() end)
+        for k, conn in pairs(Runtime.conns or {}) do
+            pcall(function() conn:Disconnect() end)
+        end
     end
 
     -- Harden character on start
