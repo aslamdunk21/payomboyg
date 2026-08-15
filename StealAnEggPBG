@@ -356,6 +356,15 @@ local function shortNum(n)
     return ("%.0f"):format(n)
 end
 
+local function isOptionSelected(v, key)
+    if type(v) ~= "table" then return false end
+    if v[key] == true then return true end
+    for k, val in pairs(v) do
+        if val == key or (k == key and val == true) then return true end
+    end
+    return false
+end
+
 ----------------------------------------------------------------
 -- Config Architecture
 ----------------------------------------------------------------
@@ -656,8 +665,8 @@ local DropAutoHatchPlace = Tabs.Farm:AddDropdown("AutoHatchPlace", {
     end)()
 })
 DropAutoHatchPlace:OnChanged(function(v)
-    Cfg.AutoHatch = v["ฟัก"] == true
-    Cfg.AutoPlace = v["วาง"] == true
+    Cfg.AutoHatch = isOptionSelected(v, "ฟัก")
+    Cfg.AutoPlace = isOptionSelected(v, "วาง")
     saveConfigSoon()
 end)
 
@@ -781,11 +790,11 @@ local DropProgSystems = Tabs.Prog:AddDropdown("ProgSystems", {
     end)()
 })
 DropProgSystems:OnChanged(function(v)
-    Cfg.AutoBaseUpgrade = v["อัปเกรดฐาน"] == true
-    Cfg.AutoTreadmillUp = v["อัปเกรดลู่วิ่ง"] == true
-    Cfg.AutoTrails      = v["ซื้อ/ใส่เทรล"] == true
-    Cfg.AutoFuse        = v["ผสมสัตว์"] == true
-    Cfg.AutoClaim       = v["รับรางวัล"] == true
+    Cfg.AutoBaseUpgrade = isOptionSelected(v, "อัปเกรดฐาน")
+    Cfg.AutoTreadmillUp = isOptionSelected(v, "อัปเกรดลู่วิ่ง")
+    Cfg.AutoTrails      = isOptionSelected(v, "ซื้อ/ใส่เทรล")
+    Cfg.AutoFuse        = isOptionSelected(v, "ผสมสัตว์")
+    Cfg.AutoClaim       = isOptionSelected(v, "รับรางวัล")
     saveConfigSoon()
 end)
 
@@ -1427,7 +1436,7 @@ task.spawn(function()
         task.wait(1)
         hardenCharacter(c)
         Runtime.carryUid = nil
-        toAnchor()
+        if Cfg.AutoSteal then toAnchor() end
     end)
 
     Runtime.conns.afk = LocalPlayer.Idled:Connect(function()
@@ -1682,7 +1691,7 @@ task.spawn(function()
         end
 
         release()
-        if placed > 0 then toAnchor() end
+        if placed > 0 and Cfg.AutoSteal then toAnchor() end
         return placed
     end
 
@@ -2460,7 +2469,6 @@ task.spawn(function()
     end
 
     job("upkeep", 2, function()
-        enforceWalkSpeed()
         if Cfg.GodMode then
             local hum = humanoid()
             if hum and hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
@@ -2479,7 +2487,6 @@ task.spawn(function()
             end
             if Cfg.AutoPlace then placeEggs() end
             if Cfg.AutoEquipBest then equipBest() end
-            toAnchor()
         end)
     end)
 
@@ -2489,6 +2496,7 @@ task.spawn(function()
     end)
 
     job("sellScan", 4, function()
+        if not (Cfg.AutoSellPets or Cfg.AutoSellEggs) then return end
         if #sellQueue == 0 or os.clock() - sellLastScan > 12 then markSellDirty() end
     end)
 
@@ -2678,7 +2686,7 @@ task.spawn(function()
     -- High-Performance Chained Steal Loop (Event-Driven Idle)
     ----------------------------------------------------------------
     task.spawn(function()
-        toAnchor()
+        if Cfg.AutoSteal then toAnchor() end
         while alive() do
             if Cfg.AutoSteal and not Runtime.stealing and not Runtime.lock then
                 Runtime.stealing = true
@@ -2702,7 +2710,7 @@ task.spawn(function()
                     end
                 until misses >= 3 or chain >= 20 or not Cfg.AutoSteal or not alive()
                 Runtime.stealing = false
-                toAnchor()
+                if Cfg.AutoSteal then toAnchor() end
 
                 if empty then
                     waitForEggChange(2)
