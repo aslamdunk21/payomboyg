@@ -267,12 +267,13 @@ local RaritiesList = {
     "Heavenly", "Corrupted", "Striker", "Sacred", "Paradox", "Founder", "Evolved",
     "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
     "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
-    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall", "Limited"
+    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
+    "Smash", "Emblem", "Chrono", "Limited"
 }
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow", "Event"
 }
 
 local TraitsList = {
