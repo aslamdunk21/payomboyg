@@ -40,12 +40,14 @@ end
 local ENV = (typeof(getgenv) == "function") and getgenv() or _G
 
 -- Reloading retires the previous session instead of stacking loops
-ENV.NyxSession = (ENV.NyxSession or 0) + 1
-local SESSION = ENV.NyxSession
-if ENV.NyxCleanup then pcall(ENV.NyxCleanup) end
-if ENV.NyxRestoreMT then pcall(ENV.NyxRestoreMT) end
+ENV.PayomboyZSession = ((ENV.PayomboyZSession or ENV.NyxSession) or 0) + 1
+local SESSION = ENV.PayomboyZSession
+if ENV.PayomboyZCleanup then pcall(ENV.PayomboyZCleanup)
+elseif ENV.NyxCleanup then pcall(ENV.NyxCleanup) end
+if ENV.PayomboyZRestoreMT then pcall(ENV.PayomboyZRestoreMT)
+elseif ENV.NyxRestoreMT then pcall(ENV.NyxRestoreMT) end
 
-local function alive() return ENV.NyxSession == SESSION end
+local function alive() return (ENV.PayomboyZSession or ENV.NyxSession) == SESSION end
 
 ----------------------------------------------------------------
 -- Fast & Resilient CDN HTTP Loader for Fluent UI
@@ -305,6 +307,7 @@ task.spawn(function()
         end
     end)
 
+    ENV.PayomboyZFloatGui = toggleGui
     ENV.NyxFloatGui = toggleGui
 end)
 
@@ -450,12 +453,13 @@ local Runtime = {
 }
 
 ----------------------------------------------------------------
--- Config Persistence (NyxSAE / PayomboyZ_SAE)
+-- Config Persistence (PayomboyZ_SAE / NyxSAE)
 ----------------------------------------------------------------
-local CFG_DIR    = "NyxSAE"
-local CFG_FILE   = CFG_DIR .. "/nyx_config.json"
-local CFG_BACKUP = CFG_DIR .. "/nyx_config.bak.json"
-local CFG_LEGACY = CFG_DIR .. "/config.json"
+local CFG_DIR    = "PayomboyZ_SAE"
+local CFG_FILE   = CFG_DIR .. "/payomboyz_config.json"
+local CFG_BACKUP = CFG_DIR .. "/payomboyz_config.bak.json"
+local CFG_LEGACY_NYX = "NyxSAE/nyx_config.json"
+local CFG_LEGACY = "NyxSAE/config.json"
 
 local hasFS = (typeof(writefile) == "function") and (typeof(readfile) == "function")
 if hasFS and typeof(makefolder) == "function" and not (isfolder and isfolder(CFG_DIR)) then
@@ -552,6 +556,7 @@ local function loadConfig()
 
     local data, from = readJson(CFG_FILE), CFG_FILE
     if not data then data, from = readJson(CFG_BACKUP), CFG_BACKUP end
+    if not data then data, from = readJson(CFG_LEGACY_NYX), CFG_LEGACY_NYX end
     if not data then data, from = readJson(CFG_LEGACY), CFG_LEGACY end
 
     if not data then
@@ -1053,7 +1058,7 @@ task.spawn(function()
     -- Client Integrity & Anti-Cheat Mute
     ----------------------------------------------------------------
     local function muteCorrectionReport()
-        if ENV.NyxCorrectionMuted then return true end
+        if ENV.PayomboyZCorrectionMuted or ENV.NyxCorrectionMuted then return true end
         if typeof(getrawmetatable) ~= "function" or typeof(setreadonly) ~= "function"
             or typeof(getnamecallmethod) ~= "function" then
             return false
@@ -1077,14 +1082,16 @@ task.spawn(function()
             end)
             setreadonly(mt, true)
 
-            ENV.NyxRestoreMT = function()
+            ENV.PayomboyZRestoreMT = function()
                 pcall(function()
                     setreadonly(mt, false)
                     mt.__namecall = oldNamecall
                     setreadonly(mt, true)
                 end)
             end
+            ENV.NyxRestoreMT = ENV.PayomboyZRestoreMT
         end)
+        ENV.PayomboyZCorrectionMuted = ok
         ENV.NyxCorrectionMuted = ok
         return ok
     end
@@ -2728,12 +2735,13 @@ task.spawn(function()
     end
 
     -- Clean up previous flight & connections on reload
-    ENV.NyxCleanup = function()
+    ENV.PayomboyZCleanup = function()
         pcall(function() stopFlying() end)
         for k, conn in pairs(Runtime.conns or {}) do
             pcall(function() conn:Disconnect() end)
         end
     end
+    ENV.NyxCleanup = ENV.PayomboyZCleanup
 
     -- Harden character on start
     Runtime.instantReady = killClientIntegrity()
