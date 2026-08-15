@@ -2038,56 +2038,6 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------
--- AFK & rendering optimization helpers
-----------------------------------------------------------------
-local blackScreenGui = nil
-
-local function toggleBlackScreen(enabled)
-    if enabled then
-        if not blackScreenGui then
-            local gui = Instance.new("ScreenGui")
-            gui.Name = "PayomboyZ_BlackScreen"
-            gui.ResetOnSpawn = false
-            gui.IgnoreGuiInset = true
-            gui.DisplayOrder = 9999999
-            
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.fromScale(1, 1)
-            frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-            frame.BorderSizePixel = 0
-            frame.Parent = gui
-
-            local txt = Instance.new("TextLabel")
-            txt.Size = UDim2.new(1, 0, 0, 60)
-            txt.Position = UDim2.new(0, 0, 0.45, 0)
-            txt.BackgroundTransparency = 1
-            txt.Text = "PayomboyZ • โหมดประหยัดพลังงาน (Black Screen)"
-            txt.TextColor3 = Color3.fromRGB(150, 150, 150)
-            txt.TextSize = 18
-            txt.Font = Enum.Font.SourceSansBold
-            txt.Parent = frame
-
-            local parented = false
-            if typeof(gethui) == "function" then parented = pcall(function() gui.Parent = gethui() end) end
-            if not parented or not gui.Parent then parented = pcall(function() gui.Parent = game:GetService("CoreGui") end) end
-            if not parented or not gui.Parent then pcall(function() gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end) end
-            blackScreenGui = gui
-        end
-        blackScreenGui.Enabled = true
-    else
-        if blackScreenGui then
-            blackScreenGui.Enabled = false
-        end
-    end
-end
-
-local function toggle3DRendering(disable)
-    pcall(function()
-        RunService:Set3dRenderingEnabled(not disable)
-    end)
-end
-
-----------------------------------------------------------------
 -- character / afk
 ----------------------------------------------------------------
 Runtime.conns.charAdded = LocalPlayer.CharacterAdded:Connect(function(c)
@@ -2115,595 +2065,9 @@ if Cfg.AntiLag then
 end
 
 ----------------------------------------------------------------
--- UI Container Resolver (Mobile Safe)
+-- UI Loading (Multi-CDN Bulletproof Loader)
 ----------------------------------------------------------------
-local function getSafeGuiParent()
-    local parent = nil
-    if typeof(gethui) == "function" then
-        pcall(function() parent = gethui() end)
-    end
-    if not parent or not parent.Parent then
-        pcall(function() parent = game:GetService("CoreGui") end)
-    end
-    if not parent or not parent.Parent then
-        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui", 10) end)
-    end
-    return parent
-end
-
-----------------------------------------------------------------
--- Built-in Native Mobile UI Engine (100% Offline / Zero Network Fallback)
-----------------------------------------------------------------
-local function createNativeUI()
-    local NativeUI = {}
-    local safeParent = getSafeGuiParent()
-    
-    function NativeUI:Notify(opts)
-        opts = opts or {}
-        local title = opts.Title or "PayomboyZ"
-        local content = opts.Content or ""
-        local dur = opts.Duration or 4
-        
-        task.spawn(function()
-            local toastGui = Instance.new("ScreenGui")
-            toastGui.Name = "PayomboyZ_Toast"
-            toastGui.ResetOnSpawn = false
-            toastGui.DisplayOrder = 999999
-            
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.fromOffset(280, 60)
-            frame.Position = UDim2.new(0.5, -140, 0, 20)
-            frame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-            frame.BorderSizePixel = 0
-            frame.Parent = toastGui
-            
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 10)
-            corner.Parent = frame
-            
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(139, 92, 246)
-            stroke.Thickness = 1.5
-            stroke.Parent = frame
-            
-            local tLabel = Instance.new("TextLabel")
-            tLabel.Size = UDim2.new(1, -20, 0, 22)
-            tLabel.Position = UDim2.fromOffset(10, 4)
-            tLabel.BackgroundTransparency = 1
-            tLabel.Text = title
-            tLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            tLabel.TextSize = 14
-            tLabel.Font = Enum.Font.SourceSansBold
-            tLabel.TextXAlignment = Enum.TextXAlignment.Left
-            tLabel.Parent = frame
-            
-            local cLabel = Instance.new("TextLabel")
-            cLabel.Size = UDim2.new(1, -20, 0, 28)
-            cLabel.Position = UDim2.fromOffset(10, 26)
-            cLabel.BackgroundTransparency = 1
-            cLabel.Text = content
-            cLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-            cLabel.TextSize = 12
-            cLabel.Font = Enum.Font.SourceSans
-            cLabel.TextXAlignment = Enum.TextXAlignment.Left
-            cLabel.TextWrapped = true
-            cLabel.Parent = frame
-            
-            pcall(function() toastGui.Parent = safeParent end)
-            task.wait(dur)
-            pcall(function() toastGui:Destroy() end)
-        end)
-    end
-    
-    function NativeUI:CreateWindow(opts)
-        opts = opts or {}
-        local title = opts.Title or "PayomboyZ"
-        local winW = opts.Size and opts.Size.X.Offset or 460
-        local winH = opts.Size and opts.Size.Y.Offset or 350
-        
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "PayomboyZ_NativeWindow"
-        screenGui.ResetOnSpawn = false
-        screenGui.DisplayOrder = 999990
-        
-        local mainFrame = Instance.new("Frame")
-        mainFrame.Name = "MainFrame"
-        mainFrame.Size = UDim2.fromOffset(winW, winH)
-        mainFrame.Position = UDim2.new(0.5, -winW/2, 0.5, -winH/2)
-        mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-        mainFrame.BorderSizePixel = 0
-        mainFrame.ClipsDescendants = true
-        mainFrame.Parent = screenGui
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 12)
-        corner.Parent = mainFrame
-        
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(139, 92, 246)
-        stroke.Thickness = 1.5
-        stroke.Parent = mainFrame
-        
-        local header = Instance.new("Frame")
-        header.Name = "Header"
-        header.Size = UDim2.new(1, 0, 0, 36)
-        header.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-        header.BorderSizePixel = 0
-        header.Parent = mainFrame
-        
-        local hCorner = Instance.new("UICorner")
-        hCorner.CornerRadius = UDim.new(0, 12)
-        hCorner.Parent = header
-        
-        local titleLabel = Instance.new("TextLabel")
-        titleLabel.Size = UDim2.new(1, -50, 1, 0)
-        titleLabel.Position = UDim2.fromOffset(12, 0)
-        titleLabel.BackgroundTransparency = 1
-        titleLabel.Text = title
-        titleLabel.TextColor3 = Color3.fromRGB(235, 235, 245)
-        titleLabel.TextSize = 14
-        titleLabel.Font = Enum.Font.SourceSansBold
-        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-        titleLabel.Parent = header
-        
-        local closeBtn = Instance.new("TextButton")
-        closeBtn.Size = UDim2.fromOffset(26, 26)
-        closeBtn.Position = UDim2.new(1, -30, 0, 5)
-        closeBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-        closeBtn.Text = "X"
-        closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        closeBtn.Font = Enum.Font.SourceSansBold
-        closeBtn.TextSize = 13
-        closeBtn.Parent = header
-        
-        local cBtnCorner = Instance.new("UICorner")
-        cBtnCorner.CornerRadius = UDim.new(0, 6)
-        cBtnCorner.Parent = closeBtn
-        
-        local UserInputService = game:GetService("UserInputService")
-        local dragging, dragStart, startPos = false, nil, nil
-        header.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                dragStart = input.Position
-                startPos = mainFrame.Position
-            end
-        end)
-        header.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                dragging = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                local delta = input.Position - dragStart
-                mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end)
-        
-        local sideBarW = opts.SideBarWidth or 120
-        local sideBar = Instance.new("ScrollingFrame")
-        sideBar.Name = "SideBar"
-        sideBar.Size = UDim2.new(0, sideBarW, 1, -40)
-        sideBar.Position = UDim2.fromOffset(4, 40)
-        sideBar.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-        sideBar.BorderSizePixel = 0
-        sideBar.ScrollBarThickness = 2
-        sideBar.Parent = mainFrame
-        
-        local sideCorner = Instance.new("UICorner")
-        sideCorner.CornerRadius = UDim.new(0, 8)
-        sideCorner.Parent = sideBar
-        
-        local sideLayout = Instance.new("UIListLayout")
-        sideLayout.Padding = UDim.new(0, 4)
-        sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        sideLayout.Parent = sideBar
-        
-        local contentArea = Instance.new("Frame")
-        contentArea.Name = "ContentArea"
-        contentArea.Size = UDim2.new(1, -sideBarW - 12, 1, -44)
-        contentArea.Position = UDim2.fromOffset(sideBarW + 8, 40)
-        contentArea.BackgroundTransparency = 1
-        contentArea.Parent = mainFrame
-        
-        pcall(function() screenGui.Parent = safeParent end)
-        
-        local windowObj = {
-            Closed = false,
-            NativeGui = screenGui,
-            MainFrame = mainFrame,
-            Tabs = {},
-            ActiveTab = nil
-        }
-        
-        closeBtn.MouseButton1Click:Connect(function()
-            windowObj:Close()
-        end)
-        
-        function windowObj:Open()
-            windowObj.Closed = false
-            mainFrame.Visible = true
-        end
-        
-        function windowObj:Close()
-            windowObj.Closed = true
-            mainFrame.Visible = false
-        end
-        
-        function windowObj:Destroy()
-            pcall(function() screenGui:Destroy() end)
-        end
-        
-        function windowObj:Tab(tabOpts)
-            tabOpts = tabOpts or {}
-            local tabTitle = tabOpts.Title or "Tab"
-            
-            local tabBtn = Instance.new("TextButton")
-            tabBtn.Size = UDim2.new(1, -8, 0, 32)
-            tabBtn.Position = UDim2.fromOffset(4, 0)
-            tabBtn.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
-            tabBtn.Text = tabTitle
-            tabBtn.TextColor3 = Color3.fromRGB(180, 180, 200)
-            tabBtn.Font = Enum.Font.SourceSansBold
-            tabBtn.TextSize = 12
-            tabBtn.Parent = sideBar
-            
-            local tbCorner = Instance.new("UICorner")
-            tbCorner.CornerRadius = UDim.new(0, 6)
-            tbCorner.Parent = tabBtn
-            
-            local container = Instance.new("ScrollingFrame")
-            container.Size = UDim2.new(1, 0, 1, 0)
-            container.BackgroundTransparency = 1
-            container.BorderSizePixel = 0
-            container.ScrollBarThickness = 4
-            container.Visible = false
-            container.Parent = contentArea
-            
-            local cLayout = Instance.new("UIListLayout")
-            cLayout.Padding = UDim.new(0, 6)
-            cLayout.SortOrder = Enum.SortOrder.LayoutOrder
-            cLayout.Parent = container
-            
-            cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                container.CanvasSize = UDim2.fromOffset(0, cLayout.AbsoluteContentSize.Y + 16)
-            end)
-            
-            local tabObj = { Container = container, Button = tabBtn }
-            
-            local function selectThisTab()
-                for _, t in ipairs(windowObj.Tabs) do
-                    t.Container.Visible = false
-                    t.Button.BackgroundColor3 = Color3.fromRGB(32, 32, 42)
-                    t.Button.TextColor3 = Color3.fromRGB(180, 180, 200)
-                end
-                container.Visible = true
-                tabBtn.BackgroundColor3 = Color3.fromRGB(139, 92, 246)
-                tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                windowObj.ActiveTab = tabObj
-            end
-            
-            tabBtn.MouseButton1Click:Connect(selectThisTab)
-            table.insert(windowObj.Tabs, tabObj)
-            
-            if #windowObj.Tabs == 1 then
-                selectThisTab()
-            end
-            
-            function tabObj:Paragraph(pOpts)
-                pOpts = pOpts or {}
-                local pFrame = Instance.new("Frame")
-                pFrame.Size = UDim2.new(1, -6, 0, 52)
-                pFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                pFrame.BorderSizePixel = 0
-                pFrame.Parent = container
-                
-                local pfCorner = Instance.new("UICorner")
-                pfCorner.CornerRadius = UDim.new(0, 6)
-                pfCorner.Parent = pFrame
-                
-                local tLab = Instance.new("TextLabel")
-                tLab.Size = UDim2.new(1, -12, 0, 18)
-                tLab.Position = UDim2.fromOffset(6, 4)
-                tLab.BackgroundTransparency = 1
-                tLab.Text = pOpts.Title or ""
-                tLab.TextColor3 = Color3.fromRGB(240, 240, 250)
-                tLab.TextSize = 12
-                tLab.Font = Enum.Font.SourceSansBold
-                tLab.TextXAlignment = Enum.TextXAlignment.Left
-                tLab.Parent = pFrame
-                
-                local dLab = Instance.new("TextLabel")
-                dLab.Size = UDim2.new(1, -12, 1, -24)
-                dLab.Position = UDim2.fromOffset(6, 22)
-                dLab.BackgroundTransparency = 1
-                dLab.Text = pOpts.Desc or ""
-                dLab.TextColor3 = Color3.fromRGB(170, 170, 185)
-                dLab.TextSize = 11
-                dLab.Font = Enum.Font.SourceSans
-                dLab.TextXAlignment = Enum.TextXAlignment.Left
-                dLab.TextWrapped = true
-                dLab.Parent = pFrame
-                
-                local elem = { Frame = pFrame, TitleLabel = tLab, DescLabel = dLab }
-                function elem:SetDesc(txt)
-                    pcall(function() dLab.Text = tostring(txt) end)
-                end
-                return elem
-            end
-            
-            function tabObj:Section(sOpts)
-                sOpts = sOpts or {}
-                local sLabel = Instance.new("TextLabel")
-                sLabel.Size = UDim2.new(1, -6, 0, 22)
-                sLabel.BackgroundTransparency = 1
-                sLabel.Text = "— " .. (sOpts.Title or "") .. " —"
-                sLabel.TextColor3 = Color3.fromRGB(139, 92, 246)
-                sLabel.TextSize = 12
-                sLabel.Font = Enum.Font.SourceSansBold
-                sLabel.TextXAlignment = Enum.TextXAlignment.Left
-                sLabel.Parent = container
-                return sLabel
-            end
-            
-            function tabObj:Toggle(tOpts)
-                tOpts = tOpts or {}
-                local val = tOpts.Value == true
-                local row = Instance.new("Frame")
-                row.Size = UDim2.new(1, -6, 0, 36)
-                row.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                row.BorderSizePixel = 0
-                row.Parent = container
-                
-                local rCorner = Instance.new("UICorner")
-                rCorner.CornerRadius = UDim.new(0, 6)
-                rCorner.Parent = row
-                
-                local tLab = Instance.new("TextLabel")
-                tLab.Size = UDim2.new(1, -65, 1, 0)
-                tLab.Position = UDim2.fromOffset(8, 0)
-                tLab.BackgroundTransparency = 1
-                tLab.Text = tOpts.Title or "Toggle"
-                tLab.TextColor3 = Color3.fromRGB(230, 230, 240)
-                tLab.TextSize = 12
-                tLab.Font = Enum.Font.SourceSansBold
-                tLab.TextXAlignment = Enum.TextXAlignment.Left
-                tLab.Parent = row
-                
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.fromOffset(50, 24)
-                btn.Position = UDim2.new(1, -56, 0.5, -12)
-                btn.BackgroundColor3 = val and Color3.fromRGB(139, 92, 246) or Color3.fromRGB(50, 50, 60)
-                btn.Text = val and "ON" or "OFF"
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                btn.Font = Enum.Font.SourceSansBold
-                btn.TextSize = 12
-                btn.Parent = row
-                
-                local bCorner = Instance.new("UICorner")
-                bCorner.CornerRadius = UDim.new(0, 6)
-                bCorner.Parent = btn
-                
-                btn.MouseButton1Click:Connect(function()
-                    val = not val
-                    btn.BackgroundColor3 = val and Color3.fromRGB(139, 92, 246) or Color3.fromRGB(50, 50, 60)
-                    btn.Text = val and "ON" or "OFF"
-                    if type(tOpts.Callback) == "function" then
-                        pcall(tOpts.Callback, val)
-                    end
-                end)
-                return row
-            end
-            
-            function tabObj:Button(bOpts)
-                bOpts = bOpts or {}
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -6, 0, 32)
-                btn.BackgroundColor3 = Color3.fromRGB(36, 36, 48)
-                btn.Text = bOpts.Title or "Button"
-                btn.TextColor3 = Color3.fromRGB(235, 235, 245)
-                btn.Font = Enum.Font.SourceSansBold
-                btn.TextSize = 12
-                btn.Parent = container
-                
-                local bCorner = Instance.new("UICorner")
-                bCorner.CornerRadius = UDim.new(0, 6)
-                bCorner.Parent = btn
-                
-                btn.MouseButton1Click:Connect(function()
-                    if type(bOpts.Callback) == "function" then
-                        pcall(bOpts.Callback)
-                    end
-                end)
-                return btn
-            end
-            
-            function tabObj:Slider(slOpts)
-                slOpts = slOpts or {}
-                local minV = (type(slOpts.Value) == "table" and slOpts.Value.Min) or 0
-                local maxV = (type(slOpts.Value) == "table" and slOpts.Value.Max) or 100
-                local currV = (type(slOpts.Value) == "table" and slOpts.Value.Default) or minV
-                
-                local row = Instance.new("Frame")
-                row.Size = UDim2.new(1, -6, 0, 40)
-                row.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                row.BorderSizePixel = 0
-                row.Parent = container
-                
-                local rCorner = Instance.new("UICorner")
-                rCorner.CornerRadius = UDim.new(0, 6)
-                rCorner.Parent = row
-                
-                local tLab = Instance.new("TextLabel")
-                tLab.Size = UDim2.new(1, -80, 1, 0)
-                tLab.Position = UDim2.fromOffset(8, 0)
-                tLab.BackgroundTransparency = 1
-                tLab.Text = (slOpts.Title or "Slider") .. ": " .. tostring(currV)
-                tLab.TextColor3 = Color3.fromRGB(230, 230, 240)
-                tLab.TextSize = 12
-                tLab.Font = Enum.Font.SourceSansBold
-                tLab.TextXAlignment = Enum.TextXAlignment.Left
-                tLab.Parent = row
-                
-                local minusBtn = Instance.new("TextButton")
-                minusBtn.Size = UDim2.fromOffset(26, 22)
-                minusBtn.Position = UDim2.new(1, -64, 0.5, -11)
-                minusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-                minusBtn.Text = "-"
-                minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                minusBtn.Font = Enum.Font.SourceSansBold
-                minusBtn.TextSize = 14
-                minusBtn.Parent = row
-                
-                local plusBtn = Instance.new("TextButton")
-                plusBtn.Size = UDim2.fromOffset(26, 22)
-                plusBtn.Position = UDim2.new(1, -32, 0.5, -11)
-                plusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-                plusBtn.Text = "+"
-                plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                plusBtn.Font = Enum.Font.SourceSansBold
-                plusBtn.TextSize = 14
-                plusBtn.Parent = row
-                
-                local function updateVal(n)
-                    currV = math.clamp(n, minV, maxV)
-                    tLab.Text = (slOpts.Title or "Slider") .. ": " .. tostring(currV)
-                    if type(slOpts.Callback) == "function" then
-                        pcall(slOpts.Callback, currV)
-                    end
-                end
-                
-                minusBtn.MouseButton1Click:Connect(function() updateVal(currV - 1) end)
-                plusBtn.MouseButton1Click:Connect(function() updateVal(currV + 1) end)
-                return row
-            end
-            
-            function tabObj:Input(inOpts)
-                inOpts = inOpts or {}
-                local row = Instance.new("Frame")
-                row.Size = UDim2.new(1, -6, 0, 36)
-                row.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                row.BorderSizePixel = 0
-                row.Parent = container
-                
-                local rCorner = Instance.new("UICorner")
-                rCorner.CornerRadius = UDim.new(0, 6)
-                rCorner.Parent = row
-                
-                local tLab = Instance.new("TextLabel")
-                tLab.Size = UDim2.new(0.5, -10, 1, 0)
-                tLab.Position = UDim2.fromOffset(8, 0)
-                tLab.BackgroundTransparency = 1
-                tLab.Text = inOpts.Title or "Input"
-                tLab.TextColor3 = Color3.fromRGB(230, 230, 240)
-                tLab.TextSize = 12
-                tLab.Font = Enum.Font.SourceSansBold
-                tLab.TextXAlignment = Enum.TextXAlignment.Left
-                tLab.Parent = row
-                
-                local box = Instance.new("TextBox")
-                box.Size = UDim2.new(0.5, -10, 0, 24)
-                box.Position = UDim2.new(0.5, 0, 0.5, -12)
-                box.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-                box.Text = tostring(inOpts.Value or "")
-                box.TextColor3 = Color3.fromRGB(255, 255, 255)
-                box.Font = Enum.Font.SourceSans
-                box.TextSize = 12
-                box.ClearTextOnFocus = false
-                box.Parent = row
-                
-                local bCorner = Instance.new("UICorner")
-                bCorner.CornerRadius = UDim.new(0, 4)
-                bCorner.Parent = box
-                
-                box.FocusLost:Connect(function()
-                    if type(inOpts.Callback) == "function" then
-                        pcall(inOpts.Callback, box.Text)
-                    end
-                end)
-                return row
-            end
-            
-            function tabObj:Dropdown(dOpts)
-                dOpts = dOpts or {}
-                local vals = dOpts.Values or {}
-                local curVal = dOpts.Value
-                
-                local row = Instance.new("Frame")
-                row.Size = UDim2.new(1, -6, 0, 36)
-                row.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-                row.BorderSizePixel = 0
-                row.Parent = container
-                
-                local rCorner = Instance.new("UICorner")
-                rCorner.CornerRadius = UDim.new(0, 6)
-                rCorner.Parent = row
-                
-                local tLab = Instance.new("TextLabel")
-                tLab.Size = UDim2.new(1, -110, 1, 0)
-                tLab.Position = UDim2.fromOffset(8, 0)
-                tLab.BackgroundTransparency = 1
-                tLab.Text = dOpts.Title or "Dropdown"
-                tLab.TextColor3 = Color3.fromRGB(230, 230, 240)
-                tLab.TextSize = 12
-                tLab.Font = Enum.Font.SourceSansBold
-                tLab.TextXAlignment = Enum.TextXAlignment.Left
-                tLab.Parent = row
-                
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.fromOffset(98, 24)
-                btn.Position = UDim2.new(1, -104, 0.5, -12)
-                btn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-                btn.Text = "เลือก / Toggle"
-                btn.TextColor3 = Color3.fromRGB(235, 235, 245)
-                btn.Font = Enum.Font.SourceSans
-                btn.TextSize = 11
-                btn.Parent = row
-                
-                local bCorner = Instance.new("UICorner")
-                bCorner.CornerRadius = UDim.new(0, 4)
-                bCorner.Parent = btn
-                
-                btn.MouseButton1Click:Connect(function()
-                    if type(dOpts.Callback) == "function" then
-                        pcall(dOpts.Callback, vals)
-                    end
-                end)
-                return row
-            end
-            
-            return tabObj
-        end
-        
-        return windowObj
-    end
-    
-    return NativeUI
-end
-
-----------------------------------------------------------------
--- UI Loading (Multi-CDN Loader with Native Mobile Fallback)
-----------------------------------------------------------------
-local function fetchScript(url)
-    local ok, body = pcall(function() return game:HttpGet(url) end)
-    if ok and type(body) == "string" and #body > 1000 and not body:find("<html") then
-        return body
-    end
-    local req = (typeof(request) == "function" and request)
-        or (typeof(http_request) == "function" and http_request)
-        or (typeof(syn) == "table" and typeof(syn.request) == "function" and syn.request)
-        or (typeof(http) == "table" and typeof(http.request) == "function" and http.request)
-    if req then
-        local okR, res = pcall(req, { Url = url, Method = "GET" })
-        if okR and type(res) == "table" and type(res.Body) == "string" and #res.Body > 1000 and not res.Body:find("<html") then
-            return res.Body
-        end
-    end
-    return nil
-end
-
-local WindUI, NativeLib
+local WindUI
 do
     local src
     local cachePath = CFG_DIR .. "/windui.lua"
@@ -2718,12 +2082,11 @@ do
             "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua",
             "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua",
             "https://cdn.jsdelivr.net/gh/Footagesus/WindUI@main/main.lua",
-            "https://fastly.jsdelivr.net/gh/Footagesus/WindUI@main/main.lua",
             "https://tree-hub.vercel.app/api/UI/WindUI"
         }
         for _, url in ipairs(urls) do
-            local body = fetchScript(url)
-            if body then
+            local ok, body = pcall(function() return game:HttpGet(url) end)
+            if ok and type(body) == "string" and #body > 1000 and not body:find("<html") then
                 src = body
                 if hasFS then pcall(writefile, cachePath, body) end
                 break
@@ -2737,18 +2100,9 @@ do
 end
 
 if not WindUI then
-    warn("[PayomboyZ] ไม่สามารถโหลด WindUI จาก CDN ได้ — สลับไปใช้ Native Mobile UI ทันที")
-    NativeLib = createNativeUI()
-end
-
-local UserInputService = game:GetService("UserInputService")
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local camera = Workspace.CurrentCamera
-local vpSize = camera and camera.ViewportSize or Vector2.new(800, 600)
-
-local winW = isMobile and math.min(420, math.floor(vpSize.X * 0.90)) or 580
-local winH = isMobile and math.min(340, math.floor(vpSize.Y * 0.86)) or 460
-local sideW = isMobile and 115 or 160
+    warn("[PayomboyZ] โหลด UI ไม่ได้ — สคริปต์ยังทำงานผ่าน getgenv().NyxAPI ได้ปกติ")
+    Notify = function() end
+else
 
 local function keyFromName(name)
     local ok, key = pcall(function() return Enum.KeyCode[tostring(name)] end)
@@ -2764,38 +2118,25 @@ local cfgAtBuild = deepCopy(Cfg)
 uiBuilding = true
 
 local uiOk, uiErr = pcall(function()
-    if WindUI then
-        UIWindow = WindUI:CreateWindow({
-            Title       = "PayomboyZ • เก็บไข่ไปกับพยอมบอย",
-            Icon        = "egg",
-            Author      = "โดย PayomboyZ",
-            Folder      = CFG_DIR,
-            Size        = UDim2.fromOffset(winW, winH),
-            Transparent = true,
-            Theme       = "Dark",
-            SideBarWidth = sideW,
-        })
-    end
+UIWindow = WindUI:CreateWindow({
+    Title       = "PayomboyZ • เก็บไข่ไปกับพยอมบอย",
+    Icon        = "egg",
+    Author      = "โดย PayomboyZ",
+    Folder      = CFG_DIR,
+    Size        = UDim2.fromOffset(580, 460),
+    Transparent = true,
+    Theme       = "Dark",
+    SideBarWidth = 160,
+})
 end)
 
 if not uiOk or not UIWindow then
-    if WindUI then warn("[PayomboyZ] สร้าง WindUI Window ไม่สำเร็จ: " .. tostring(uiErr) .. " — สลับไปใช้ Native Mobile UI") end
-    NativeLib = NativeLib or createNativeUI()
-    UIWindow = NativeLib:CreateWindow({
-        Title = "PayomboyZ • เก็บไข่ไปกับพยอมบอย (Mobile UI)",
-        Size  = UDim2.fromOffset(winW, winH),
-        SideBarWidth = sideW,
-    })
-end
+    warn("[PayomboyZ] ไม่สามารถสร้าง UIWindow ได้: " .. tostring(uiErr))
+    Notify = function() end
+else
 
 Notify = function(title, text, dur)
-    pcall(function()
-        if WindUI and not NativeLib then
-            WindUI:Notify({ Title = title, Content = text, Duration = dur or 4 })
-        elseif NativeLib then
-            NativeLib:Notify({ Title = title, Content = text, Duration = dur or 4 })
-        end
-    end)
+    pcall(function() WindUI:Notify({ Title = title, Content = text, Duration = dur or 4 }) end)
 end
 
 local function isOn(v) return v == true end
@@ -2815,7 +2156,6 @@ local function toSet(value)
     end
     return set
 end
-
 
 local TabFarm  = UIWindow:Tab({ Title = "ฟาร์มไข่",    Icon = "egg" })
 local TabSell  = UIWindow:Tab({ Title = "ขายของ",      Icon = "coins" })
@@ -3197,7 +2537,7 @@ do
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 999999
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    pcall(function() gui.Parent = getSafeGuiParent() end)
+    pcall(function() gui.Parent = (typeof(gethui) == "function") and gethui() or LocalPlayer:WaitForChild("PlayerGui") end)
 
     local btn = Instance.new("TextButton")
     btn.Name = "Open"
@@ -3437,6 +2777,9 @@ job("ui", 5, function()
 
     if Runtime.refreshCfgBox then Runtime.refreshCfgBox() end
 end)
+
+end -- uiOk check
+end -- WindUI present
 
 ----------------------------------------------------------------
 -- exports / cleanup
