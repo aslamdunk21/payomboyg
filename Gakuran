@@ -35,10 +35,34 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
--- ── 2. โหลด Fluent UI Framework & Addons ───────────────────────────────────────
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- ── 2. โหลด Fluent UI Framework & Addons (รองรับ Fallback CDN) ───────────────
+local function fetchModule(urls)
+    for _, url in ipairs(urls) do
+        local ok, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if ok and result then
+            return result
+        end
+    end
+    error("ไม่สามารถโหลดมอดูล UI จาก CDN ได้")
+end
+
+local Fluent = fetchModule({
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua",
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/main.lua"
+})
+
+local SaveManager = fetchModule({
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua"
+})
+
+local InterfaceManager = fetchModule({
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua"
+})
 
 local Window = Fluent:CreateWindow({
     Title = "พยอมบอยนักเลงเว้ย",
@@ -75,12 +99,14 @@ end
 local function getPlayerData(char)
     char = char or LocalPlayer.Character
     if not char then return nil end
-    return char:FindFirstChild("PlayerData") or char:WaitForChild("PlayerData", 3)
+    return char:FindFirstChild("PlayerData") or char:WaitForChild("PlayerData", 2)
 end
 
-local initChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local initPD = getPlayerData(initChar)
+-- ดึงข้อมูลตัวละครเริ่มต้นแบบ Non-Blocking
+local initChar = LocalPlayer.Character
+local initPD = initChar and getPlayerData(initChar)
 local initialStyle = initPD and initPD:GetAttribute("CombatStyle") or "Basic"
+local defaultStyle = table.find(allStyles, initialStyle) and initialStyle or "Basic"
 
 -- ── 4. สร้างปุ่มและ UI Element ภาษาไทย ────────────────────────────────────────
 
@@ -118,7 +144,7 @@ local StyleDropdown = Tabs.Character:AddDropdown("CombatStyle", {
     Description = "เลือกสายวิชาการต่อสู้ที่ต้องการใช้",
     Values = allStyles,
     Multi = false,
-    Default = initialStyle,
+    Default = defaultStyle,
 })
 
 local HeightSlider = Tabs.Character:AddSlider("HeightScale", {
@@ -136,13 +162,17 @@ Tabs.Visuals:AddParagraph({ Title = "ปรับแต่งหน้าจอ 
 local ToggleHideName = Tabs.Visuals:AddToggle("HideName", { Title = "ซ่อนป้ายชื่อบนหัว (Hide Name)", Default = false })
 local ToggleM2HUD    = Tabs.Visuals:AddToggle("M2CooldownDisplay", { Title = "แสดงหลอดคูลดาวน์ M2 (HUD)", Default = false })
 
--- ── 5. ดึง Pointer Recovery Function (callClientFunction) ─────────────────────
+-- ── 5. ดึง Pointer Recovery Function (callClientFunction) ป้องกัน Error ────
 local callClientFunction
-for _, sandbox in pairs(getgc(true)) do
-    if type(sandbox) == "table" and rawget(sandbox, "callClientFunction") then
-        callClientFunction = sandbox.callClientFunction
-        break
-    end
+if type(getgc) == "function" then
+    pcall(function()
+        for _, sandbox in pairs(getgc(true)) do
+            if type(sandbox) == "table" and rawget(sandbox, "callClientFunction") then
+                callClientFunction = sandbox.callClientFunction
+                break
+            end
+        end
+    end)
 end
 
 if not callClientFunction then
@@ -172,8 +202,10 @@ local MAX_REACH_DISTANCE = 14.0
 local StrictCombatMovements = {}
 
 local function indexStrictCombatAnimations()
-    local animationsFolder = ReplicatedStorage:WaitForChild("Animations", 5)
-    if not animationsFolder then return end
+    local ok, animationsFolder = pcall(function()
+        return ReplicatedStorage:WaitForChild("Animations", 3)
+    end)
+    if not ok or not animationsFolder then return end
 
     local foldersToScan = {}
     local combatFolder = animationsFolder:FindFirstChild("Combat")
@@ -214,7 +246,7 @@ local function indexStrictCombatAnimations()
         end
     end
 end
-indexStrictCombatAnimations()
+task.spawn(indexStrictCombatAnimations)
 
 local function getEvasiveDirectionRelative(myHRP, enemyHRP)
     local headingVector = Vector3.new(enemyHRP.Position.X - myHRP.Position.X, 0, enemyHRP.Position.Z - myHRP.Position.Z)
@@ -503,7 +535,7 @@ local M1_BASE_DELAY = {
 local M2_BASE_DELAY = {
     BaseCombat=0.38, BasicAnims=0.38, BoxingAnims=0.32, CaipoeiraAnims=0.40,
     HakariAnims=0.35, HakariOtherAnims=0.35, KarateAnims=0.36, KureAnims=0.34,
-    MuayThaiAnims=0.33, SluggerAnims=0.36, StrikerAnims=0.34, WrestlingAnims=0.42, Grappling=0.42,
+    MuayThaiAnims=0.33, SluggerAnims=0.36, StrikerAnims=0.29, WrestlingAnims=0.42, Grappling=0.42,
 }
 local COMBO_SHAVE = {0, -0.015, -0.028, -0.038}
 
@@ -657,13 +689,18 @@ local _noSlowConn = nil
 
 local function activateNoSlow()
     if _noSlowConn then return end
-    local myChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hum = myChar:WaitForChild("Humanoid")
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local hum = myChar:FindFirstChildOfClass("Humanoid") or myChar:WaitForChild("Humanoid", 3)
+    if not hum then return end
+
     local baseWalk = hum.WalkSpeed
     local baseJump = hum.JumpPower
 
-    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    end)
 
     local badAttrs = {"Stunned", "GuardBroken", "CantAnything"}
 
@@ -719,6 +756,7 @@ local _noclipConn = nil
 local _noclipChar = nil
 
 local function _noclipSetup(char)
+    if not char then return end
     _noclipChar = char
     if _noclipConn then _noclipConn:Disconnect() end
     _noclipConn = RunService.Heartbeat:Connect(function()
@@ -785,9 +823,9 @@ end)
 
 local hnConn = LocalPlayer.CharacterAdded:Connect(function(char)
     if not (Options.HideName and Options.HideName.Value) then return end
-    local playersFolder = char:WaitForChild("Players", 10)
+    local playersFolder = char:WaitForChild("Players", 5)
     if not playersFolder then return end
-    local billboard = playersFolder:WaitForChild("PlayerInfoBillboard", 10)
+    local billboard = playersFolder:WaitForChild("PlayerInfoBillboard", 5)
     if billboard then
         billboard.Enabled = false
     end
@@ -796,7 +834,8 @@ registerCleanup(hnConn)
 
 -- ── 14. ฟังก์ชันเกิดใหม่อัตโนมัติ (Auto Restart UI) ────────────────────────────
 local function doAutoRestart()
-    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    if not playerGui then return end
 
     task.spawn(function()
         while Options.AutoRestart and Options.AutoRestart.Value do
@@ -862,9 +901,12 @@ local function punchAssistGuardCheck(myChar)
 end
 
 local function setupPunchAssistSelf()
-    local myChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local humanoid = myChar:WaitForChild("Humanoid")
-    local animator = humanoid:WaitForChild("Animator")
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local humanoid = myChar:FindFirstChildOfClass("Humanoid") or myChar:WaitForChild("Humanoid", 3)
+    if not humanoid then return end
+    local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator", 3)
+    if not animator then return end
 
     local conn = animator.AnimationPlayed:Connect(function(track)
         if not (Options.PunchAssist and Options.PunchAssist.Value) then return end
@@ -892,7 +934,7 @@ local function setupPunchAssistSelf()
     registerCleanup(conn)
 end
 
-setupPunchAssistSelf()
+task.spawn(setupPunchAssistSelf)
 local paConn = LocalPlayer.CharacterAdded:Connect(function()
     task.wait(1)
     setupPunchAssistSelf()
@@ -938,7 +980,7 @@ local function getM2CooldownDuration(char)
         local M2_COOLDOWN_DURATION = {
             BaseCombat=3.0, BasicAnims=3.0, BoxingAnims=2.8, CaipoeiraAnims=3.2,
             HakariAnims=3.0, HakariOtherAnims=3.0, KarateAnims=3.0, KureAnims=2.9,
-            MuayThaiAnims=2.8, SluggerAnims=3.1, StrikerAnims=2.9, WrestlingAnims=3.5, Grappling=4.0,
+            MuayThaiAnims=2.8, SluggerAnims=3.1, StrikerAnims=2.9, WrestlingAnims=4.2, Grappling=4.0,
         }
         return M2_COOLDOWN_DURATION[style] or 3.0
     end
@@ -1058,9 +1100,8 @@ end)
 HeightSlider:OnChanged(function(Value)
     local frac = math.clamp(Value / 100, 0, 1)
     local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if char and hum then
-        char:ScaleTo(0.7 + frac * 0.6)
+    if char then
+        pcall(function() char:ScaleTo(0.7 + frac * 0.6) end)
     end
 end)
 
@@ -1072,36 +1113,42 @@ local charAddedChanger = LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
     if Options.HeightScale and Options.HeightScale.Value then
         local frac = math.clamp(Options.HeightScale.Value / 100, 0, 1)
-        newChar:ScaleTo(0.7 + frac * 0.6)
+        pcall(function() newChar:ScaleTo(0.7 + frac * 0.6) end)
     end
     if Options.NoSlow and Options.NoSlow.Value then
         local hum = newChar:WaitForChild("Humanoid", 5)
         if hum then
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+            pcall(function()
+                hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+            end)
         end
     end
 end)
 registerCleanup(charAddedChanger)
 
 -- ── 19. ระบบ SaveManager & InterfaceManager ─────────────────────────────────
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
+pcall(function()
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
 
-InterfaceManager:SetFolder("PayomBoyScriptHub")
-SaveManager:SetFolder("PayomBoyScriptHub/rbxl")
+    InterfaceManager:SetFolder("PayomBoyScriptHub")
+    SaveManager:SetFolder("PayomBoyScriptHub/rbxl")
 
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+    InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+    SaveManager:BuildConfigSection(Tabs.Settings)
+end)
 
 Window:SelectTab(1)
 
 Fluent:Notify({
     Title = "พยอมบอยนักเลงเว้ย",
-    Content = "โหลดสคริปต์สำเร็จแล้ว พร้อมใช้งาน!",
+    Content = "โหลดสคริปต์สำเร็จแล้ว พร้อมใช้งานครบทุกเมนู!",
     Duration = 5
 })
 
-SaveManager:LoadAutoloadConfig()
+pcall(function()
+    SaveManager:LoadAutoloadConfig()
+end)
