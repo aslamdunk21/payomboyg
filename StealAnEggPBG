@@ -20,6 +20,7 @@ local Lighting          = game:GetService("Lighting")
 local Fluent, SaveManager, InterfaceManager, Window, Options, UIWindow, Notify
 local syn, http, http_request, request
 local startFlying, stopFlying
+local setAFKMode, updateAFKLogs, afkGui
 
 local LocalPlayer = Players.LocalPlayer
 while not LocalPlayer do task.wait(0.1); LocalPlayer = Players.LocalPlayer end
@@ -40,12 +41,14 @@ end
 local ENV = (typeof(getgenv) == "function") and getgenv() or _G
 
 -- Reloading retires the previous session instead of stacking loops
-ENV.NyxSession = (ENV.NyxSession or 0) + 1
-local SESSION = ENV.NyxSession
-if ENV.NyxCleanup then pcall(ENV.NyxCleanup) end
-if ENV.NyxRestoreMT then pcall(ENV.NyxRestoreMT) end
+ENV.PayomboyZSession = ((ENV.PayomboyZSession or ENV.NyxSession) or 0) + 1
+local SESSION = ENV.PayomboyZSession
+if ENV.PayomboyZCleanup then pcall(ENV.PayomboyZCleanup)
+elseif ENV.NyxCleanup then pcall(ENV.NyxCleanup) end
+if ENV.PayomboyZRestoreMT then pcall(ENV.PayomboyZRestoreMT)
+elseif ENV.NyxRestoreMT then pcall(ENV.NyxRestoreMT) end
 
-local function alive() return ENV.NyxSession == SESSION end
+local function alive() return (ENV.PayomboyZSession or ENV.NyxSession) == SESSION end
 
 ----------------------------------------------------------------
 -- Fast & Resilient CDN HTTP Loader for Fluent UI
@@ -305,7 +308,201 @@ task.spawn(function()
         end
     end)
 
+    ENV.PayomboyZFloatGui = toggleGui
     ENV.NyxFloatGui = toggleGui
+end)
+
+----------------------------------------------------------------
+-- AFK Mode & Log GUI (GPU Saver)
+----------------------------------------------------------------
+task.spawn(function()
+    local oldAfk = CoreGui:FindFirstChild("PayomboyZAFKGui") or playerGui:FindFirstChild("PayomboyZAFKGui")
+    if oldAfk then oldAfk:Destroy() end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PayomboyZAFKGui"
+    gui.ResetOnSpawn = false
+    gui.Enabled = false
+
+    pcall(function() gui.Parent = CoreGui end)
+    if not gui.Parent or gui.Parent ~= CoreGui then gui.Parent = playerGui end
+
+    local bg = Instance.new("Frame")
+    bg.Name = "AFKBackground"
+    bg.Size = UDim2.fromScale(1, 1)
+    bg.BackgroundColor3 = Color3.fromRGB(8, 9, 14)
+    bg.BorderSizePixel = 0
+    bg.Parent = gui
+
+    -- Top Bar Header
+    local topBar = Instance.new("Frame")
+    topBar.Name = "TopBar"
+    topBar.Size = UDim2.new(1, -30, 0, 68)
+    topBar.Position = UDim2.new(0, 15, 0, 12)
+    topBar.BackgroundColor3 = Color3.fromRGB(18, 20, 32)
+    topBar.BorderSizePixel = 0
+    topBar.Parent = bg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = topBar
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(139, 92, 246)
+    stroke.Thickness = 1.5
+    stroke.Parent = topBar
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(0.65, 0, 0, 28)
+    titleLabel.Position = UDim2.new(0, 15, 0, 8)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "⚡ PayomboyZ HUB — โหมด AFK (ประหยัด GPU)"
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 15
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = topBar
+
+    local statsLabel = Instance.new("TextLabel")
+    statsLabel.Name = "AFKStatsLabel"
+    statsLabel.Size = UDim2.new(0.65, 0, 0, 22)
+    statsLabel.Position = UDim2.new(0, 15, 0, 36)
+    statsLabel.BackgroundTransparency = 1
+    statsLabel.Text = "ขโมยไข่สะสม: 0 ใบ | ฟักแล้ว: 0 ตัว | เวลา AFK: 00:00:00"
+    statsLabel.Font = Enum.Font.GothamMedium
+    statsLabel.TextSize = 12
+    statsLabel.TextColor3 = Color3.fromRGB(168, 85, 247)
+    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statsLabel.Parent = topBar
+
+    local exitBtn = Instance.new("TextButton")
+    exitBtn.Name = "ExitAFKBtn"
+    exitBtn.Size = UDim2.new(0, 150, 0, 40)
+    exitBtn.Position = UDim2.new(1, -165, 0.5, -20)
+    exitBtn.BackgroundColor3 = Color3.fromRGB(225, 29, 72)
+    exitBtn.Text = "❌ ปิดโหมด AFK"
+    exitBtn.Font = Enum.Font.GothamBold
+    exitBtn.TextSize = 13
+    exitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    exitBtn.Parent = topBar
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = exitBtn
+
+    exitBtn.MouseButton1Click:Connect(function()
+        if Options and Options.AFKMode then
+            Options.AFKMode:SetValue(false)
+        elseif setAFKMode then
+            setAFKMode(false)
+        end
+    end)
+
+    -- Container for 2 Log Panels
+    local container = Instance.new("Frame")
+    container.Name = "LogContainer"
+    container.Size = UDim2.new(1, -30, 1, -96)
+    container.Position = UDim2.new(0, 15, 0, 86)
+    container.BackgroundTransparency = 1
+    container.Parent = bg
+
+    -- Left Column: Stolen Eggs
+    local leftPanel = Instance.new("Frame")
+    leftPanel.Name = "LeftPanel"
+    leftPanel.Size = UDim2.new(0.5, -8, 1, 0)
+    leftPanel.Position = UDim2.new(0, 0, 0, 0)
+    leftPanel.BackgroundColor3 = Color3.fromRGB(15, 17, 26)
+    leftPanel.BorderSizePixel = 0
+    leftPanel.Parent = container
+
+    local leftCorner = Instance.new("UICorner")
+    leftCorner.CornerRadius = UDim.new(0, 10)
+    leftCorner.Parent = leftPanel
+
+    local leftStroke = Instance.new("UIStroke")
+    leftStroke.Color = Color3.fromRGB(56, 189, 248)
+    leftStroke.Thickness = 1
+    leftStroke.Transparency = 0.5
+    leftStroke.Parent = leftPanel
+
+    local leftHeader = Instance.new("TextLabel")
+    leftHeader.Size = UDim2.new(1, 0, 0, 34)
+    leftHeader.BackgroundColor3 = Color3.fromRGB(22, 26, 42)
+    leftHeader.Text = "   🥷 บันทึกการขโมยไข่ (Stolen Eggs Log)"
+    leftHeader.Font = Enum.Font.GothamBold
+    leftHeader.TextSize = 13
+    leftHeader.TextColor3 = Color3.fromRGB(56, 189, 248)
+    leftHeader.TextXAlignment = Enum.TextXAlignment.Left
+    leftHeader.Parent = leftPanel
+
+    local leftHeaderCorner = Instance.new("UICorner")
+    leftHeaderCorner.CornerRadius = UDim.new(0, 10)
+    leftHeaderCorner.Parent = leftHeader
+
+    local leftScroll = Instance.new("ScrollingFrame")
+    leftScroll.Name = "LeftScroll"
+    leftScroll.Size = UDim2.new(1, -12, 1, -42)
+    leftScroll.Position = UDim2.new(0, 6, 0, 38)
+    leftScroll.BackgroundTransparency = 1
+    leftScroll.BorderSizePixel = 0
+    leftScroll.ScrollBarThickness = 4
+    leftScroll.ScrollBarImageColor3 = Color3.fromRGB(56, 189, 248)
+    leftScroll.Parent = leftPanel
+
+    local leftLayout = Instance.new("UIListLayout")
+    leftLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    leftLayout.Padding = UDim.new(0, 3)
+    leftLayout.Parent = leftScroll
+
+    -- Right Column: Hatched Pets
+    local rightPanel = Instance.new("Frame")
+    rightPanel.Name = "RightPanel"
+    rightPanel.Size = UDim2.new(0.5, -8, 1, 0)
+    rightPanel.Position = UDim2.new(0.5, 8, 0, 0)
+    rightPanel.BackgroundColor3 = Color3.fromRGB(15, 17, 26)
+    rightPanel.BorderSizePixel = 0
+    rightPanel.Parent = container
+
+    local rightCorner = Instance.new("UICorner")
+    rightCorner.CornerRadius = UDim.new(0, 10)
+    rightCorner.Parent = rightPanel
+
+    local rightStroke = Instance.new("UIStroke")
+    rightStroke.Color = Color3.fromRGB(250, 204, 21)
+    rightStroke.Thickness = 1
+    rightStroke.Transparency = 0.5
+    rightStroke.Parent = rightPanel
+
+    local rightHeader = Instance.new("TextLabel")
+    rightHeader.Size = UDim2.new(1, 0, 0, 34)
+    rightHeader.BackgroundColor3 = Color3.fromRGB(22, 26, 42)
+    rightHeader.Text = "   🐣 บันทึกการฟักสัตว์เลี้ยง (Hatched Pets Log)"
+    rightHeader.Font = Enum.Font.GothamBold
+    rightHeader.TextSize = 13
+    rightHeader.TextColor3 = Color3.fromRGB(250, 204, 21)
+    rightHeader.TextXAlignment = Enum.TextXAlignment.Left
+    rightHeader.Parent = rightPanel
+
+    local rightHeaderCorner = Instance.new("UICorner")
+    rightHeaderCorner.CornerRadius = UDim.new(0, 10)
+    rightHeaderCorner.Parent = rightHeader
+
+    local rightScroll = Instance.new("ScrollingFrame")
+    rightScroll.Name = "RightScroll"
+    rightScroll.Size = UDim2.new(1, -12, 1, -42)
+    rightScroll.Position = UDim2.new(0, 6, 0, 38)
+    rightScroll.BackgroundTransparency = 1
+    rightScroll.BorderSizePixel = 0
+    rightScroll.ScrollBarThickness = 4
+    rightScroll.ScrollBarImageColor3 = Color3.fromRGB(250, 204, 21)
+    rightScroll.Parent = rightPanel
+
+    local rightLayout = Instance.new("UIListLayout")
+    rightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rightLayout.Padding = UDim.new(0, 3)
+    rightLayout.Parent = rightScroll
+
+    afkGui = gui
 end)
 
 ----------------------------------------------------------------
@@ -391,6 +588,7 @@ local Cfg = {
     -- survival & movement
     GodMode          = true,
     AntiAFK          = true,
+    AFKMode          = false,
     FlyEnabled       = false,
     FlySpeed         = 50,
     FlyNoclip        = false,
@@ -439,6 +637,9 @@ local Runtime = {
     carryUid    = nil,
     skip        = {},
     log         = {},
+    stolenLogs  = {},
+    hatchedLogs = {},
+    afkStartAt  = os.clock(),
     stats       = { eggs = 0, hatched = 0, soldPets = 0, soldEggs = 0, startedAt = os.clock(), startMoney = 0 },
     instantReady= false,
     lastHopAt   = nil,
@@ -449,13 +650,16 @@ local Runtime = {
     eggTick     = 0,
 }
 
+
+
 ----------------------------------------------------------------
--- Config Persistence (NyxSAE / PayomboyZ_SAE)
+-- Config Persistence (PayomboyZ_SAE / NyxSAE)
 ----------------------------------------------------------------
-local CFG_DIR    = "NyxSAE"
-local CFG_FILE   = CFG_DIR .. "/nyx_config.json"
-local CFG_BACKUP = CFG_DIR .. "/nyx_config.bak.json"
-local CFG_LEGACY = CFG_DIR .. "/config.json"
+local CFG_DIR    = "PayomboyZ_SAE"
+local CFG_FILE   = CFG_DIR .. "/payomboyz_config.json"
+local CFG_BACKUP = CFG_DIR .. "/payomboyz_config.bak.json"
+local CFG_LEGACY_NYX = "NyxSAE/nyx_config.json"
+local CFG_LEGACY = "NyxSAE/config.json"
 
 local hasFS = (typeof(writefile) == "function") and (typeof(readfile) == "function")
 if hasFS and typeof(makefolder) == "function" and not (isfolder and isfolder(CFG_DIR)) then
@@ -531,6 +735,78 @@ local function saveConfigSoon()
     end)
 end
 
+setAFKMode = function(enabled)
+    Cfg.AFKMode = enabled
+    if saveConfigSoon then pcall(saveConfigSoon) end
+    pcall(function()
+        RunService:Set3dRenderingEnabled(not enabled)
+    end)
+    if afkGui then
+        afkGui.Enabled = enabled
+        if enabled then
+            Runtime.afkStartAt = os.clock()
+            if updateAFKLogs then pcall(updateAFKLogs) end
+        end
+    end
+end
+
+updateAFKLogs = function()
+    if not (afkGui and afkGui.Enabled) then return end
+    local topBar = afkGui.AFKBackground:FindFirstChild("TopBar")
+    local statsLabel = topBar and topBar:FindFirstChild("AFKStatsLabel")
+    if statsLabel then
+        local sec = math.floor(os.clock() - (Runtime.afkStartAt or os.clock()))
+        local h = math.floor(sec / 3600)
+        local m = math.floor((sec % 3600) / 60)
+        local s = sec % 60
+        statsLabel.Text = string.format("ขโมยไข่สะสม: %d ใบ | ฟักแล้ว: %d ตัว | เวลา AFK: %02d:%02d:%02d",
+            Runtime.stats.eggs or 0, Runtime.stats.hatched or 0, h, m, s)
+    end
+
+    local logContainer = afkGui.AFKBackground:FindFirstChild("LogContainer")
+    if not logContainer then return end
+
+    local leftScroll = logContainer.LeftPanel:FindFirstChild("LeftScroll")
+    if leftScroll then
+        for _, child in ipairs(leftScroll:GetChildren()) do
+            if child:IsA("TextLabel") then child:Destroy() end
+        end
+        for i, text in ipairs(Runtime.stolenLogs or {}) do
+            if i > 50 then break end
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, 0, 0, 20)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.GothamMedium
+            lbl.TextSize = 11
+            lbl.TextColor3 = Color3.fromRGB(224, 231, 255)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = leftScroll
+        end
+        leftScroll.CanvasSize = UDim2.new(0, 0, 0, #Runtime.stolenLogs * 23)
+    end
+
+    local rightScroll = logContainer.RightPanel:FindFirstChild("RightScroll")
+    if rightScroll then
+        for _, child in ipairs(rightScroll:GetChildren()) do
+            if child:IsA("TextLabel") then child:Destroy() end
+        end
+        for i, text in ipairs(Runtime.hatchedLogs or {}) do
+            if i > 50 then break end
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, 0, 0, 20)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.GothamMedium
+            lbl.TextSize = 11
+            lbl.TextColor3 = Color3.fromRGB(254, 240, 138)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = rightScroll
+        end
+        rightScroll.CanvasSize = UDim2.new(0, 0, 0, #Runtime.hatchedLogs * 23)
+    end
+end
+
 local function applyConfigTable(data)
     for k, v in pairs(data) do
         if Cfg[k] ~= nil then Cfg[k] = v end
@@ -552,6 +828,7 @@ local function loadConfig()
 
     local data, from = readJson(CFG_FILE), CFG_FILE
     if not data then data, from = readJson(CFG_BACKUP), CFG_BACKUP end
+    if not data then data, from = readJson(CFG_LEGACY_NYX), CFG_LEGACY_NYX end
     if not data then data, from = readJson(CFG_LEGACY), CFG_LEGACY end
 
     if not data then
@@ -864,6 +1141,17 @@ local ToggleAntiAFK = Tabs.Sys:AddToggle("AntiAFK", {
 })
 ToggleAntiAFK:OnChanged(function(v) Cfg.AntiAFK = v saveConfigSoon() end)
 
+local ToggleAFKMode = Tabs.Sys:AddToggle("AFKMode", {
+    Title = "โหมด AFK (จอดำประหยัด GPU)",
+    Description = "ปิด 3D Render ลดความร้อนเครื่อง เด้งจอดำแสดง Log ขโมยและฟักไข่",
+    Default = Cfg.AFKMode
+})
+ToggleAFKMode:OnChanged(function(v)
+    if setAFKMode then
+        pcall(setAFKMode, v)
+    end
+end)
+
 local ToggleAutoHop = Tabs.Sys:AddToggle("AutoHop", {
     Title = "ย้ายเซิร์ฟเมื่อโซนนี้ไม่มีไข่ที่ต้องการ",
     Default = Cfg.AutoHop
@@ -1053,7 +1341,7 @@ task.spawn(function()
     -- Client Integrity & Anti-Cheat Mute
     ----------------------------------------------------------------
     local function muteCorrectionReport()
-        if ENV.NyxCorrectionMuted then return true end
+        if ENV.PayomboyZCorrectionMuted or ENV.NyxCorrectionMuted then return true end
         if typeof(getrawmetatable) ~= "function" or typeof(setreadonly) ~= "function"
             or typeof(getnamecallmethod) ~= "function" then
             return false
@@ -1077,14 +1365,16 @@ task.spawn(function()
             end)
             setreadonly(mt, true)
 
-            ENV.NyxRestoreMT = function()
+            ENV.PayomboyZRestoreMT = function()
                 pcall(function()
                     setreadonly(mt, false)
                     mt.__namecall = oldNamecall
                     setreadonly(mt, true)
                 end)
             end
+            ENV.NyxRestoreMT = ENV.PayomboyZRestoreMT
         end)
+        ENV.PayomboyZCorrectionMuted = ok
         ENV.NyxCorrectionMuted = ok
         return ok
     end
@@ -1643,7 +1933,13 @@ task.spawn(function()
                         if EggCmds.RequestCompleteHatchEgg(uid) then
                             hatched += 1
                             Runtime.stats.hatched += 1
-                            logLine("hatch", ("ฟัก %s"):format(rec.AssetCategory or "?"))
+                            local catName = rec.AssetCategory or "?"
+                            local rarName = RARITY_TH[rarityOf(catName)] or rarityOf(catName)
+                            local timeStr = os.date("%H:%M:%S")
+                            logLine("hatch", ("ฟัก %s"):format(catName))
+                            table.insert(Runtime.hatchedLogs, 1, string.format("[%s] 🐣 ฟักได้: %s (%s)", timeStr, catName, rarName))
+                            if #Runtime.hatchedLogs > 60 then table.remove(Runtime.hatchedLogs) end
+                            if updateAFKLogs then pcall(updateAFKLogs) end
                         end
                     end
                 end
@@ -2010,9 +2306,14 @@ task.spawn(function()
 
         Runtime.stats.eggs += 1
         local cat = rec.AssetCategory
-        logLine("steal", ("ขโมย %s (%s)"):format(cat, RARITY_TH[rarityOf(cat)] or rarityOf(cat)))
+        local rarName = RARITY_TH[rarityOf(cat)] or rarityOf(cat)
+        local timeStr = os.date("%H:%M:%S")
+        logLine("steal", ("ขโมย %s (%s)"):format(cat, rarName))
+        table.insert(Runtime.stolenLogs, 1, string.format("[%s] 🥷 ขโมย: %s (%s)", timeStr, cat, rarName))
+        if #Runtime.stolenLogs > 60 then table.remove(Runtime.stolenLogs) end
+        if updateAFKLogs then pcall(updateAFKLogs) end
         if Cfg.WebhookSteal then
-            webhook("🥷 ขโมยไข่สำเร็จ", ("**%s** (%s) — โซน %s"):format(cat, RARITY_TH[rarityOf(cat)] or rarityOf(cat), rec.AreaId))
+            webhook("🥷 ขโมยไข่สำเร็จ", ("**%s** (%s) — โซน %s"):format(cat, rarName, rec.AreaId))
         end
         blinkExact(ANCHOR)
         return true
@@ -2074,7 +2375,13 @@ task.spawn(function()
         if not claimed then toAnchor() return false, "ไข่หลุดระหว่างทาง" end
 
         Runtime.stats.eggs += 1
-        logLine("steal", ("ขโมย %s"):format(rec.AssetCategory))
+        local cat = rec.AssetCategory
+        local rarName = RARITY_TH[rarityOf(cat)] or rarityOf(cat)
+        local timeStr = os.date("%H:%M:%S")
+        logLine("steal", ("ขโมย %s"):format(cat))
+        table.insert(Runtime.stolenLogs, 1, string.format("[%s] 🥷 ขโมย: %s (%s)", timeStr, cat, rarName))
+        if #Runtime.stolenLogs > 60 then table.remove(Runtime.stolenLogs) end
+        if updateAFKLogs then pcall(updateAFKLogs) end
         toAnchor()
         return true
     end
@@ -2514,7 +2821,10 @@ task.spawn(function()
     job("antilag", 30, function() pcall(antiLagSweep) end)
     job("gc", 60, gcSweep)
 
-    job("ui", 5, function()
+    job("ui", 1, function()
+        if Cfg.AFKMode and updateAFKLogs then
+            pcall(updateAFKLogs)
+        end
         local data = saveData()
         local mins = math.max((os.clock() - Runtime.stats.startedAt) / 60, 0.01)
 
@@ -2728,12 +3038,15 @@ task.spawn(function()
     end
 
     -- Clean up previous flight & connections on reload
-    ENV.NyxCleanup = function()
+    ENV.PayomboyZCleanup = function()
         pcall(function() stopFlying() end)
+        pcall(function() RunService:Set3dRenderingEnabled(true) end)
+        if afkGui then pcall(function() afkGui:Destroy() end) end
         for k, conn in pairs(Runtime.conns or {}) do
             pcall(function() conn:Disconnect() end)
         end
     end
+    ENV.NyxCleanup = ENV.PayomboyZCleanup
 
     -- Harden character on start
     Runtime.instantReady = killClientIntegrity()
