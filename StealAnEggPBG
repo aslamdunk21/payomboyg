@@ -185,10 +185,10 @@ local Cfg = {
 
     -- movement
     MoveMode         = "Instant",       -- Instant = วาปตรง | Warp = วาปทีละสเต็ป
-    WarpPct          = 0.8,
+    WarpPct          = 0.45,
     ZoneHopStep      = 260,
     GuardSafeGap     = 26,
-    BoostWalkSpeed   = 900,
+    BoostWalkSpeed   = 700,
 
     -- survival
     GodMode          = true,
