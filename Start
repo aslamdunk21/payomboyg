@@ -107,6 +107,10 @@ local function ShowToast(title, message, isError)
     end)
 end
 
+if getgenv then
+    getgenv().PayomboyZ_ShowToast = ShowToast
+end
+
 local function PassToKeyChecker(userKey)
     if not userKey or userKey == "" then return end
     userKey = userKey:gsub("%s+", "")
