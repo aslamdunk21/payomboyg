@@ -28,6 +28,31 @@ local function LoadSavedKey()
     return saved:gsub("%s+", "")
 end
 
+local function GetPassedScriptKey()
+    local key = nil
+    pcall(function()
+        if getgenv then
+            local genvKey = getgenv().script_key or getgenv().PayomboyZ_InputKey
+            if type(genvKey) == "string" and genvKey ~= "" then
+                key = genvKey
+            end
+        end
+        if not key and type(_G.script_key) == "string" and _G.script_key ~= "" then
+            key = _G.script_key
+        end
+        if not key and type(shared.script_key) == "string" and shared.script_key ~= "" then
+            key = shared.script_key
+        end
+        if not key and type(script_key) == "string" and script_key ~= "" then
+            key = script_key
+        end
+    end)
+    if key and type(key) == "string" then
+        return key:gsub("%s+", "")
+    end
+    return ""
+end
+
 local function ShowToast(title, message, isError)
     pcall(function()
         local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -138,6 +163,15 @@ local function PassToKeyChecker(userKey)
                 if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
                     delfile(LuarmorConfig.SavedKeyFile)
                 end
+
+                pcall(function()
+                    if getgenv then
+                        getgenv().script_key = nil
+                        getgenv().PayomboyZ_InputKey = nil
+                    end
+                    _G.script_key = nil
+                    shared.script_key = nil
+                end)
 
                 -- ทำลาย Error Popup ทิ้ง (ถ้าเป็น GUI ปกติ)
                 if not isKickPrompt then
@@ -671,8 +705,12 @@ if getgenv and getgenv().PayomboyZ_ShowUI then
 end
 
 local savedKey = LoadSavedKey()
+local passedKey = GetPassedScriptKey()
 
-if savedKey and savedKey ~= "" then
+if passedKey and passedKey ~= "" then
+    -- นำ Key ที่ผู้ใช้ใส่ในตัวรันสคริปต์มาใส่ในช่อง TextBox ให้ผู้ใช้อัตโนมัติ
+    CreateLoaderUI("✨ พบ Key จากตัวรัน! กรุณากดปุ่มเพื่อเข้าใช้งาน", passedKey)
+elseif savedKey and savedKey ~= "" then
     -- ==============================================================================
     -- 🚀 INSTANT AUTO-LOGIN & ESCAPE HATCH (ฉลาด ไว และแก้บั๊กค้าง 100%)
     -- ==============================================================================
@@ -719,6 +757,14 @@ if savedKey and savedKey ~= "" then
         if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
             delfile(LuarmorConfig.SavedKeyFile)
         end
+        pcall(function()
+            if getgenv then
+                getgenv().script_key = nil
+                getgenv().PayomboyZ_InputKey = nil
+            end
+            _G.script_key = nil
+            shared.script_key = nil
+        end)
         EscBtn.Text = "✅ ลบคีย์แล้ว! กำลังเปิดหน้าต่างใหม่..."
         EscBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         task.wait(1.5)
