@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/start.txt
+-- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
 -- ==============================================================================
 
 local LuarmorConfig = {
@@ -9,7 +9,7 @@ local LuarmorConfig = {
     GetKeyURL = "https://discordapp.com/channels/1533260775458607256/1533265542394155158",
     DiscordURL = "https://discord.gg/5DEAQBj2y",
     LogoPath = "543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/start.txt",
+    StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
     LuarmorLoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG"
 }
 
