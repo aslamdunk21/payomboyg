@@ -266,10 +266,10 @@ local COLORS = {
 	hexLuck = "FFC400",
 }
 
-local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" }
+local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean" }
 
 local LUCK = {
-	rarity = { 1, 1.6, 2.6, 4.2, 7, 12 },
+	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60 },
 	base = 0.00045,
 	exponent = 0.5,
 	cap = 500,
@@ -304,8 +304,22 @@ local WATCHED_ATTRIBUTES = {
 	"ExtraMutations",
 }
 
-local SUFFIXES = { "", "k", "M", "B", "T", "Qa" }
-local PARSE_MULTIPLIERS = { k = 1e3, m = 1e6, b = 1e9, t = 1e12, qa = 1e15 }
+local SUFFIXES = { "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+local PARSE_MULTIPLIERS = {
+	k = 1e3,
+	m = 1e6,
+	b = 1e9,
+	t = 1e12,
+	qa = 1e15, qd = 1e15, quad = 1e15, quadrillion = 1e15,
+	qi = 1e18, qn = 1e18, quint = 1e18, quintillion = 1e18,
+	sx = 1e21, sext = 1e21, sextillion = 1e21,
+	sp = 1e24, sept = 1e24, septillion = 1e24,
+	oc = 1e27, oct = 1e27, octillion = 1e27,
+	no = 1e30, non = 1e30, nonillion = 1e30,
+	dc = 1e33, dec = 1e33, decillion = 1e33,
+	udc = 1e36, ddc = 1e39, tdc = 1e42, qdc = 1e45, qndc = 1e48,
+	sxdc = 1e51, spdc = 1e54, odc = 1e57, nvdc = 1e60, vig = 1e63,
+}
 local CONTAINER_NAMES = { "DroppedCrystals", "Crystals" }
 
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
@@ -340,8 +354,8 @@ local Locales = {
 	["Crystal ESP"] = {EN = "Crystal ESP", TH = "มองทะลุคริสตัล"},
 	["Crystal Size"] = {EN = "Crystal Size", TH = "ขนาดคริสตัล"},
 	["Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b. Empty shows everything"] = {
-		EN = "Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b. Empty shows everything", 
-		TH = "มูลค่าขั้นต่ำ (ตัวอย่าง: 500k, 2m) หากว่างจะแสดงทั้งหมด"
+		EN = "Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b, 1t, 1qa. Empty shows everything", 
+		TH = "มูลค่าขั้นต่ำ (ตัวอย่าง: 500k, 2m, 1.5b, 1t, 1qa, 1qi) หากว่างจะแสดงทั้งหมด"
 	},
 	["Min Value"] = {EN = "Min Value", TH = "มูลค่าขั้นต่ำ"},
 	["Tracking: %d  |  Shown: %d"] = {EN = "Tracking: %d  |  Shown: %d", TH = "ติดตาม: %d | แสดง: %d"},
@@ -526,7 +540,14 @@ local function parseValue(text)
 	if cleaned == "" then
 		return 0
 	end
-	local number, suffix = cleaned:match("^(%d*%.?%d+)(%a*)$")
+	local direct = tonumber(cleaned)
+	if direct then
+		return direct
+	end
+	local number, suffix = cleaned:match("^([%d%.e%+%-]+)(%a*)$")
+	if not number then
+		number, suffix = cleaned:match("^(%d*%.?%d+)(%a*)$")
+	end
 	if not number then
 		return nil
 	end
@@ -669,7 +690,7 @@ local function computeLuck(inst)
 	end
 
 	local weight = math.max(0, crystalWeight(inst))
-	local base = (LUCK.rarity[tier] or LUCK.rarity[1]) * math.min(weight, LUCK.cap) ^ LUCK.exponent * LUCK.base
+	local base = (LUCK.rarity[tier] or LUCK.rarity[#LUCK.rarity] or LUCK.rarity[1]) * math.min(weight, LUCK.cap) ^ LUCK.exponent * LUCK.base
 
 	if getAttr(inst, "BombCrystal") == true then
 		base *= LUCK.bomb
@@ -807,7 +828,7 @@ local function looksLikeCrystal(inst)
 	if not inst:IsA("BasePart") then
 		return false
 	end
-	return inst.Name:find("Crystal", 1, true) ~= nil
+	return inst.Name:find("Crystal", 1, true) ~= nil or getAttr(inst, "Value") ~= nil or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil
 end
 
 local crystalFlags = setmetatable({}, { __mode = "k" })
@@ -820,7 +841,7 @@ local function isCrystal(inst)
 
 	local result = false
 	if inst:IsA("BasePart") and getAttr(inst, "Value") ~= nil then
-		result = getAttr(inst, "CrystalName") ~= nil or inst.Name:find("Crystal", 1, true) ~= nil
+		result = getAttr(inst, "CrystalName") ~= nil or getAttr(inst, "TierName") ~= nil or getAttr(inst, "Tier") ~= nil or inst.Name:find("Crystal", 1, true) ~= nil
 	end
 
 	crystalFlags[inst] = result
@@ -3367,7 +3388,7 @@ do
 		CrystalBox:AddInput("EspMinValue", {
 			Text = L("Min Value"),
 			Default = Config.MinCrystalValue,
-			Placeholder = "2m",
+			Placeholder = "2m, 1t, 1qa, 1qi",
 			Numeric = false,
 			Finished = false,
 			Callback = setMinValue,
