@@ -1,8 +1,12 @@
-local playersService = game:GetService("Players")
-local localPlayer = playersService.LocalPlayer
-wait(15)
 if not game:IsLoaded() then
     game.Loaded:Wait()
+end
+
+local playersService = game:GetService("Players")
+local localPlayer = playersService.LocalPlayer
+while not localPlayer do
+    task.wait(0.1)
+    localPlayer = playersService.LocalPlayer
 end
 
 local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
@@ -63,6 +67,11 @@ local State = {
 	autoPickupActive = false,
 	instantPromptActive = false,
 	autoBuyBombs = false,
+	autoUpgradeAir = false,
+	autoUpgradeWeight = false,
+	autoBuyPickaxes = false,
+	autoEquipBest = false,
+	upgradeAccumulator = 0,
 	minValue = 2000000,
 	valueFilter = true,
 	espScale = 0.7,
@@ -404,6 +413,18 @@ local Locales = {
 	["Auto Buy On Restock"] = {EN = "Auto Buy On Restock", TH = "ซื้ออัตโนมัติเมื่อของเข้า"},
 	["Buy All Stock Now"] = {EN = "Buy All Stock Now", TH = "ซื้อทั้งหมดเดี๋ยวนี้"},
 
+	["Auto Upgrade"] = {EN = "Auto Upgrade", TH = "อัปเกรดอัตโนมัติ"},
+	["Upgrades"] = {EN = "Upgrades", TH = "อัปเกรดตัวละคร & กระเป๋า"},
+	["Auto Upgrade Air"] = {EN = "Auto Upgrade Air", TH = "อัปเกรดความอึดอัตโนมัติ (Air)"},
+	["Auto Upgrade Weight"] = {EN = "Auto Upgrade Weight", TH = "อัปเกรดกระเป๋าอัตโนมัติ (Weight)"},
+	["Pickaxe Shop & Equip"] = {EN = "Pickaxe Shop & Equip", TH = "ร้านค้า Pickaxe & สวมใส่อัตโนมัติ"},
+	["Auto Buy Pickaxes"] = {EN = "Auto Buy Pickaxes", TH = "กวาดซื้อ Pickaxe อัตโนมัติ"},
+	["Auto Equip Best Pickaxe"] = {EN = "Auto Equip Best Pickaxe", TH = "สวมใส่ Pickaxe ดีที่สุดอัตโนมัติ"},
+	["Buy Air (Stamina) Now"] = {EN = "Buy Air (Stamina) Now", TH = "ซื้อความอึดทันที (Air x3)"},
+	["Buy Weight (Bag) Now"] = {EN = "Buy Weight (Bag) Now", TH = "ซื้อกระเป๋าทันที (Weight x3)"},
+	["Buy All Pickaxes Now"] = {EN = "Buy All Pickaxes Now", TH = "ซื้อ Pickaxe ทั้งหมดทันที"},
+	["Equip Best Pickaxe Now"] = {EN = "Equip Best Pickaxe Now", TH = "สวมใส่ Pickaxe ที่ดีที่สุดทันที"},
+
 	["Configuration"] = {EN = "Configuration", TH = "การตั้งค่า Config"},
 	["Config name"] = {EN = "Config name", TH = "ชื่อ Config"},
 	["Create config"] = {EN = "Create config", TH = "สร้าง Config"},
@@ -468,6 +489,7 @@ local Tabs = {
 	boulders = Window:AddTab(L("Boulders"), "mountain"),
 	teleports = Window:AddTab(L("Teleports"), "crosshair"),
 	farming = Window:AddTab(L("Farming"), "pickaxe"),
+	upgrades = Window:AddTab(L("Auto Upgrade"), "arrow-up-circle"),
 	movement = Window:AddTab(L("Movement"), "zap"),
 }
 
@@ -533,6 +555,9 @@ local function formatLuck(score)
 end
 
 local function parseValue(text)
+	if type(text) == "number" then
+		return text
+	end
 	if type(text) ~= "string" then
 		return nil
 	end
@@ -544,14 +569,14 @@ local function parseValue(text)
 	if direct then
 		return direct
 	end
-	local number, suffix = cleaned:match("^([%d%.e%+%-]+)(%a*)$")
-	if not number then
-		number, suffix = cleaned:match("^(%d*%.?%d+)(%a*)$")
+	local numberStr, suffix = cleaned:match("^([%d%.]+)(%a*)$")
+	if not numberStr then
+		numberStr, suffix = cleaned:match("^([%d%.]+e?[%+%-%d]*)(%a*)$")
 	end
-	if not number then
+	if not numberStr then
 		return nil
 	end
-	local base = tonumber(number)
+	local base = tonumber(numberStr)
 	if not base then
 		return nil
 	end
@@ -560,7 +585,22 @@ local function parseValue(text)
 	end
 	local multiplier = PARSE_MULTIPLIERS[suffix]
 	if not multiplier then
-		return nil
+		if suffix:sub(1, 1) == "t" then
+			multiplier = 1e12
+		elseif suffix:sub(1, 2) == "qa" or suffix:sub(1, 2) == "qd" then
+			multiplier = 1e15
+		elseif suffix:sub(1, 2) == "qi" or suffix:sub(1, 2) == "qn" then
+			multiplier = 1e18
+		elseif suffix:sub(1, 1) == "b" then
+			multiplier = 1e9
+		elseif suffix:sub(1, 1) == "m" then
+			multiplier = 1e6
+		elseif suffix:sub(1, 1) == "k" then
+			multiplier = 1e3
+		end
+	end
+	if not multiplier then
+		return base
 	end
 	return base * multiplier
 end
@@ -604,14 +644,102 @@ local function getAttr(inst, name)
 		return nil
 	end
 	local ok, value = pcall(inst.GetAttribute, inst, name)
-	if ok then
+	if ok and value ~= nil then
 		return value
+	end
+	if inst:IsA("Model") then
+		local primary = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+		if primary then
+			local ok2, value2 = pcall(primary.GetAttribute, primary, name)
+			if ok2 and value2 ~= nil then
+				return value2
+			end
+		end
+		for _, child in ipairs(inst:GetChildren()) do
+			local ok3, value3 = pcall(child.GetAttribute, child, name)
+			if ok3 and value3 ~= nil then
+				return value3
+			end
+		end
 	end
 	return nil
 end
 
 local function crystalValue(inst)
-	return tonumber(getAttr(inst, "Value")) or 0
+	local raw = getAttr(inst, "Value")
+	if raw ~= nil then
+		local p = parseValue(raw)
+		if p and p > 0 then
+			return p
+		end
+	end
+
+	for _, attrName in ipairs({ "ValueText", "ValueString", "Money", "Price", "Val", "BaseValue", "Worth" }) do
+		local val = getAttr(inst, attrName)
+		if val ~= nil then
+			local p = parseValue(val)
+			if p and p > 0 then
+				return p
+			end
+		end
+	end
+
+	if inst:IsA("Model") or inst:IsA("BasePart") then
+		local bestVal = 0
+		for _, child in ipairs(inst:GetDescendants()) do
+			if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
+				local text = child.Text
+				if not text:find("%%") and not text:lower():find("kg") and not text:lower():find("tons") then
+					local dollarMatch = text:match("%$[%d%,%.%a%s]+")
+					if dollarMatch then
+						local p = parseValue(dollarMatch)
+						if p and p > 0 and p > bestVal then
+							bestVal = p
+						end
+					else
+						local numMatch = text:match("[%d%,%.]+%s*%a*")
+						if numMatch then
+							local p = parseValue(numMatch)
+							if p and p > 0 and p > bestVal then
+								bestVal = p
+							end
+						end
+					end
+				else
+					local dollarMatch = text:match("%$[%d%,%.%a]+")
+					if dollarMatch then
+						local p = parseValue(dollarMatch)
+						if p and p > 0 and p > bestVal then
+							bestVal = p
+						end
+					end
+				end
+			end
+		end
+		if bestVal > 0 then
+			return bestVal
+		end
+	end
+
+	local tier = crystalTier(inst)
+	if tier > 0 then
+		local weight = math.max(1, crystalWeight(inst))
+		local tierFallback = {
+			[1] = 100,
+			[2] = 1000,
+			[3] = 10000,
+			[4] = 100000,
+			[5] = 1000000,
+			[6] = 100000000,
+			[7] = 1000000000000,       -- Quasar: 1T
+			[8] = 1000000000000000,    -- Pulsar: 1Qa
+			[9] = 1000000000000000000, -- Empyrean: 1Qi
+		}
+		local baseVal = tierFallback[tier] or (10 ^ (tier + 2))
+		return baseVal * weight
+	end
+
+	return 0
 end
 
 local function crystalWeight(inst)
@@ -619,7 +747,19 @@ local function crystalWeight(inst)
 end
 
 local function crystalTier(inst)
-	return tonumber(getAttr(inst, "Tier")) or 0
+	local t = tonumber(getAttr(inst, "Tier"))
+	if t then
+		return t
+	end
+	local name = getAttr(inst, "TierName") or inst.Name
+	if type(name) == "string" then
+		for index, tierName in ipairs(TIER_NAMES) do
+			if name:lower():find(tierName:lower(), 1, true) then
+				return index
+			end
+		end
+	end
+	return 0
 end
 
 local function crystalRarity(inst)
@@ -734,7 +874,13 @@ local function meetsFilter(inst, value)
 	if not State.valueFilter then
 		return true
 	end
-	return (value or crystalValue(inst)) >= State.minValue
+	local val = value or crystalValue(inst)
+	if val <= 0 then
+		if isCrystal(inst) or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil then
+			return true
+		end
+	end
+	return val >= State.minValue
 end
 
 local function ownsGamepass(name)
@@ -825,7 +971,7 @@ local function backpackFree()
 end
 
 local function looksLikeCrystal(inst)
-	if not inst:IsA("BasePart") then
+	if not (inst:IsA("BasePart") or inst:IsA("Model")) then
 		return false
 	end
 	return inst.Name:find("Crystal", 1, true) ~= nil or getAttr(inst, "Value") ~= nil or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil
@@ -834,17 +980,47 @@ end
 local crystalFlags = setmetatable({}, { __mode = "k" })
 
 local function isCrystal(inst)
+	if not inst or not inst.Parent then
+		return false
+	end
+
 	local cached = crystalFlags[inst]
-	if cached ~= nil then
-		return cached
+	if cached == true then
+		return true
 	end
 
 	local result = false
-	if inst:IsA("BasePart") and getAttr(inst, "Value") ~= nil then
-		result = getAttr(inst, "CrystalName") ~= nil or getAttr(inst, "TierName") ~= nil or getAttr(inst, "Tier") ~= nil or inst.Name:find("Crystal", 1, true) ~= nil
+	if inst:IsA("BasePart") or inst:IsA("Model") then
+		local pName = inst.Parent and inst.Parent.Name
+		if pName == "Crystals" or pName == "DroppedCrystals" then
+			result = true
+		end
+
+		if not result then
+			local hasValue = getAttr(inst, "Value") ~= nil or getAttr(inst, "ValueText") ~= nil or getAttr(inst, "Money") ~= nil
+			local hasTier = getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil or getAttr(inst, "CrystalName") ~= nil
+			local nameLower = inst.Name:lower()
+			local hasName = nameLower:find("crystal", 1, true) ~= nil 
+				or nameLower:find("quasar", 1, true) ~= nil 
+				or nameLower:find("pulsar", 1, true) ~= nil 
+				or nameLower:find("empyrean", 1, true) ~= nil
+
+			if hasValue or hasTier or hasName then
+				result = true
+			end
+		end
+
+		if not result then
+			if inst:FindFirstChild("CrystalHover", true) or inst:FindFirstChildWhichIsA("BillboardGui", true) then
+				result = true
+			end
+		end
 	end
 
-	crystalFlags[inst] = result
+	if result then
+		crystalFlags[inst] = true
+	end
+
 	return result
 end
 
@@ -936,10 +1112,27 @@ local function playerTextSize()
 	return math.max(6, math.floor(PLAYER.text * State.playerScale + 0.5))
 end
 
+local function crystalPosition(inst)
+	if not inst then return Vector3.zero end
+	if inst:IsA("Model") then
+		local part = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+		return part and part.Position or (inst:GetPivot() and inst:GetPivot().Position or Vector3.zero)
+	end
+	return inst.Position
+end
+
+local function crystalAdornee(inst)
+	if not inst then return nil end
+	if inst:IsA("Model") then
+		return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true) or inst
+	end
+	return inst
+end
+
 local function createEntry(inst)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "UniverseEsp"
-	billboard.Adornee = inst
+	billboard.Adornee = crystalAdornee(inst)
 	billboard.AlwaysOnTop = true
 	billboard.ResetOnSpawn = false
 	billboard.LightInfluence = 0
@@ -1042,7 +1235,7 @@ local function applyDetails(inst, entry, origin)
 
 	local distanceText = "--"
 	if origin then
-		distanceText = formatDistance((inst.Position - origin).Magnitude)
+		distanceText = formatDistance((crystalPosition(inst) - origin).Magnitude)
 	end
 
 	applyExtra(entry, distanceText)
@@ -1664,7 +1857,11 @@ local function crystalPrompt(inst)
 	return nil
 end
 
-local function surfaceDistance(part, origin)
+local function surfaceDistance(inst, origin)
+	local part = inst:IsA("Model") and (inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)) or inst
+	if not part or not part:IsA("BasePart") then
+		return (crystalPosition(inst) - origin).Magnitude
+	end
 	local ok, distance = pcall(function()
 		local point = part.CFrame:PointToObjectSpace(origin)
 		local half = part.Size * 0.5
@@ -2094,6 +2291,98 @@ local function watchSpeed(humanoid)
 	end
 end
 
+local PICKAXES_TO_BUY = {
+	"EclipseFang",
+	"AstralRend",
+	"CelestialApex",
+	"TempestPick",
+}
+
+local PICKAXE_PRIORITY = {
+	"TempestPick",
+	"CelestialApex",
+	"AstralRend",
+	"EclipseFang",
+	"Titanium Spike",
+	"Voidreign",
+	"The Terminus",
+}
+
+local function buyAirUpgrade(amount)
+	amount = amount or 3
+	pcall(function()
+		local remotes = Services.ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes then
+			local upgradeBuy = remotes:FindFirstChild("UpgradeBuy")
+			if upgradeBuy then
+				upgradeBuy:FireServer("Air", amount)
+			end
+			local upgradePrices = remotes:FindFirstChild("UpgradePrices")
+			if upgradePrices and upgradePrices:IsA("RemoteFunction") then
+				upgradePrices:InvokeServer("Air")
+			end
+		end
+	end)
+end
+
+local function buyWeightUpgrade(amount)
+	amount = amount or 3
+	pcall(function()
+		local remotes = Services.ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes then
+			local upgradeBuy = remotes:FindFirstChild("UpgradeBuy")
+			if upgradeBuy then
+				upgradeBuy:FireServer("Weight", amount)
+			end
+			local upgradePrices = remotes:FindFirstChild("UpgradePrices")
+			if upgradePrices and upgradePrices:IsA("RemoteFunction") then
+				upgradePrices:InvokeServer("Weight")
+			end
+		end
+	end)
+end
+
+local function buyPickaxe(name)
+	pcall(function()
+		local remotes = Services.ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes then
+			local shopBuy = remotes:FindFirstChild("ShopBuy")
+			if shopBuy then
+				shopBuy:FireServer(name)
+			end
+		end
+	end)
+end
+
+local function buyAllPickaxes()
+	for _, name in ipairs(PICKAXES_TO_BUY) do
+		buyPickaxe(name)
+	end
+end
+
+local function equipBestPickaxe()
+	local character = LocalPlayer.Character
+	if not character then return end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+	if not humanoid or not backpack then return end
+
+	for _, name in ipairs(PICKAXE_PRIORITY) do
+		local tool = backpack:FindFirstChild(name)
+		if tool and tool:IsA("Tool") then
+			humanoid:EquipTool(tool)
+			return
+		end
+	end
+
+	for _, tool in ipairs(backpack:GetChildren()) do
+		if tool:IsA("Tool") then
+			humanoid:EquipTool(tool)
+			return
+		end
+	end
+end
+
 local function setSpeedBoost(value)
 	State.speedActive = value
 
@@ -2174,6 +2463,23 @@ Connections.schedulerConn = Services.RunService.Heartbeat:Connect(function(delta
 		local ok, err = pcall(updateBackpackLabel)
 		if not ok then
 			reportError("backpack", err)
+		end
+	end
+
+	State.upgradeAccumulator += deltaTime
+	if State.upgradeAccumulator >= 1.5 then
+		State.upgradeAccumulator = 0
+		if State.autoUpgradeAir then
+			pcall(function() buyAirUpgrade(3) end)
+		end
+		if State.autoUpgradeWeight then
+			pcall(function() buyWeightUpgrade(3) end)
+		end
+		if State.autoBuyPickaxes then
+			pcall(buyAllPickaxes)
+		end
+		if State.autoEquipBest then
+			pcall(equipBestPickaxe)
 		end
 	end
 
@@ -3376,12 +3682,20 @@ do
 		CrystalBox:AddLabel(L("Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b. Empty shows everything"), true)
 
 		local function setMinValue(text)
-			local parsed = parseValue(text)
-			if not parsed then
+			if type(text) == "string" and text:gsub("%s", "") == "" then
+				State.minValue = 0
+				State.valueFilter = false
+				requestRefresh()
 				return
 			end
-			State.minValue = math.max(parsed, 0)
-			State.valueFilter = State.minValue > 0
+			local parsed = parseValue(text)
+			if parsed then
+				State.minValue = math.max(parsed, 0)
+				State.valueFilter = State.minValue > 0
+			else
+				State.minValue = 0
+				State.valueFilter = false
+			end
 			requestRefresh()
 		end
 
@@ -3428,6 +3742,75 @@ do
 				applyPlayerScale()
 			end,
 		})
+	end
+
+	install()
+end
+
+do
+	local function install()
+		local UpgradeBox = Tabs.upgrades:AddLeftGroupbox(L("Upgrades"), "arrow-up-circle")
+
+		UpgradeBox:AddToggle("AutoUpgradeAir", {
+			Text = L("Auto Upgrade Air"),
+			Default = false,
+			Callback = function(value)
+				State.autoUpgradeAir = value
+			end,
+		})
+
+		UpgradeBox:AddToggle("AutoUpgradeWeight", {
+			Text = L("Auto Upgrade Weight"),
+			Default = false,
+			Callback = function(value)
+				State.autoUpgradeWeight = value
+			end,
+		})
+
+		UpgradeBox:AddDivider()
+
+		UpgradeBox:AddButton(L("Buy Air (Stamina) Now"), function()
+			buyAirUpgrade(3)
+			if Library then Library:Notify("Bought Air Upgrade x3", 2) end
+		end)
+
+		UpgradeBox:AddButton(L("Buy Weight (Bag) Now"), function()
+			buyWeightUpgrade(3)
+			if Library then Library:Notify("Bought Weight Upgrade x3", 2) end
+		end)
+
+		local ShopBox = Tabs.upgrades:AddRightGroupbox(L("Pickaxe Shop & Equip"), "shopping-cart")
+
+		ShopBox:AddToggle("AutoBuyPickaxes", {
+			Text = L("Auto Buy Pickaxes"),
+			Default = false,
+			Callback = function(value)
+				State.autoBuyPickaxes = value
+			end,
+		})
+
+		ShopBox:AddToggle("AutoEquipBest", {
+			Text = L("Auto Equip Best Pickaxe"),
+			Default = false,
+			Callback = function(value)
+				State.autoEquipBest = value
+				if value then
+					equipBestPickaxe()
+				end
+			end,
+		})
+
+		ShopBox:AddDivider()
+
+		ShopBox:AddButton(L("Buy All Pickaxes Now"), function()
+			buyAllPickaxes()
+			if Library then Library:Notify("Bought Pickaxes", 2) end
+		end)
+
+		ShopBox:AddButton(L("Equip Best Pickaxe Now"), function()
+			equipBestPickaxe()
+			if Library then Library:Notify("Equipped Best Pickaxe", 2) end
+		end)
 	end
 
 	install()
