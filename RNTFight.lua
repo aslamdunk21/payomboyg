@@ -12,13 +12,27 @@ local player = Players.LocalPlayer
 while not player do task.wait(0.1); player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui", 10) or player.PlayerGui
 
--- Fast CDN HTTP Loader for Fluent UI
+-- Fast & Resilient CDN HTTP Loader for Fluent UI with Fallback Mirrors & Retries
 local function safeHttpGet(urls)
-    for _, url in ipairs(urls) do
-        local ok, res = pcall(function() return game:HttpGet(url) end)
-        if ok and type(res) == "string" and #res > 500 then
-            return res
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+    for retry = 1, 2 do
+        for _, url in ipairs(urls) do
+            -- Method 1: Standard game:HttpGet
+            local ok, res = pcall(function() return game:HttpGet(url) end)
+            if ok and type(res) == "string" and #res > 500 then
+                return res
+            end
+            -- Method 2: HTTP Request table fallback (works on mobile executors with custom headers)
+            if requestFunc then
+                local reqOk, reqRes = pcall(function()
+                    return requestFunc({ Url = url, Method = "GET" })
+                end)
+                if reqOk and reqRes and reqRes.Body and type(reqRes.Body) == "string" and #reqRes.Body > 500 then
+                    return reqRes.Body
+                end
+            end
         end
+        task.wait(0.5)
     end
     return nil
 end
@@ -26,23 +40,26 @@ end
 local fluentCode = safeHttpGet({
     "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
     "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/main.lua",
+    "https://fastly.jsdelivr.net/gh/dawid-scripts/Fluent@main/main.lua",
     "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
 })
 
 local saveManagerCode = safeHttpGet({
     "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua"
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua",
+    "https://fastly.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/SaveManager.lua"
 })
 
 local interfaceManagerCode = safeHttpGet({
     "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua"
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua",
+    "https://fastly.jsdelivr.net/gh/dawid-scripts/Fluent@main/Addons/InterfaceManager.lua"
 })
 
 if not fluentCode or not saveManagerCode or not interfaceManagerCode then
     StarterGui:SetCore("SendNotification", {
         Title = "PayomboyZ HUB",
-        Text = "ไม่สามารถโหลด Fluent UI ได้ กรุณาลองใหม่อีกครั้ง",
+        Text = "ไม่สามารถโหลด Fluent UI ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่",
         Duration = 10
     })
     return
@@ -52,11 +69,17 @@ local Fluent = loadstring(fluentCode)()
 local SaveManager = loadstring(saveManagerCode)()
 local InterfaceManager = loadstring(interfaceManagerCode)()
 
+-- Responsive UI Sizing for Mobile & Emulators
+local viewport = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1920, 1080)
+local winWidth = math.clamp(viewport.X - 30, 320, 580)
+local winHeight = math.clamp(viewport.Y - 60, 280, 440)
+local tabWidth = (viewport.X < 500) and 130 or 170
+
 local Window = Fluent:CreateWindow({
     Title = "Roll Anime to Fight! ⚔️",
     SubTitle = "by PayomboyZ HUB",
-    TabWidth = 180,
-    Size = UDim2.fromOffset(600, 460),
+    TabWidth = tabWidth,
+    Size = UDim2.fromOffset(winWidth, winHeight),
     Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.LeftControl
@@ -281,6 +304,7 @@ local Tabs = {
     Tower = Window:AddTab({ Title = "ออโต้ทาวเวอร์ (Auto Tower)", Icon = "shield" }),
     Clone = Window:AddTab({ Title = "เครื่องโคลน (Clone Machine)", Icon = "copy" }),
     Trait = Window:AddTab({ Title = "ปรับแต่ง Trait (Trait Machine)", Icon = "sparkles" }),
+    AutoSell = Window:AddTab({ Title = "ออโต้ขายยูนิต (Auto Sell)", Icon = "trash-2" }),
     Filter = Window:AddTab({ Title = "ตัวละคร / Rarity", Icon = "users" }),
     Upgrade = Window:AddTab({ Title = "อัปเกรด (Upgrade)", Icon = "trending-up" }),
     Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
@@ -328,19 +352,47 @@ local function safeFindPath(root, ...)
     return current
 end
 
+-- Latency-Managed Remote Invocation Queue (Prevents network queue overflows & client freezes)
+local remoteQueue = {}
+local isProcessingQueue = false
+local MIN_REMOTE_INTERVAL = 0.08
+
+local function safeFireRemote(remote, ...)
+    if not remote then return end
+    local args = { ... }
+    table.insert(remoteQueue, { remote = remote, args = args })
+
+    if not isProcessingQueue then
+        isProcessingQueue = true
+        task.spawn(function()
+            while #remoteQueue > 0 do
+                local item = table.remove(remoteQueue, 1)
+                if item and item.remote and item.remote.Parent then
+                    pcall(function()
+                        item.remote:FireServer(unpack(item.args))
+                    end)
+                end
+                task.wait(MIN_REMOTE_INTERVAL)
+            end
+            isProcessingQueue = false
+        end)
+    end
+end
+
 local function findPrompt(root)
     if not root then return nil end
-    local buyUI = root:FindFirstChild("BuyUI", true)
+    local head = root:FindFirstChild("Head")
+    local buyUI = head and head:FindFirstChild("BuyUI") or root:FindFirstChild("BuyUI")
     if buyUI then
-        local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt")
         if prompt then return prompt end
     end
     local preferredNames = { "BuyPrompt", "PlacementPrompt", "RollPrompt", "GiftPrompt", "ProximityPrompt", "Prox", "Prompt" }
     for _, name in ipairs(preferredNames) do
-        local inst = root:FindFirstChild(name, true)
+        local inst = root:FindFirstChild(name)
         if inst and inst:IsA("ProximityPrompt") then return inst end
     end
-    return root:FindFirstChildWhichIsA("ProximityPrompt", true)
+    return root:FindFirstChildWhichIsA("ProximityPrompt")
 end
 
 local function firePrompt(prompt)
@@ -435,7 +487,7 @@ local function stopFight()
     pcall(function()
         local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
         if fightStartRemote then
-            fightStartRemote:FireServer("Stop")
+            safeFireRemote(fightStartRemote, "Stop")
         end
     end)
     pcall(function()
@@ -482,11 +534,11 @@ local function runEquipBestSequence()
         -- Step 3: Restart fight if Auto Start or Auto Play enabled
         if (doStart or doAutoPlay) and fightStartRemote then
             if doStart then
-                pcall(function() fightStartRemote:FireServer("Start") end)
+                safeFireRemote(fightStartRemote, "Start")
                 task.wait(0.3)
             end
             if doAutoPlay then
-                pcall(function() fightStartRemote:FireServer("AutoPlay") end)
+                safeFireRemote(fightStartRemote, "AutoPlay")
             end
         end
 
@@ -581,13 +633,12 @@ local function teleportToCloneMachine()
     end
 
     if not ppPart then
-        for _, prompt in ipairs(workspace:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Parent and prompt.Parent:IsA("BasePart") then
-                local pName = prompt.Parent.Name
-                local mName = prompt.Parent.Parent and prompt.Parent.Parent.Name
-                if pName == "PP" or (mName and mName:lower():find("clone")) then
-                    ppPart = prompt.Parent
-                    break
+        local machinesFolder = workspace:FindFirstChild("Machines")
+        if machinesFolder then
+            for _, m in ipairs(machinesFolder:GetChildren()) do
+                if m.Name:lower():find("clone") then
+                    ppPart = m:FindFirstChild("PP") or m:FindFirstChildWhichIsA("BasePart", true)
+                    if ppPart then break end
                 end
             end
         end
@@ -696,6 +747,29 @@ local function sortedValues(set)
     return values
 end
 
+local function sortRarities(set)
+    local values = {}
+    for value in pairs(set) do
+        table.insert(values, value)
+    end
+
+    local rankMap = {}
+    for index, rarity in ipairs(RarityFallbackValues) do
+        rankMap[rarity:lower()] = index
+    end
+
+    table.sort(values, function(a, b)
+        local rankA = rankMap[tostring(a):lower()] or 999
+        local rankB = rankMap[tostring(b):lower()] or 999
+        if rankA ~= rankB then
+            return rankA < rankB
+        end
+        return tostring(a) < tostring(b)
+    end)
+
+    return values
+end
+
 local function getRarityValues()
     local values = {}
     local module = getModule("Modules", "Characters", "CharactersInfo")
@@ -719,7 +793,7 @@ local function getRarityValues()
         end
     end
 
-    return sortedValues(values)
+    return sortRarities(values)
 end
 
 local function addWorkspaceModelName(model, values)
@@ -938,6 +1012,234 @@ local function rebuildTargetLookup()
     targetConfig = buildTargetConfig()
 end
 
+local function scanAndExecuteAutoSell()
+    local selectedRarities = (Options.SellRarities and Options.SellRarities.Value) or {}
+    local activeRaritySet = {}
+    local hasSelectedRarity = false
+
+    if type(selectedRarities) == "table" then
+        for rarityKey, isSelected in pairs(selectedRarities) do
+            if isSelected == true or (type(rarityKey) == "number" and isSelected) then
+                local rName = (type(rarityKey) == "string" and rarityKey or tostring(isSelected))
+                rName = rName:gsub("<.->", ""):match("^%s*(.-)%s*$")
+                if rName and rName ~= "" then
+                    local lowerName = rName:lower()
+                    -- MANDATORY SAFETY GUARD: Never allow Secret or Limited to be auto-sold!
+                    if lowerName ~= "secret" and lowerName ~= "limited" then
+                        activeRaritySet[lowerName] = true
+                        hasSelectedRarity = true
+                    end
+                end
+            end
+        end
+    end
+
+    -- If no valid rarity is selected in dropdown, DO NOT SEND ANY SELL REQUESTS AT ALL!
+    if not hasSelectedRarity then
+        return 0
+    end
+
+    local sellRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Sell")
+                    or safeFindPath(ReplicatedStorage, "Remotes", "Sell")
+                    or ReplicatedStorage:FindFirstChild("Sell", true)
+
+    local function getUnitRarity(unitName, inst)
+        if inst then
+            local attr = inst:GetAttribute("Rarity") or inst:GetAttribute("UnitRarity") or inst:GetAttribute("Tier")
+            if attr and tostring(attr) ~= "" then return tostring(attr) end
+        end
+        if unitName then
+            local cleanName = tostring(unitName):gsub("<.->", ""):match("^%s*(.-)%s*$")
+            local module = getModule("Modules", "Characters", "CharactersInfo")
+            if module then
+                local ok, data = pcall(require, module)
+                local characters = ok and type(data) == "table" and (data.Characters or data)
+                if type(characters) == "table" then
+                    local info = characters[cleanName]
+                    if type(info) == "table" and info.Rarity then
+                        return tostring(info.Rarity)
+                    end
+                    for k, v in pairs(characters) do
+                        if tostring(k):lower() == cleanName:lower() and type(v) == "table" and v.Rarity then
+                            return tostring(v.Rarity)
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function isUnitLocked(inst)
+        if not inst then return false end
+        if inst:GetAttribute("Locked") == true or inst:GetAttribute("Lock") == true or inst:GetAttribute("IsLocked") == true then
+            return true
+        end
+        local lockImg = inst:FindFirstChild("Locked", true) or inst:FindFirstChild("LockButton", true)
+        if lockImg and lockImg:IsA("GuiObject") and lockImg.Visible then
+            return true
+        end
+        return false
+    end
+
+    local function getUnitUUID(inst)
+        if not inst then return nil end
+        for _, attrName in ipairs({"UUID", "Id", "UID", "UnitUUID", "CharacterUUID", "uid", "uuid"}) do
+            local val = inst:GetAttribute(attrName)
+            if val and type(val) == "string" and #val > 10 then
+                return val
+            end
+        end
+        for _, childName in ipairs({"UUID", "Id", "UID", "UnitUUID", "CharacterUUID", "uid", "uuid"}) do
+            local child = inst:FindFirstChild(childName)
+            if child and child:IsA("StringValue") and #child.Value > 10 then
+                return child.Value
+            end
+        end
+        if type(inst.Name) == "string" and inst.Name:match("%x+-%x+-%x+-%x+-%x+") then
+            return inst.Name
+        end
+        return nil
+    end
+
+    local sellUUIDs = {}
+    local sellInstances = {}
+
+    -- METHOD 1: Scan Inventory GUI Slots (PlayerGui.MainUI.Frames.Animes.Frame.Main.ScrollingFrame)
+    local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
+                  or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
+
+    if invSlots then
+        for _, slot in ipairs(invSlots:GetChildren()) do
+            if slot:IsA("Frame") or slot:IsA("GuiObject") then
+                if slot.Name == "Template" or slot.Name:find("Layout") then continue end
+
+                -- Check lock
+                if isUnitLocked(slot) then continue end
+
+                -- Check equipped
+                local eqLabel = slot:FindFirstChild("Equipped", true) or slot:GetAttribute("Equipped")
+                if eqLabel == true or (eqLabel and eqLabel:IsA("GuiObject") and eqLabel.Visible) then
+                    continue
+                end
+
+                -- Find unit name
+                local nameLabel = safeFindPath(slot, "Frame", "Info", "AnimeName")
+                               or slot:FindFirstChild("AnimeName", true)
+                               or slot:FindFirstChild("Title", true)
+                               or slot:FindFirstChild("UnitName", true)
+                local unitName = nameLabel and nameLabel.Text or slot.Name
+                local rarity = getUnitRarity(unitName, slot)
+
+                if rarity then
+                    local lowerR = rarity:lower()
+                    -- EXCLUSION: Never sell Secret or Limited!
+                    if lowerR ~= "secret" and lowerR ~= "limited" then
+                        if activeRaritySet[lowerR] then
+                            local uuid = getUnitUUID(slot)
+                            if uuid then
+                                table.insert(sellUUIDs, uuid)
+                            end
+                            table.insert(sellInstances, slot)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- METHOD 2: Scan Player Backpack Tools
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and tool.Parent ~= player.Character then
+                if not isUnitLocked(tool) then
+                    local rarity = getUnitRarity(tool.Name, tool)
+                    if rarity then
+                        local lowerR = rarity:lower()
+                        -- EXCLUSION: Never sell Secret or Limited!
+                        if lowerR ~= "secret" and lowerR ~= "limited" then
+                            if activeRaritySet[lowerR] then
+                                local uuid = getUnitUUID(tool)
+                                if uuid then
+                                    table.insert(sellUUIDs, uuid)
+                                end
+                                table.insert(sellInstances, tool)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local countToSell = math.max(#sellUUIDs, #sellInstances)
+    if countToSell == 0 then
+        return 0
+    end
+
+    -- ENSURE SELL MODE IS OPEN IN GAME UI BEFORE SELLING
+    pcall(function()
+        local animesFrame = safeFindPath(playerGui, "MainUI", "Frames", "Animes")
+                         or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame")
+        if animesFrame then
+            local isSellModeActive = false
+            for _, desc in ipairs(animesFrame:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Visible then
+                    local txt = desc.Text:lower()
+                    if txt:find("select") and txt:find("sell") then
+                        isSellModeActive = true
+                        break
+                    end
+                end
+            end
+
+            if not isSellModeActive then
+                for _, desc in ipairs(animesFrame:GetDescendants()) do
+                    if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
+                        local n = desc.Name:lower()
+                        if n:find("sell") or n:find("dollar") or n:find("toggle") then
+                            if firesignal then firesignal(desc.MouseButton1Click)
+                            elseif firebutton then firebutton(desc) end
+                            task.wait(0.2)
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- EXECUTE SELL REMOTE VIA LATENCY-MANAGED BATCH QUEUE
+    pcall(function()
+        if sellRemote then
+            if #sellUUIDs > 0 then
+                -- Single batch array call format: Sell:FireServer({ UUID_1, UUID_2, ... })
+                safeFireRemote(sellRemote, sellUUIDs)
+            elseif #sellInstances > 0 then
+                for _, inst in ipairs(sellInstances) do
+                    safeFireRemote(sellRemote, inst)
+                end
+            end
+        end
+    end)
+
+    -- Also trigger UI click buttons on card slots if present
+    for _, slot in ipairs(sellInstances) do
+        pcall(function()
+            if slot:IsA("GuiObject") then
+                local clickBtn = slot:FindFirstChild("ClickButton", true) or slot:FindFirstChildWhichIsA("GuiButton", true)
+                if clickBtn then
+                    if firesignal then firesignal(clickBtn.MouseButton1Click)
+                    elseif firebutton then firebutton(clickBtn) end
+                end
+            end
+        end)
+    end
+
+    return countToSell
+end
+
 -- ===== FLUENT UI COMPONENTS =====
 
 Tabs.Filter:AddSection("Select Unit Type Rarity")
@@ -1016,6 +1318,68 @@ Names3:OnChanged(rebuildTargetLookup)
 Mutations3:OnChanged(rebuildTargetLookup)
 Names4:OnChanged(rebuildTargetLookup)
 Mutations4:OnChanged(rebuildTargetLookup)
+
+Tabs.AutoSell:AddSection("ระบบออโต้ขายยูนิต (Auto Sell Units)")
+
+local AutoSellToggle = Tabs.AutoSell:AddToggle("AutoSellToggle", {
+    Title = "Auto Sell Units",
+    Description = "เปิดระบบออโต้ขายยูนิตตามระดับ Rarity ที่เลือกอัตโนมัติ",
+    Default = false,
+})
+
+local SellRarities = Tabs.AutoSell:AddDropdown("SellRarities", {
+    Title = "เลือก Rarity ที่ต้องการขาย (Auto Sell Rarities)",
+    Description = "เลือกยูนิตระดับ Rarity ที่ต้องการให้ขายทิ้ง (ไม่เลือก = ไม่ขาย)",
+    Values = RarityValues,
+    Multi = true,
+    Default = {},
+})
+
+local AutoSellDelaySlider = Tabs.AutoSell:AddSlider("AutoSellDelay", {
+    Title = "Auto Sell Delay",
+    Description = "ระยะเวลาดีเลย์การตรวจเช็คเพื่อขาย (วินาที)",
+    Default = 2.0,
+    Min = 0.5,
+    Max = 10.0,
+    Rounding = 1,
+})
+
+Tabs.AutoSell:AddButton({
+    Title = "กดขายยูนิตตาม Rarity ทันที (Sell Selected Rarities Now)",
+    Description = "สั่งให้ระบบตรวจเช็คกระเป๋าและสั่งขายยูนิตตาม Rarity ที่เลือกทันที 1 ครั้ง",
+    Callback = function()
+        local count = scanAndExecuteAutoSell()
+        Fluent:Notify({
+            Title = "Auto Sell Units",
+            Content = "ตรวจเช็คกระเป๋าและสั่งขายเรียบร้อยแล้ว (" .. tostring(count) .. " ตัว)! 💰",
+            Duration = 4
+        })
+    end
+})
+
+Tabs.AutoSell:AddButton({
+    Title = "เปิด/ปิด โหมดขายยูนิตในหน้าจอ (Toggle UI Sell Mode)",
+    Description = "เปิดหรือปิดสถานะ Select Animes to Sell ในหน้าจอกระเป๋าของเกมโดยตรง",
+    Callback = function()
+        pcall(function()
+            local animesFrame = safeFindPath(playerGui, "MainUI", "Frames", "Animes")
+                             or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame")
+            if animesFrame then
+                for _, desc in ipairs(animesFrame:GetDescendants()) do
+                    if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
+                        local n = desc.Name:lower()
+                        if n:find("sell") or n:find("dollar") or n:find("toggle") then
+                            if firesignal then firesignal(desc.MouseButton1Click)
+                            elseif firebutton then firebutton(desc) end
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+    end
+})
+
 
 Tabs.Main:AddSection("ระบบออโต้หลัก (Main Auto)")
 
@@ -1322,12 +1686,13 @@ local TargetTraitLocks = Tabs.Trait:AddDropdown("TargetTraitLocks", {
 })
 
 TargetTraitLocks:OnChanged(function(selected)
+    if not isUiInitialized then return end
     pcall(function()
         local settingsRemote = safeFindPath(ReplicatedStorage, "Remotes", "Settings")
         if settingsRemote and type(selected) == "table" then
             for traitName, isSelected in pairs(selected) do
                 if isSelected then
-                    pcall(function() settingsRemote:FireServer("TraitLock", traitName) end)
+                    safeFireRemote(settingsRemote, "TraitLock", traitName)
                 end
             end
         end
@@ -1562,12 +1927,13 @@ end)
 
 -- Throttled Auto Tower Thread
 task.spawn(function()
+    task.wait(2.0)
     while task.wait(1.5) do
         local doTower = Options.AutoJoinTower and Options.AutoJoinTower.Value
         if doTower then
             local joinTowerRemote = safeFindPath(ReplicatedStorage, "Remotes", "JoinTower")
             if joinTowerRemote then
-                pcall(function() joinTowerRemote:FireServer() end)
+                safeFireRemote(joinTowerRemote)
             end
         end
     end
@@ -1606,7 +1972,7 @@ task.spawn(function()
             runEquipBestSequence()
         elseif roundEnded and not isEquippingBest and doStart then
             if fightStartRemote then
-                pcall(function() fightStartRemote:FireServer("Start") end)
+                safeFireRemote(fightStartRemote, "Start")
             end
         end
     end
@@ -1742,13 +2108,11 @@ task.spawn(function()
         local traitRemote = safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Request")
                          or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Roll")
         if traitRemote then
-            pcall(function()
-                if targetUnitObj then
-                    traitRemote:FireServer("Roll", targetUnitObj)
-                else
-                    traitRemote:FireServer("Roll")
-                end
-            end)
+            if targetUnitObj then
+                safeFireRemote(traitRemote, "Roll", targetUnitObj)
+            else
+                safeFireRemote(traitRemote, "Roll")
+            end
         end
 
         -- Step 5: Also click ROLL button in UI
@@ -1790,6 +2154,7 @@ task.spawn(function()
             pcall(function()
                 if Rarities1 then Rarities1:SetValues(RarityValues) end
                 if Rarities2 then Rarities2:SetValues(RarityValues) end
+                if SellRarities then SellRarities:SetValues(RarityValues) end
             end)
             rebuildTargetLookup()
         end
@@ -1810,6 +2175,7 @@ end)
 
 -- Throttled Auto Spin Wheel
 task.spawn(function()
+    task.wait(2.5)
     while task.wait(1.5) do
         if not Options.AutoSpinWheel or not Options.AutoSpinWheel.Value then continue end
 
@@ -1820,7 +2186,7 @@ task.spawn(function()
             local text = label.Text or ""
             local count = tonumber(text:match("%((%d+)%)")) or 0
             if count > 0 then
-                remote:FireServer("Spin")
+                safeFireRemote(remote, "Spin")
                 task.wait(2.5)
             end
         end
@@ -1846,7 +2212,7 @@ task.spawn(function()
                         local checked = free:FindFirstChild("Checked")
                         if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
                             if locked.Visible == false and checked.Visible == false then
-                                remote:FireServer(index, "Free")
+                                safeFireRemote(remote, index, "Free")
                                 task.wait(0.2)
                             end
                         end
@@ -1876,7 +2242,7 @@ task.spawn(function()
                         local checked = premium:FindFirstChild("Checked")
                         if locked and checked and locked:IsA("GuiObject") and checked:IsA("GuiObject") then
                             if locked.Visible == false and checked.Visible == false then
-                                remote:FireServer(index, "Premium")
+                                safeFireRemote(remote, index, "Premium")
                                 task.wait(0.2)
                             end
                         end
@@ -1939,7 +2305,7 @@ task.spawn(function()
                 local price = getUpgradePrice(cat.name)
                 -- Only fire remote if player actually has enough cash (or price is unreadable)
                 if not price or currentCash >= price then
-                    pcall(function() remote:FireServer("Gold", cat.name) end)
+                    safeFireRemote(remote, "Gold", cat.name)
                     task.wait(0.5)
                     currentCash = readCash()
                 end
@@ -2185,19 +2551,26 @@ task.spawn(function()
     local function getBuyCandidates(plot)
         local candidates = {}
         local scanRoot = plot:FindFirstChild("Characters") or plot
-        local models = scanRoot == plot and scanRoot:GetDescendants() or scanRoot:GetChildren()
+        local models = scanRoot:GetChildren()
 
         for _, inst in ipairs(models) do
             if inst:IsA("Model") then
+                -- Fast Guard: Unit must have Head or BuyUI to be a buy candidate
+                local head = inst:FindFirstChild("Head")
+                local buyUI = head and head:FindFirstChild("BuyUI") or inst:FindFirstChild("BuyUI")
+                if not buyUI then continue end
+
                 if isBoughtCharacterModel(inst, scanRoot) then
                     continue
                 end
 
                 local priceLabel = getPriceLabel(inst)
                 local prompt = findPrompt(inst)
+                if not prompt then continue end
+
                 local targetIndex, characterName, mutation = getTargetIndex(inst)
 
-                if priceLabel and prompt and targetIndex then
+                if priceLabel and targetIndex then
                     local price = parseMoney(priceLabel.Text) or 0
                     table.insert(candidates, {
                         model = inst,
@@ -2283,6 +2656,18 @@ task.spawn(function()
                     task.wait(delayTime - 0.4)
                 end
             end
+        end
+    end
+end)
+
+-- ===== THROTTLED AUTO SELL UNITS THREAD =====
+task.spawn(function()
+    while true do
+        local delayVal = (Options.AutoSellDelay and tonumber(Options.AutoSellDelay.Value)) or 2.0
+        task.wait(delayVal)
+
+        if Options.AutoSellToggle and Options.AutoSellToggle.Value == true then
+            pcall(scanAndExecuteAutoSell)
         end
     end
 end)
