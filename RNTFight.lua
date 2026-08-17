@@ -1391,10 +1391,10 @@ local AutoBuyPlot = Tabs.Main:AddToggle("AutoBuyPlot", {
 
 local RollDelaySlider = Tabs.Main:AddSlider("RollDelay", {
     Title = "Roll Delay",
-    Description = "ดีเลย์การสุ่ม (วินาที)",
-    Default = 0.8,
-    Min = 0.3,
-    Max = 3.0,
+    Description = "ดีเลย์การสุ่ม (วินาที) [ค่าเริ่มต้น 2 วินาที]",
+    Default = 2.0,
+    Min = 0.5,
+    Max = 10.0,
     Rounding = 1,
 })
 
@@ -2597,12 +2597,22 @@ task.spawn(function()
 
     state.hasBoughtThisRoll = false
 
-    while task.wait(0.2) do
-        if not Options.AutoBuyPlot or not Options.AutoBuyPlot.Value then continue end
+    while true do
+        local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 2.0
+        if delayTime < 0.5 then delayTime = 0.5 end
+
+        if not Options.AutoBuyPlot or not Options.AutoBuyPlot.Value then
+            task.wait(0.5)
+            continue
+        end
 
         local myPlot = getBestPlot()
-        if not myPlot then continue end
+        if not myPlot then
+            task.wait(0.5)
+            continue
+        end
 
+        local cycleStartTime = tick()
         local boughtOrBlocked = false
 
         if not state.buying and not state.hasBoughtThisRoll then
@@ -2615,7 +2625,7 @@ task.spawn(function()
                 if cash >= bestCandidate.price then
                     state.buying = true
                     firePrompt(bestCandidate.prompt)
-                    task.wait(0.5)
+                    task.wait(0.4)
                     state.buying = false
                     state.hasBoughtThisRoll = true
                     boughtOrBlocked = true
@@ -2644,18 +2654,21 @@ task.spawn(function()
                     if cash >= bestCandidate.price then
                         state.buying = true
                         firePrompt(bestCandidate.prompt)
-                        task.wait(0.5)
+                        task.wait(0.4)
                         state.buying = false
                         state.hasBoughtThisRoll = true
                     end
                 end
-
-                -- Respect user configured Roll Delay
-                local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 0.8
-                if delayTime > 0.4 then
-                    task.wait(delayTime - 0.4)
-                end
             end
+        end
+
+        -- Throttle whole cycle so it fires once per delayTime (default 2 seconds)
+        local elapsed = tick() - cycleStartTime
+        local sleepTime = delayTime - elapsed
+        if sleepTime > 0 then
+            task.wait(sleepTime)
+        else
+            task.wait(0.2)
         end
     end
 end)
