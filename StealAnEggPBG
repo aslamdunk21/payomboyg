@@ -2547,22 +2547,33 @@ end)
 ----------------------------------------------------------------
 task.spawn(function()
     local WindUI
-    local src
     local cachePath = CFG_DIR .. "/windui.lua"
+
     if hasFS and isfile and isfile(cachePath) then
         local ok, body = pcall(readfile, cachePath)
-        if ok and type(body) == "string" and #body > 1000 then src = body end
-    end
-    if not src then
-        local ok, body = pcall(game.HttpGet, game, "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua")
         if ok and type(body) == "string" and #body > 1000 then
-            src = body
-            if hasFS then pcall(writefile, cachePath, body) end
+            local okLoad, lib = pcall(function() return loadstring(body)() end)
+            if okLoad and lib then WindUI = lib end
         end
     end
-    if src then
-        local ok, lib = pcall(function() return loadstring(src)() end)
-        if ok then WindUI = lib end
+
+    if not WindUI then
+        local cdnUrls = {
+            "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua",
+            "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+            "https://tree-hub.vercel.app/api/UI/WindUI"
+        }
+        for _, url in ipairs(cdnUrls) do
+            local ok, body = pcall(game.HttpGet, game, url)
+            if ok and type(body) == "string" and #body > 1000 then
+                local okLoad, lib = pcall(function() return loadstring(body)() end)
+                if okLoad and lib then
+                    WindUI = lib
+                    if hasFS then pcall(writefile, cachePath, body) end
+                    break
+                end
+            end
+        end
     end
 
     if not WindUI then
@@ -2586,7 +2597,7 @@ task.spawn(function()
     local okWin, winInstance = pcall(function()
         return WindUI:CreateWindow({
             Title       = HUB_TITLE,
-            Icon        = "egg",
+            Icon        = "rbxassetid://10723380448",
             Author      = HUB_AUTHOR,
             Folder      = CFG_DIR,
             Size        = UDim2.fromOffset(560, 440),
@@ -2595,6 +2606,20 @@ task.spawn(function()
             SideBarWidth = 150,
         })
     end)
+
+    if not (okWin and winInstance) then
+        okWin, winInstance = pcall(function()
+            return WindUI:CreateWindow({
+                Title       = HUB_TITLE,
+                Author      = HUB_AUTHOR,
+                Folder      = CFG_DIR,
+                Size        = UDim2.fromOffset(560, 440),
+                Transparent = true,
+                Theme       = "Dark",
+                SideBarWidth = 150,
+            })
+        end)
+    end
 
     if not (okWin and winInstance) then
         warn("[" .. HUB_TAG .. "] ไม่สามารถสร้างหน้าต่าง WindUI ได้")
@@ -3979,9 +4004,20 @@ task.spawn(function()
     ----------------------------------------------------------------
     local UserInput = game:GetService("UserInputService")
 
+    local windowState = true
     local function toggleWindow()
+        if not UIWindow then return end
         pcall(function()
-            if UIWindow and UIWindow.Closed then UIWindow:Open() elseif UIWindow then UIWindow:Close() end
+            if typeof(UIWindow.Toggle) == "function" then
+                UIWindow:Toggle()
+            else
+                windowState = not windowState
+                if windowState then
+                    if typeof(UIWindow.Open) == "function" then UIWindow:Open() end
+                else
+                    if typeof(UIWindow.Close) == "function" then UIWindow:Close() end
+                end
+            end
         end)
     end
     Runtime.toggleUI = toggleWindow
@@ -4002,20 +4038,18 @@ task.spawn(function()
 
         local btn = Instance.new("TextButton")
         btn.Name = "Open"
-        btn.Size = UDim2.fromOffset(44, 44)
+        btn.Size = UDim2.fromOffset(190, 48)
         btn.Position = UDim2.fromOffset(tonumber(Cfg.FloatX) or 18, tonumber(Cfg.FloatY) or 260)
-        btn.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+        btn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
         btn.BackgroundTransparency = 0.15
         btn.BorderSizePixel = 0
-        btn.Text = "🥚"
-        btn.TextSize = 22
-        btn.TextColor3 = Color3.fromRGB(235, 235, 245)
-        btn.AutoButtonColor = true
+        btn.Text = ""
+        btn.AutoButtonColor = false
         btn.Visible = Cfg.ShowFloatIcon
         btn.Parent = gui
 
         local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 10)
+        corner.CornerRadius = UDim.new(0, 12)
         corner.Parent = btn
 
         local stroke = Instance.new("UIStroke")
@@ -4023,6 +4057,83 @@ task.spawn(function()
         stroke.Thickness = 1.5
         stroke.Transparency = 0.25
         stroke.Parent = btn
+
+        -- Character Headshot Image
+        local avatarImg = Instance.new("ImageLabel")
+        avatarImg.Name = "Avatar"
+        avatarImg.Active = false
+        avatarImg.Size = UDim2.fromOffset(36, 36)
+        avatarImg.Position = UDim2.fromOffset(6, 6)
+        avatarImg.BackgroundTransparency = 1
+        avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(LocalPlayer and LocalPlayer.UserId or 1) .. "&w=150&h=150"
+        avatarImg.ScaleType = Enum.ScaleType.Fit
+        avatarImg.Parent = btn
+
+        local avatarCorner = Instance.new("UICorner")
+        avatarCorner.CornerRadius = UDim.new(1, 0)
+        avatarCorner.Parent = avatarImg
+
+        local avatarStroke = Instance.new("UIStroke")
+        avatarStroke.Color = Color3.fromRGB(139, 92, 246)
+        avatarStroke.Thickness = 1
+        avatarStroke.Transparency = 0.4
+        avatarStroke.Parent = avatarImg
+
+        -- Username Label
+        local userLabel = Instance.new("TextLabel")
+        userLabel.Name = "Username"
+        userLabel.Active = false
+        userLabel.Size = UDim2.new(1, -52, 0, 18)
+        userLabel.Position = UDim2.fromOffset(48, 6)
+        userLabel.BackgroundTransparency = 1
+        userLabel.Font = Enum.Font.GothamBold
+        userLabel.TextSize = 12
+        userLabel.TextColor3 = Color3.fromRGB(240, 240, 255)
+        userLabel.TextXAlignment = Enum.TextXAlignment.Left
+        userLabel.TextYAlignment = Enum.TextYAlignment.Center
+        userLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        local displayName = LocalPlayer and LocalPlayer.DisplayName or "Player"
+        local username = LocalPlayer and LocalPlayer.Name or "Player"
+        userLabel.Text = (displayName ~= "" and displayName ~= username) and (displayName .. " (@" .. username .. ")") or displayName
+        userLabel.Parent = btn
+
+        -- FPS and Ping Stats Label
+        local statsLabel = Instance.new("TextLabel")
+        statsLabel.Name = "Stats"
+        statsLabel.Active = false
+        statsLabel.Size = UDim2.new(1, -52, 0, 16)
+        statsLabel.Position = UDim2.fromOffset(48, 24)
+        statsLabel.BackgroundTransparency = 1
+        statsLabel.Font = Enum.Font.GothamMedium
+        statsLabel.TextSize = 11
+        statsLabel.TextColor3 = Color3.fromRGB(160, 160, 175)
+        statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+        statsLabel.TextYAlignment = Enum.TextYAlignment.Center
+        statsLabel.Text = "FPS: --  •  Ping: --ms"
+        statsLabel.Parent = btn
+
+        -- Dynamic FPS & Ping Updater
+        local StatsService = game:GetService("Stats")
+        local fpsCount, lastFpsTime, currentFps = 0, os.clock(), 60
+
+        Runtime.conns.floatStats = RunService.RenderStepped:Connect(function()
+            fpsCount += 1
+            local now = os.clock()
+            if now - lastFpsTime >= 0.5 then
+                currentFps = math.floor(fpsCount / (now - lastFpsTime))
+                fpsCount = 0
+                lastFpsTime = now
+
+                local ping = 0
+                pcall(function()
+                    ping = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue())
+                end)
+
+                if statsLabel and statsLabel.Parent then
+                    statsLabel.Text = string.format("FPS: %d  •  Ping: %dms", currentFps, ping)
+                end
+            end
+        end)
 
         local dragging, dragStart, startPos, moved = false, nil, nil, false
 
@@ -4125,8 +4236,8 @@ task.spawn(function()
     })
 
     TabSys:Toggle({
-        Title = "แสดงไอคอนลอย",
-        Desc  = "สี่เหลี่ยมเล็กๆ ลากย้ายได้ กดเพื่อเปิดหน้าต่างตอนพับอยู่",
+        Title = "แสดงปุ่มลอย",
+        Desc  = "แสดงปุ่มลอย (รูปตัวละคร, ชื่อผู้ใช้, FPS, Ping) ลากย้ายได้ กดเพื่อเปิด/ปิดหน้าต่าง UI",
         Value = Cfg.ShowFloatIcon,
         Callback = function(v)
             Cfg.ShowFloatIcon = isOn(v)
