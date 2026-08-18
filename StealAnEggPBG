@@ -648,12 +648,8 @@ local function pin(pos)
         end
     end
 
-    conns[#conns + 1] = RunService.Heartbeat:Connect(apply)
-    pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
+    -- เหลือแค่ PostSimulation ตัวเดียวตามสั่ง ลดการโดน Anti-Cheat ตรวจจับ Packet
     pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
-    if RunService:IsClient() then
-        pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
-    end
 
     apply()
     Runtime.pinConns = conns
