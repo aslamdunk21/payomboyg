@@ -137,6 +137,8 @@ local NormalRouter = {
     [122446657157717] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
     [126042865144779] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
     [119259569670784] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
+    [90165746516953] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
+
 
     -- 4. Roll Anime To Fight (RATF)
     [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
