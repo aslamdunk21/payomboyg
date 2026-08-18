@@ -1041,9 +1041,13 @@ local function hardenCharacter(c)
         hum.RequiresNeck       = false
     end)
     if Runtime.conns.health then Runtime.conns.health:Disconnect() end
+    
+    -- ปิดการทำงาน God Mode ฮีลเลือดบน Client เพื่อป้องกัน Anti-Cheat เตะ
+    --[[
     Runtime.conns.health = hum.HealthChanged:Connect(function(h)
         if Cfg.GodMode and h < hum.MaxHealth then hum.Health = hum.MaxHealth end
     end)
+    --]]
 end
 
 ----------------------------------------------------------------
@@ -1261,9 +1265,6 @@ local function placeEggs()
         local ok, err = EggCmds.RequestPlaceEgg(egg.uid, lcf)
 
         if not ok and tostring(err):find("closer") then
-            -- walk back and retry the SAME egg on the SAME spot; the spot is
-            -- only marked taken once the server has actually rejected it for a
-            -- reason other than distance
             closeFails += 1
             if closeFails > 2 or not approachPlot(2) then break end
             ok, err = EggCmds.RequestPlaceEgg(egg.uid, lcf)
@@ -1273,7 +1274,8 @@ local function placeEggs()
             placed += 1
             closeFails, otherFails = 0, 0
             table.insert(taken, lcf.Position)
-            task.wait(0.08)
+            -- ปรับเพิ่มเวลาหน่วงตรงนี้ ป้องกัน Server Sync ไม่ทันและกันโดน BAC-15110
+            task.wait(0.22) 
         elseif tostring(err):find("closer") then
             break
         else
