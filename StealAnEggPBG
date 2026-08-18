@@ -891,7 +891,7 @@ local function stepTo(target, timeout)
         end
 
         -- คุมระยะเคลื่อนที่ให้อยู่ในเกณฑ์ที่เกมยอมรับ (ไม่เกิน 6-8 studs/frame)
-        local moveStep = math.min(8, dist)
+        local moveStep = math.min(6, dist)
         local nxt = pos + flat.Unit * moveStep
         if dist > 35 then nxt = Nav.dodge(nxt, guards) end
         local gy  = stepGroundY(nxt)
