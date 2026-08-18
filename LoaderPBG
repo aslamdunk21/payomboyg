@@ -128,7 +128,8 @@ local NormalRouter = {
     -- 1. Attack On Titan Revolution (AOTR)
     [13379208636] = { Name = "Attack On Titan Revolution", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua", Keywords = {"titan", "aotr"} },
     [14916516914] = { Name = "Attack On Titan Revolution", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua", Keywords = {"titan", "aotr"} },
-
+    [14932214603] = { Name = "Attack On Titan Revolution", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AOTitanR.Lua", Keywords = {"titan", "aotr"} },
+    
     -- 2. Anime Card Farm
     [125039473548047] = { Name = "Anime Card Farm", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ANCradG.lua", Keywords = {"anime card"} },
     
