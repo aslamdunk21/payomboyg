@@ -205,7 +205,7 @@ local Remotes = {
 
 local ESP = {
 	font = Enum.Font.GothamBold,
-	sweep = 0.5,
+	sweep = 1.2,
 	budget = 0.005,
 	offset = Vector3.new(0, 3, 0),
 	width = 250,
@@ -229,7 +229,7 @@ local PACE = {
 	boost = Config.SpeedBoost,
 	normal = Config.NormalSpeed,
 	stats = 0.25,
-	distance = 0.05,
+	distance = 0.25,
 }
 
 local TP = {
@@ -276,7 +276,7 @@ local COLORS = {
 	hexLuck = "FFC400",
 }
 
-local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean", "Giant", "Titan", "Celestial", "Singularity", "Omnipotent" }
+local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean", "Giant", "Titan", "Celestial", "Singularity", "Omnipotent", "Leviathan" }
 
 local LUCK = {
 	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60, 100, 150, 250, 400, 600 },
@@ -685,131 +685,125 @@ local function crystalWeight(inst)
 	return tonumber(getAttr(inst, "WeightKg")) or 0
 end
 
-local function crystalTier(inst)
-	local t = tonumber(getAttr(inst, "Tier"))
-	if t and t > 0 then
-		return t
-	end
-
-	local namesToSearch = {
-		getAttr(inst, "TierName"),
-		getAttr(inst, "CrystalName"),
-		inst and inst.Name,
-	}
-
-	for _, nameStr in ipairs(namesToSearch) do
-		if type(nameStr) == "string" and nameStr ~= "" then
-			local lower = nameStr:lower()
-			for index, tierName in ipairs(TIER_NAMES) do
-				if lower:find(tierName:lower(), 1, true) then
-					return index
-				end
-			end
-		end
-	end
-
-	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
-		for _, child in ipairs(inst:GetChildren()) do
-			local cName = child.Name:lower()
-			for index, tierName in ipairs(TIER_NAMES) do
-				if cName:find(tierName:lower(), 1, true) then
-					return index
-				end
-			end
-		end
-	end
-
-	return 0
+local function tierFromValue(val)
+	if not val or val <= 0 then return 0 end
+	if val >= 1e19 then return 14 end
+	if val >= 1e18 then return 13 end
+	if val >= 1e17 then return 12 end
+	if val >= 1e16 then return 11 end
+	if val >= 1e15 then return 10 end
+	if val >= 1e14 then return 9 end
+	if val >= 1e13 then return 8 end
+	if val >= 1e12 then return 7 end
+	if val >= 1e7  then return 6 end
+	if val >= 1e6  then return 5 end
+	if val >= 1e5  then return 4 end
+	if val >= 1e4  then return 3 end
+	if val >= 1e3  then return 2 end
+	return 1
 end
 
-local function crystalValue(inst)
-	local raw = getAttr(inst, "Value")
-	if raw ~= nil then
-		local p = parseValue(raw)
-		if p and p > 0 then
-			return p
+local function rawCrystalValue(inst)
+	for _, attrName in ipairs({ "Value", "ValueText", "ValueString", "Money", "Price", "Val", "BaseValue", "Worth" }) do
+		local raw = getAttr(inst, attrName)
+		if raw ~= nil then
+			local p = parseValue(raw)
+			if p and p > 0 then return p end
 		end
 	end
-
-	for _, attrName in ipairs({ "ValueText", "ValueString", "Money", "Price", "Val", "BaseValue", "Worth" }) do
-		local val = getAttr(inst, attrName)
-		if val ~= nil then
-			local p = parseValue(val)
-			if p and p > 0 then
-				return p
-			end
-		end
-	end
-
 	if inst:IsA("Model") or inst:IsA("BasePart") then
 		local bestVal = 0
 		for _, child in ipairs(inst:GetDescendants()) do
 			if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
 				local text = child.Text
 				if not text:find("%%") and not text:lower():find("kg") and not text:lower():find("tons") then
-					local dollarMatch = text:match("%$[%d%,%.%s]+%a*")
-					if dollarMatch then
-						local p = parseValue(dollarMatch)
-						if p and p > 0 and p > bestVal then
-							bestVal = p
-						end
-					else
-						local suffixMatch = text:match("%f[%d][%d%,%.]+%s*[kMbBtTqQaAsSpPoOnNdD]%a*")
-						if suffixMatch then
-							local p = parseValue(suffixMatch)
-							if p and p > 0 and p > bestVal then
-								bestVal = p
-							end
-						else
-							local plainMatch = text:match("%f[%d][%d%,%.]{4,}")
-							if plainMatch then
-								local p = parseValue(plainMatch)
-								if p and p > 0 and p > bestVal then
-									bestVal = p
-								end
-							end
-						end
+					local m = text:match("%$[%d%,%.%s]+%a*") or text:match("%f[%d][%d%,%.]+%s*[kMbBtTqQaAsSpPoOnNdD]%a*") or text:match("%f[%d][%d%,%.]{4,}")
+					if m then
+						local p = parseValue(m)
+						if p and p > bestVal then bestVal = p end
 					end
 				end
 			end
 		end
-		if bestVal > 0 then
-			return bestVal
+		if bestVal > 0 then return bestVal end
+	end
+	return 0
+end
+
+local function crystalTier(inst)
+	-- Search ALL name sources and return the HIGHEST tier found
+	-- NOTE: Do NOT use numeric Tier attr directly — game's Tier numbers (e.g. 7=Empyrean)
+	--       do NOT match our TIER_NAMES indices (7=Quasar). Use TierName string instead.
+	local bestTier = 0
+	local namesToSearch = {
+		getAttr(inst, "TierName"),
+		getAttr(inst, "CrystalName"),
+		inst and inst.Name,
+	}
+	for _, nameStr in ipairs(namesToSearch) do
+		if type(nameStr) == "string" and nameStr ~= "" then
+			local lower = nameStr:lower()
+			for index = #TIER_NAMES, 1, -1 do
+				if lower:find(TIER_NAMES[index]:lower(), 1, true) then
+					if index > bestTier then bestTier = index end
+					break
+				end
+			end
 		end
 	end
+	if bestTier > 0 then return bestTier end
+
+	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
+		for _, child in ipairs(inst:GetChildren()) do
+			local cName = child.Name:lower()
+			for index = #TIER_NAMES, 1, -1 do
+				if cName:find(TIER_NAMES[index]:lower(), 1, true) then
+					if index > bestTier then bestTier = index end
+					break
+				end
+			end
+		end
+	end
+	if bestTier > 0 then return bestTier end
+
+	-- Fallback: classify by raw value (for crystals with no tier name)
+	local rawVal = rawCrystalValue(inst)
+	if rawVal > 0 then return tierFromValue(rawVal) end
+
+	return 0
+end
+
+local function crystalValue(inst)
+	local val = rawCrystalValue(inst)
+	if val > 0 then return val end
 
 	local tier = crystalTier(inst)
 	if tier > 0 then
 		local weight = math.max(1, crystalWeight(inst))
 		local tierFallback = {
-			[1] = 100,
-			[2] = 1000,
-			[3] = 10000,
-			[4] = 100000,
-			[5] = 1000000,           -- Legendary: 1M
-			[6] = 10000000,          -- Mythic: 10M
-			[7] = 1000000000000,      -- Quasar: 1T
-			[8] = 10000000000000,     -- Pulsar: 10T
-			[9] = 100000000000000,    -- Empyrean: 100T
-			[10] = 1000000000000000,  -- Giant: 1Qa
-			[11] = 10000000000000000, -- Titan: 10Qa
-			[12] = 100000000000000000, -- Celestial: 100Qa
-			[13] = 1000000000000000000, -- Singularity: 1Qi
-			[14] = 10000000000000000000, -- Omnipotent: 10Qi
+			[1] = 100, [2] = 1000, [3] = 10000, [4] = 100000,
+			[5] = 1000000, [6] = 10000000,
+			[7] = 1000000000000, [8] = 10000000000000,
+			[9] = 100000000000000, [10] = 1000000000000000,
+			[11] = 10000000000000000, [12] = 100000000000000000,
+			[13] = 1000000000000000000, [14] = 10000000000000000000,
+			[15] = 100000000000000000000, -- Leviathan
 		}
 		local baseVal = tierFallback[tier] or (10 ^ (tier + 2))
 		return baseVal * weight
 	end
-
 	return 0
 end
 
 local function crystalRarity(inst)
-	local name = getAttr(inst, "TierName")
-	if type(name) == "string" and name ~= "" then
-		return name
+	-- Use crystalTier first (accounts for inst.Name "GIANT xxx" overriding TierName "Mythic")
+	local tier = crystalTier(inst)
+	if tier > 0 then
+		return TIER_NAMES[tier] or "Unknown"
 	end
-	return TIER_NAMES[crystalTier(inst)] or "Unknown"
+	local name = getAttr(inst, "TierName")
+	if type(name) == "string" and name ~= "" then return name end
+	return "Unknown"
 end
 
 local function crystalName(inst)
@@ -867,10 +861,10 @@ local function getMutationsList(inst)
 		end
 	end
 
-	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
-		local hover = inst:FindFirstChild("CrystalHover", true)
+	if #mutations == 0 and inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
+		local hover = inst:FindFirstChild("CrystalHover") or inst:FindFirstChild("CrystalHover", true)
 		if hover then
-			for _, child in ipairs(hover:GetDescendants()) do
+			for _, child in ipairs(hover:GetChildren()) do
 				if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
 					for mutName in pairs(MUTATION_LUCK) do
 						if child.Text:find(mutName, 1, true) then
@@ -1852,7 +1846,7 @@ local function requestStream(position)
 	end
 
 	local now = os.clock()
-	if State.streamSpot and now - State.streamMark < 0.3 and (State.streamSpot - position).Magnitude < 32 then
+	if State.streamSpot and (now - State.streamMark < 2.5) and (State.streamSpot - position).Magnitude < 80 then
 		return
 	end
 
@@ -1861,7 +1855,7 @@ local function requestStream(position)
 
 	task.spawn(function()
 		pcall(function()
-			LocalPlayer:RequestStreamAroundAsync(position, 1)
+			LocalPlayer:RequestStreamAroundAsync(position, 0.5)
 		end)
 	end)
 end
@@ -5818,6 +5812,7 @@ do
 		local plantPlotPos
 		local plantGroundPos
 		local lootBlocked = false
+		local farmTiers = {}
 		local statusText = "Idle"
 
 		local function toggleValue(name)
@@ -6041,6 +6036,27 @@ do
 
 		-- Replaced with plantPhase state machine in step()
 
+		local function meetsFarmTierFilter(inst)
+			if not next(farmTiers) then
+				return true
+			end
+			local hasAny = false
+			for _, enabled in pairs(farmTiers) do
+				if enabled then hasAny = true break end
+			end
+			if not hasAny then return true end
+			local rName = crystalRarity(inst)
+			local tIndex = crystalTier(inst)
+			local tName = TIER_NAMES[tIndex] or rName
+			if farmTiers[tName] then return true end
+			for selName, enabled in pairs(farmTiers) do
+				if enabled and rName:lower():find(selName:lower(), 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+
 		local function findLoot(free, origin)
 			local now = os.clock()
 			local best, bestScore, bestDistance
@@ -6071,6 +6087,9 @@ do
 					end
 					score = luckPts
 				else
+					if not meetsFarmTierFilter(inst) then
+						return
+					end
 					local value = crystalValue(inst)
 					if not meetsFilter(inst, value) then
 						return
@@ -6314,7 +6333,7 @@ do
 				end
 			end
 
-			if autoSell and sellPhase == "idle" and (bagRatio() >= SELL_MARK or lootBlocked) then
+			if autoSell and sellPhase == "idle" and (bagRatio() >= SELL_MARK or (lootBlocked and bagRatio() >= 0.25)) then
 				sellReturnCFrame = root.CFrame
 				sellPhase = "travel"
 				sellPhaseClock = now
@@ -6576,6 +6595,17 @@ do
 			Default = false,
 			Callback = function(value)
 				autoSell = value
+			end,
+		})
+
+		MoneyBox:AddDropdown("FarmTierFilter", {
+			Text = L("Filter Tiers"),
+			Values = TIER_NAMES,
+			Default = {},
+			Multi = true,
+			Callback = function(selectedMap)
+				farmTiers = selectedMap or {}
+				loot = nil
 			end,
 		})
 
