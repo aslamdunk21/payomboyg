@@ -625,6 +625,9 @@ end
 local function blinkExact(pos)
     local root = hrp()
     if not root then return false end
+    -- ปรับปรุง blinkExact เพิ่ม Micro-Lerp หลบ Raycast Detection
+    root.CFrame = root.CFrame:Lerp(CFrame.new(pos), 0.5)
+    task.wait()
     root.CFrame = CFrame.new(pos)
     root.AssemblyLinearVelocity = Vector3.zero
     return true
