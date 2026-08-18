@@ -625,11 +625,20 @@ end
 local function blinkExact(pos)
     local root = hrp()
     if not root then return false end
-    -- ปรับปรุง blinkExact เพิ่ม Micro-Lerp หลบ Raycast Detection
-    root.CFrame = root.CFrame:Lerp(CFrame.new(pos), 0.5)
-    task.wait()
-    root.CFrame = CFrame.new(pos)
-    root.AssemblyLinearVelocity = Vector3.zero
+
+    -- ถ้าระยะทางไกล ให้แบ่งวาร์ปทีละก้าว หลบ Anti-Cheat (BAC)
+    local currentPos = root.Position
+    local distance = (pos - currentPos).Magnitude
+    local steps = math.ceil(distance / 25) -- ไม่เกิน 25 studs ต่อรอบ
+
+    for i = 1, steps do
+        if not hrp() then break end
+        local target = currentPos:Lerp(pos, i / steps)
+        root.CFrame = CFrame.new(target)
+        root.AssemblyLinearVelocity = Vector3.zero
+        task.wait(0.03) -- ให้เวลา Server sync พิกัด
+    end
+
     return true
 end
 
@@ -637,27 +646,16 @@ end
 -- step signal, so the position that replicates is ours
 local function pin(pos)
     local stopped = false
-    local conns = {}
 
-    local function apply()
-        if stopped then return end
-        local root = hrp()
-        if root then
-            root.CFrame = CFrame.new(pos)
-            root.AssemblyLinearVelocity = Vector3.zero
-        end
+    local root = hrp()
+    if root then
+        root.CFrame = CFrame.new(pos)
+        root.AssemblyLinearVelocity = Vector3.zero
     end
 
-    -- เหลือแค่ PostSimulation ตัวเดียวตามสั่ง ลดการโดน Anti-Cheat ตรวจจับ Packet
-    pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
-
-    apply()
-    Runtime.pinConns = conns
+    -- คืนค่าฟังก์ชันเปล่า เพื่อไม่ให้ระบบส่วนอื่นที่เรียก unpin() เกิด Error (Nil Call)
     return function()
-        if stopped then return end
         stopped = true
-        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
-        if Runtime.pinConns == conns then Runtime.pinConns = nil end
     end
 end
 
