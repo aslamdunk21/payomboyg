@@ -768,9 +768,13 @@ local function findCardFolder()
         for _, desc in ipairs(plot:GetDescendants()) do
             if desc:IsA("ProximityPrompt") then
                 local model = desc:FindFirstAncestorOfClass("Model")
-                if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
-                    getgenv().CardFolder = model.Parent
-                    return true
+                if model then
+                    local actTxt = string.lower(desc.ActionText or "")
+                    local objTxt = string.lower(desc.ObjectText or "")
+                    if actTxt:find("buy") or actTxt:find("open") or actTxt:find("ซื้อ") or actTxt:find("เปิด") or objTxt:find("card") or objTxt:find("pack") then
+                        getgenv().CardFolder = model.Parent
+                        return true
+                    end
                 end
             end
         end
@@ -1080,7 +1084,7 @@ local function getCardModelRarityAndMutation(model)
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs({"uncommon", "common", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour", "Smash", "Emblem", "Chrono", "Limited"}) do
+                for _, rName in ipairs({"uncommon", "common", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour", "smash", "emblem", "chrono", "limited"}) do
                     if cl:find(rName) then
                         rarity = rName
                         break
@@ -1103,7 +1107,7 @@ local function instantBuyLoop()
     if not getgenv().CardFolder then return end
 
     for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-        if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
+        if not model:IsA("Model") then continue end
         if model:GetAttribute("Rejected") == true then continue end
 
         -- Fast Conveyor Arrival Signal (Fire once per model to prevent ping spikes)
