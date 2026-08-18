@@ -208,7 +208,7 @@ local function shortNum(n)
 end
 
 ----------------------------------------------------------------
--- Config & Runtime Architecture
+
 ----------------------------------------------------------------
 local function raritySet(list)
     local t = {}
