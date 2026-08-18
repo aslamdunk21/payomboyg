@@ -623,8 +623,12 @@ local function instantOK()
 end
 
 local function blinkExact(pos)
-    local root = hrp()
-    if not root then return false end
+local root = hrp()
+if root and (root.Position - spot).Magnitude < 15 then 
+    root.AssemblyLinearVelocity = Vector3.zero -- คืนค่าความเร็วเป็น 0 เพื่อให้ Server รับรู้พิกัดนิ่ง
+    task.wait(0.1) -- รอ 100ms ให้ Client-Server Sync พิกัดตรงกัน
+    return true 
+end
 
     -- ถ้าระยะทางไกล ให้แบ่งวาร์ปทีละก้าว หลบ Anti-Cheat (BAC)
     local currentPos = root.Position
