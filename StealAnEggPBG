@@ -830,9 +830,15 @@ Guardless.rayParams = RaycastParams.new()
 Guardless.rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function stepGroundY(pos)
-    Guardless.rayParams.FilterDescendantsInstances = { char() }
+    local c = char()
+    if not c then return nil end
+    Guardless.rayParams.FilterDescendantsInstances = { c }
     local hit = Workspace:Raycast(pos + Vector3.new(0, 60, 0), Vector3.new(0, -400, 0), Guardless.rayParams)
-    return hit and hit.Position.Y or nil
+    -- ต้องเป็นชิ้นส่วนที่เดินชนได้ (CanCollide) และไม่ใช่ตัวเราเอง
+    if hit and hit.Instance and hit.Instance.CanCollide then
+        return hit.Position.Y
+    end
+    return nil
 end
 
 local Nav = { GuardRing = 22 }
@@ -879,6 +885,8 @@ local function stepTo(target, timeout)
     local guards   = Nav.guardPivots()
     local refresh  = os.clock() + 0.5
 
+    local lastPos = root.Position
+    local stuckTime = 0
     while os.clock() < deadline do
         local dt   = RunService.Heartbeat:Wait()
         local root = hrp()
@@ -907,6 +915,17 @@ local function stepTo(target, timeout)
             charModel:PivotTo(CFrame.new(nxt, nxt + flat.Unit))
         else
             root.CFrame = CFrame.new(nxt)
+        -- เช็กว่าขยับตัวได้จริงหรือไม่
+        if (root.Position - lastPos).Magnitude < 0.5 then
+            stuckTime = stuckTime + dt
+            if stuckTime > 1.0 then
+                -- ถ้าติดกำแพงเกิน 1 วินาที ให้เขยิบตำแหน่งเบี่ยงไปข้างๆ เล็กน้อย
+                nxt = nxt + Vector3.new(math.random(-2,2), 0, math.random(-2,2))
+                stuckTime = 0
+            end
+        else
+            stuckTime = 0
+            lastPos = root.Position
         end
     end
     return false
