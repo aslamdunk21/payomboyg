@@ -224,7 +224,7 @@ local Cfg = {
     AutoEquipBest    = true,
 
     -- movement
-    MoveMode         = "Warp",
+    MoveMode         = "Walk",
     WarpPct          = 0.35,
     ZoneHopStep      = 260,
     GuardSafeGap     = 26,
