@@ -207,6 +207,9 @@ local function shortNum(n)
     return ("%.0f"):format(n)
 end
 
+----------------------------------------------------------------
+-- Config & Runtime
+----------------------------------------------------------------
 local Cfg = {
     -- farming
     AutoSteal        = false,
@@ -1035,16 +1038,12 @@ local function hardenCharacter(c)
     if not hum then return end
     pcall(function()
         hum.BreakJointsOnDeath = false
-        hum.RequiresNeck       = false
+        hum.RequiresNeck = false
     end)
-    if Runtime.conns.health then Runtime.conns.health:Disconnect() end
-    
-    -- ปิดการทำงาน God Mode ฮีลเลือดบน Client เพื่อป้องกัน Anti-Cheat เตะ
-    --[[
-    Runtime.conns.health = hum.HealthChanged:Connect(function(h)
-        if Cfg.GodMode and h < hum.MaxHealth then hum.Health = hum.MaxHealth end
-    end)
-    --]]
+    if Runtime.conns.health then 
+        Runtime.conns.health:Disconnect() 
+        Runtime.conns.health = nil
+    end
 end
 
 ----------------------------------------------------------------
