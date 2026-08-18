@@ -225,10 +225,10 @@ local Cfg = {
 
     -- movement
     MoveMode         = "Warp",
-    WarpPct          = 0.45,
+    WarpPct          = 0.35,
     ZoneHopStep      = 260,
     GuardSafeGap     = 26,
-    BoostWalkSpeed   = 500,
+    BoostWalkSpeed   = 350,
 
     -- survival
     GodMode          = true,
