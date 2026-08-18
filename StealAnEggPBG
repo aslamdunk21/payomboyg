@@ -869,30 +869,43 @@ local function stepTo(target, timeout)
     local budget = timeout or 12
     if start then
         local flat0 = Vector3.new(target.X - start.Position.X, 0, target.Z - start.Position.Z).Magnitude
-        budget = math.max(budget, flat0 / 60 + 4)
+        budget = math.max(budget, flat0 / 30 + 4) -- ขยายเวลานิดนึงให้เนียน
     end
     local deadline = os.clock() + budget
     local guards   = Nav.guardPivots()
     local refresh  = os.clock() + 0.5
+
     while os.clock() < deadline do
         local dt   = RunService.Heartbeat:Wait()
         local root = hrp()
         if not root then return false end
         if os.clock() > refresh then guards = Nav.guardPivots() refresh = os.clock() + 0.5 end
+        
         local pos  = root.Position
         local flat = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
         local dist = flat.Magnitude
-        if dist < 6 then return true end
-        local nxt = pos + flat.Unit * math.min(Guardless.StepSpeed * dt, dist)
+        if dist < 4.5 then return true end
+
+        -- จำกัดก้าวไม่เกิน 8-12 studs ต่อเฟรม ให้ Server physics engine ทัน Sync
+        local moveStep = math.min(10, dist)
+        local nxt = pos + flat.Unit * moveStep
         if dist > 35 then nxt = Nav.dodge(nxt, guards) end
         local gy  = stepGroundY(nxt)
         if gy then nxt = Vector3.new(nxt.X, gy + MIN_HOVER, nxt.Z) end
-        root.CFrame = CFrame.new(nxt)
-        root.AssemblyLinearVelocity = Vector3.zero
+
+        -- เปลี่ยนจาก root.CFrame เป็น PivotTo เพื่อรองรับ Rig Assembly ของ Roblox ยุคใหม่
+        local charModel = char()
+        if charModel then
+            charModel:PivotTo(CFrame.new(nxt, nxt + flat.Unit))
+        else
+            root.CFrame = CFrame.new(nxt)
+        end
+        
+        -- ปล่อย LinearVelocity สั้นๆ เพื่อให้ Physics Replication Packet ส่งไปบอก Server ว่าตัวละครขยับจริง
+        root.AssemblyLinearVelocity = flat.Unit * 16
     end
     return false
 end
-
 function Nav.curtainClosed()
     local objs  = Workspace:FindFirstChild("__OBJECTS")
     local areas = objs and objs:FindFirstChild("Areas")
