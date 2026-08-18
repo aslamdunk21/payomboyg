@@ -210,6 +210,15 @@ end
 ----------------------------------------------------------------
 -- Config & Runtime Architecture
 ----------------------------------------------------------------
+local function raritySet(list)
+    local t = {}
+    if type(list) == "table" then
+        for _, v in ipairs(list) do 
+            t[v] = true 
+        end
+    end
+    return t
+end
 local Cfg = {
     -- farming
     AutoSteal        = false,
