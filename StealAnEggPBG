@@ -869,7 +869,7 @@ local function stepTo(target, timeout)
     local budget = timeout or 12
     if start then
         local flat0 = Vector3.new(target.X - start.Position.X, 0, target.Z - start.Position.Z).Magnitude
-        budget = math.max(budget, flat0 / 30 + 4) -- ขยายเวลานิดนึงให้เนียน
+        budget = math.max(budget, flat0 / 25 + 4)
     end
     local deadline = os.clock() + budget
     local guards   = Nav.guardPivots()
@@ -884,25 +884,26 @@ local function stepTo(target, timeout)
         local pos  = root.Position
         local flat = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
         local dist = flat.Magnitude
-        if dist < 4.5 then return true end
+        if dist < 4.5 then 
+            -- เมื่อถึงจุดหมาย ให้คืนค่า Velocity เป็น 0 ตามธรรมชาติ ป้องกัน Server สับสน
+            root.AssemblyLinearVelocity = Vector3.zero
+            return true 
+        end
 
-        -- จำกัดก้าวไม่เกิน 8-12 studs ต่อเฟรม ให้ Server physics engine ทัน Sync
-        local moveStep = math.min(10, dist)
+        -- คุมระยะเคลื่อนที่ให้อยู่ในเกณฑ์ที่เกมยอมรับ (ไม่เกิน 6-8 studs/frame)
+        local moveStep = math.min(8, dist)
         local nxt = pos + flat.Unit * moveStep
         if dist > 35 then nxt = Nav.dodge(nxt, guards) end
         local gy  = stepGroundY(nxt)
         if gy then nxt = Vector3.new(nxt.X, gy + MIN_HOVER, nxt.Z) end
 
-        -- เปลี่ยนจาก root.CFrame เป็น PivotTo เพื่อรองรับ Rig Assembly ของ Roblox ยุคใหม่
+        -- ใช้ CFrame เคลื่อนที่แบบนุ่มนวล ไม่ฝืนยัด AssemblyLinearVelocity
         local charModel = char()
         if charModel then
             charModel:PivotTo(CFrame.new(nxt, nxt + flat.Unit))
         else
             root.CFrame = CFrame.new(nxt)
         end
-        
-        -- ปล่อย LinearVelocity สั้นๆ เพื่อให้ Physics Replication Packet ส่งไปบอก Server ว่าตัวละครขยับจริง
-        root.AssemblyLinearVelocity = flat.Unit * 16
     end
     return false
 end
