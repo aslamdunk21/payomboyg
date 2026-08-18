@@ -74,6 +74,7 @@ local State = {
 	upgradeAccumulator = 0,
 	minValue = 2000000,
 	valueFilter = true,
+	selectedTiers = {},
 	espScale = 0.7,
 	playerScale = 0.6,
 	boulderScale = 0.6,
@@ -275,10 +276,10 @@ local COLORS = {
 	hexLuck = "FFC400",
 }
 
-local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean", "Celestial", "Singularity", "Omnipotent" }
+local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean", "Giant", "Titan", "Celestial", "Singularity", "Omnipotent" }
 
 local LUCK = {
-	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60, 100, 180, 300 },
+	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60, 100, 150, 250, 400, 600 },
 	base = 0.00045,
 	exponent = 0.5,
 	cap = 500,
@@ -333,11 +334,6 @@ local PARSE_MULTIPLIERS = {
 	td = 1e42, tdc = 1e42,
 	qdc = 1e45,
 	qndc = 1e48,
-	sxdc = 1e51,
-	spdc = 1e54,
-	odc = 1e57,
-	nvdc = 1e60,
-	vig = 1e63,
 }
 local CONTAINER_NAMES = { "DroppedCrystals", "Crystals" }
 
@@ -377,6 +373,7 @@ local Locales = {
 		TH = "มูลค่าขั้นต่ำ (ตัวอย่าง: 500k, 2m, 1.5b, 100b, 1t, 100t, 1qa) หากว่างจะแสดงทั้งหมด"
 	},
 	["Min Value"] = {EN = "Min Value", TH = "มูลค่าขั้นต่ำ"},
+	["Filter Tiers"] = {EN = "Filter Tiers", TH = "ตัวกรองเทียร (Tier Filter)"},
 	["Tracking: %d  |  Shown: %d"] = {EN = "Tracking: %d  |  Shown: %d", TH = "ติดตาม: %d | แสดง: %d"},
 	
 	["Player ESP"] = {EN = "Player ESP", TH = "มองทะลุผู้เล่น"},
@@ -789,14 +786,16 @@ local function crystalValue(inst)
 			[2] = 1000,
 			[3] = 10000,
 			[4] = 100000,
-			[5] = 1000000,          -- Legendary: 1M
-			[6] = 10000000,         -- Mythic: 10M
-			[7] = 1000000000000,     -- Quasar: 1T
-			[8] = 10000000000000,    -- Pulsar: 10T
-			[9] = 100000000000000,   -- Empyrean: 100T
-			[10] = 1000000000000000, -- Celestial: 1Qa
-			[11] = 10000000000000000, -- Singularity: 10Qa
-			[12] = 100000000000000000, -- Omnipotent: 100Qa
+			[5] = 1000000,           -- Legendary: 1M
+			[6] = 10000000,          -- Mythic: 10M
+			[7] = 1000000000000,      -- Quasar: 1T
+			[8] = 10000000000000,     -- Pulsar: 10T
+			[9] = 100000000000000,    -- Empyrean: 100T
+			[10] = 1000000000000000,  -- Giant: 1Qa
+			[11] = 10000000000000000, -- Titan: 10Qa
+			[12] = 100000000000000000, -- Celestial: 100Qa
+			[13] = 1000000000000000000, -- Singularity: 1Qi
+			[14] = 10000000000000000000, -- Omnipotent: 10Qi
 		}
 		local baseVal = tierFallback[tier] or (10 ^ (tier + 2))
 		return baseVal * weight
@@ -831,6 +830,61 @@ local function crystalColor(inst)
 	return COLORS.default
 end
 
+local function getMutationsList(inst)
+	local mutations = {}
+	local seen = {}
+
+	local function add(m)
+		if type(m) == "string" and m ~= "" then
+			m = m:match("^%s*(.-)%s*$")
+			if m ~= "" and not seen[m] then
+				seen[m] = true
+				mutations[#mutations + 1] = m
+			end
+		end
+	end
+
+	for _, attrName in ipairs({ "Mutation", "MutationName", "ExtraMutations", "AdminMutation" }) do
+		local val = getAttr(inst, attrName)
+		if type(val) == "string" and val ~= "" then
+			for part in string.gmatch(val, "[^,%+%/]+") do
+				add(part)
+			end
+		end
+	end
+
+	if inst and inst.Name then
+		for brack in inst.Name:gmatch("%[(.-)%]") do
+			add(brack)
+		end
+		for paren in inst.Name:gmatch("%((.-)%)") do
+			add(paren)
+		end
+		for mutName in pairs(MUTATION_LUCK) do
+			if inst.Name:find(mutName, 1, true) then
+				add(mutName)
+			end
+		end
+	end
+
+	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
+		local hover = inst:FindFirstChild("CrystalHover", true)
+		if hover then
+			for _, child in ipairs(hover:GetDescendants()) do
+				if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
+					for mutName in pairs(MUTATION_LUCK) do
+						if child.Text:find(mutName, 1, true) then
+							add(mutName)
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return mutations
+end
+
 local function mutationLuck(name)
 	if type(name) ~= "string" or name == "" then
 		return 1
@@ -839,28 +893,23 @@ local function mutationLuck(name)
 end
 
 local function combinedLuckMult(inst)
-	local mutation = getAttr(inst, "Mutation")
-	local roll = tonumber(getAttr(inst, "MutationLuckRoll"))
-	local multiplier = (roll and roll > 0) and roll or mutationLuck(mutation)
+	local multiplier = 1
+	local mutations = getMutationsList(inst)
 
-	local extra = getAttr(inst, "ExtraMutations")
-	if type(extra) == "string" and extra ~= "" then
-		for name in string.gmatch(extra, "[^,]+") do
-			if name ~= "" then
-				multiplier *= mutationLuck(name)
-			end
+	for _, mut in ipairs(mutations) do
+		local luckVal = MUTATION_LUCK[mut]
+		if luckVal then
+			multiplier *= luckVal
 		end
+	end
+
+	local roll = tonumber(getAttr(inst, "MutationLuckRoll"))
+	if roll and roll > 1 then
+		multiplier = math.max(multiplier, roll)
 	end
 
 	if getAttr(inst, "IsBloodCrystal") == true then
 		multiplier *= LUCK.blood
-	end
-
-	if getAttr(inst, "AdminMutation") == "Radioactive" and mutation ~= "Radioactive" then
-		local hasRadioactive = type(extra) == "string" and extra:find("Radioactive", 1, true) ~= nil
-		if not hasRadioactive then
-			multiplier *= mutationLuck("Radioactive")
-		end
 	end
 
 	return multiplier
@@ -903,27 +952,70 @@ local function luckLabelText(inst)
 end
 
 local function crystalLuck(inst)
-	local text = luckLabelText(inst)
-	if type(text) == "string" then
-		local pct = tonumber(text:match("([%d%.]+)%s*%%"))
-		if pct and pct > 0 then
-			return pct / 100
+	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
+		local hover = inst:FindFirstChild("CrystalHover", true)
+		if hover then
+			for _, label in ipairs(hover:GetDescendants()) do
+				if label:IsA("TextLabel") and label.Text and label.Text ~= "" then
+					local pctStr = label.Text:match("%+?([%d%.]+)%s*%%")
+					if pctStr then
+						local pct = tonumber(pctStr)
+						if pct and pct > 0 then
+							return pct / 100
+						end
+					end
+				end
+			end
 		end
 	end
 	return computeLuck(inst)
 end
 
 local function meetsFilter(inst, value)
-	if not State.valueFilter then
-		return true
-	end
-	local val = value or crystalValue(inst)
-	if val <= 0 then
-		if isCrystal(inst) or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil then
-			return true
+	if State.valueFilter then
+		local val = value or crystalValue(inst)
+		if val <= 0 then
+			if not (isCrystal(inst) or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil) then
+				return false
+			end
+		elseif val < State.minValue then
+			return false
 		end
 	end
-	return val >= State.minValue
+
+	if State.selectedTiers and next(State.selectedTiers) ~= nil then
+		local hasAnySelected = false
+		for _, enabled in pairs(State.selectedTiers) do
+			if enabled then
+				hasAnySelected = true
+				break
+			end
+		end
+
+		if hasAnySelected then
+			local rName = crystalRarity(inst)
+			local tIndex = crystalTier(inst)
+			local tierName = TIER_NAMES[tIndex] or rName
+
+			local matched = false
+			if State.selectedTiers[tierName] then
+				matched = true
+			else
+				for selName, enabled in pairs(State.selectedTiers) do
+					if enabled and rName:lower():find(selName:lower(), 1, true) then
+						matched = true
+						break
+					end
+				end
+			end
+
+			if not matched then
+				return false
+			end
+		end
+	end
+
+	return true
 end
 
 local function ownsGamepass(name)
@@ -1022,6 +1114,8 @@ local function looksLikeCrystal(inst)
 		or nameLower:find("quasar", 1, true) 
 		or nameLower:find("pulsar", 1, true) 
 		or nameLower:find("empyrean", 1, true)
+		or nameLower:find("giant", 1, true)
+		or nameLower:find("titan", 1, true)
 		or nameLower:find("celestial", 1, true)
 		or nameLower:find("singularity", 1, true)
 		or nameLower:find("omnipotent", 1, true)
@@ -1069,6 +1163,8 @@ local function isCrystal(inst)
 				or nameLower:find("quasar", 1, true) ~= nil 
 				or nameLower:find("pulsar", 1, true) ~= nil 
 				or nameLower:find("empyrean", 1, true) ~= nil
+				or nameLower:find("giant", 1, true) ~= nil
+				or nameLower:find("titan", 1, true) ~= nil
 				or nameLower:find("celestial", 1, true) ~= nil
 				or nameLower:find("singularity", 1, true) ~= nil
 				or nameLower:find("omnipotent", 1, true) ~= nil
@@ -1280,12 +1376,17 @@ end
 
 local function buildTitle(inst)
 	local rarity = crystalRarity(inst)
-	local name = crystalName(inst)
-	local mutation = getAttr(inst, "Mutation")
-	if type(mutation) == "string" and mutation ~= "" then
-		return string.format("[%s] %s (%s)", rarity, name, mutation)
+	local rawName = crystalName(inst)
+	local cleanName = rawName:gsub("%s*%[.-%]", ""):gsub("%s*%(.-%)%s*%+?", ""):match("^%s*(.-)%s*$")
+	if not cleanName or cleanName == "" then
+		cleanName = rawName
 	end
-	return string.format("[%s] %s", rarity, name)
+
+	local mutations = getMutationsList(inst)
+	if #mutations > 0 then
+		return string.format("[%s] %s (%s)", rarity, cleanName, table.concat(mutations, ", "))
+	end
+	return string.format("[%s] %s", rarity, cleanName)
 end
 
 local function applyDetails(inst, entry, origin)
@@ -2942,9 +3043,19 @@ do
 			if not inst then
 				return nil
 			end
+			local nameLower = inst.Name:lower()
 			for kind in pairs(BOULDER_INFO) do
-				if inst.Name:find(kind, 1, true) then
+				if nameLower:find(kind:lower(), 1, true) then
 					return kind
+				end
+			end
+			local bType = getAttr(inst, "BoulderType") or getAttr(inst, "MountainType") or getAttr(inst, "TierName")
+			if type(bType) == "string" then
+				local bLower = bType:lower()
+				for kind in pairs(BOULDER_INFO) do
+					if bLower:find(kind:lower(), 1, true) then
+						return kind
+					end
 				end
 			end
 			return nil
@@ -3777,6 +3888,17 @@ do
 			Numeric = false,
 			Finished = false,
 			Callback = setMinValue,
+		})
+
+		CrystalBox:AddDropdown("TierFilter", {
+			Text = L("Filter Tiers"),
+			Values = TIER_NAMES,
+			Default = {},
+			Multi = true,
+			Callback = function(selectedMap)
+				State.selectedTiers = selectedMap or {}
+				requestRefresh()
+			end,
 		})
 
 		StatsLabel = CrystalBox:AddLabel("Tracking: 0  |  Shown: 0")
