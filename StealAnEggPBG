@@ -784,7 +784,7 @@ local function warpTo(dest, arriveDist, opts)
 
         local hum   = humanoid()
         local speed = math.max(60, (hum and hum.WalkSpeed or 16) * (Cfg.WarpPct or 0.8))
-        local step  = math.min(speed * dt, flat.Magnitude)
+        local step  = math.min(math.min(speed * dt, 8), flat.Magnitude)
         local nextPos = root.Position + flat.Unit * step
 
         if not opts.ignoreGuards then
