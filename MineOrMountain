@@ -275,10 +275,10 @@ local COLORS = {
 	hexLuck = "FFC400",
 }
 
-local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean" }
+local TIER_NAMES = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Quasar", "Pulsar", "Empyrean", "Celestial", "Singularity", "Omnipotent" }
 
 local LUCK = {
-	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60 },
+	rarity = { 1, 1.6, 2.6, 4.2, 7, 12, 20, 35, 60, 100, 180, 300 },
 	base = 0.00045,
 	exponent = 0.5,
 	cap = 500,
@@ -292,6 +292,8 @@ local MUTATION_LUCK = {
 	Gilded = 18,
 	Onyx = 28,
 	Terminus = 40,
+	Behemoth = 50,
+	Titan = 75,
 	Frost = 1.4,
 	Fire = 1.4,
 	Thunder = 1.5,
@@ -313,21 +315,29 @@ local WATCHED_ATTRIBUTES = {
 	"ExtraMutations",
 }
 
-local SUFFIXES = { "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc" }
+local SUFFIXES = { "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Ud", "Dd", "Td", "Qd", "Qn" }
 local PARSE_MULTIPLIERS = {
-	k = 1e3,
-	m = 1e6,
-	b = 1e9,
-	t = 1e12,
-	qa = 1e15, qd = 1e15, quad = 1e15, quadrillion = 1e15,
+	k = 1e3, thousand = 1e3,
+	m = 1e6, mil = 1e6, million = 1e6,
+	b = 1e9, bil = 1e9, billion = 1e9,
+	t = 1e12, tri = 1e12, tril = 1e12, trillion = 1e12,
+	q = 1e15, qa = 1e15, qd = 1e15, quad = 1e15, quadrillion = 1e15,
 	qi = 1e18, qn = 1e18, quint = 1e18, quintillion = 1e18,
 	sx = 1e21, sext = 1e21, sextillion = 1e21,
 	sp = 1e24, sept = 1e24, septillion = 1e24,
 	oc = 1e27, oct = 1e27, octillion = 1e27,
 	no = 1e30, non = 1e30, nonillion = 1e30,
 	dc = 1e33, dec = 1e33, decillion = 1e33,
-	udc = 1e36, ddc = 1e39, tdc = 1e42, qdc = 1e45, qndc = 1e48,
-	sxdc = 1e51, spdc = 1e54, odc = 1e57, nvdc = 1e60, vig = 1e63,
+	ud = 1e36, udc = 1e36,
+	dd = 1e39, ddc = 1e39,
+	td = 1e42, tdc = 1e42,
+	qdc = 1e45,
+	qndc = 1e48,
+	sxdc = 1e51,
+	spdc = 1e54,
+	odc = 1e57,
+	nvdc = 1e60,
+	vig = 1e63,
 }
 local CONTAINER_NAMES = { "DroppedCrystals", "Crystals" }
 
@@ -363,8 +373,8 @@ local Locales = {
 	["Crystal ESP"] = {EN = "Crystal ESP", TH = "มองทะลุคริสตัล"},
 	["Crystal Size"] = {EN = "Crystal Size", TH = "ขนาดคริสตัล"},
 	["Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b. Empty shows everything"] = {
-		EN = "Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b, 1t, 1qa. Empty shows everything", 
-		TH = "มูลค่าขั้นต่ำ (ตัวอย่าง: 500k, 2m, 1.5b, 1t, 1qa, 1qi) หากว่างจะแสดงทั้งหมด"
+		EN = "Min Value hides and skips crystals worth less than this. Example: 500k, 2m, 1.5b, 100b, 1t, 100t, 1qa. Empty shows everything", 
+		TH = "มูลค่าขั้นต่ำ (ตัวอย่าง: 500k, 2m, 1.5b, 100b, 1t, 100t, 1qa) หากว่างจะแสดงทั้งหมด"
 	},
 	["Min Value"] = {EN = "Min Value", TH = "มูลค่าขั้นต่ำ"},
 	["Tracking: %d  |  Shown: %d"] = {EN = "Tracking: %d  |  Shown: %d", TH = "ติดตาม: %d | แสดง: %d"},
@@ -576,6 +586,15 @@ local function parseValue(text)
 	if not numberStr then
 		return nil
 	end
+
+	local dotCount = 0
+	for _ in numberStr:gmatch("%.") do
+		dotCount += 1
+	end
+	if dotCount > 1 then
+		numberStr = numberStr:gsub("%.", "")
+	end
+
 	local base = tonumber(numberStr)
 	if not base then
 		return nil
@@ -585,12 +604,12 @@ local function parseValue(text)
 	end
 	local multiplier = PARSE_MULTIPLIERS[suffix]
 	if not multiplier then
-		if suffix:sub(1, 1) == "t" then
-			multiplier = 1e12
-		elseif suffix:sub(1, 2) == "qa" or suffix:sub(1, 2) == "qd" then
+		if suffix:sub(1, 2) == "qa" or suffix:sub(1, 2) == "qd" then
 			multiplier = 1e15
 		elseif suffix:sub(1, 2) == "qi" or suffix:sub(1, 2) == "qn" then
 			multiplier = 1e18
+		elseif suffix:sub(1, 1) == "t" then
+			multiplier = 1e12
 		elseif suffix:sub(1, 1) == "b" then
 			multiplier = 1e9
 		elseif suffix:sub(1, 1) == "m" then
@@ -665,6 +684,47 @@ local function getAttr(inst, name)
 	return nil
 end
 
+local function crystalWeight(inst)
+	return tonumber(getAttr(inst, "WeightKg")) or 0
+end
+
+local function crystalTier(inst)
+	local t = tonumber(getAttr(inst, "Tier"))
+	if t and t > 0 then
+		return t
+	end
+
+	local namesToSearch = {
+		getAttr(inst, "TierName"),
+		getAttr(inst, "CrystalName"),
+		inst and inst.Name,
+	}
+
+	for _, nameStr in ipairs(namesToSearch) do
+		if type(nameStr) == "string" and nameStr ~= "" then
+			local lower = nameStr:lower()
+			for index, tierName in ipairs(TIER_NAMES) do
+				if lower:find(tierName:lower(), 1, true) then
+					return index
+				end
+			end
+		end
+	end
+
+	if inst and (inst:IsA("Model") or inst:IsA("BasePart")) then
+		for _, child in ipairs(inst:GetChildren()) do
+			local cName = child.Name:lower()
+			for index, tierName in ipairs(TIER_NAMES) do
+				if cName:find(tierName:lower(), 1, true) then
+					return index
+				end
+			end
+		end
+	end
+
+	return 0
+end
+
 local function crystalValue(inst)
 	local raw = getAttr(inst, "Value")
 	if raw ~= nil then
@@ -690,27 +750,27 @@ local function crystalValue(inst)
 			if child:IsA("TextLabel") and child.Text and child.Text ~= "" then
 				local text = child.Text
 				if not text:find("%%") and not text:lower():find("kg") and not text:lower():find("tons") then
-					local dollarMatch = text:match("%$[%d%,%.%a%s]+")
+					local dollarMatch = text:match("%$[%d%,%.%s]+%a*")
 					if dollarMatch then
 						local p = parseValue(dollarMatch)
 						if p and p > 0 and p > bestVal then
 							bestVal = p
 						end
 					else
-						local numMatch = text:match("[%d%,%.]+%s*%a*")
-						if numMatch then
-							local p = parseValue(numMatch)
+						local suffixMatch = text:match("%f[%d][%d%,%.]+%s*[kMbBtTqQaAsSpPoOnNdD]%a*")
+						if suffixMatch then
+							local p = parseValue(suffixMatch)
 							if p and p > 0 and p > bestVal then
 								bestVal = p
 							end
-						end
-					end
-				else
-					local dollarMatch = text:match("%$[%d%,%.%a]+")
-					if dollarMatch then
-						local p = parseValue(dollarMatch)
-						if p and p > 0 and p > bestVal then
-							bestVal = p
+						else
+							local plainMatch = text:match("%f[%d][%d%,%.]{4,}")
+							if plainMatch then
+								local p = parseValue(plainMatch)
+								if p and p > 0 and p > bestVal then
+									bestVal = p
+								end
+							end
 						end
 					end
 				end
@@ -729,36 +789,19 @@ local function crystalValue(inst)
 			[2] = 1000,
 			[3] = 10000,
 			[4] = 100000,
-			[5] = 1000000,
-			[6] = 100000000,
-			[7] = 1000000000000,       -- Quasar: 1T
-			[8] = 1000000000000000,    -- Pulsar: 1Qa
-			[9] = 1000000000000000000, -- Empyrean: 1Qi
+			[5] = 1000000,          -- Legendary: 1M
+			[6] = 10000000,         -- Mythic: 10M
+			[7] = 1000000000000,     -- Quasar: 1T
+			[8] = 10000000000000,    -- Pulsar: 10T
+			[9] = 100000000000000,   -- Empyrean: 100T
+			[10] = 1000000000000000, -- Celestial: 1Qa
+			[11] = 10000000000000000, -- Singularity: 10Qa
+			[12] = 100000000000000000, -- Omnipotent: 100Qa
 		}
 		local baseVal = tierFallback[tier] or (10 ^ (tier + 2))
 		return baseVal * weight
 	end
 
-	return 0
-end
-
-local function crystalWeight(inst)
-	return tonumber(getAttr(inst, "WeightKg")) or 0
-end
-
-local function crystalTier(inst)
-	local t = tonumber(getAttr(inst, "Tier"))
-	if t then
-		return t
-	end
-	local name = getAttr(inst, "TierName") or inst.Name
-	if type(name) == "string" then
-		for index, tierName in ipairs(TIER_NAMES) do
-			if name:lower():find(tierName:lower(), 1, true) then
-				return index
-			end
-		end
-	end
 	return 0
 end
 
@@ -974,7 +1017,29 @@ local function looksLikeCrystal(inst)
 	if not (inst:IsA("BasePart") or inst:IsA("Model")) then
 		return false
 	end
-	return inst.Name:find("Crystal", 1, true) ~= nil or getAttr(inst, "Value") ~= nil or getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil
+	local nameLower = inst.Name:lower()
+	if nameLower:find("crystal", 1, true) 
+		or nameLower:find("quasar", 1, true) 
+		or nameLower:find("pulsar", 1, true) 
+		or nameLower:find("empyrean", 1, true)
+		or nameLower:find("celestial", 1, true)
+		or nameLower:find("singularity", 1, true)
+		or nameLower:find("omnipotent", 1, true)
+		or nameLower:find("boulder", 1, true)
+		or nameLower:find("gem", 1, true)
+	then
+		return true
+	end
+
+	if getAttr(inst, "Value") ~= nil 
+		or getAttr(inst, "Tier") ~= nil 
+		or getAttr(inst, "TierName") ~= nil
+		or getAttr(inst, "CrystalName") ~= nil
+	then
+		return true
+	end
+
+	return false
 end
 
 local crystalFlags = setmetatable({}, { __mode = "k" })
@@ -1004,6 +1069,9 @@ local function isCrystal(inst)
 				or nameLower:find("quasar", 1, true) ~= nil 
 				or nameLower:find("pulsar", 1, true) ~= nil 
 				or nameLower:find("empyrean", 1, true) ~= nil
+				or nameLower:find("celestial", 1, true) ~= nil
+				or nameLower:find("singularity", 1, true) ~= nil
+				or nameLower:find("omnipotent", 1, true) ~= nil
 
 			if hasValue or hasTier or hasName then
 				result = true
@@ -1418,7 +1486,7 @@ local function updateDistances()
 
 	for inst, entry in pairs(Storage.espCache) do
 		if inst.Parent then
-			local text = formatDistance((inst.Position - origin).Magnitude)
+			local text = formatDistance((crystalPosition(inst) - origin).Magnitude)
 			if text ~= entry.distanceText then
 				applyExtra(entry, text)
 			end
@@ -2762,6 +2830,9 @@ do
 			Gildrite = { rarity = "Rare", pickaxe = "Eclipse Fang", crystals = "11-15", runes = "Fortune / Detonation", color = Color3.fromRGB(255, 200, 60) },
 			Rimeveil = { rarity = "Epic", pickaxe = "Voidreign", crystals = "13-18", runes = "Preservation / Warmth", color = Color3.fromRGB(170, 100, 255) },
 			Nocturnite = { rarity = "Legendary", pickaxe = "The Terminus", crystals = "16-22", runes = "Excavator / Colossus", color = Color3.fromRGB(255, 80, 180) },
+			Quasar = { rarity = "Quasar", pickaxe = "The Terminus", crystals = "20-30", runes = "Cosmic / Radiance", color = Color3.fromRGB(80, 255, 200) },
+			Pulsar = { rarity = "Pulsar", pickaxe = "The Terminus", crystals = "25-35", runes = "Pulse / Gravity", color = Color3.fromRGB(255, 60, 60) },
+			Empyrean = { rarity = "Empyrean", pickaxe = "The Terminus", crystals = "30-40", runes = "Celestial / Ascend", color = Color3.fromRGB(255, 215, 0) },
 		}
 
 		local BOULDER_OFFSET = Vector3.new(0, 7, 0)
@@ -3702,7 +3773,7 @@ do
 		CrystalBox:AddInput("EspMinValue", {
 			Text = L("Min Value"),
 			Default = Config.MinCrystalValue,
-			Placeholder = "2m, 1t, 1qa, 1qi",
+			Placeholder = "2m, 100b, 1t, 100t, 1qa",
 			Numeric = false,
 			Finished = false,
 			Callback = setMinValue,
