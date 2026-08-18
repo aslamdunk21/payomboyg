@@ -226,12 +226,12 @@ local Cfg = {
     -- movement
     MoveMode         = "Walk",
     WarpPct          = 0.35,
-    ZoneHopStep      = 260,
-    GuardSafeGap     = 26,
-    BoostWalkSpeed   = 350,
+    ZoneHopStep      = 220,
+    GuardSafeGap     = 22,
+    BoostWalkSpeed   = 300,
 
     -- survival
-    GodMode          = true,
+    GodMode          = false,
     AntiAFK          = true,
     MuteReports      = false,
 
@@ -824,7 +824,7 @@ end
 
 -- every trip that ends in a request to the server is walked at step speed:
 -- feet on the ground, velocity zeroed, ~800 studs a second
-Guardless.StepSpeed = 800
+Guardless.StepSpeed = 500
 Guardless.rayParams = RaycastParams.new()
 Guardless.rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -834,7 +834,7 @@ local function stepGroundY(pos)
     return hit and hit.Position.Y or nil
 end
 
-local Nav = { GuardRing = 26 }
+local Nav = { GuardRing = 22 }
 
 function Nav.guardPivots()
     local list = {}
@@ -864,7 +864,7 @@ end
 
 -- Measured 2026-08-17 on this build: a stepped trip covers ~85 studs a second,
 -- not the 800 the step size asks for, because the corrector drags every frame
--- back. The fixed 8s/15s budgets were written for the fast case, so a nest 700
+-- back. The fixed 8s/15s budgets were written for the fast case, so a nest 600
 -- studs out reported "ไปไม่ถึงไข่" while the character was still walking. The
 -- caller's number is now a floor, and the real budget comes from the distance.
 local function stepTo(target, timeout)
