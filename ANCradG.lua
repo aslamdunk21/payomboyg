@@ -1185,12 +1185,33 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             dBtn.BackgroundColor3 = COLORS.surface
             dBtn.BackgroundTransparency = 0.20
 
+            local function getSelectedList(val)
+                local list = {}
+                if type(val) == "table" then
+                    for k, v in pairs(val) do
+                        if type(k) == "number" then
+                            if type(v) == "string" and v ~= "" and not table.find(list, v) then
+                                table.insert(list, v)
+                            end
+                        elseif (v == true or type(v) == "table") and type(k) == "string" and k ~= "" and not table.find(list, k) then
+                            table.insert(list, k)
+                        end
+                    end
+                elseif type(val) == "string" and val ~= "" then
+                    table.insert(list, val)
+                end
+                return list
+            end
+
             local function formatValText(val)
                 if type(val) == "table" then
-                    if #val == 0 then return "[ กดเพื่อเลือกรายการ ]" end
-                    return table.concat(val, ", ")
+                    local list = getSelectedList(val)
+                    if #list == 0 then return "[ กดเพื่อเลือกรายการ ]" end
+                    return table.concat(list, ", ")
+                elseif type(val) == "string" and val ~= "" then
+                    return val
                 end
-                return tostring(val)
+                return "[ กดเพื่อเลือกรายการ ]"
             end
 
             dBtn.Text = formatValText(defaultVal)
@@ -1358,11 +1379,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 local currentSelected = {}
                 if isMulti then
-                    if type(OptionObj.Value) == "table" then
-                        for _, v in ipairs(OptionObj.Value) do table.insert(currentSelected, v) end
-                    end
+                    currentSelected = getSelectedList(OptionObj.Value)
                 else
-                    table.insert(currentSelected, OptionObj.Value)
+                    if type(OptionObj.Value) == "string" and OptionObj.Value ~= "" then
+                        table.insert(currentSelected, OptionObj.Value)
+                    elseif type(OptionObj.Value) == "table" then
+                        local list = getSelectedList(OptionObj.Value)
+                        if #list > 0 then table.insert(currentSelected, list[1]) end
+                    end
                 end
 
                 local optionButtons = {}
@@ -2116,21 +2140,79 @@ local function SendWebhook(url, rarity, mutation)
 
     if not req then return end
 
-    local inventoryText = "Unknown"
-    pcall(function() inventoryText = GetAllInventorySummary() end)
+    local timeStr = os.date("%H:%M:%S")
+    Runtime.boughtLog = Runtime.boughtLog or {}
+    table.insert(Runtime.boughtLog, 1, string.format("[%s] %s [%s]", timeStr, tostring(rarity), tostring(mutation)))
+    if #Runtime.boughtLog > 10 then table.remove(Runtime.boughtLog, 11) end
+
+    local recentBoughtText = table.concat(Runtime.boughtLog, "\n")
+    if recentBoughtText == "" then recentBoughtText = "ไม่มีประวัติล่าสุด" end
 
     local data = {
         ["content"] = "",
         ["embeds"] = {
             {
-                ["title"] = "🎉 Card Bought (PayomboyZ)!",
-                ["description"] = "Successfully bought a card matching your criteria.",
+                ["title"] = "🎉 ซื้อการ์ดสำเร็จ (Card Bought)!",
+                ["description"] = "ซื้อการ์ดตรงตามเงื่อนไขเรียบร้อยแล้ว",
                 ["type"] = "rich",
-                ["color"] = 13382451,
+                ["color"] = 65484,
                 ["fields"] = {
-                    { ["name"] = "Rarity", ["value"] = tostring(rarity), ["inline"] = true },
-                    { ["name"] = "Mutation", ["value"] = tostring(mutation), ["inline"] = true },
-                    { ["name"] = "Full Inventory", ["value"] = inventoryText, ["inline"] = false },
+                    { ["name"] = "ความหายาก (Rarity)", ["value"] = tostring(rarity), ["inline"] = true },
+                    { ["name"] = "กลายพันธุ์ (Mutation)", ["value"] = tostring(mutation), ["inline"] = true },
+                    { ["name"] = "📜 ประวัติการซื้อการ์ดล่าสุด (Recent Bought)", ["value"] = recentBoughtText, ["inline"] = false },
+                },
+                ["timestamp"] = DateTime.now():ToIsoDate(),
+            },
+        },
+    }
+    pcall(function()
+        req({
+            Url = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(data),
+        })
+    end)
+end
+
+local function SendRerollWebhook(rerollType, cardName, resultValue)
+    local url = getgenv().DiscordWebhook
+    if not url or url == "" then return end
+    url = string.match(url, "^%s*(.-)%s*$") or url
+    if not string.find(url, "http") then return end
+
+    local req = (syn and syn.request) 
+             or (http and http.request) 
+             or http_request 
+             or (fluxus and fluxus.request) 
+             or request 
+             or (krnl and krnl.request) 
+             or (delta and delta.request)
+
+    if not req then return end
+
+    local timeStr = os.date("%H:%M:%S")
+    Runtime.rerollSuccessLog = Runtime.rerollSuccessLog or {}
+    local entryStr = string.format("[%s] [%s] %s -> %s", timeStr, string.upper(rerollType), tostring(cardName), tostring(resultValue))
+    table.insert(Runtime.rerollSuccessLog, 1, entryStr)
+    if #Runtime.rerollSuccessLog > 10 then table.remove(Runtime.rerollSuccessLog, 11) end
+
+    local historyText = table.concat(Runtime.rerollSuccessLog, "\n")
+    if historyText == "" then historyText = "ไม่มีประวัติล่าสุด" end
+
+    local data = {
+        ["content"] = "",
+        ["embeds"] = {
+            {
+                ["title"] = "🎯 รีโรลสำเร็จ (Reroll Success)!",
+                ["description"] = "การ์ดได้รับการสุ่มตามเป้าหมายที่เลือกเรียบร้อยแล้ว",
+                ["type"] = "rich",
+                ["color"] = 16750848,
+                ["fields"] = {
+                    { ["name"] = "ประเภท (Type)", ["value"] = tostring(rerollType), ["inline"] = true },
+                    { ["name"] = "ชื่อการ์ด (Card)", ["value"] = tostring(cardName), ["inline"] = true },
+                    { ["name"] = "ผลลัพธ์ (Result)", ["value"] = tostring(resultValue), ["inline"] = true },
+                    { ["name"] = "📜 ประวัติการรีโรลสำเร็จย้อนหลัง (Reroll History)", ["value"] = historyText, ["inline"] = false },
                 },
                 ["timestamp"] = DateTime.now():ToIsoDate(),
             },
@@ -3436,13 +3518,20 @@ local function getCardModelRarityAndMutation(model)
         or model:GetAttribute("BoxRarity")
         or model:GetAttribute("PackName")
         or model:GetAttribute("TemplateName")
+        or model:GetAttribute("CardName")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
 
     rarity = rarity and tostring(rarity) or ""
     mutation = mutation and tostring(mutation) or "Normal"
 
+    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+    local promptTxt = ""
+    if prompt then
+        promptTxt = string.lower((prompt.ActionText or "") .. " " .. (prompt.ObjectText or "") .. " " .. prompt.Name)
+    end
+
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "PackRarity", "PackName", "TemplateName"}) do
+        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "PackRarity", "PackName", "TemplateName", "CardName"}) do
             local obj = model:FindFirstChild(childName, true)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
@@ -3480,25 +3569,25 @@ local function getCardModelRarityAndMutation(model)
     end
 
     if rarity == "" then
-        local searchRarities = {
-            "common", "uncommon", "rare", "epic", "legendary", "mythic", "secret",
-            "divine", "transcendent", "shadow", "emperor", "demon", "manga", "celestial",
-            "heavenly", "corrupted", "striker", "sacred", "paradox", "founder", "evolved",
-            "magic", "oni", "chaos", "ruin", "reborn", "beast", "nordic", "hunter",
-            "soul", "swordsman", "gamer", "revenge", "chainsaw", "eternity", "academy",
-            "dynasty", "grail", "conquest", "blaze", "devour", "raven", "arcane", "nightfall",
-            "smash", "emblem", "chrono", "event", "newpack", "limited", "unknown", "unknow"
-        }
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(searchRarities) do
-                    if cl:find(rName) then
+                for _, rName in ipairs(RaritiesList or {}) do
+                    if cl:find(string.lower(rName)) then
                         rarity = rName
                         break
                     end
                 end
                 if rarity ~= "" then break end
+            end
+        end
+    end
+
+    if rarity == "" and promptTxt ~= "" then
+        for _, rName in ipairs(RaritiesList or {}) do
+            if promptTxt:find(string.lower(rName)) then
+                rarity = rName
+                break
             end
         end
     end
@@ -3509,10 +3598,11 @@ local function getCardModelRarityAndMutation(model)
             rarity = "Unknown"
         elseif mName:find("unknow") then
             rarity = "Unknow"
+        else
+            rarity = model.Name
         end
     end
 
-    -- Clean pack/box suffix from rarity string if needed
     if rarity ~= "" then
         local cleanedRarity = string.gsub(rarity, "%s+[Pp][Aa][Cc][Kk]$", "")
         cleanedRarity = string.gsub(cleanedRarity, "%s+[Bb][Oo][Xx]$", "")
@@ -3549,7 +3639,7 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
+        if buyAttempts >= 25 or (tick() - firstSeen > 25) then
             model:SetAttribute("Rejected", true)
             continue
         end
@@ -3558,54 +3648,67 @@ local function instantBuyLoop()
         local rLower = string.lower(tostring(cardRarity))
         local mLower = string.lower(tostring(cardMutation))
 
-        local hasRarityFilter = (next(getgenv().SelectedRarities) ~= nil)
-        local hasMutationFilter = (next(getgenv().SelectedMutations) ~= nil)
+        local hasRarityFilter = false
+        if getgenv().SelectedRarities then
+            for k, v in pairs(getgenv().SelectedRarities) do
+                if v == true and tostring(k) ~= "" then hasRarityFilter = true; break end
+            end
+        end
+
+        local hasMutationFilter = false
+        if getgenv().SelectedMutations then
+            for k, v in pairs(getgenv().SelectedMutations) do
+                if v == true and tostring(k) ~= "" then hasMutationFilter = true; break end
+            end
+        end
 
         local matchRarity = not hasRarityFilter
-        if hasRarityFilter and rLower ~= "" then
+        if hasRarityFilter then
             if getgenv().SelectedRarities[rLower] == true then
                 matchRarity = true
             elseif (rLower:find("unknown") or rLower:find("unknow")) and (getgenv().SelectedRarities["unknown"] == true or getgenv().SelectedRarities["unknow"] == true) then
                 matchRarity = true
             else
-                -- Substring/Fuzzy match for pack titles or names
-                for selRarity, _ in pairs(getgenv().SelectedRarities) do
-                    if selRarity ~= "" and (rLower:find(selRarity, 1, true) or selRarity:find(rLower, 1, true)) then
-                        matchRarity = true
-                        break
+                for selRarity, isSel in pairs(getgenv().SelectedRarities) do
+                    if isSel and selRarity ~= "" then
+                        local sLow = string.lower(tostring(selRarity))
+                        if rLower:find(sLow, 1, true) or sLow:find(rLower, 1, true) 
+                           or string.lower(model.Name):find(sLow, 1, true) 
+                           or promptTxt:find(sLow, 1, true) then
+                            matchRarity = true
+                            break
+                        end
                     end
                 end
             end
         end
 
         local matchMutation = not hasMutationFilter
-        if hasMutationFilter and mLower ~= "" then
+        if hasMutationFilter then
             if getgenv().SelectedMutations[mLower] == true then
                 matchMutation = true
             elseif (mLower:find("unknown") or mLower:find("unknow")) and (getgenv().SelectedMutations["unknown"] == true or getgenv().SelectedMutations["unknow"] == true) then
                 matchMutation = true
             else
-                for selMut, _ in pairs(getgenv().SelectedMutations) do
-                    if selMut ~= "" and (mLower:find(selMut, 1, true) or selMut:find(mLower, 1, true)) then
-                        matchMutation = true
-                        break
+                for selMut, isSel in pairs(getgenv().SelectedMutations) do
+                    if isSel and selMut ~= "" then
+                        local sMut = string.lower(tostring(selMut))
+                        if mLower:find(sMut, 1, true) or sMut:find(mLower, 1, true) or promptTxt:find(sMut, 1, true) then
+                            matchMutation = true
+                            break
+                        end
                     end
                 end
             end
         end
 
         if isPackCard(model) then
-            if getgenv().SelectedRarities["unknown"] or getgenv().SelectedRarities["unknow"] or getgenv().SelectedMutations["unknown"] or getgenv().SelectedMutations["unknow"] then
+            if (getgenv().SelectedRarities and (getgenv().SelectedRarities["unknown"] or getgenv().SelectedRarities["unknow"])) or (getgenv().SelectedMutations and (getgenv().SelectedMutations["unknown"] or getgenv().SelectedMutations["unknow"])) then
                 if rLower:find("unknown") or rLower:find("unknow") or mLower:find("unknown") or mLower:find("unknow") or string.lower(model.Name):find("pack") or string.lower(model.Name):find("box") then
                     matchRarity = true
                     matchMutation = true
                 end
             end
-        end
-
-        if not hasRarityFilter and not hasMutationFilter then
-            matchRarity = true
-            matchMutation = true
         end
 
         if matchRarity and matchMutation then
@@ -3646,7 +3749,10 @@ local function instantBuyLoop()
                 end
             end
         else
-            model:SetAttribute("Rejected", true)
+            -- Only mark card as Rejected if it has been visible for > 1.5 seconds, giving text/attributes time to replicate!
+            if tick() - firstSeen > 1.5 then
+                model:SetAttribute("Rejected", true)
+            end
         end
     end
 end
@@ -4032,6 +4138,7 @@ AutoRerollToggle:OnChanged(function(state)
                     if hasSelected then
                         logTraitRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Trait: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentTrait), true)
                         Fluent:Notify({ Title = "Auto Reroll", Content = ("%s ได้รับ Trait: %s แล้ว!"):format(cardName, currentTrait), Duration = 4 })
+                        task.spawn(function() SendRerollWebhook("Trait", cardName, currentTrait) end)
                         finishedThisCard = true
                         break
                     end
@@ -4246,6 +4353,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                     if hasSelected then
                         logRankRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Rank: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentRank), true)
                         Fluent:Notify({ Title = "Auto Rank", Content = ("%s ได้รับ Rank: %s แล้ว!"):format(cardName, currentRank), Duration = 4 })
+                        task.spawn(function() SendRerollWebhook("Rank", cardName, currentRank) end)
                         finishedThisCard = true
                         break
                     end
@@ -4540,21 +4648,48 @@ local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
     Default = "Rare"
 })
 
-local MinRarityIdx = {}
-for i, v in ipairs(RaritiesList) do 
-    MinRarityIdx[v] = i 
-    MinRarityIdx[string.lower(v)] = i
-    MinRarityIdx[string.upper(v)] = i
+local function getToolRarity(item)
+    if not item then return "Common" end
+    local r = item:GetAttribute("Rarity") 
+        or item:GetAttribute("CardRarity") 
+        or item:GetAttribute("PackRarity")
+        or item:GetAttribute("CardGrade")
+        or item:GetAttribute("Grade")
+        or item:GetAttribute("TemplateName")
+        or item:GetAttribute("CardName")
+    if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
+
+    for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade"}) do
+        local valObj = item:FindFirstChild(childName)
+        if valObj then
+            if valObj:IsA("StringValue") and valObj.Value ~= "" then
+                return valObj.Value
+            elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
+                return valObj.Text
+            end
+        end
+    end
+
+    for _, txtObj in ipairs(item:GetDescendants()) do
+        if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
+            local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
+            for _, rName in ipairs(RaritiesList or {}) do
+                if string.find(cleanTxt, string.lower(rName)) then
+                    return rName
+                end
+            end
+        end
+    end
+    return "Common"
 end
 
-local function getRankIndex(rankStr)
-    if not rankStr or rankStr == "" or rankStr == "None" then return 99 end
-    if MinRarityIdx[rankStr] then return MinRarityIdx[rankStr] end
-    local lowerRank = string.lower(rankStr)
-    if MinRarityIdx[lowerRank] then return MinRarityIdx[lowerRank] end
-    for rName, idx in pairs(MinRarityIdx) do
-        if type(rName) == "string" and string.len(rName) > 2 and string.find(lowerRank, string.lower(rName), 1, true) then
-            return idx
+local function getRarityIndex(rarityStr)
+    if not rarityStr or rarityStr == "" or rarityStr == "None" then return 1 end
+    local lowerR = string.lower(tostring(rarityStr))
+    for i, rName in ipairs(RaritiesList) do
+        local lowerName = string.lower(rName)
+        if lowerName == lowerR or string.find(lowerR, lowerName, 1, true) then
+            return i
         end
     end
     return 99
@@ -4574,21 +4709,21 @@ InvBalToggle:OnChanged(function(state)
                     
                     if #items > 0 then
                         local selectedKeep = MinRarityDrop.Value or "Rare"
-                        local threshold = getRankIndex(selectedKeep)
+                        local threshold = getRarityIndex(selectedKeep)
                         if threshold == 99 then threshold = 3 end
                         
                         local trashCards = {}
                         
                         for _, t in ipairs(items) do
                             local isPack = isPackCard(t)
-                            local rank = getCardRank(t)
-                            local rankIdx = getRankIndex(rank)
+                            local rarity = getToolRarity(t)
+                            local rIdx = getRarityIndex(rarity)
                             
-                            if isPack and rankIdx == 99 then
+                            if isPack and rIdx == 99 then
                                 local upName = string.upper(t.Name)
-                                for r, idx in pairs(MinRarityIdx) do
-                                    if type(r) == "string" and string.len(r) > 2 and string.find(upName, string.upper(r), 1, true) then
-                                        rankIdx = idx
+                                for idx, rName in ipairs(RaritiesList) do
+                                    if string.find(upName, string.upper(rName), 1, true) then
+                                        rIdx = idx
                                         break
                                     end
                                 end
@@ -4597,9 +4732,9 @@ InvBalToggle:OnChanged(function(state)
                             if not isPack then
                                 local mut = string.lower(getCardMutation(t))
                                 if mut ~= "normal" and mut ~= "golden" then continue end
-                                local upRank = string.upper(tostring(rank))
-                                if upRank:find("SS") or upRank:find("UR") or upRank:find("LR") or upRank:find("GODLY") or upRank:find("SECRET") or upRank:find("ADMIN") then
-                                    rankIdx = 99
+                                local rankStr = string.upper(tostring(getCardRank(t)))
+                                if rankStr:find("SS") or rankStr:find("UR") or rankStr:find("LR") or rankStr:find("GODLY") or rankStr:find("SECRET") or rankStr:find("ADMIN") then
+                                    rIdx = 99
                                 end
                             end
                             
@@ -4625,7 +4760,7 @@ InvBalToggle:OnChanged(function(state)
                             end)
                             if cashScore >= 1e27 then continue end
                             
-                            if rankIdx < threshold then
+                            if rIdx < threshold then
                                 table.insert(trashCards, t)
                             end
                         end
@@ -4634,20 +4769,20 @@ InvBalToggle:OnChanged(function(state)
                             for _, t in ipairs(trashCards) do
                                 pcall(function()
                                     char.Humanoid:EquipTool(t)
-                                    task.wait(0.2)
+                                    task.wait(0.15)
                                     local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
                                     if rem and rem:FindFirstChild("SellRE") then
                                         rem.SellRE:FireServer("SellHand")
                                     end
-                                    task.wait(0.2)
+                                    task.wait(0.15)
                                     if t and t.Parent then t:Destroy() end
                                 end)
                             end
-                            pcall(function() logLine(string.format("[InvBal] 🗑️ เคลียร์ขยะอัตโนมัติเรียบร้อย (%d ใบ)", #trashCards)) end)
+                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์การ์ดขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
                         end
                     end
                 end)
-                task.wait(10)
+                task.wait(2)
             end
         end)
     end
@@ -6427,30 +6562,57 @@ local function LoadConfig(name)
             getgenv().SelectedRanks = data.SelectedRanks or {}
 
             -- Sync Rarities Multi-Dropdown UI
-            local dictR = {}
+            local listR = {}
             if type(data.Rarities) == "table" then
                 for _, v in ipairs(RaritiesList) do
                     local lowerV = string.lower(v)
-                    if data.Rarities[lowerV] == true or data.Rarities[v] == true then
-                        dictR[v] = true
+                    if data.Rarities[lowerV] == true or data.Rarities[v] == true or (table.find(data.Rarities, v) or table.find(data.Rarities, lowerV)) then
+                        table.insert(listR, v)
                         getgenv().SelectedRarities[lowerV] = true
                     end
                 end
             end
-            pcall(function() Options.SelectedRarities:SetValue(dictR) end)
+            if Options and Options.SelectedRarities then pcall(function() Options.SelectedRarities:SetValue(listR) end) end
 
             -- Sync Mutations Multi-Dropdown UI
-            local dictM = {}
+            local listM = {}
             if type(data.Mutations) == "table" then
                 for _, v in ipairs(MutationsList) do
                     local lowerM = string.lower(v)
-                    if data.Mutations[lowerM] == true or data.Mutations[v] == true then
-                        dictM[v] = true
+                    if data.Mutations[lowerM] == true or data.Mutations[v] == true or (table.find(data.Mutations, v) or table.find(data.Mutations, lowerM)) then
+                        table.insert(listM, v)
                         getgenv().SelectedMutations[lowerM] = true
                     end
                 end
             end
-            pcall(function() Options.SelectedMutations:SetValue(dictM) end)
+            if Options and Options.SelectedMutations then pcall(function() Options.SelectedMutations:SetValue(listM) end) end
+
+            -- Sync Traits Multi-Dropdown UI
+            local listT = {}
+            if type(data.SelectedTraits) == "table" then
+                for _, v in ipairs(TraitsList) do
+                    local lowerT = string.lower(v)
+                    if data.SelectedTraits[lowerT] == true or data.SelectedTraits[v] == true or (table.find(data.SelectedTraits, v) or table.find(data.SelectedTraits, lowerT)) then
+                        table.insert(listT, v)
+                        getgenv().SelectedTraits[lowerT] = true
+                    end
+                end
+            end
+            if Options and Options.SelectedTraits then pcall(function() Options.SelectedTraits:SetValue(listT) end) end
+
+            -- Sync Ranks Multi-Dropdown UI
+            local listRank = {}
+            if type(data.SelectedRanks) == "table" then
+                for _, v in ipairs(RankList) do
+                    local lowerR = string.lower(v)
+                    if data.SelectedRanks[lowerR] == true or data.SelectedRanks[v] == true or (table.find(data.SelectedRanks, v) or table.find(data.SelectedRanks, lowerR)) then
+                        table.insert(listRank, v)
+                        getgenv().SelectedRanks[lowerR] = true
+                    end
+                end
+            end
+            if Options and Options.SelectedRank then pcall(function() Options.SelectedRank:SetValue(listRank) end) end
+            if Options and Options.SelectedRanks then pcall(function() Options.SelectedRanks:SetValue(listRank) end) end
 
             -- Sync Toggles UI
             local function safeSetToggle(optName, val)
