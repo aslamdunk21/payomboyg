@@ -2364,6 +2364,26 @@ local AFK_RARITY_COLOR = {
 
 local AFK_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
+-- Kill zombie pump connections from previous script runs
+pcall(function()
+    if getgenv().AFK_PumpConn then
+        getgenv().AFK_PumpConn:Disconnect()
+        getgenv().AFK_PumpConn = nil
+    end
+    -- Force-close leftover ANIME_AFK GUIs from previous runs
+    local containers = {game:GetService("CoreGui"), LocalPlayer:FindFirstChild("PlayerGui")}
+    if gethui then table.insert(containers, gethui()) end
+    for _, parent in ipairs(containers) do
+        if parent then
+            for _, child in ipairs(parent:GetChildren()) do
+                if child.Name == "ANIME_AFK" or child.Name == "PayomboyZ_AFK" or child.Name == "PayomboyZ_Restore3DBtn" then
+                    child:Destroy()
+                end
+            end
+        end
+    end
+end)
+
 local AFK = {
     on          = false,
     gui         = nil,
@@ -2596,12 +2616,8 @@ local function afkEnterLowPower()
         AFK.prevQuality = settings().Rendering.QualityLevel
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
     end)
-    pcall(function()
-        if RunService.Set3dRenderingEnabled then
-            AFK.prev3D = true
-            RunService:Set3dRenderingEnabled(false)
-        end
-    end)
+    -- NOTE: ไม่ใช้ Set3dRenderingEnabled(false) ที่นี่ เพราะมันทำให้ UI พัง/จอดำ
+    -- การปิด 3D Rendering อยู่ใน FPS Tab > โหมดจอขาว เท่านั้น
 end
 
 local function afkExitLowPower()
@@ -2612,7 +2628,7 @@ local function afkExitLowPower()
         if AFK.prevQuality then settings().Rendering.QualityLevel = AFK.prevQuality end
     end)
     pcall(function()
-        if AFK.prev3D and RunService.Set3dRenderingEnabled then
+        if RunService and RunService.Set3dRenderingEnabled then
             RunService:Set3dRenderingEnabled(true)
         end
     end)
@@ -2961,7 +2977,26 @@ local afkClose
 
 local function afkBuild()
     pcall(function()
+        if RunService and RunService.Set3dRenderingEnabled then
+            RunService:Set3dRenderingEnabled(true)
+        end
+    end)
+    pcall(function()
         if Runtime.afkGui then Runtime.afkGui:Destroy() end
+        if AFK.gui then AFK.gui:Destroy() end
+    end)
+    pcall(function()
+        local containers = {game:GetService("CoreGui"), LocalPlayer:FindFirstChild("PlayerGui")}
+        if gethui then table.insert(containers, gethui()) end
+        for _, parent in ipairs(containers) do
+            if parent then
+                for _, child in ipairs(parent:GetChildren()) do
+                    if child.Name == "ANIME_AFK" or child.Name == "PayomboyZ_AFK" then
+                        child:Destroy()
+                    end
+                end
+            end
+        end
     end)
 
     local gui = Instance.new("ScreenGui")
@@ -2970,6 +3005,7 @@ local function afkBuild()
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 9999
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Enabled = false  -- ตั้ง disabled ทันทีตั้งแต่เริ่มสร้าง
 
     local parented = false
     pcall(function()
@@ -2990,6 +3026,7 @@ local function afkBuild()
     root.Size = UDim2.fromScale(1, 1)
     root.Parent = gui
 
+
     local scale = Instance.new("UIScale")
     scale.Scale = AFK_TOUCH and 0.85 or 1.0
     scale.Parent = root
@@ -2998,6 +3035,7 @@ local function afkBuild()
     body.Name = "Body"
     body.BackgroundTransparency = 1
     body.Size = UDim2.fromScale(1, 1)
+    body.ZIndex = 10
     body.Parent = root
     afkPad(body, 16)
 
@@ -3166,7 +3204,27 @@ local function afkBuild()
     local _, traitScroll = subPanel(2, 0.31, -4, "🔮 สถานะการรี Trait")
     local _, rankScroll  = subPanel(3, 0.31, -4, "⭐ สถานะการรี Rank")
 
-    local _, invScroll = panel(3, 0.32, 0.68, 8, "🎒 การ์ดในกระเป๋า")
+    local invPanel, invScroll = panel(3, 0.32, 0.68, 8, "🎒 การ์ดในกระเป๋า")
+
+    local invRefreshBtn = Instance.new("TextButton")
+    invRefreshBtn.Name = "RefreshInvBtn"
+    invRefreshBtn.AnchorPoint = Vector2.new(1, 0)
+    invRefreshBtn.Position = UDim2.new(1, -10, 0, 5)
+    invRefreshBtn.Size = UDim2.fromOffset(75, 20)
+    invRefreshBtn.BackgroundColor3 = AFK_COLOR.raised
+    invRefreshBtn.BorderSizePixel = 0
+    invRefreshBtn.Font = Enum.Font.GothamMedium
+    invRefreshBtn.TextSize = 10
+    invRefreshBtn.TextColor3 = AFK_COLOR.teal
+    invRefreshBtn.Text = "🔄 รีเฟรช"
+    invRefreshBtn.Parent = invPanel
+    afkCorner(invRefreshBtn, 6)
+    afkStroke(invRefreshBtn, AFK_COLOR.teal, 1, 0.5)
+
+    invRefreshBtn.MouseButton1Click:Connect(function()
+        pcall(afkPaintInventory)
+        logLine("afk", "🔄 รีเฟรชรายการการ์ดในกระเป๋าเรียบร้อย")
+    end)
 
     AFK.logList, AFK.beltList, AFK.invList = logScroll, beltScroll, invScroll
 
@@ -3392,14 +3450,21 @@ afkClose = function()
     if Options and Options.AFKModeToggle then
         pcall(function() Options.AFKModeToggle:SetValue(false) end)
     end
-    Fluent:Notify({ Title = "โหมด AFK", Content = "ปิดโหมด AFK แล้ว — ล้างประวัติ Log และคืนค่าปกติเรียบร้อย", Duration = 3 })
+    if Fluent and Fluent.Notify then
+        Fluent:Notify({ Title = "โหมด AFK", Content = "ปิดโหมด AFK แล้ว — ล้างประวัติ Log และคืนค่าปกติเรียบร้อย", Duration = 3 })
+    end
 end
 
 afkBuild()
-AFK.gui.Enabled = false
+-- Force-disable และ reset สถานะ AFK ทั้งหมด ป้องกัน loadConfig หรือ pump เก่าเปิดขึ้นมาเอง
+AFK.on = false
+AFK.wantShow = false
+AFK.wantHide = false
+if AFK.gui then AFK.gui.Enabled = false end
 
 if AFK.conns.pump then AFK.conns.pump:Disconnect() end
 AFK.conns.pump = RunService.Heartbeat:Connect(function() pcall(afkPump) end)
+getgenv().AFK_PumpConn = AFK.conns.pump  -- เก็บไว้เพื่อ disconnect ตอน re-run
 
 ---------------------------------------------------------
 -- 1. MAIN TAB (หลัก)
@@ -6198,6 +6263,7 @@ FPSDropdown:OnChanged(function(Value)
     end
 end)
 
+
 local AFKToggle = Tabs.FPS:AddToggle("AFKModeWhiteScreen", {
     Title = "📺 โหมดจอขาว (AFK Mode)",
     Description = "ปิดการเรนเดอร์ภาพ 3D และแสดงจอดำ (ประหยัด GPU 99%)",
@@ -6215,7 +6281,7 @@ AFKToggle:OnChanged(function(state)
                 afkScreenGui.IgnoreGuiInset = true
                 afkScreenGui.ResetOnSpawn = false
                 afkScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-                
+
                 local button = Instance.new("TextButton")
                 button.Size = UDim2.new(1, 0, 1, 0)
                 button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -6226,16 +6292,19 @@ AFKToggle:OnChanged(function(state)
                 button.Parent = afkScreenGui
 
                 button.MouseButton1Click:Connect(function()
-                    if Options.AFKModeWhiteScreen then
-                        Options.AFKModeWhiteScreen:SetValue(false)
+                    if afkScreenGui then afkScreenGui.Parent = nil end
+                    pcall(function() RunService:Set3dRenderingEnabled(true) end)
+                    getgenv().AFKMode = false
+                    if Options and Options.AFKModeWhiteScreen then
+                        pcall(function() Options.AFKModeWhiteScreen:SetValue(false) end)
                     end
                 end)
             end
             afkScreenGui.Parent = CoreGui
-            RunService:Set3dRenderingEnabled(false)
+            pcall(function() RunService:Set3dRenderingEnabled(false) end)
         else
             if afkScreenGui then afkScreenGui.Parent = nil end
-            RunService:Set3dRenderingEnabled(true)
+            pcall(function() RunService:Set3dRenderingEnabled(true) end)
         end
     end)
 end)
