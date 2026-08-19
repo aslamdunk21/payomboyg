@@ -1793,6 +1793,35 @@ Fluent:Notify({
 
 -- ===== BACKGROUND AUTOMATION THREADS (NON-BLOCKING & THROTTLED) =====
 
+local function parseMoney(text)
+    text = tostring(text or ""):lower()
+    if text:find("free", 1, true) then return 0 end
+    local numberText, suffix = text:match("([%d,%.]+)%s*([kmbtq]?)")
+    if not numberText then return nil end
+    local value = tonumber((numberText:gsub(",", "")))
+    if not value then return nil end
+    local scale = { k = 1e3, m = 1e6, b = 1e9, t = 1e12, q = 1e15 }
+    return value * (scale[suffix] or 1)
+end
+
+local cashLabel = nil
+local lastCashSearch = 0
+local function readCash()
+    if not cashLabel or not cashLabel.Parent then
+        if tick() - lastCashSearch > 5 then
+            lastCashSearch = tick()
+            cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
+                     or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
+                     or playerGui:FindFirstChild("CashLabel", true)
+        end
+    end
+    if cashLabel and cashLabel:IsA("TextLabel") then
+        local val = parseMoney(cashLabel.Text)
+        if val then return val end
+    end
+    return math.huge
+end
+
 local function parseStatValue(text)
     if not text then return 0 end
     text = tostring(text):gsub("<.->", ""):gsub(",", "")
@@ -1890,7 +1919,7 @@ end
 
 -- Dedicated PlayEnd & Round State Event Watcher
 task.spawn(function()
-    task.wait(2)
+    task.wait(1)
     local startFrame = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Start")
     local textLabel = startFrame and (safeFindPath(startFrame, "Frame", "TextLabel") or startFrame:FindFirstChild("TextLabel", true))
 
@@ -1927,7 +1956,7 @@ end)
 
 -- Throttled Auto Tower Thread
 task.spawn(function()
-    task.wait(2.0)
+    task.wait(1.0)
     while task.wait(1.5) do
         local doTower = Options.AutoJoinTower and Options.AutoJoinTower.Value
         if doTower then
@@ -2175,7 +2204,7 @@ end)
 
 -- Throttled Auto Spin Wheel
 task.spawn(function()
-    task.wait(2.5)
+    task.wait(1.5)
     while task.wait(1.5) do
         if not Options.AutoSpinWheel or not Options.AutoSpinWheel.Value then continue end
 
@@ -2316,12 +2345,20 @@ end)
 
 -- Optimized & Throttled Auto Roll / Buy System
 task.spawn(function()
-    local character = player.Character or player.CharacterAdded:Wait()
+    local character = player.Character
+    if not character then
+        character = player.CharacterAdded:Wait()
+    end
     local hrp = character:WaitForChild("HumanoidRootPart", 10) or character:FindFirstChild("HumanoidRootPart")
     local plotsFolder = workspace:WaitForChild("Plots", 10) or workspace:FindFirstChild("Plots")
-    local cashLabel = nil
 
     if not hrp or not plotsFolder then return end
+
+    -- Auto-reconnect on respawn
+    player.CharacterAdded:Connect(function(newChar)
+        character = newChar
+        hrp = newChar:WaitForChild("HumanoidRootPart", 10)
+    end)
 
     local state = { buying = false, hasBoughtThisRoll = false }
 
@@ -2477,42 +2514,7 @@ task.spawn(function()
         end
     end
 
-    local function getPlotOwner(plot)
-        return plot:GetAttribute("OwnerUserId")
-            or plot:GetAttribute("OwnerId")
-            or plot:GetAttribute("Owner")
-            or plot:GetAttribute("OwnerName")
-            or plot:GetAttribute("Player")
-            or plot:GetAttribute("UserId")
-    end
-
-    local function parseMoney(text)
-        text = tostring(text or ""):lower()
-        if text:find("free", 1, true) then return 0 end
-        local numberText, suffix = text:match("([%d,%.]+)%s*([kmbtq]?)")
-        if not numberText then return nil end
-        local value = tonumber((numberText:gsub(",", "")))
-        if not value then return nil end
-        local scale = { k = 1e3, m = 1e6, b = 1e9, t = 1e12, q = 1e15 }
-        return value * (scale[suffix] or 1)
-    end
-
-    local lastCashSearch = 0
-    local function readCash()
-        if not cashLabel or not cashLabel.Parent then
-            if tick() - lastCashSearch > 5 then
-                lastCashSearch = tick()
-                cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
-                         or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
-                         or playerGui:FindFirstChild("CashLabel", true)
-            end
-        end
-        if cashLabel and cashLabel:IsA("TextLabel") then
-            local val = parseMoney(cashLabel.Text)
-            if val then return val end
-        end
-        return math.huge
-    end
+    -- getPlotOwner, parseMoney, readCash are now defined at module scope above
 
     local function getPriceLabel(model)
         local head = model:FindFirstChild("Head")
