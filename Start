@@ -1,13 +1,14 @@
 -- ==============================================================================
--- PayomboyZ Hub - Stage 1: Key UI & Smart Auto-Login (Start.txt)
+-- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
 -- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
+-- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
 local LuarmorConfig = {
     ScriptId = "PayomboyZ_Hub",
     SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
-    GetKeyURL = "https://discordapp.com/channels/1533260775458607256/1533265542394155158",
-    DiscordURL = "https://discord.gg/5DEAQBj2y",
+    GetKeyURL = "https://discord.gg/GBKDAe23C",
+    DiscordURL = "https://discord.gg/GBKDAe23C",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
@@ -16,8 +17,11 @@ local LuarmorConfig = {
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local MarketplaceService = game:GetService("MarketplaceService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ==============================================================================
@@ -71,8 +75,74 @@ local function SaveKey(userKey)
     end)
 end
 
+local function copyText(value)
+    local copier = setclipboard or toclipboard
+    if type(copier) ~= "function" then
+        return false
+    end
+    return pcall(copier, tostring(value))
+end
+
+local function executorName()
+    if type(identifyexecutor) == "function" then
+        local ok, name = pcall(identifyexecutor)
+        if ok and name then return tostring(name) end
+    end
+    return "Unknown"
+end
+
+local function deviceName()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        return "Mobile"
+    end
+    return "PC"
+end
+
+local function readableHwid()
+    local providers = { gethwid, get_hwid }
+    if syn and type(syn.gethwid) == "function" then
+        table.insert(providers, syn.gethwid)
+    end
+    for _, provider in ipairs(providers) do
+        if type(provider) == "function" then
+            local ok, value = pcall(provider)
+            if ok and value and tostring(value) ~= "" then
+                return tostring(value)
+            end
+        end
+    end
+    return nil
+end
+
+local SUPPORTED_GAMES = {
+    [13379208636] = "Attack On Titan Revolution",
+    [14916516914] = "Attack On Titan Revolution",
+    [125039473548047] = "Anime Card Farm",
+    [122446657157717] = "Arena Sniper",
+    [126042865144779] = "Arena Sniper",
+    [107653945083776] = "Roll Anime To Fight",
+    [125927821145949] = "Mine a Mountain (VVIP)",
+    [142823291] = "Murder Mystery 2 (VVIP)",
+    [104973076655377] = "Capybara Vs Plant (VVIP)",
+}
+
+local function resolveGameName()
+    local placeId = game.PlaceId
+    if SUPPORTED_GAMES[placeId] then
+        return SUPPORTED_GAMES[placeId]
+    end
+    local gameName = nil
+    pcall(function()
+        local info = MarketplaceService:GetProductInfo(placeId)
+        if info and info.Name then
+            gameName = info.Name
+        end
+    end)
+    return gameName or ("Place: " .. tostring(placeId))
+end
+
 -- ==============================================================================
--- 🖼️ ระบบโหลดรูปภาพโลโก้จาก Github (ไม่ใช้อวาตาร์ผู้เล่น)
+-- 🖼️ ระบบโหลดรูปภาพโลโก้จาก Github (ใช้ใน Service Banner)
 -- ==============================================================================
 local function LoadCustomLogo(imageLabel)
     task.spawn(function()
@@ -114,17 +184,17 @@ local function ShowToast(title, message, isError)
         local Frame = Instance.new("Frame")
         Frame.Size = UDim2.new(0, 330, 0, 60)
         Frame.Position = UDim2.new(1, -350, 0, 20)
-        Frame.BackgroundColor3 = Color3.fromRGB(12, 10, 18)
+        Frame.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
         Frame.BorderSizePixel = 0
         Frame.Parent = ToastGui
 
         local Corner = Instance.new("UICorner")
-        Corner.CornerRadius = UDim.new(0, 8)
+        Corner.CornerRadius = UDim.new(0, 10)
         Corner.Parent = Frame
 
         local Stroke = Instance.new("UIStroke")
-        Stroke.Color = isError and Color3.fromRGB(255, 65, 85) or Color3.fromRGB(255, 45, 85)
-        Stroke.Transparency = 0.25
+        Stroke.Color = isError and Color3.fromRGB(255, 60, 60) or Color3.fromRGB(255, 55, 85)
+        Stroke.Transparency = 0.2
         Stroke.Thickness = 1.5
         Stroke.Parent = Frame
 
@@ -135,7 +205,7 @@ local function ShowToast(title, message, isError)
         TText.Text = title
         TText.Font = Enum.Font.GothamBold
         TText.TextSize = 13
-        TText.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TText.TextColor3 = Color3.fromRGB(255, 55, 85)
         TText.TextXAlignment = Enum.TextXAlignment.Left
         TText.Parent = Frame
 
@@ -146,7 +216,7 @@ local function ShowToast(title, message, isError)
         MText.Text = message
         MText.Font = Enum.Font.Gotham
         MText.TextSize = 11
-        MText.TextColor3 = Color3.fromRGB(200, 200, 215)
+        MText.TextColor3 = Color3.fromRGB(242, 218, 228)
         MText.TextXAlignment = Enum.TextXAlignment.Left
         MText.Parent = Frame
 
@@ -296,466 +366,1412 @@ local function PassToKeyChecker(userKey)
 end
 
 -- ==============================================================================
--- 🎨 MODERN PREMIUM OBSIDIAN KEY UI GENERATOR
+-- 🎨 SNOWY HUB STYLE MODERN LOADER UI GENERATOR FOR PAYOMBOYZ HUB
 -- ==============================================================================
 local function CreateLoaderUI(initialStatus, defaultKeyText)
-    if CoreGui:FindFirstChild("PayomboyZ_LuarmorLoader") then CoreGui.PayomboyZ_LuarmorLoader:Destroy() end
-    if LocalPlayer.PlayerGui:FindFirstChild("PayomboyZ_LuarmorLoader") then LocalPlayer.PlayerGui.PayomboyZ_LuarmorLoader:Destroy() end
+    local parent = CoreGui
+    pcall(function()
+        if type(gethui) == "function" then parent = gethui() end
+    end)
 
-    local LoaderGui = Instance.new("ScreenGui")
-    LoaderGui.Name = "PayomboyZ_LuarmorLoader"
-    LoaderGui.ResetOnSpawn = false
-    LoaderGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    LoaderGui.IgnoreGuiInset = true
+    pcall(function()
+        local previous = parent:FindFirstChild("PayomboyZ_SnowyLoader")
+        if previous then previous:Destroy() end
+    end)
 
-    pcall(function() LoaderGui.Parent = CoreGui end)
-    if not LoaderGui.Parent then LoaderGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PayomboyZ_SnowyLoader"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = parent
 
-    local ModernTheme = {
-        Background = Color3.fromRGB(10, 10, 16),
-        HeaderPanel = Color3.fromRGB(16, 14, 24),
-        CardBackground = Color3.fromRGB(18, 16, 28),
-        InputBackground = Color3.fromRGB(24, 21, 36),
-        Accent = Color3.fromRGB(255, 45, 85),
-        AccentGradientEnd = Color3.fromRGB(180, 20, 55),
-        GlowBorder = Color3.fromRGB(255, 55, 95),
-        TextPrimary = Color3.fromRGB(255, 255, 255),
-        TextMuted = Color3.fromRGB(160, 160, 175),
-        ErrorRed = Color3.fromRGB(255, 75, 95),
-        SuccessGreen = Color3.fromRGB(80, 225, 140),
-        ButtonDark = Color3.fromRGB(26, 22, 38)
+    local COLORS = {
+        backdrop = Color3.fromRGB(12, 5, 8),
+        shell = Color3.fromRGB(20, 10, 14),
+        glass = Color3.fromRGB(32, 14, 20),
+        glassDeep = Color3.fromRGB(25, 11, 16),
+        glassRaised = Color3.fromRGB(48, 18, 28),
+        userPanel = Color3.fromRGB(28, 12, 18),
+        surface = Color3.fromRGB(42, 18, 26),
+        surfaceRaised = Color3.fromRGB(58, 24, 34),
+        surfaceHover = Color3.fromRGB(78, 30, 44),
+        surfacePressed = Color3.fromRGB(34, 14, 20),
+        input = Color3.fromRGB(20, 9, 13),
+        inputFocus = Color3.fromRGB(36, 14, 22),
+        divider = Color3.fromRGB(140, 40, 60),
+        primary = Color3.fromRGB(255, 45, 85),
+        primaryHover = Color3.fromRGB(255, 75, 110),
+        primaryPressed = Color3.fromRGB(210, 30, 65),
+        secondary = Color3.fromRGB(52, 18, 28),
+        secondaryHover = Color3.fromRGB(68, 24, 36),
+        secondaryPressed = Color3.fromRGB(40, 14, 22),
+        text = Color3.fromRGB(255, 255, 255),
+        textMuted = Color3.fromRGB(242, 218, 228),
+        textFaint = Color3.fromRGB(210, 168, 182),
+        cyan = Color3.fromRGB(255, 55, 85),
+        success = Color3.fromRGB(46, 224, 140),
+        warning = Color3.fromRGB(255, 185, 70),
+        danger = Color3.fromRGB(255, 60, 60),
+        premium = Color3.fromRGB(255, 45, 85),
+        premiumSurface = Color3.fromRGB(36, 14, 22),
+        premiumAction = Color3.fromRGB(255, 45, 85),
+        premiumHover = Color3.fromRGB(255, 75, 110),
+        premiumPressed = Color3.fromRGB(210, 30, 65),
+        disabled = Color3.fromRGB(50, 25, 32),
     }
 
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    MainFrame.Size = UDim2.new(0, 500, 0, 335)
-    MainFrame.Position = UDim2.new(0.5, 0, 0.5, 10)
-    MainFrame.BackgroundColor3 = ModernTheme.Background
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Active = true
-    MainFrame.Draggable = true
-    MainFrame.ClipsDescendants = true
-    MainFrame.Parent = LoaderGui
+    local MOTION = {
+        quick = 0.12,
+        normal = 0.22,
+        slow = 0.34,
+    }
 
-    local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 12)
-    MainCorner.Parent = MainFrame
+    local LUCIDE = {
+        user = { image = "rbxassetid://16898613869", size = Vector2.new(48, 48), offset = Vector2.new(661, 869) },
+        settings = { image = "rbxassetid://16898613777", size = Vector2.new(48, 48), offset = Vector2.new(771, 257) },
+        shield = { image = "rbxassetid://16898613777", size = Vector2.new(48, 48), offset = Vector2.new(869, 0) },
+        globe = { image = "rbxassetid://16898613509", size = Vector2.new(48, 48), offset = Vector2.new(771, 563) },
+        save = { image = "rbxassetid://16898613699", size = Vector2.new(48, 48), offset = Vector2.new(918, 453) },
+        minus = { image = "rbxassetid://7734000129" },
+        x = { image = "rbxassetid://7743878857" },
+        key = { image = "rbxassetid://7733965118" },
+        ["shield-check"] = { image = "rbxassetid://7734056411" },
+        ["message-circle"] = { image = "rbxassetid://7733993311" },
+        copy = { image = "rbxassetid://7733764083" },
+        monitor = { image = "rbxassetid://7734002839" },
+        smartphone = { image = "rbxassetid://7734058979" },
+        gamepad = { image = "rbxassetid://7733799901" },
+        clock = { image = "rbxassetid://7733734848" },
+        wifi = { image = "rbxassetid://7743878148" },
+        ["external-link"] = { image = "rbxassetid://7743866903" },
+        ["alert-circle"] = { image = "rbxassetid://7733658271" },
+        ["check-circle"] = { image = "rbxassetid://7733919427" },
+        info = { image = "rbxassetid://7733964719" },
+        server = { image = "rbxassetid://7734053426" },
+    }
 
-    local MainStroke = Instance.new("UIStroke")
-    MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    MainStroke.Thickness = 1.5
-    MainStroke.Transparency = 0.2
-    MainStroke.Color = ModernTheme.GlowBorder
-    MainStroke.Parent = MainFrame
+    local DESKTOP_WIDTH = 930
+    local COMPACT_WIDTH = 644
+    local SHELL_HEIGHT = 620
+    local SNOW_TEXTURE = "rbxthumb://type=Asset&id=68072539&w=150&h=150"
+    local DESKTOP_SNOWFLAKES = 18
+    local COMPACT_SNOWFLAKES = 10
+    local activeTweens = setmetatable({}, { __mode = "k" })
 
-    local MainGradient = Instance.new("UIGradient")
-    MainGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 18, 34)),
-        ColorSequenceKeypoint.new(1, ModernTheme.Background)
-    })
-    MainGradient.Rotation = 135
-    MainGradient.Parent = MainFrame
+    local clickSound = Instance.new("Sound")
+    clickSound.Name = "PayomboyZClick"
+    clickSound.SoundId = "rbxassetid://6895079853"
+    clickSound.Volume = 0.42
+    clickSound.PlaybackSpeed = 1
+    clickSound.Looped = false
+    clickSound.Parent = gui
 
-    -- Smooth Entrance Animation
-    MainFrame.Size = UDim2.new(0, 470, 0, 310)
-    TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 500, 0, 335),
-        Position = UDim2.new(0.5, 0, 0.5, 0)
-    }):Play()
+    local function playClickSound()
+        pcall(function()
+            clickSound.TimePosition = 0
+            clickSound:Play()
+        end)
+    end
 
-    -- Top Header Bar
-    local Header = Instance.new("Frame")
-    Header.Name = "Header"
-    Header.Size = UDim2.new(1, 0, 0, 56)
-    Header.BackgroundColor3 = ModernTheme.HeaderPanel
-    Header.BorderSizePixel = 0
-    Header.Parent = MainFrame
+    local function create(className, properties, targetParent)
+        local object = Instance.new(className)
+        for key, value in pairs(properties or {}) do
+            object[key] = value
+        end
+        object.Parent = targetParent
+        return object
+    end
 
-    local HeaderCorner = Instance.new("UICorner")
-    HeaderCorner.CornerRadius = UDim.new(0, 12)
-    HeaderCorner.Parent = Header
+    local function round(object, radius)
+        return create("UICorner", { CornerRadius = UDim.new(0, radius or 12) }, object)
+    end
 
-    local HeaderLine = Instance.new("Frame")
-    HeaderLine.Size = UDim2.new(1, 0, 0, 2)
-    HeaderLine.Position = UDim2.new(0, 0, 1, -2)
-    HeaderLine.BackgroundColor3 = ModernTheme.Accent
-    HeaderLine.BorderSizePixel = 0
-    HeaderLine.Parent = Header
+    local function glassSurface(object, topColor, bottomColor, transparency, radius)
+        object.BackgroundColor3 = topColor or COLORS.glass
+        object.BackgroundTransparency = transparency or 0.3
+        object.BorderSizePixel = 0
+        object.ClipsDescendants = true
+        round(object, radius or 14)
+        create("UIGradient", {
+            Color = ColorSequence.new(
+                topColor or COLORS.glassRaised,
+                bottomColor or COLORS.glassDeep
+            ),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.02),
+                NumberSequenceKeypoint.new(1, 0.10),
+            }),
+            Rotation = 105,
+        }, object)
+        return object
+    end
 
-    local HeaderLineGradient = Instance.new("UIGradient")
-    HeaderLineGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, ModernTheme.Accent),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 120, 150)),
-        ColorSequenceKeypoint.new(1, ModernTheme.Accent)
-    })
-    HeaderLineGradient.Parent = HeaderLine
+    local function applyLucideData(icon, iconName)
+        local data = LUCIDE[iconName] or LUCIDE.info
+        icon.Image = data.image
+        if data.offset and data.size then
+            icon.ImageRectOffset = data.offset
+            icon.ImageRectSize = data.size
+        else
+            icon.ImageRectOffset = Vector2.new(0, 0)
+            icon.ImageRectSize = Vector2.new(0, 0)
+        end
+    end
 
-    -- Logo Image (Github Image 543199739_2812856088914181_3062917809445648175_n.jpg)
-    local LogoImg = Instance.new("ImageLabel")
-    LogoImg.Name = "PayomboyZ_Logo"
-    LogoImg.Size = UDim2.new(0, 36, 0, 36)
-    LogoImg.Position = UDim2.new(0, 14, 0, 10)
-    LogoImg.BackgroundColor3 = ModernTheme.CardBackground
-    LogoImg.BackgroundTransparency = 0
-    LogoImg.ScaleType = Enum.ScaleType.Fit
-    LogoImg.Parent = Header
+    local function lucideIcon(parentObject, iconName, position, size, color, zIndex)
+        local icon = create("ImageLabel", {
+            Name = "LucideIcon",
+            BackgroundTransparency = 1,
+            Position = position,
+            Size = size,
+            ImageColor3 = color or COLORS.textMuted,
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = zIndex or 4,
+        }, parentObject)
+        applyLucideData(icon, iconName)
+        return icon
+    end
 
-    local LogoCorner = Instance.new("UICorner")
-    LogoCorner.CornerRadius = UDim.new(1, 0)
-    LogoCorner.Parent = LogoImg
-
-    local LogoStroke = Instance.new("UIStroke")
-    LogoStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    LogoStroke.Color = ModernTheme.Accent
-    LogoStroke.Transparency = 0.2
-    LogoStroke.Thickness = 1.5
-    LogoStroke.Parent = LogoImg
-
-    -- โหลดรูปภาพโลโก้จาก Github URL
-    LoadCustomLogo(LogoImg)
-
-    local BrandTitle = Instance.new("TextLabel")
-    BrandTitle.Size = UDim2.new(0, 200, 0, 20)
-    BrandTitle.Position = UDim2.new(0, 58, 0, 10)
-    BrandTitle.BackgroundTransparency = 1
-    BrandTitle.Text = "PAYOMBOYZ HUB"
-    BrandTitle.Font = Enum.Font.GothamBold
-    BrandTitle.TextSize = 13
-    BrandTitle.TextColor3 = ModernTheme.TextPrimary
-    BrandTitle.TextXAlignment = Enum.TextXAlignment.Left
-    BrandTitle.Parent = Header
-
-    local BrandSub = Instance.new("TextLabel")
-    BrandSub.Size = UDim2.new(0, 200, 0, 16)
-    BrandSub.Position = UDim2.new(0, 58, 0, 28)
-    BrandSub.BackgroundTransparency = 1
-    BrandSub.Text = "LUARMOR KEY ACCESS"
-    BrandSub.Font = Enum.Font.GothamMedium
-    BrandSub.TextSize = 10
-    BrandSub.RichText = true
-    BrandSub.TextXAlignment = Enum.TextXAlignment.Left
-    BrandSub.Parent = Header
-
-    -- RGB Ambient Animation for Subtitle
-    task.spawn(function()
-        local conn
-        conn = RunService.RenderStepped:Connect(function()
-            if not BrandSub or not BrandSub.Parent then
-                if conn then conn:Disconnect() end
-                return
+    local function playTween(object, duration, properties, easingStyle, easingDirection, channel)
+        local bucket = activeTweens[object]
+        if not bucket then
+            bucket = {}
+            activeTweens[object] = bucket
+        end
+        local key = channel or "default"
+        local previous = bucket[key]
+        if previous then previous:Cancel() end
+        local tween = TweenService:Create(
+            object,
+            TweenInfo.new(
+                duration,
+                easingStyle or Enum.EasingStyle.Quint,
+                easingDirection or Enum.EasingDirection.Out
+            ),
+            properties
+        )
+        bucket[key] = tween
+        tween.Completed:Connect(function()
+            if bucket[key] == tween then
+                bucket[key] = nil
             end
-            local hue = (tick() * 0.2) % 1
-            local col = Color3.fromHSV(hue, 0.8, 1)
-            BrandSub.Text = string.format('<b><font color="rgb(%d,%d,%d)">LUARMOR KEY ACCESS</font></b>', math.floor(col.R*255), math.floor(col.G*255), math.floor(col.B*255))
+        end)
+        tween:Play()
+        return tween
+    end
+
+    local function textLabel(parentObject, text, position, size, font, textSize, color, alignment)
+        return create("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = position,
+            Size = size,
+            Font = font or Enum.Font.Gotham,
+            Text = text,
+            TextColor3 = color or COLORS.text,
+            TextSize = textSize or 13,
+            TextXAlignment = alignment or Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+        }, parentObject)
+    end
+
+    local function bindButtonMotion(button, baseColor, hoverColor, pressedColor)
+        local scale = button:FindFirstChildOfClass("UIScale")
+        local function animate(color, value)
+            if button:GetAttribute("MotionDisabled") then return end
+            playTween(button, MOTION.quick, { BackgroundColor3 = color })
+            if scale then
+                playTween(scale, MOTION.quick, { Scale = value })
+            end
+        end
+
+        button.MouseEnter:Connect(function() animate(hoverColor, 1.015) end)
+        button.MouseLeave:Connect(function() animate(baseColor, 1) end)
+        button.MouseButton1Down:Connect(function() animate(pressedColor, 0.975) end)
+        button.MouseButton1Up:Connect(function() animate(hoverColor, 1.01) end)
+    end
+
+    local function makeButton(parentObject, name, text, position, size, baseColor, hoverColor, pressedColor, iconName)
+        local button = create("TextButton", {
+            Name = name,
+            Position = position,
+            Size = size,
+            BackgroundColor3 = baseColor,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Active = true,
+            Text = "",
+            TextColor3 = COLORS.text,
+        }, parentObject)
+        round(button, 11)
+        create("UIScale", { Scale = 1 }, button)
+        local content = create("Frame", {
+            Name = "ButtonContent",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(0, 18),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            ZIndex = 5,
+        }, button)
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, iconName and 8 or 0),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, content)
+        if iconName then
+            local icon = lucideIcon(content, iconName, UDim2.new(), UDim2.fromOffset(16, 16), COLORS.text, 5)
+            icon.LayoutOrder = 1
+            icon.ImageTransparency = 0.08
+        end
+        local label = textLabel(content, text, UDim2.new(), UDim2.fromOffset(0, 18), Enum.Font.GothamBold, 13, COLORS.text, Enum.TextXAlignment.Center)
+        label.Name = "ButtonLabel"
+        label.AutomaticSize = Enum.AutomaticSize.X
+        label.LayoutOrder = 2
+        label.TextTruncate = Enum.TextTruncate.None
+        label.ZIndex = 5
+        bindButtonMotion(button, baseColor, hoverColor or COLORS.surfaceHover, pressedColor or COLORS.surfacePressed)
+        button.Activated:Connect(function()
+            if button.Active and not button:GetAttribute("MotionDisabled") then
+                playClickSound()
+            end
+        end)
+        return button
+    end
+
+    local function setButtonText(button, value)
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then label.Text = tostring(value or "") end
+    end
+
+    local function setButtonTextSize(button, value)
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then label.TextSize = value end
+    end
+
+    local function makeIconButton(parentObject, name, iconName, position, baseColor, hoverColor, pressedColor)
+        local button = create("ImageButton", {
+            Name = name,
+            Position = position,
+            Size = UDim2.fromOffset(32, 32),
+            BackgroundColor3 = baseColor,
+            BackgroundTransparency = 0.18,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Active = true,
+            Image = "",
+        }, parentObject)
+        round(button, 10)
+        create("UIScale", { Scale = 1 }, button)
+        lucideIcon(button, iconName, UDim2.fromOffset(8, 8), UDim2.fromOffset(16, 16), COLORS.textMuted, 5)
+        bindButtonMotion(button, baseColor, hoverColor, pressedColor)
+        button.Activated:Connect(function()
+            if button.Active and not button:GetAttribute("MotionDisabled") then
+                playClickSound()
+            end
+        end)
+        return button
+    end
+
+    local function setButtonEnabled(button, enabled)
+        button.Active = enabled
+        button:SetAttribute("MotionDisabled", not enabled)
+        playTween(button, MOTION.quick, {
+            BackgroundColor3 = enabled and COLORS.secondary or COLORS.disabled,
+        })
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then playTween(label, MOTION.quick, { TextTransparency = enabled and 0 or 0.28 }) end
+        local icon = button:FindFirstChild("LucideIcon", true)
+        if icon then playTween(icon, MOTION.quick, { ImageTransparency = enabled and 0.08 or 0.45 }) end
+    end
+
+    -- Backdrop
+    local backdrop = create("Frame", {
+        Name = "Backdrop",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = COLORS.backdrop,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, gui)
+    create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 6, 12)),
+            ColorSequenceKeypoint.new(0.55, Color3.fromRGB(12, 5, 8)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 8, 16)),
+        }),
+        Rotation = 18,
+    }, backdrop)
+
+    -- Shell Frame
+    local shell = create("CanvasGroup", {
+        Name = "Shell",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(DESKTOP_WIDTH, SHELL_HEIGHT),
+        BackgroundTransparency = 1,
+        GroupTransparency = 1,
+    }, backdrop)
+    local shellScale = create("UIScale", { Scale = 0.96 }, shell)
+
+    local shellChrome = create("Frame", {
+        Name = "Chrome",
+        Size = UDim2.fromScale(1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 2,
+    }, shell)
+    glassSurface(shellChrome, COLORS.glassRaised, COLORS.shell, 0.12, 22)
+
+    local shellStroke = create("UIStroke", {
+        Name = "ShellStroke",
+        Color = COLORS.cyan,
+        Thickness = 1.5,
+        Transparency = 0.3,
+    }, shellChrome)
+
+    -- ❄️ PARTICLES ANIMATION LAYER (OBSIDIAN GLASS 2 SNOW ENGINE)
+    local snowLayer = create("Frame", {
+        Name = "SnowLayer",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Active = false,
+        ZIndex = 2,
+    }, shellChrome)
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 35 do
+            local dot = create("Frame", {
+                Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4)),
+                Position = UDim2.new(math.random(), 0, math.random(), 0),
+                BackgroundColor3 = Color3.fromRGB(220, 240, 255),
+                BackgroundTransparency = math.random(30, 70) / 100,
+                BorderSizePixel = 0,
+                ZIndex = 2,
+            }, snowLayer)
+
+            round(dot, 4)
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 40) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
+
+    -- 💎 UNIVERSAL DRAGGABLE TOGGLE CAPSULE WITH SNOW, IMAGE & METRICS (FPS/PING)
+    local toggleCapsule = create("Frame", {
+        Name = "ObsidianToggleCapsule",
+        Size = UDim2.fromOffset(230, 58),
+        Position = UDim2.new(0, 15, 0.5, -29),
+        BackgroundColor3 = COLORS.shell,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        ZIndex = 99999,
+    }, gui)
+    round(toggleCapsule, 16)
+
+    local tcStroke = create("UIStroke", {
+        Color = COLORS.cyan,
+        Thickness = 1.5,
+        Transparency = 0.2,
+    }, toggleCapsule)
+
+    -- ❄️ MINI SNOW LAYER INSIDE TOGGLE CAPSULE
+    local capsuleSnowLayer = create("Frame", {
+        Name = "CapsuleSnowLayer",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        ZIndex = 1,
+    }, toggleCapsule)
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 12 do
+            local dot = create("Frame", {
+                Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3)),
+                Position = UDim2.new(math.random(), 0, math.random(), 0),
+                BackgroundColor3 = Color3.fromRGB(220, 240, 255),
+                BackgroundTransparency = math.random(30, 70) / 100,
+                BorderSizePixel = 0,
+                ZIndex = 1,
+            }, capsuleSnowLayer)
+
+            round(dot, 3)
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 35) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
+
+    -- 🖼️ AVATAR IMAGE BOX
+    local capAvatarFrame = create("Frame", {
+        Size = UDim2.fromOffset(42, 42),
+        Position = UDim2.new(0, 8, 0.5, -21),
+        BackgroundColor3 = COLORS.glassDeep,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, toggleCapsule)
+    round(capAvatarFrame, 21)
+
+    create("UIStroke", {
+        Color = COLORS.primary,
+        Thickness = 1.5,
+    }, capAvatarFrame)
+
+    local capAvatarImg = create("ImageLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://0",
+        ZIndex = 4,
+    }, capAvatarFrame)
+    round(capAvatarImg, 21)
+
+    -- 👤 USERNAME & ⚡ METRICS (FPS & PING)
+    local initialUser = LocalPlayer and LocalPlayer.Name or "User"
+    local capUserLabel = textLabel(toggleCapsule, "@" .. initialUser, UDim2.new(0, 56, 0, 10), UDim2.new(1, -58, 0, 18), Enum.Font.GothamBold, 12, COLORS.text)
+    capUserLabel.ZIndex = 3
+
+    local capMetricsLabel = textLabel(toggleCapsule, "⚡ 60 FPS  •  📡 0 ms", UDim2.new(0, 56, 0, 28), UDim2.new(1, -58, 0, 16), Enum.Font.GothamBold, 10, COLORS.cyan)
+    capMetricsLabel.ZIndex = 3
+
+    task.spawn(function()
+        local player = Players.LocalPlayer
+        while not player do
+            task.wait(0.1)
+            player = Players.LocalPlayer
+        end
+        capUserLabel.Text = "@" .. player.Name
+        capAvatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=420&h=420"
+        pcall(function()
+            local content, isReady = Players:GetUserThumbnailAsync(
+                player.UserId,
+                Enum.ThumbnailType.HeadShot,
+                Enum.ThumbnailSize.Size420x420
+            )
+            if content and content ~= "" then
+                capAvatarImg.Image = content
+            end
         end)
     end)
 
-    -- Shield Badge Widget
-    local ShieldBadge = Instance.new("Frame")
-    ShieldBadge.Size = UDim2.new(0, 110, 0, 28)
-    ShieldBadge.Position = UDim2.new(1, -150, 0, 14)
-    ShieldBadge.BackgroundColor3 = ModernTheme.CardBackground
-    ShieldBadge.BorderSizePixel = 0
-    ShieldBadge.Parent = Header
+    -- 🔄 REALTIME FPS & PING UPDATE LOOP FOR TOGGLE CAPSULE
+    task.spawn(function()
+        local frameCount = 0
+        local lastFpsTime = tick()
+        local fpsVal = 60
 
-    local ShieldCorner = Instance.new("UICorner")
-    ShieldCorner.CornerRadius = UDim.new(0, 6)
-    ShieldCorner.Parent = ShieldBadge
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local now = tick()
+            if now - lastFpsTime >= 1 then
+                fpsVal = frameCount
+                frameCount = 0
+                lastFpsTime = now
+            end
+        end)
 
-    local ShieldStroke = Instance.new("UIStroke")
-    ShieldStroke.Color = ModernTheme.Accent
-    ShieldStroke.Transparency = 0.4
-    ShieldStroke.Thickness = 1
-    ShieldStroke.Parent = ShieldBadge
-
-    local ShieldLabel = Instance.new("TextLabel")
-    ShieldLabel.Size = UDim2.new(1, 0, 1, 0)
-    ShieldLabel.BackgroundTransparency = 1
-    ShieldLabel.Text = "🛡️ LUARMOR"
-    ShieldLabel.Font = Enum.Font.GothamBold
-    ShieldLabel.TextSize = 10
-    ShieldLabel.TextColor3 = ModernTheme.TextPrimary
-    ShieldLabel.Parent = ShieldBadge
-
-    -- Close Button
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 26, 0, 26)
-    CloseBtn.Position = UDim2.new(1, -34, 0, 15)
-    CloseBtn.BackgroundColor3 = ModernTheme.ButtonDark
-    CloseBtn.BorderSizePixel = 0
-    CloseBtn.Text = "X"
-    CloseBtn.Font = Enum.Font.GothamBold
-    CloseBtn.TextSize = 13
-    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseBtn.Parent = Header
-
-    local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(0, 6)
-    CloseCorner.Parent = CloseBtn
-
-    CloseBtn.MouseEnter:Connect(function()
-        TweenService:Create(CloseBtn, TweenInfo.new(0.2), {BackgroundColor3 = ModernTheme.ErrorRed}):Play()
-    end)
-    CloseBtn.MouseLeave:Connect(function()
-        TweenService:Create(CloseBtn, TweenInfo.new(0.2), {BackgroundColor3 = ModernTheme.ButtonDark}):Play()
-    end)
-    CloseBtn.MouseButton1Click:Connect(function() LoaderGui:Destroy() end)
-
-    -- Main Content Area
-    local Content = Instance.new("Frame")
-    Content.Size = UDim2.new(1, 0, 1, -56)
-    Content.Position = UDim2.new(0, 0, 0, 56)
-    Content.BackgroundTransparency = 1
-    Content.Parent = MainFrame
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -40, 0, 24)
-    Title.Position = UDim2.new(0, 20, 0, 16)
-    Title.BackgroundTransparency = 1
-    Title.Text = "Key System Verification"
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 16
-    Title.TextColor3 = ModernTheme.TextPrimary
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Content
-
-    local Desc = Instance.new("TextLabel")
-    Desc.Size = UDim2.new(1, -40, 0, 28)
-    Desc.Position = UDim2.new(0, 20, 0, 42)
-    Desc.BackgroundTransparency = 1
-    Desc.Text = "กรุณากรอก Luarmor Key ของคุณเพื่อเริ่มใช้งานสคริปต์ (ระบบจะบันทึกคีย์ให้อัตโนมัติ)"
-    Desc.Font = Enum.Font.Gotham
-    Desc.TextSize = 11
-    Desc.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Desc.TextWrapped = true
-    Desc.TextXAlignment = Enum.TextXAlignment.Left
-    Desc.TextYAlignment = Enum.TextYAlignment.Top
-    Desc.Parent = Content
-
-    -- Key Input Field Box
-    local InputBox = Instance.new("Frame")
-    InputBox.Size = UDim2.new(1, -40, 0, 46)
-    InputBox.Position = UDim2.new(0, 20, 0, 80)
-    InputBox.BackgroundColor3 = ModernTheme.InputBackground
-    InputBox.BorderSizePixel = 0
-    InputBox.Parent = Content
-
-    local InputCorner = Instance.new("UICorner")
-    InputCorner.CornerRadius = UDim.new(0, 8)
-    InputCorner.Parent = InputBox
-
-    local InputStroke = Instance.new("UIStroke")
-    InputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    InputStroke.Thickness = 1.25
-    InputStroke.Transparency = 0.3
-    InputStroke.Color = ModernTheme.Accent
-    InputStroke.Parent = InputBox
-
-    local InputPillar = Instance.new("Frame")
-    InputPillar.Size = UDim2.new(0, 3, 1, -16)
-    InputPillar.Position = UDim2.new(0, 10, 0, 8)
-    InputPillar.BackgroundColor3 = ModernTheme.Accent
-    InputPillar.BorderSizePixel = 0
-    InputPillar.Parent = InputBox
-
-    local InputPillarCorner = Instance.new("UICorner")
-    InputPillarCorner.CornerRadius = UDim.new(1, 0)
-    InputPillarCorner.Parent = InputPillar
-
-    local KeyTag = Instance.new("TextLabel")
-    KeyTag.Size = UDim2.new(0, 36, 1, 0)
-    KeyTag.Position = UDim2.new(0, 22, 0, 0)
-    KeyTag.BackgroundTransparency = 1
-    KeyTag.Text = "KEY"
-    KeyTag.Font = Enum.Font.GothamBold
-    KeyTag.TextSize = 10
-    KeyTag.TextColor3 = Color3.fromRGB(255, 255, 255)
-    KeyTag.TextXAlignment = Enum.TextXAlignment.Left
-    KeyTag.Parent = InputBox
-
-    local KeyTextBox = Instance.new("TextBox")
-    KeyTextBox.Size = UDim2.new(1, -68, 1, 0)
-    KeyTextBox.Position = UDim2.new(0, 58, 0, 0)
-    KeyTextBox.BackgroundTransparency = 1
-    KeyTextBox.PlaceholderText = "กรอก Key ของคุณที่นี่..."
-    KeyTextBox.PlaceholderColor3 = Color3.fromRGB(210, 210, 225)
-    -- นำ Key ที่ผู้ใช้ใส่ในตัวรันสคริปต์ หรือ Key ที่บันทึกไว้ มาใส่ในช่องอัตโนมัติ
-    KeyTextBox.Text = defaultKeyText or ""
-    KeyTextBox.Font = Enum.Font.GothamMedium
-    KeyTextBox.TextSize = 12
-    KeyTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    KeyTextBox.TextXAlignment = Enum.TextXAlignment.Left
-    KeyTextBox.ClearTextOnFocus = false
-    KeyTextBox.Parent = InputBox
-
-    KeyTextBox.Focused:Connect(function()
-        TweenService:Create(InputStroke, TweenInfo.new(0.2), {Transparency = 0, Color = ModernTheme.GlowBorder}):Play()
-    end)
-    KeyTextBox.FocusLost:Connect(function()
-        TweenService:Create(InputStroke, TweenInfo.new(0.2), {Transparency = 0.3, Color = ModernTheme.Accent}):Play()
+        while task.wait(0.8) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
+                if renderConn then renderConn:Disconnect() end
+                break
+            end
+            local pingVal = 0
+            pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+        end
     end)
 
-    -- Status Text Label
-    local StatusText = Instance.new("TextLabel")
-    StatusText.Size = UDim2.new(1, -40, 0, 18)
-    StatusText.Position = UDim2.new(0, 20, 0, 134)
-    StatusText.BackgroundTransparency = 1
-    StatusText.Text = initialStatus or (defaultKeyText and defaultKeyText ~= "" and "✨ ดึง Key มาใส่ให้อัตโนมัติเรียบร้อย!" or "พร้อมรับข้อมูล Key")
-    StatusText.Font = Enum.Font.GothamMedium
-    StatusText.TextSize = 11
-    StatusText.TextColor3 = initialStatus and ModernTheme.ErrorRed or (defaultKeyText and defaultKeyText ~= "" and ModernTheme.SuccessGreen or Color3.fromRGB(255, 255, 255))
-    StatusText.TextXAlignment = Enum.TextXAlignment.Left
-    StatusText.Parent = Content
+    -- 🖱️ CLICKABLE BUTTON & DRAGGABLE HANDLER
+    local capBtn = create("TextButton", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "",
+        ZIndex = 10,
+    }, toggleCapsule)
 
-    -- Verify Button
-    local VerifyBtn = Instance.new("TextButton")
-    VerifyBtn.Size = UDim2.new(1, -40, 0, 42)
-    VerifyBtn.Position = UDim2.new(0, 20, 0, 160)
-    VerifyBtn.BackgroundColor3 = ModernTheme.Accent
-    VerifyBtn.BorderSizePixel = 0
-    VerifyBtn.Text = ""
-    VerifyBtn.AutoButtonColor = false
-    VerifyBtn.Parent = Content
+    local tDragging, tDragInput, tDragStart, tStartPos
+    local hasDragged = false
 
-    local VerifyCorner = Instance.new("UICorner")
-    VerifyCorner.CornerRadius = UDim.new(0, 8)
-    VerifyCorner.Parent = VerifyBtn
-
-    local VerifyGradient = Instance.new("UIGradient")
-    VerifyGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(240, 30, 70)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 15, 45))
-    })
-    VerifyGradient.Rotation = 90
-    VerifyGradient.Parent = VerifyBtn
-
-    local VerifyStroke = Instance.new("UIStroke")
-    VerifyStroke.Color = Color3.fromRGB(255, 140, 170)
-    VerifyStroke.Transparency = 0.3
-    VerifyStroke.Thickness = 1
-    VerifyStroke.Parent = VerifyBtn
-
-    local VerifyTextLabel = Instance.new("TextLabel")
-    VerifyTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    VerifyTextLabel.BackgroundTransparency = 1
-    VerifyTextLabel.Text = "🔑 ตรวจสอบและเข้าใช้งาน (Verify Key)"
-    VerifyTextLabel.Font = Enum.Font.GothamBold
-    VerifyTextLabel.TextSize = 13
-    VerifyTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    VerifyTextLabel.ZIndex = 5
-    VerifyTextLabel.Parent = VerifyBtn
-
-    VerifyBtn.MouseEnter:Connect(function()
-        TweenService:Create(VerifyBtn, TweenInfo.new(0.2), {Size = UDim2.new(1, -36, 0, 44), Position = UDim2.new(0, 18, 0, 159)}):Play()
-    end)
-    VerifyBtn.MouseLeave:Connect(function()
-        TweenService:Create(VerifyBtn, TweenInfo.new(0.2), {Size = UDim2.new(1, -40, 0, 42), Position = UDim2.new(0, 20, 0, 160)}):Play()
+    capBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            tDragging = true
+            hasDragged = false
+            tDragStart = input.Position
+            tStartPos = toggleCapsule.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    tDragging = false
+                end
+            end)
+        end
     end)
 
-    -- Get Key & Discord Secondary Buttons
-    local GetKeyBtn = Instance.new("TextButton")
-    GetKeyBtn.Size = UDim2.new(0.5, -25, 0, 36)
-    GetKeyBtn.Position = UDim2.new(0, 20, 0, 214)
-    GetKeyBtn.BackgroundColor3 = ModernTheme.ButtonDark
-    GetKeyBtn.BorderSizePixel = 0
-    GetKeyBtn.Text = ""
-    GetKeyBtn.AutoButtonColor = false
-    GetKeyBtn.Parent = Content
-
-    local GetKeyCorner = Instance.new("UICorner")
-    GetKeyCorner.CornerRadius = UDim.new(0, 8)
-    GetKeyCorner.Parent = GetKeyBtn
-
-    local GetKeyStroke = Instance.new("UIStroke")
-    GetKeyStroke.Color = ModernTheme.Accent
-    GetKeyStroke.Transparency = 0.4
-    GetKeyStroke.Thickness = 1
-    GetKeyStroke.Parent = GetKeyBtn
-
-    local GetKeyTextLabel = Instance.new("TextLabel")
-    GetKeyTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    GetKeyTextLabel.BackgroundTransparency = 1
-    GetKeyTextLabel.Text = "🔑 ซื้อ / รับ Key"
-    GetKeyTextLabel.Font = Enum.Font.GothamBold
-    GetKeyTextLabel.TextSize = 11
-    GetKeyTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    GetKeyTextLabel.ZIndex = 5
-    GetKeyTextLabel.Parent = GetKeyBtn
-
-    local DiscordBtn = Instance.new("TextButton")
-    DiscordBtn.Size = UDim2.new(0.5, -25, 0, 36)
-    DiscordBtn.Position = UDim2.new(0.5, 5, 0, 214)
-    DiscordBtn.BackgroundColor3 = ModernTheme.ButtonDark
-    DiscordBtn.BorderSizePixel = 0
-    DiscordBtn.Text = ""
-    DiscordBtn.AutoButtonColor = false
-    DiscordBtn.Parent = Content
-
-    local DiscordCorner = Instance.new("UICorner")
-    DiscordCorner.CornerRadius = UDim.new(0, 8)
-    DiscordCorner.Parent = DiscordBtn
-
-    local DiscordStroke = Instance.new("UIStroke")
-    DiscordStroke.Color = ModernTheme.Accent
-    DiscordStroke.Transparency = 0.4
-    DiscordStroke.Thickness = 1
-    DiscordStroke.Parent = DiscordBtn
-
-    local DiscordTextLabel = Instance.new("TextLabel")
-    DiscordTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    DiscordTextLabel.BackgroundTransparency = 1
-    DiscordTextLabel.Text = "💬 Discord"
-    DiscordTextLabel.Font = Enum.Font.GothamBold
-    DiscordTextLabel.TextSize = 11
-    DiscordTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    DiscordTextLabel.ZIndex = 5
-    DiscordTextLabel.Parent = DiscordBtn
-
-    GetKeyBtn.MouseEnter:Connect(function()
-        TweenService:Create(GetKeyStroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
-    end)
-    GetKeyBtn.MouseLeave:Connect(function()
-        TweenService:Create(GetKeyStroke, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
+    capBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            tDragInput = input
+        end
     end)
 
-    DiscordBtn.MouseEnter:Connect(function()
-        TweenService:Create(DiscordStroke, TweenInfo.new(0.2), {Transparency = 0.1}):Play()
-    end)
-    DiscordBtn.MouseLeave:Connect(function()
-        TweenService:Create(DiscordStroke, TweenInfo.new(0.2), {Transparency = 0.4}):Play()
+    UserInputService.InputChanged:Connect(function(input)
+        if input == tDragInput and tDragging then
+            local delta = input.Position - tDragStart
+            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
+                hasDragged = true
+            end
+            toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+        end
     end)
 
-    -- Button Logic Connections
-    VerifyBtn.MouseButton1Click:Connect(function()
-        local userKey = KeyTextBox.Text:gsub("%s+", "")
-        if userKey == "" then
-            StatusText.Text = "⚠️ กรุณากรอก Key ก่อนกดปุ่มนี้!"
-            StatusText.TextColor3 = ModernTheme.ErrorRed
-            TweenService:Create(InputStroke, TweenInfo.new(0.2), {Color = ModernTheme.ErrorRed, Transparency = 0}):Play()
+    capBtn.MouseButton1Click:Connect(function()
+        if not hasDragged then
+            playClickSound()
+            shell.Visible = not shell.Visible
+        end
+    end)
+
+    -- ⌨️ KEYBIND TOGGLE (KEY [K] / [RightControl])
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+            shell.Visible = not shell.Visible
+        end
+    end)
+
+    -- Left Column (User Panel)
+    local userPanel = create("Frame", {
+        Name = "UserInfo",
+        Position = UDim2.fromOffset(8, 8),
+        Size = UDim2.fromOffset(278, 604),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
+
+    -- Right Column (Main Panel)
+    local mainPanel = create("Frame", {
+        Name = "Main",
+        Position = UDim2.fromOffset(294, 8),
+        Size = UDim2.fromOffset(628, 604),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
+
+    local columnDivider = create("Frame", {
+        Name = "ColumnDivider",
+        Position = UDim2.fromOffset(286, 20),
+        Size = UDim2.new(0, 1, 1, -40),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.84,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
+
+    -- Left Panel Content
+    lucideIcon(userPanel, "user", UDim2.fromOffset(20, 19), UDim2.fromOffset(15, 15), COLORS.cyan, 5)
+    textLabel(userPanel, "User Info", UDim2.fromOffset(43, 14), UDim2.new(1, -62, 0, 26), Enum.Font.GothamBold, 11, COLORS.cyan)
+    create("Frame", {
+        Position = UDim2.fromOffset(18, 48),
+        Size = UDim2.new(1, -36, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.72,
+        BorderSizePixel = 0,
+    }, userPanel)
+
+    local avatarHalo = create("Frame", {
+        Name = "AvatarHalo",
+        Position = UDim2.new(0.5, -50, 0, 58),
+        Size = UDim2.fromOffset(100, 100),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userPanel)
+    round(avatarHalo, 50)
+    local avatarRing = create("Frame", {
+        Name = "AvatarGradientRing",
+        Position = UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(92, 92),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, avatarHalo)
+    round(avatarRing, 46)
+    local avatarRingStroke = create("UIStroke", {
+        Name = "AvatarRingStroke",
+        Color = COLORS.cyan,
+        Thickness = 3,
+        Transparency = 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, avatarRing)
+    create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 75, 110)),
+            ColorSequenceKeypoint.new(0.52, COLORS.primary),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 35, 70)),
+        }),
+        Rotation = 35,
+    }, avatarRingStroke)
+    local avatarSeparator = create("Frame", {
+        Name = "AvatarSeparator",
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(88, 88),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, avatarRing)
+    round(avatarSeparator, 44)
+    local avatar = create("ImageLabel", {
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(84, 84),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Image = "rbxassetid://0",
+        ScaleType = Enum.ScaleType.Crop,
+    }, avatarSeparator)
+    round(avatar, 42)
+    local onlineDot = create("Frame", {
+        Name = "OnlineDotBacking",
+        Position = UDim2.new(1, -26, 1, -26),
+        Size = UDim2.fromOffset(22, 22),
+        BackgroundColor3 = COLORS.shell,
+        BorderSizePixel = 0,
+    }, avatarHalo)
+    round(onlineDot, 11)
+    local onlineCore = create("Frame", {
+        Position = UDim2.fromOffset(5, 5),
+        Size = UDim2.fromOffset(12, 12),
+        BackgroundColor3 = COLORS.success,
+        BorderSizePixel = 0,
+    }, onlineDot)
+    round(onlineCore, 6)
+    local onlinePulseUp = TweenService:Create(
+        onlineCore,
+        TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        { BackgroundColor3 = Color3.fromRGB(90, 255, 186) }
+    )
+    onlinePulseUp:Play()
+    gui.Destroying:Connect(function() onlinePulseUp:Cancel() end)
+
+    local displayNameLabel = textLabel(userPanel, "PayomboyZ User", UDim2.fromOffset(18, 160), UDim2.new(1, -36, 0, 18), Enum.Font.GothamBold, 13, COLORS.text, Enum.TextXAlignment.Center)
+    local userNameLabel = textLabel(userPanel, "@unknown", UDim2.fromOffset(18, 177), UDim2.new(1, -36, 0, 15), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
+    local userIdLabel = textLabel(userPanel, "ID: -----", UDim2.fromOffset(18, 192), UDim2.new(1, -36, 0, 14), Enum.Font.GothamMedium, 9, COLORS.cyan, Enum.TextXAlignment.Center)
+
+    task.spawn(function()
+        local player = Players.LocalPlayer
+        while not player do
+            task.wait(0.1)
+            player = Players.LocalPlayer
+        end
+        displayNameLabel.Text = player.DisplayName or player.Name
+        userNameLabel.Text = "@" .. player.Name
+        userIdLabel.Text = "ID: " .. tostring(player.UserId)
+
+        avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=420&h=420"
+        pcall(function()
+            local content, isReady = Players:GetUserThumbnailAsync(
+                player.UserId,
+                Enum.ThumbnailType.HeadShot,
+                Enum.ThumbnailSize.Size420x420
+            )
+            if content and content ~= "" then
+                avatar.Image = content
+            end
+        end)
+    end)
+
+    local detectedGame = resolveGameName()
+    local infoGroup = create("Frame", {
+        Name = "ProfileDetails",
+        Position = UDim2.fromOffset(18, 214),
+        Size = UDim2.new(1, -36, 0, 166),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userPanel)
+    local stats = {
+        { "Executor", executorName(), "monitor", COLORS.textMuted },
+        { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
+        { "HWID", readableHwid() and "Available" or "Luarmor Managed", "shield", COLORS.textMuted },
+        { "Game", detectedGame, "gamepad", COLORS.success },
+    }
+    for index, item in ipairs(stats) do
+        local y = (index - 1) * 41
+        lucideIcon(infoGroup, item[3], UDim2.fromOffset(14, y + 12), UDim2.fromOffset(16, 16), item[4], 5)
+        textLabel(infoGroup, item[1], UDim2.fromOffset(42, y + 4), UDim2.fromOffset(78, 15), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+        textLabel(infoGroup, item[2], UDim2.fromOffset(42, y + 18), UDim2.new(1, -56, 0, 18), Enum.Font.GothamMedium, 10, item[4])
+        if index < #stats then
+            create("Frame", {
+                Position = UDim2.fromOffset(42, y + 40),
+                Size = UDim2.new(1, -56, 0, 1),
+                BackgroundColor3 = COLORS.divider,
+                BackgroundTransparency = 0.84,
+                BorderSizePixel = 0,
+            }, infoGroup)
+        end
+    end
+
+    local metricsStrip = create("Frame", {
+        Name = "Metrics",
+        Position = UDim2.fromOffset(18, 392),
+        Size = UDim2.new(1, -36, 0, 66),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userPanel)
+    create("Frame", {
+        Position = UDim2.new(0.5, 0, 0, 12),
+        Size = UDim2.new(0, 1, 1, -24),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.78,
+        BorderSizePixel = 0,
+    }, metricsStrip)
+
+    local sessionCard = create("Frame", {
+        Size = UDim2.new(0.5, 0, 1, 0),
+        BackgroundTransparency = 1,
+    }, metricsStrip)
+    lucideIcon(sessionCard, "clock", UDim2.fromOffset(14, 16), UDim2.fromOffset(16, 16), COLORS.cyan, 5)
+    textLabel(sessionCard, "Session", UDim2.fromOffset(38, 9), UDim2.new(1, -48, 0, 18), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+    local sessionText = textLabel(sessionCard, "00:00", UDim2.fromOffset(38, 27), UDim2.new(1, -48, 0, 22), Enum.Font.GothamBold, 12, COLORS.cyan)
+
+    local pingCard = create("Frame", {
+        Position = UDim2.fromScale(0.5, 0),
+        Size = UDim2.new(0.5, 0, 1, 0),
+        BackgroundTransparency = 1,
+    }, metricsStrip)
+    lucideIcon(pingCard, "wifi", UDim2.fromOffset(14, 16), UDim2.fromOffset(16, 16), COLORS.success, 5)
+    textLabel(pingCard, "Ping", UDim2.fromOffset(38, 9), UDim2.new(1, -48, 0, 18), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+    local pingText = textLabel(pingCard, "-- ms", UDim2.fromOffset(38, 27), UDim2.new(1, -48, 0, 22), Enum.Font.GothamBold, 12, COLORS.success)
+
+    local connectionCard = create("Frame", {
+        Position = UDim2.fromOffset(18, 502),
+        Size = UDim2.new(1, -36, 0, 68),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userPanel)
+    lucideIcon(connectionCard, "check-circle", UDim2.fromOffset(14, 24), UDim2.fromOffset(20, 20), COLORS.success, 5)
+    textLabel(connectionCard, "Connected to PayomboyZ Hub", UDim2.fromOffset(44, 11), UDim2.new(1, -56, 0, 24), Enum.Font.GothamBold, 12, COLORS.success)
+    textLabel(connectionCard, "PayomboyZ Hub is ready", UDim2.fromOffset(44, 35), UDim2.new(1, -56, 0, 18), Enum.Font.Gotham, 9, COLORS.textMuted)
+
+    -- Right Panel Header
+    local header = create("Frame", {
+        Name = "Header",
+        Size = UDim2.new(1, 0, 0, 62),
+        BackgroundTransparency = 1,
+        Active = true,
+    }, mainPanel)
+    textLabel(header, "PayomboyZ Hub", UDim2.fromOffset(22, 8), UDim2.fromOffset(200, 30), Enum.Font.GothamBold, 22, COLORS.text)
+    textLabel(header, "Obsidian Glassmorphic 2 Engine", UDim2.fromOffset(23, 35), UDim2.fromOffset(260, 16), Enum.Font.Gotham, 9, COLORS.textFaint)
+
+    local minimize = makeIconButton(
+        header,
+        "Minimize",
+        "minus",
+        UDim2.new(1, -82, 0, 14),
+        COLORS.surfaceRaised,
+        COLORS.surfaceHover,
+        COLORS.surfacePressed
+    )
+    local close = makeIconButton(
+        header,
+        "Close",
+        "x",
+        UDim2.new(1, -44, 0, 14),
+        COLORS.surfaceRaised,
+        Color3.fromRGB(74, 38, 53),
+        Color3.fromRGB(54, 27, 40)
+    )
+    create("Frame", {
+        Position = UDim2.fromOffset(20, 61),
+        Size = UDim2.new(1, -40, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.74,
+        BorderSizePixel = 0,
+    }, header)
+
+    -- Service Banner Card
+    local serviceCard = create("Frame", {
+        Name = "ServiceCard",
+        Position = UDim2.fromOffset(20, 74),
+        Size = UDim2.new(1, -40, 0, 88),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, mainPanel)
+    local serviceLogoSlot = create("Frame", {
+        Name = "ServiceLogoSlot",
+        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.fromOffset(116, 82),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, serviceCard)
+    local logo = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(80, 80),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScaleType = Enum.ScaleType.Fit,
+    }, serviceLogoSlot)
+    round(logo, 40)
+    LoadCustomLogo(logo)
+
+    textLabel(serviceCard, "ACTIVE SERVICE", UDim2.fromOffset(128, 11), UDim2.new(1, -318, 0, 17), Enum.Font.GothamBold, 9, COLORS.success)
+    textLabel(serviceCard, "PayomboyZ Studios", UDim2.fromOffset(128, 29), UDim2.new(1, -318, 0, 24), Enum.Font.GothamBold, 15, COLORS.text)
+    textLabel(serviceCard, "Verified client delivery", UDim2.fromOffset(128, 54), UDim2.new(1, -318, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint)
+    local secureBadge = create("Frame", {
+        Position = UDim2.new(1, -172, 0.5, -17),
+        Size = UDim2.fromOffset(154, 34),
+        BackgroundColor3 = COLORS.glassDeep,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+    }, serviceCard)
+    round(secureBadge, 9)
+    create("UIStroke", {
+        Color = COLORS.cyan,
+        Thickness = 1,
+        Transparency = 0.3,
+    }, secureBadge)
+    lucideIcon(secureBadge, "shield-check", UDim2.fromOffset(12, 9), UDim2.fromOffset(16, 16), COLORS.success, 5)
+    textLabel(secureBadge, "LUARMOR VERIFIED", UDim2.fromOffset(36, 0), UDim2.new(1, -44, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
+
+    textLabel(mainPanel, "SECURE ACCESS", UDim2.fromOffset(22, 174), UDim2.new(1, -44, 0, 16), Enum.Font.GothamBold, 9, COLORS.cyan)
+    textLabel(mainPanel, "Enter your Luarmor key to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
+
+    -- Key Input
+    local input = create("TextBox", {
+        Name = "KeyInput",
+        Position = UDim2.fromOffset(20, 214),
+        Size = UDim2.new(1, -40, 0, 50),
+        BackgroundColor3 = COLORS.input,
+        BackgroundTransparency = 0.24,
+        BorderSizePixel = 0,
+        ClearTextOnFocus = false,
+        Font = Enum.Font.GothamMedium,
+        PlaceholderText = "Paste your Luarmor key",
+        PlaceholderColor3 = COLORS.textMuted,
+        Text = defaultKeyText or "",
+        TextColor3 = COLORS.text,
+        TextTransparency = 0,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 4,
+    }, mainPanel)
+    round(input, 12)
+    local inputFocused = false
+    local inputBorder = create("UIStroke", {
+        Name = "KeyInputBorder",
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Color = COLORS.cyan,
+        Thickness = 1.35,
+        Transparency = 0.18,
+    }, input)
+    local inputBorderGradient = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 20, 50)),
+            ColorSequenceKeypoint.new(0.44, Color3.fromRGB(255, 45, 85)),
+            ColorSequenceKeypoint.new(0.52, Color3.fromRGB(255, 120, 150)),
+            ColorSequenceKeypoint.new(0.60, Color3.fromRGB(255, 45, 85)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 20, 50)),
+        }),
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.58),
+            NumberSequenceKeypoint.new(0.40, 0.38),
+            NumberSequenceKeypoint.new(0.50, 0),
+            NumberSequenceKeypoint.new(0.62, 0.38),
+            NumberSequenceKeypoint.new(1, 0.58),
+        }),
+        Rotation = 0,
+    }, inputBorder)
+    local inputBorderSpin = TweenService:Create(
+        inputBorderGradient,
+        TweenInfo.new(2.65, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+        { Rotation = 360 }
+    )
+    inputBorderSpin:Play()
+    gui.Destroying:Connect(function() inputBorderSpin:Cancel() end)
+    local inputKeyIcon = lucideIcon(mainPanel, "key", UDim2.fromOffset(36, 230), UDim2.fromOffset(18, 18), COLORS.textMuted, 5)
+    create("UIPadding", {
+        PaddingLeft = UDim.new(0, 46),
+        PaddingRight = UDim.new(0, 16),
+    }, input)
+
+    -- Primary Buttons Row
+    local primaryRow = create("Frame", {
+        Position = UDim2.fromOffset(20, 276),
+        Size = UDim2.new(1, -40, 0, 46),
+        BackgroundTransparency = 1,
+    }, mainPanel)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 10),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, primaryRow)
+    local getKey = makeButton(primaryRow, "GetKey", "Get Key", UDim2.new(), UDim2.new(0.5, -5, 1, 0), COLORS.primary, COLORS.primaryHover, COLORS.primaryPressed, "key")
+    getKey.LayoutOrder = 1
+    local redeem = makeButton(primaryRow, "Redeem", "Verify Key", UDim2.new(), UDim2.new(0.5, -5, 1, 0), COLORS.secondary, COLORS.secondaryHover, COLORS.secondaryPressed, "shield-check")
+    redeem.LayoutOrder = 2
+
+    -- Utility Buttons Row
+    local utilityRow = create("Frame", {
+        Position = UDim2.fromOffset(20, 334),
+        Size = UDim2.new(1, -40, 0, 38),
+        BackgroundTransparency = 1,
+    }, mainPanel)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, utilityRow)
+    local discord = makeButton(utilityRow, "Discord", "Discord", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "message-circle")
+    discord.LayoutOrder = 1
+    local copyHwid = makeButton(utilityRow, "CopyHWID", "Copy HWID", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "copy")
+    copyHwid.LayoutOrder = 2
+    local settingsButton = makeButton(utilityRow, "Settings", "Settings", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "settings")
+    settingsButton.LayoutOrder = 3
+    setButtonTextSize(discord, 11)
+    setButtonTextSize(copyHwid, 11)
+    setButtonTextSize(settingsButton, 11)
+
+    -- Status Card
+    local statusCard = create("Frame", {
+        Name = "StatusCard",
+        Position = UDim2.fromOffset(20, 384),
+        Size = UDim2.new(1, -40, 0, 46),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+    }, mainPanel)
+    local statusAccent = create("Frame", {
+        Position = UDim2.fromOffset(0, 8),
+        Size = UDim2.new(0, 3, 1, -16),
+        BackgroundColor3 = COLORS.cyan,
+        BorderSizePixel = 0,
+    }, statusCard)
+    round(statusAccent, 2)
+    local statusIcon = lucideIcon(statusCard, "info", UDim2.fromOffset(16, 15), UDim2.fromOffset(16, 16), COLORS.cyan, 5)
+    local statusSummary = textLabel(statusCard, "", UDim2.fromOffset(42, 13), UDim2.new(1, -58, 0, 20), Enum.Font.GothamBold, 11, COLORS.textMuted)
+    statusSummary.Name = "StatusSummary"
+    local statusDetail = textLabel(statusCard, "", UDim2.fromOffset(42, 34), UDim2.new(1, -58, 0, 38), Enum.Font.Gotham, 9, COLORS.textMuted)
+    statusDetail.Name = "StatusDetail"
+    statusDetail.TextWrapped = true
+    statusDetail.TextTruncate = Enum.TextTruncate.None
+    statusDetail.TextYAlignment = Enum.TextYAlignment.Top
+    statusDetail.Visible = false
+    local copyError = makeButton(statusCard, "CopyError", "Copy Error", UDim2.new(1, -108, 0, 8), UDim2.fromOffset(94, 26), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "copy")
+    setButtonTextSize(copyError, 9)
+    copyError.Visible = false
+
+    -- Premium / VIP Card
+    local accessCard = create("Frame", {
+        Name = "PremiumAccess",
+        Position = UDim2.fromOffset(20, 442),
+        Size = UDim2.new(1, -40, 0, 146),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+    }, mainPanel)
+    create("Frame", {
+        Name = "PremiumDivider",
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.new(1, 0, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.84,
+        BorderSizePixel = 0,
+    }, accessCard)
+    local premiumBadge = textLabel(accessCard, "PAYOMBOYZ VIP", UDim2.fromOffset(18, 14), UDim2.fromOffset(86, 18), Enum.Font.GothamBold, 8, COLORS.primary, Enum.TextXAlignment.Center)
+    premiumBadge.BackgroundTransparency = 0
+    premiumBadge.BackgroundColor3 = COLORS.surfaceRaised
+    round(premiumBadge, 6)
+    textLabel(accessCard, "VVIP Exclusive Access", UDim2.fromOffset(18, 40), UDim2.new(1, -170, 0, 22), Enum.Font.GothamBold, 15, COLORS.text)
+    textLabel(accessCard, "Unlock Mine a Mountain, MM2 & exclusive features", UDim2.fromOffset(18, 64), UDim2.new(1, -170, 0, 19), Enum.Font.GothamMedium, 11, COLORS.textMuted)
+    textLabel(accessCard, "Join Discord to Upgrade to VVIP", UDim2.fromOffset(18, 87), UDim2.new(1, -170, 0, 18), Enum.Font.GothamMedium, 10, COLORS.premium)
+    local premiumPerks = textLabel(accessCard, "VVIP Maps  |  Priority Support  |  Auto Farm Engine", UDim2.fromOffset(18, 111), UDim2.new(1, -170, 0, 19), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    local plansSlot = create("Frame", {
+        Name = "PlansSlot",
+        Position = UDim2.new(1, -136, 0.5, -20),
+        Size = UDim2.fromOffset(118, 40),
+        BackgroundTransparency = 1,
+    }, accessCard)
+    local premiumButton = makeButton(plansSlot, "PremiumPlans", "Get VVIP", UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), COLORS.premiumAction, COLORS.premiumHover, COLORS.premiumPressed, "external-link")
+    setButtonTextSize(premiumButton, 12)
+    local plansScale = create("UIScale", { Scale = 1 }, plansSlot)
+    local plansMotionStartedAt = os.clock()
+    local plansMotionConnection = RunService.RenderStepped:Connect(function()
+        if not gui.Parent or not premiumButton.Parent then return end
+        local phase = os.clock() - plansMotionStartedAt
+        premiumButton.Position = UDim2.fromOffset(
+            math.cos(phase * 0.90) * 2.0,
+            math.sin(phase * 1.10) * 3.0
+        )
+        premiumButton.Rotation = math.sin(phase * 0.74 + 0.55) * 0.65
+        plansScale.Scale = 1 + math.sin(phase * 0.62 + 1.20) * 0.012
+    end)
+    gui.Destroying:Connect(function()
+        if plansMotionConnection then plansMotionConnection:Disconnect() end
+    end)
+
+    local lastErrorDetail = ""
+    local function setStatusLayout(hasDetail, tone)
+        local statusHeight = hasDetail and 82 or 46
+        local accessY = hasDetail and 478 or 442
+        local accessHeight = hasDetail and 110 or 146
+        if hasDetail then
+            statusDetail.Visible = true
+            copyError.Visible = true
+        else
+            statusDetail.Visible = false
+            copyError.Visible = false
+        end
+        premiumPerks.Visible = not hasDetail
+        playTween(statusCard, MOTION.normal, { Size = UDim2.new(1, -40, 0, statusHeight) })
+        playTween(accessCard, MOTION.normal, {
+            Position = UDim2.fromOffset(20, accessY),
+            Size = UDim2.new(1, -40, 0, accessHeight),
+        })
+        playTween(statusSummary, MOTION.quick, {
+            Position = UDim2.fromOffset(42, hasDetail and 8 or 13),
+            Size = UDim2.new(1, hasDetail and -160 or -58, 0, 20),
+            TextColor3 = tone,
+        })
+        playTween(statusIcon, MOTION.quick, { Position = UDim2.fromOffset(16, hasDetail and 10 or 15) })
+        statusSummary.TextXAlignment = Enum.TextXAlignment.Left
+    end
+
+    local function setStatus(message, color, detail)
+        local tone = color or COLORS.textMuted
+        local safeDetail = tostring(detail or ""):gsub("[%c]+", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+        local hasDetail = safeDetail ~= ""
+        statusSummary.Text = tostring(message or "")
+        local iconName = "info"
+        if tone == COLORS.success then
+            iconName = "check-circle"
+        elseif tone == COLORS.warning or tone == COLORS.danger then
+            iconName = "alert-circle"
+        end
+        applyLucideData(statusIcon, iconName)
+        playTween(statusIcon, MOTION.quick, { ImageColor3 = tone })
+        playTween(statusAccent, MOTION.quick, { BackgroundColor3 = tone })
+        setStatusLayout(hasDetail, tone)
+        lastErrorDetail = safeDetail
+        if hasDetail then
+            statusDetail.Text = #safeDetail > 190 and (safeDetail:sub(1, 187) .. "...") or safeDetail
+            warn("[PayomboyZ Hub] " .. tostring(message or "Error") .. " " .. safeDetail)
+        else
+            statusDetail.Text = ""
+        end
+    end
+
+    if initialStatus then
+        setStatus(initialStatus, COLORS.warning)
+    else
+        setStatus("Ready for " .. detectedGame .. ".", COLORS.cyan)
+    end
+
+    local busy = false
+    local function redeemKey()
+        if busy then return end
+        local rawKey = input.Text or ""
+        local key = rawKey:gsub("%s+", "")
+        if key == "" then
+            setStatus("กรุณากรอก Luarmor key ก่อนกดปุ่มนี้", COLORS.warning)
             return
         end
-        StatusText.Text = "⏳ บันทึก Key เรียบร้อย! กำลังเชื่อมต่อ Luarmor..."
-        StatusText.TextColor3 = ModernTheme.SuccessGreen
-        task.wait(0.3)
-        LoaderGui:Destroy()
-        PassToKeyChecker(userKey)
+
+        busy = true
+        setButtonEnabled(redeem, false)
+        setButtonText(redeem, "Loading...")
+        setStatus("กำลังบันทึกคีย์และเชื่อมต่อ PayomboyZ Hub...", COLORS.cyan)
+
+        task.delay(0.3, function()
+            gui:Destroy()
+            PassToKeyChecker(key)
+        end)
+    end
+
+    copyError.Activated:Connect(function()
+        if lastErrorDetail ~= "" and copyText(lastErrorDetail) then
+            setButtonText(copyError, "Copied")
+            task.delay(1.2, function()
+                if copyError.Parent then setButtonText(copyError, "Copy Error") end
+            end)
+        end
     end)
 
-    GetKeyBtn.MouseButton1Click:Connect(function()
-        pcall(function()
-            if setclipboard then setclipboard(LuarmorConfig.GetKeyURL) end
-        end)
-        StatusText.Text = "📋 คัดลอกลิงก์รับ Key เรียบร้อยแล้ว!"
-        StatusText.TextColor3 = ModernTheme.SuccessGreen
+    getKey.Activated:Connect(function()
+        if copyText(LuarmorConfig.GetKeyURL) then
+            setStatus("คัดลอกลิงก์รับ Key เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(LuarmorConfig.GetKeyURL, COLORS.warning)
+        end
     end)
 
-    DiscordBtn.MouseButton1Click:Connect(function()
-        pcall(function()
-            if setclipboard then setclipboard(LuarmorConfig.DiscordURL) end
+    discord.Activated:Connect(function()
+        if copyText(LuarmorConfig.DiscordURL) then
+            setStatus("คัดลอกลิงก์ Discord เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(LuarmorConfig.DiscordURL, COLORS.warning)
+        end
+    end)
+
+    copyHwid.Activated:Connect(function()
+        local hwid = readableHwid()
+        if hwid and copyText(hwid) then
+            setStatus("คัดลอก HWID เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus("Luarmor จะผูก HWID ของคุณโดยอัตโนมัติ", COLORS.warning)
+        end
+    end)
+
+    premiumButton.Activated:Connect(function()
+        if copyText(LuarmorConfig.DiscordURL) then
+            setStatus("คัดลอกลิงก์ Discord VVIP เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(LuarmorConfig.DiscordURL, COLORS.warning)
+        end
+    end)
+
+    input.Focused:Connect(function()
+        inputFocused = true
+        playTween(input, MOTION.quick, { BackgroundColor3 = COLORS.inputFocus })
+        playTween(inputBorder, MOTION.quick, { Transparency = 0.06 })
+        playTween(inputKeyIcon, MOTION.quick, { ImageColor3 = COLORS.cyan })
+    end)
+
+    input.FocusLost:Connect(function()
+        inputFocused = false
+        playTween(input, MOTION.quick, { BackgroundColor3 = COLORS.input })
+        playTween(inputBorder, MOTION.quick, { Transparency = 0.18 })
+        playTween(inputKeyIcon, MOTION.quick, { ImageColor3 = COLORS.textFaint })
+    end)
+
+    local waitingKeyStates = {
+        "Waiting for key",
+        "Waiting for key.",
+        "Waiting for key..",
+        "Waiting for key...",
+    }
+    task.spawn(function()
+        local waitingIndex = 1
+        while gui.Parent do
+            if input.Text == "" and not inputFocused then
+                input.PlaceholderText = waitingKeyStates[waitingIndex]
+                waitingIndex = waitingIndex % #waitingKeyStates + 1
+            end
+            task.wait(0.45)
+        end
+    end)
+
+    local detailsVisible = true
+    local requestedDetails = true
+    local viewportCompact = false
+    local detailsTransitioning = false
+    local detailsTransitionVersion = 0
+    local updateResponsiveScale
+
+    local function setDetailsVisible(visible, announce)
+        visible = visible and not viewportCompact
+        if visible == detailsVisible and not detailsTransitioning then
+            setSnowflakeCount(visible and DESKTOP_SNOWFLAKES or COMPACT_SNOWFLAKES)
+            return
+        end
+
+        detailsTransitionVersion = detailsTransitionVersion + 1
+        local transitionVersion = detailsTransitionVersion
+        detailsTransitioning = true
+        detailsVisible = visible
+        setSnowflakeCount(visible and DESKTOP_SNOWFLAKES or COMPACT_SNOWFLAKES)
+
+        columnDivider.Visible = true
+        if visible then
+            userPanel.Visible = true
+            userPanel.Position = UDim2.fromOffset(-286, 8)
+            columnDivider.BackgroundTransparency = 1
+            playTween(shell, MOTION.slow, {
+                Size = UDim2.fromOffset(DESKTOP_WIDTH, SHELL_HEIGHT),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "layout")
+            playTween(mainPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(294, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            playTween(columnDivider, MOTION.slow, {
+                BackgroundTransparency = 0.84,
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            local profileTween = playTween(userPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(8, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            profileTween.Completed:Connect(function()
+                if transitionVersion == detailsTransitionVersion then
+                    detailsTransitioning = false
+                end
+            end)
+        else
+            playTween(shell, MOTION.slow, {
+                Size = UDim2.fromOffset(COMPACT_WIDTH, SHELL_HEIGHT),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "layout")
+            playTween(mainPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(8, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            playTween(columnDivider, MOTION.slow, {
+                BackgroundTransparency = 1,
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            local profileTween = playTween(userPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(-286, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            profileTween.Completed:Connect(function()
+                if gui.Parent and transitionVersion == detailsTransitionVersion and not detailsVisible then
+                    userPanel.Visible = false
+                    columnDivider.Visible = false
+                    detailsTransitioning = false
+                end
+            end)
+        end
+        if announce then
+            setStatus(visible and "Profile details shown." or "Compact mode enabled.", COLORS.textMuted)
+        end
+        if updateResponsiveScale then
+            task.defer(updateResponsiveScale)
+        end
+    end
+
+    settingsButton.Activated:Connect(function()
+        if detailsTransitioning then return end
+        if viewportCompact then
+            setStatus("Profile is hidden on compact screens.", COLORS.warning)
+            return
+        end
+        requestedDetails = not requestedDetails
+        setDetailsVisible(requestedDetails, true)
+    end)
+
+    minimize.Activated:Connect(function()
+        if detailsTransitioning then return end
+        requestedDetails = false
+        setDetailsVisible(false, true)
+    end)
+
+    local closing = false
+    local function closeLoader()
+        if closing then return end
+        closing = true
+        playTween(backdrop, MOTION.normal, { BackgroundTransparency = 1 })
+        playTween(shellScale, MOTION.normal, { Scale = shellScale.Scale * 0.96 })
+        local tween = playTween(shell, MOTION.normal, { GroupTransparency = 1 }, nil, nil, "visibility")
+        tween.Completed:Connect(function()
+            if gui.Parent then gui:Destroy() end
         end)
-        StatusText.Text = "💬 คัดลอกลิงก์ Discord เรียบร้อยแล้ว!"
-        StatusText.TextColor3 = ModernTheme.SuccessGreen
+    end
+
+    close.Activated:Connect(closeLoader)
+    redeem.Activated:Connect(redeemKey)
+    input.FocusLost:Connect(function(enterPressed)
+        if enterPressed then redeemKey() end
+    end)
+
+    local startedAt = os.clock()
+    task.spawn(function()
+        while gui.Parent do
+            local elapsed = math.floor(os.clock() - startedAt)
+            sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
+            local ping = "--"
+            pcall(function()
+                ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString():match("[%d%.]+") or "--"
+            end)
+            pingText.Text = tostring(ping) .. " ms"
+            task.wait(1)
+        end
+    end)
+
+    local dragging = false
+    local dragStart
+    local shellStart
+    header.InputBegan:Connect(function(inputObject)
+        if inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = inputObject.Position
+            shellStart = shell.Position
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inputObject)
+        if inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inputObject)
+        if dragging and (inputObject.UserInputType == Enum.UserInputType.MouseMovement or inputObject.UserInputType == Enum.UserInputType.Touch) then
+            local delta = inputObject.Position - dragStart
+            shell.Position = UDim2.new(
+                shellStart.X.Scale,
+                shellStart.X.Offset + delta.X,
+                shellStart.Y.Scale,
+                shellStart.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    local entered = false
+    local responsiveScale = 1
+    updateResponsiveScale = function()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        local baseWidth = detailsVisible and DESKTOP_WIDTH or COMPACT_WIDTH
+        responsiveScale = math.min(
+            1,
+            math.max(0.42, (viewport.X - 24) / baseWidth),
+            math.max(0.42, (viewport.Y - 24) / SHELL_HEIGHT)
+        )
+        if entered then
+            playTween(shellScale, MOTION.normal, { Scale = responsiveScale })
+        else
+            shellScale.Scale = responsiveScale * 0.96
+        end
+    end
+
+    local function applyResponsiveLayout()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        viewportCompact = viewport.X < 860
+        setDetailsVisible(requestedDetails and not viewportCompact, false)
+        updateResponsiveScale()
+    end
+
+    applyResponsiveLayout()
+    pcall(function()
+        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+    end)
+
+    task.defer(function()
+        if not gui.Parent then return end
+        entered = true
+        playTween(backdrop, MOTION.slow, { BackgroundTransparency = 0.78 })
+        playTween(shell, MOTION.slow, { GroupTransparency = 0 }, nil, nil, "visibility")
+        playTween(shellScale, MOTION.slow, { Scale = responsiveScale })
     end)
 end
 
@@ -854,5 +1870,5 @@ elseif savedKey ~= "" then
     PassToKeyChecker(savedKey)
 else
     -- ถ้าไม่มีคีย์ ให้สร้าง UI พร้อมนำ activeKey มา pre-fill ในช่องใส่ Key ให้อัตโนมัติ
-    CreateLoaderUI("กรุณากรอก Luarmor Key ของคุณเพื่อเริ่มใช้งานสคริปต์", activeKey)
+    CreateLoaderUI(nil, activeKey)
 end
