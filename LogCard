@@ -1,0 +1,378 @@
+-- [[ PayomboyZ - Horst Manager Log Script (Anime Card Farm / GAG 2 Structure) ]]
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+-- รอให้เกมโหลดและมี LocalPlayer ก่อนทำงาน
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local lp = Players.LocalPlayer
+while not lp do
+    task.wait(0.5)
+    lp = Players.LocalPlayer
+end
+
+-- ✅ Horst Config
+if getgenv then
+    getgenv().HorstConfig = {
+        ["EnableLog"] = true,
+        ["Whitescreen"] = false,
+        ["EnableAddFriends"] = false,
+        ["LockFps"] = {
+            ["EnableLockFps"] = false,
+            ["LockFpsAmount"] = 30 
+        }
+    }
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/HorstSpaceX/last_update/main/on_loaded.lua"))()
+    end)
+end
+
+-- 💰 1. ฟังก์ชันดึงจำนวนเงิน (Currency) - กรอง Multiplier ออกถูกต้อง 100%
+local function getCurrency(lp, playerGui)
+    -- 1. Check leaderstats / Attributes
+    if lp then
+        local leaderstats = lp:FindFirstChild("leaderstats") or lp:FindFirstChild("Stats") or lp:FindFirstChild("Data")
+        if leaderstats then
+            for _, stat in ipairs(leaderstats:GetChildren()) do
+                local sName = stat.Name:lower()
+                if (sName:find("cash") or sName:find("money") or sName:find("coin") or sName:find("yen")) 
+                   and not sName:find("mult") and not sName:find("boost") then
+                    local val = stat.Value
+                    if val then
+                        local txt = tostring(val)
+                        if not txt:find("%$") then txt = "$" .. txt end
+                        return txt
+                    end
+                end
+            end
+        end
+        for _, attr in ipairs({"Cash", "Money", "Coins", "Currency", "Yen"}) do
+            local v = lp:GetAttribute(attr)
+            if v then
+                local txt = tostring(v)
+                if not txt:find("%$") then txt = "$" .. txt end
+                return txt
+            end
+        end
+    end
+
+    if not playerGui then return "$0" end
+
+    local candidates = {}
+
+    -- 2. สแกน TextLabel ใน PlayerGui ทั้งหมด
+    for _, desc in ipairs(playerGui:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextBox") then
+            local raw = tostring(desc.Text or "")
+            -- ลบ HTML / RichText tags
+            local clean = raw:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or ""
+            local lower = clean:lower()
+            local nLower = desc.Name:lower()
+            local pName = desc.Parent and desc.Parent.Name:lower() or ""
+
+            -- ❌ กรอง Multiplier / Shop / Pass / Robux / Boost ออกทั้งหมด
+            local isMultiplier = lower:find("multiplier") or lower:find("mult") or lower:find("boost") 
+                              or lower:match("%d+%.?%d*%s*x$") or clean:find("Cash:") or nLower:find("mult")
+            local isIgnored = lower:find("shop") or lower:find("robux") or lower:find("pass") 
+                           or lower:find("card") or lower:find("pack") or lower:find("level") or lower:find("lvl")
+
+            if not isMultiplier and not isIgnored then
+                -- รูปแบบที่ 1: มี $ และมีตัวเลขหลักเงิน (เช่น $358.17Ud, $44.69Ud, $1.68Dd)
+                if clean:find("%$") and clean:match("%d") then
+                    table.insert(candidates, { text = clean, priority = 1 })
+                else
+                    -- รูปแบบที่ 2: มีตัวเลข + หน่วยเงิน (Ud, Dd, Td, K, M, B, T ฯลฯ) ที่ไม่ใช่ x
+                    local moneyMatch = clean:match("^(%d+%.?%d*%s*[A-Za-z]+)$")
+                    if moneyMatch and not moneyMatch:lower():find("x$") then
+                        table.insert(candidates, { text = "$" .. moneyMatch, priority = 2 })
+                    elseif (nLower:find("coin") or nLower:find("cash") or pName:find("coin") or pName:find("cash") or pName:find("currency")) and clean:match("%d") then
+                        if #clean <= 25 and not clean:find(":") then
+                            local formatted = clean:find("%$") and clean or ("$" .. clean)
+                            table.insert(candidates, { text = formatted, priority = 3 })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- เรียง priority แล้วดึงอันแรก
+    table.sort(candidates, function(a, b) return a.priority < b.priority end)
+    if #candidates > 0 then
+        return candidates[1].text
+    end
+
+    return "$0"
+end
+
+-- ⚙️ 2. ฟังก์ชันดึงเลเวลสายพาน (Conveyor Level - Cv)
+local function getConveyorLevel(lp, playerGui)
+    -- 1. Check Player Attributes / leaderstats
+    if lp then
+        for _, attr in ipairs({"ConveyorLevel", "ConveyorLvl", "ConveyorLv", "ConveyerLevel", "ConveyerLvl", "ConveyerLv", "Conveyor", "Conveyer", "Cv", "BeltLevel", "BeltLvl"}) do
+            local v = lp:GetAttribute(attr)
+            if v then return "Cv:" .. tostring(v) end
+        end
+        local leaderstats = lp:FindFirstChild("leaderstats") or lp:FindFirstChild("Stats") or lp:FindFirstChild("Data")
+        if leaderstats then
+            for _, stat in ipairs(leaderstats:GetChildren()) do
+                local sName = stat.Name:lower()
+                if sName:find("conveyor") or sName:find("belt") or sName == "cv" then
+                    local val = stat.Value
+                    if val then return "Cv:" .. tostring(val) end
+                end
+            end
+        end
+    end
+
+    -- 2. Helper หา Plot ของผู้เล่นแบบละเอียด 100%
+    local function findMyPlot()
+        if not lp then return nil end
+
+        -- ดึง PlotNumber (ทั้งแบบ Object Value และ Attribute)
+        local plotNum = 0
+        if lp:FindFirstChild("PlotNumber") then
+            plotNum = tonumber(lp.PlotNumber.Value) or 0
+        elseif lp:GetAttribute("PlotNumber") then
+            plotNum = tonumber(lp:GetAttribute("PlotNumber")) or 0
+        elseif lp:FindFirstChild("Plot") then
+            plotNum = tonumber(lp.Plot.Value) or 0
+        elseif lp:GetAttribute("Plot") then
+            plotNum = tonumber(lp:GetAttribute("Plot")) or 0
+        end
+
+        -- ค้นหาโฟลเดอร์ Plots ทั้งหมดที่มีใน Workspace
+        local plotsFolders = {}
+        if workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots") then
+            table.insert(plotsFolders, workspace.MAP.Plots)
+        end
+        if workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Plots") then
+            table.insert(plotsFolders, workspace.Map.Plots)
+        end
+        if workspace:FindFirstChild("Plots") then
+            table.insert(plotsFolders, workspace.Plots)
+        end
+
+        for _, folder in ipairs(plotsFolders) do
+            -- 1. เช็คจาก PlotNumber
+            if plotNum ~= 0 then
+                local p = folder:FindFirstChild(tostring(plotNum))
+                if p then return p end
+            end
+
+            -- 2. เช็คจากชื่อ Plot หรือ Owner
+            for _, plot in ipairs(folder:GetChildren()) do
+                if plot.Name == lp.Name or plot.Name == tostring(lp.UserId) then
+                    return plot
+                end
+
+                -- เช็ค Owner แบบ Attribute
+                local attrOwner = plot:GetAttribute("Owner") or plot:GetAttribute("OwnerName") or plot:GetAttribute("Player")
+                if attrOwner and (tostring(attrOwner) == lp.Name or tostring(attrOwner) == tostring(lp.UserId)) then
+                    return plot
+                end
+
+                -- เช็ค Owner แบบ Child Object (StringValue / ObjectValue / IntValue)
+                local ownerObj = plot:FindFirstChild("Owner") or plot:FindFirstChild("OwnerName") or plot:FindFirstChild("Player") or plot:FindFirstChild("UserId")
+                if ownerObj then
+                    if ownerObj:IsA("StringValue") and ownerObj.Value == lp.Name then
+                        return plot
+                    elseif ownerObj:IsA("ObjectValue") and ownerObj.Value == lp then
+                        return plot
+                    elseif (ownerObj:IsA("IntValue") or ownerObj:IsA("NumberValue")) and ownerObj.Value == lp.UserId then
+                        return plot
+                    elseif tostring(ownerObj.Value) == lp.Name or tostring(ownerObj.Value) == tostring(lp.UserId) then
+                        return plot
+                    end
+                end
+            end
+        end
+
+        -- 3. ค้นหาลึกใน Workspace กรณีหาโฟลเดอร์ Plots ไม่เจอ
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if desc:IsA("Folder") or desc:IsA("Model") then
+                local ownerChild = desc:FindFirstChild("Owner")
+                local ownerVal = ownerChild and ownerChild.Value
+                if desc.Name == lp.Name 
+                   or desc:GetAttribute("Owner") == lp.Name 
+                   or desc:GetAttribute("Owner") == lp.UserId
+                   or ownerVal == lp.Name 
+                   or ownerVal == lp then
+                    local pf = desc:FindFirstAncestor("Plots") or desc:FindFirstAncestorWhichIsA("Folder")
+                    if pf and pf.Name:lower():find("plot") then
+                        return desc
+                    end
+                end
+            end
+        end
+
+        return nil
+    end
+
+    -- 3. Check Workspace Plot
+    local plotCv = nil
+    pcall(function()
+        local myPlot = findMyPlot()
+        if myPlot then
+            -- สแกน Attributes และ Value Objects ใน Plot, Plot_N0 หรือซับโมเดล
+            local targets = {myPlot, myPlot:FindFirstChild("Plot_N0")}
+            for _, child in ipairs(myPlot:GetChildren()) do
+                if child:IsA("Model") or child:IsA("Folder") then
+                    table.insert(targets, child)
+                end
+            end
+
+            for _, target in ipairs(targets) do
+                if target then
+                    -- เช็ค Attributes
+                    for _, attr in ipairs({"ConveyorLevel", "ConveyerLevel", "ConveyorLvl", "ConveyerLvl", "BeltLevel", "BeltLvl", "Level", "Cv", "Lvl"}) do
+                        local v = target:GetAttribute(attr)
+                        if v then plotCv = tonumber(v) break end
+                    end
+                    -- เช็ค IntValue / NumberValue children
+                    if not plotCv then
+                        for _, attrName in ipairs({"ConveyorLevel", "ConveyerLevel", "ConveyorLvl", "BeltLevel", "Level", "Cv"}) do
+                            local valObj = target:FindFirstChild(attrName)
+                            if valObj and (valObj:IsA("IntValue") or valObj:IsA("NumberValue") or valObj:IsA("StringValue")) then
+                                plotCv = tonumber(valObj.Value)
+                                if plotCv then break end
+                            end
+                        end
+                    end
+                end
+                if plotCv then break end
+            end
+
+            -- ProximityPrompts / Conveyor Models inside Plot
+            if not plotCv then
+                for _, desc in ipairs(myPlot:GetDescendants()) do
+                    if desc:IsA("ProximityPrompt") then
+                        local act = tostring(desc.ActionText or "")
+                        local obj = tostring(desc.ObjectText or "")
+                        local name = tostring(desc.Name or "")
+                        local parentName = desc.Parent and desc.Parent.Name or ""
+                        local fullStr = act .. " " .. obj .. " " .. name .. " " .. parentName
+                        local lvlMatch = fullStr:match("[Cc]onvey[oe]r%s*[Ll]v[el]*%s*:?%s*(%d+)") 
+                                      or fullStr:match("[Bb]elt%s*[Ll]v[el]*%s*:?%s*(%d+)")
+                                      or fullStr:match("[Cc]v%s*:?%s*(%d+)")
+                        if lvlMatch then plotCv = tonumber(lvlMatch) break end
+                    elseif desc:IsA("Model") and (desc.Name:lower():find("convey") or desc.Name:lower():find("belt")) then
+                        local lvl = desc:GetAttribute("Level") or desc:GetAttribute("Lvl") or desc:GetAttribute("ConveyorLevel") or desc:GetAttribute("ConveyerLevel")
+                        if lvl then plotCv = tonumber(lvl) break end
+                    end
+                end
+            end
+        end
+    end)
+
+    if plotCv then
+        return "Cv:" .. tostring(plotCv)
+    end
+
+    -- 4. Scan UI TextLabels / TextButtons ใน PlayerGui
+    if playerGui then
+        for _, desc in ipairs(playerGui:GetDescendants()) do
+            if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+                local raw = tostring(desc.Text or "")
+                local clean = raw:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or ""
+                local cvMatch = clean:match("[Cc]v%s*:?%s*(%d+)") 
+                             or clean:match("[Cc]onvey[oe]r%s*[Ll]v[el]*%s*:?%s*(%d+)")
+                             or clean:match("[Bb]elt%s*[Ll]v[el]*%s*:?%s*(%d+)")
+                if cvMatch then
+                    local n = tonumber(cvMatch)
+                    if n and n >= 1 and n <= 500 then
+                        return "Cv:" .. n
+                    end
+                end
+            end
+        end
+    end
+
+    return "Cv:1"
+end
+
+-- 📊 3. ฟังก์ชันหลักอัปเดตสถานะให้ Horst Manager
+local function updateHorstDescription()
+    local lp = Players.LocalPlayer
+    if not lp then return end
+
+    local backpack = lp:FindFirstChild("Backpack")
+    local playerGui = lp:FindFirstChild("PlayerGui")
+
+    local coins = getCurrency(lp, playerGui)
+    local cvStr = getConveyorLevel(lp, playerGui)
+
+    local cardStats = {
+        Grail    = {S = 0, A = 0, U = 0, G = 0},
+        Blaze    = {S = 0, A = 0, U = 0, G = 0},
+        Conquest = {S = 0, A = 0, U = 0, G = 0},
+        Devour   = {S = 0, A = 0, U = 0, G = 0}
+    }
+
+    local item_data = {
+        Coins = coins,
+        ConveyorLevel = cvStr
+    }
+
+    local containers = {backpack, lp.Character}
+    for _, container in ipairs(containers) do
+        if container then
+            for _, v in ipairs(container:GetChildren()) do
+                if v:IsA("Tool") then
+                    local itemName     = string.lower(v.Name)
+                    local itemMutation = tostring(v:GetAttribute("Mutation") or v:GetAttribute("CardMutation") or ""):lower()
+                    local itemRarity   = tostring(v:GetAttribute("Rarity") or v:GetAttribute("CardGrade") or ""):lower()
+                    local cardName     = tostring(v:GetAttribute("CardName") or ""):lower()
+                    local tmplName     = tostring(v:GetAttribute("TemplateName") or ""):lower()
+
+                    local fullText = itemName .. " " .. itemMutation .. " " .. itemRarity .. " " .. cardName .. " " .. tmplName
+                    local count    = tonumber(v:GetAttribute("Count") or v:GetAttribute("Amount") or 1) or 1
+
+                    for rarityName, data in pairs(cardStats) do
+                        if fullText:find(rarityName:lower()) then
+                            if fullText:find("starfallen") then
+                                data.S = data.S + count
+                            elseif fullText:find("admin") then
+                                data.A = data.A + count
+                            elseif fullText:find("unknow") or fullText:find("unknown") then
+                                data.U = data.U + count
+                            elseif fullText:find("glitch") then
+                                data.G = data.G + count
+                            end
+                            item_data[v.Name] = (item_data[v.Name] or 0) + count
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local messages = string.format(
+        "💰 %s ⚙️ %s - 🏆 Grail: [S:%d A:%d U:%d G:%d] 🔥 Blaze: [S:%d A:%d U:%d G:%d] ⚔️ Conquest: [S:%d A:%d U:%d G:%d] 👹 Devour: [S:%d A:%d U:%d G:%d]",
+        coins, cvStr,
+        cardStats.Grail.S,    cardStats.Grail.A,    cardStats.Grail.U,    cardStats.Grail.G,
+        cardStats.Blaze.S,    cardStats.Blaze.A,    cardStats.Blaze.U,    cardStats.Blaze.G,
+        cardStats.Conquest.S, cardStats.Conquest.A, cardStats.Conquest.U, cardStats.Conquest.G,
+        cardStats.Devour.S,   cardStats.Devour.A,   cardStats.Devour.U,   cardStats.Devour.G
+    )
+
+    local EncodeJson = HttpService:JSONEncode(item_data)
+
+    if _G and _G.Horst_SetDescription then
+        pcall(_G.Horst_SetDescription, messages, EncodeJson)
+    end
+    if getgenv and getgenv().Horst_SetDescription then
+        pcall(getgenv().Horst_SetDescription, messages, EncodeJson)
+    end
+end
+
+task.spawn(function()
+    while true do
+        pcall(updateHorstDescription)
+        task.wait(1)
+    end
+end)
