@@ -1867,6 +1867,58 @@ local function isPackCard(obj)
     return isPackByText
 end
 
+local function isBossOrRaidCard(obj)
+    if not obj then return false end
+    
+    pcall(function()
+        if obj:GetAttribute("IsBoss") == true 
+            or obj:GetAttribute("IsBossCard") == true
+            or obj:GetAttribute("IsBossTicket") == true
+            or obj:GetAttribute("IsRaid") == true
+            or obj:GetAttribute("IsRaidCard") == true
+            or obj:GetAttribute("IsRaidTicket") == true
+            or obj:GetAttribute("BossValue") ~= nil
+            or obj:GetAttribute("RaidValue") ~= nil
+        then
+            return true
+        end
+        local cType = obj:GetAttribute("CardType") or obj:GetAttribute("TicketType") or obj:GetAttribute("Type")
+        if cType and (string.find(string.lower(tostring(cType)), "boss") or string.find(string.lower(tostring(cType)), "raid") or string.find(string.lower(tostring(cType)), "ticket")) then
+            return true
+        end
+    end)
+
+    local name = string.lower(obj.Name or "")
+    local templateAttr = obj:GetAttribute("TemplateName")
+    local template = templateAttr and string.lower(tostring(templateAttr)) or ""
+    local cardNameAttr = obj:GetAttribute("CardName")
+    local cardName = cardNameAttr and string.lower(tostring(cardNameAttr)) or ""
+    
+    local keywords = {"boss ticket", "raid ticket", "bossticket", "raidticket", "บัตรบอส", "บัตรเรด", "บัตร บอส", "บัตร เรด", "บอสการ์ด", "เรดการ์ด", "boss card", "raid card", "boss", "raid", "ticket", "ตั๋ว", "บัตร"}
+    for _, kw in ipairs(keywords) do
+        if string.find(name, kw) or (template ~= "" and string.find(template, kw)) or (cardName ~= "" and string.find(cardName, kw)) then
+            return true
+        end
+    end
+
+    local isBossRaid = false
+    pcall(function()
+        for _, descendant in ipairs(obj:GetDescendants()) do
+            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+                local txt = string.lower(descendant.Text or "")
+                for _, kw in ipairs(keywords) do
+                    if string.find(txt, kw) then
+                        isBossRaid = true
+                        break
+                    end
+                end
+            end
+            if isBossRaid then break end
+        end
+    end)
+    return isBossRaid
+end
+
 local function getCardRank(item)
     if not item then return "None" end
     local attr = item:GetAttribute("Rank") 
@@ -3831,15 +3883,22 @@ local function GetInventoryCardsForReroll()
     local function scanFolder(folder)
         if not folder then return end
         for _, item in ipairs(folder:GetChildren()) do
-            if item:IsA("Tool") and not isPackCard(item) and (item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or string.find(item.Name, "Card")) then
-                local cardName = item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or item.Name
-                local mutation = getCardMutation(item)
-                local trait = getCardTrait(item)
-                local uid = item.Name
-                local rank = getCardRank(item)
-                local display = string.format("[%s] %s | Rnk: %s | Trt: %s", mutation, cardName, rank, trait)
-                local key = display .. " (" .. string.sub(uid, 1, 4) .. ")"
-                inventory[key] = item
+            if item:IsA("Tool") then
+                local isPack = false
+                pcall(function() isPack = isPackCard(item) end)
+                local isBossRaid = false
+                pcall(function() isBossRaid = isBossOrRaidCard and isBossOrRaidCard(item) end)
+
+                if not isPack and not isBossRaid then
+                    local cardName = item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or item.Name
+                    local mutation = getCardMutation(item)
+                    local trait = getCardTrait(item)
+                    local uid = item.Name
+                    local rank = getCardRank(item)
+                    local display = string.format("[%s] %s | Rnk: %s | Trt: %s", mutation, cardName, rank, trait)
+                    local key = display .. " (" .. string.sub(uid, 1, 4) .. ")"
+                    inventory[key] = item
+                end
             end
         end
     end
