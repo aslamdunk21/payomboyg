@@ -1748,12 +1748,12 @@ local RaritiesList = {
     "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
     "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
     "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
-    "Smash", "Emblem", "Chrono", "Limited"
+    "Smash", "Emblem", "Chrono", "Event", "Newpack", "Limited"
 }
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow", "Event"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow", "Newmutation", "Limited", "Event"
 }
 
 local TraitsList = {
