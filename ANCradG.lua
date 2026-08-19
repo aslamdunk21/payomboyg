@@ -4588,9 +4588,9 @@ local function parseSuffixValue(txt)
 end
 
 Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing)")
-local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { Title = "เคลียร์ขยะอัตโนมัติเมื่อกระเป๋าเต็ม", Default = false })
+local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card)", Default = false })
 local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
-    Title = "ระดับขั้นต่ำที่ต้องการเก็บไว้",
+    Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้",
     Values = RaritiesList,
     Multi = false,
     Default = "Rare"
@@ -4671,26 +4671,30 @@ InvBalToggle:OnChanged(function(state)
                         local trashCards = {}
                         
                         for _, t in ipairs(items) do
-                            local isPack = isPackCard(t)
+                            -- Strict Protection: ONLY sell Pack Cards (isPackCard == true)
+                            -- NEVER sell actual character cards or boss/raid cards!
+                            local isPack = false
+                            pcall(function() isPack = isPackCard(t) end)
+                            if not isPack then
+                                continue
+                            end
+
+                            local isBossRaid = false
+                            pcall(function() isBossRaid = isBossOrRaidCard and isBossOrRaidCard(t) end)
+                            if isBossRaid then
+                                continue
+                            end
+                            
                             local rarity = getToolRarity(t)
                             local rIdx = getRarityIndex(rarity)
                             
-                            if isPack and rIdx == 99 then
+                            if rIdx == 99 then
                                 local upName = string.upper(t.Name)
                                 for idx, rName in ipairs(RaritiesList) do
                                     if string.find(upName, string.upper(rName), 1, true) then
                                         rIdx = idx
                                         break
                                     end
-                                end
-                            end
-                            
-                            if not isPack then
-                                local mut = string.lower(getCardMutation(t))
-                                if mut ~= "normal" and mut ~= "golden" then continue end
-                                local rankStr = string.upper(tostring(getCardRank(t)))
-                                if rankStr:find("SS") or rankStr:find("UR") or rankStr:find("LR") or rankStr:find("GODLY") or rankStr:find("SECRET") or rankStr:find("ADMIN") then
-                                    rIdx = 99
                                 end
                             end
                             
@@ -4719,7 +4723,7 @@ InvBalToggle:OnChanged(function(state)
                                     if t and t.Parent then t:Destroy() end
                                 end)
                             end
-                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์การ์ด/แพ็กขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
+                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์แพ็คขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
                         end
                     end
                 end)
@@ -5546,6 +5550,18 @@ end
 
 -- UI Component Setup
 
+getgenv().TargetTowerFloor = getgenv().TargetTowerFloor or 0
+local TargetFloorInput = Tabs.Raid:AddInput("TargetTowerFloorInput", {
+    Title = "🏰 ชั้นหอคอยเป้าหมาย (0 = ชั้นล่าสุด/สูงสุด)",
+    Default = tostring(getgenv().TargetTowerFloor or 0),
+    Placeholder = "เช่น 10 (ใส่ 0 เพื่อลงชั้นสูงสุด)",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        getgenv().TargetTowerFloor = tonumber(Value) or 0
+    end
+})
+
 getgenv().TowerCardSource = getgenv().TowerCardSource or "จากในกระเป๋า (Inventory)"
 local TowerSourceDropdown = Tabs.Raid:AddDropdown("TowerCardSource", {
     Title = "🏰 แหล่งที่มาของการ์ดหอคอย",
@@ -5578,6 +5594,13 @@ BossDiffDropdown:OnChanged(function(Value)
     getgenv().BossRaidDifficulty = Value
 end)
 
+local function getMinutesToNextBoss()
+    local min = tonumber(os.date("!%M")) or tonumber(os.date("%M")) or 0
+    if min <= 5 then return 0
+    elseif min >= 58 then return 0
+    else return 58 - min end
+end
+
 -- Unified Background Orchestrator Loop for Tower & Boss Raid
 local isRaidTowerLoopRunning = false
 local function startRaidTowerManagerLoop()
@@ -5603,8 +5626,16 @@ local function startRaidTowerManagerLoop()
                 end
 
                 if shouldDoBoss then
-                    -- 1. Execute Boss Raid Logic (Or transition out of Tower if currently inside)
-                    local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
+                    -- 1. Execute Boss Raid Logic
+                    -- Priority Guard: Exit Tower if player is currently in Tower match or AutoReplay is active
+                    if getgenv().AutoReplayToggled or getgenv().TowerHasCollected then
+                        if logLine then pcall(function() logLine("RAID", "🐉 ถึงเวลาบอสเรด! กำลังกดออกจากหอคอยเพื่อลงบอส...") end) end
+                        Fluent:Notify({ Title = "บอสเรด", Content = "ถึงเวลาบอสเรด! กำลังกดออกจากหอคอย...", Duration = 4 })
+                        exitTowerNow()
+                        task.wait(1.5)
+                    end
+
+                    local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn
                     local alreadyFoughtText = false
 
                     for _, v in ipairs(playerGui:GetDescendants()) do
@@ -5653,14 +5684,8 @@ local function startRaidTowerManagerLoop()
                     if alreadyFoughtText then
                         getgenv().BossFoughtHourKey = getCurrentHourKey()
                         pcall(closeBossRaidUI)
-                        Fluent:Notify({ Title = "บอสเรด", Content = "คุณสู้บอสไปแล้วในชั่วโมงนี้! สลับกลับไปทำระบบอื่น", Duration = 4 })
+                        Fluent:Notify({ Title = "บอสเรด", Content = "คุณสู้บอสไปแล้วในชั่วโมงนี้! สลับกลับไปลงหอคอย", Duration = 4 })
                     else
-                        -- If we are in Tower, exit tower first to enter Boss Raid
-                        if getgenv().AutoReplayToggled and not (diffBtn or battleBtn) then
-                            exitTowerNow()
-                            task.wait(1.5)
-                        end
-
                         local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
                         if not inBattle then
                             if getgenv().BossCardSource == "จากบนฐาน (Plot)" and not getgenv().BossHasCollected then
@@ -5714,7 +5739,7 @@ local function startRaidTowerManagerLoop()
                             if logLine then pcall(function() logLine("RAID", "🐉 เริ่มเข้าต่อสู้บอสเรด (Boss Raid)") end) end
                             fireButton(battleBtn)
                             getgenv().BossFoughtHourKey = getCurrentHourKey()
-                            task.wait(0.2)
+                            task.wait(0.5)
                             local character = LocalPlayer.Character
                             if getgenv().BossOriginalCFrame and character then
                                 character:PivotTo(getgenv().BossOriginalCFrame)
@@ -5722,6 +5747,8 @@ local function startRaidTowerManagerLoop()
                                 placeCollectedCardsBack()
                             end
                             getgenv().BossHasCollected = false
+                            getgenv().AutoReplayToggledBoss = false
+                            pcall(closeBossRaidUI)
                         end
 
                         if autoReplayBtn and not getgenv().AutoReplayToggledBoss then
@@ -5781,6 +5808,27 @@ local function startRaidTowerManagerLoop()
                         end
                     end
 
+                    -- Apply Target Floor setting if specified by user
+                    local targetFloorNum = tonumber(getgenv().TargetTowerFloor) or 0
+                    if targetFloorNum > 0 then
+                        pcall(function()
+                            for _, tb in ipairs(playerGui:GetDescendants()) do
+                                if tb:IsA("TextBox") and isGuiVisible(tb) then
+                                    local pName = string.lower(tb.Name)
+                                    local parentName = tb.Parent and string.lower(tb.Parent.Name) or ""
+                                    if pName:find("floor") or pName:find("level") or parentName:find("tower") or parentName:find("floor") then
+                                        if tb.Text ~= tostring(targetFloorNum) then
+                                            tb.Text = tostring(targetFloorNum)
+                                            if getconnections then
+                                                for _, c in ipairs(getconnections(tb.FocusLost)) do c:Fire(true) end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+                    end
+
                     local openPrompt
                     for _, p in ipairs(workspace:GetDescendants()) do
                         if p:IsA("ProximityPrompt") then
@@ -5823,7 +5871,8 @@ local function startRaidTowerManagerLoop()
                     if openBtn and not inTowerUI and not inBattle then fireButton(openBtn) task.wait(0.4) end
                     if equipBtn then fireButton(equipBtn) task.wait(0.4) end
                     if battleBtn then
-                        if logLine then pcall(function() logLine("TOWER", "🏰 เริ่มเข้าต่อสู้หอคอย (Infinity Tower)") end) end
+                        local floorNotice = targetFloorNum > 0 and (" ชั้น: " .. tostring(targetFloorNum)) or ""
+                        if logLine then pcall(function() logLine("TOWER", "🏰 เริ่มเข้าต่อสู้หอคอย (Infinity Tower)" .. floorNotice) end) end
                         fireButton(battleBtn)
                         task.wait(0.5)
                         if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
