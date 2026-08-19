@@ -3510,28 +3510,14 @@ end)
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
 
-    local rarity = model:GetAttribute("Rarity") 
-        or model:GetAttribute("CardGrade") 
-        or model:GetAttribute("Grade") 
-        or model:GetAttribute("CardRarity")
-        or model:GetAttribute("PackRarity")
-        or model:GetAttribute("BoxRarity")
-        or model:GetAttribute("PackName")
-        or model:GetAttribute("TemplateName")
-        or model:GetAttribute("CardName")
+    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
 
     rarity = rarity and tostring(rarity) or ""
     mutation = mutation and tostring(mutation) or "Normal"
 
-    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-    local promptTxt = ""
-    if prompt then
-        promptTxt = string.lower((prompt.ActionText or "") .. " " .. (prompt.ObjectText or "") .. " " .. prompt.Name)
-    end
-
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "PackRarity", "PackName", "TemplateName", "CardName"}) do
+        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel"}) do
             local obj = model:FindFirstChild(childName, true)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
@@ -3572,7 +3558,7 @@ local function getCardModelRarityAndMutation(model)
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(RaritiesList or {}) do
+                for _, rName in ipairs(RaritiesList or {"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
                     if cl:find(string.lower(rName)) then
                         rarity = rName
                         break
@@ -3581,32 +3567,6 @@ local function getCardModelRarityAndMutation(model)
                 if rarity ~= "" then break end
             end
         end
-    end
-
-    if rarity == "" and promptTxt ~= "" then
-        for _, rName in ipairs(RaritiesList or {}) do
-            if promptTxt:find(string.lower(rName)) then
-                rarity = rName
-                break
-            end
-        end
-    end
-
-    if rarity == "" or rarity == "nil" then
-        local mName = string.lower(model.Name)
-        if mName:find("unknown") then
-            rarity = "Unknown"
-        elseif mName:find("unknow") then
-            rarity = "Unknow"
-        else
-            rarity = model.Name
-        end
-    end
-
-    if rarity ~= "" then
-        local cleanedRarity = string.gsub(rarity, "%s+[Pp][Aa][Cc][Kk]$", "")
-        cleanedRarity = string.gsub(cleanedRarity, "%s+[Bb][Oo][Xx]$", "")
-        if cleanedRarity ~= "" then rarity = cleanedRarity end
     end
 
     return rarity, mutation
@@ -3639,76 +3599,22 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 25 or (tick() - firstSeen > 25) then
+        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
             model:SetAttribute("Rejected", true)
             continue
         end
 
         local cardRarity, cardMutation = getCardModelRarityAndMutation(model)
-        local rLower = string.lower(tostring(cardRarity))
-        local mLower = string.lower(tostring(cardMutation))
 
-        local hasRarityFilter = false
-        if getgenv().SelectedRarities then
-            for k, v in pairs(getgenv().SelectedRarities) do
-                if v == true and tostring(k) ~= "" then hasRarityFilter = true; break end
-            end
-        end
+        local hasRaritiesSelected = (getgenv().SelectedRarities and next(getgenv().SelectedRarities) ~= nil)
+        local hasMutationsSelected = (getgenv().SelectedMutations and next(getgenv().SelectedMutations) ~= nil)
 
-        local hasMutationFilter = false
-        if getgenv().SelectedMutations then
-            for k, v in pairs(getgenv().SelectedMutations) do
-                if v == true and tostring(k) ~= "" then hasMutationFilter = true; break end
-            end
-        end
+        local matchRarity = not hasRaritiesSelected or (cardRarity ~= "" and getgenv().SelectedRarities[string.lower(cardRarity)] == true)
+        local matchMutation = not hasMutationsSelected or (cardMutation ~= "" and getgenv().SelectedMutations[string.lower(cardMutation)] == true)
 
-        local matchRarity = not hasRarityFilter
-        if hasRarityFilter then
-            if getgenv().SelectedRarities[rLower] == true then
-                matchRarity = true
-            elseif (rLower:find("unknown") or rLower:find("unknow")) and (getgenv().SelectedRarities["unknown"] == true or getgenv().SelectedRarities["unknow"] == true) then
-                matchRarity = true
-            else
-                for selRarity, isSel in pairs(getgenv().SelectedRarities) do
-                    if isSel and selRarity ~= "" then
-                        local sLow = string.lower(tostring(selRarity))
-                        if rLower:find(sLow, 1, true) or sLow:find(rLower, 1, true) 
-                           or string.lower(model.Name):find(sLow, 1, true) 
-                           or promptTxt:find(sLow, 1, true) then
-                            matchRarity = true
-                            break
-                        end
-                    end
-                end
-            end
-        end
-
-        local matchMutation = not hasMutationFilter
-        if hasMutationFilter then
-            if getgenv().SelectedMutations[mLower] == true then
-                matchMutation = true
-            elseif (mLower:find("unknown") or mLower:find("unknow")) and (getgenv().SelectedMutations["unknown"] == true or getgenv().SelectedMutations["unknow"] == true) then
-                matchMutation = true
-            else
-                for selMut, isSel in pairs(getgenv().SelectedMutations) do
-                    if isSel and selMut ~= "" then
-                        local sMut = string.lower(tostring(selMut))
-                        if mLower:find(sMut, 1, true) or sMut:find(mLower, 1, true) or promptTxt:find(sMut, 1, true) then
-                            matchMutation = true
-                            break
-                        end
-                    end
-                end
-            end
-        end
-
-        if isPackCard(model) then
-            if (getgenv().SelectedRarities and (getgenv().SelectedRarities["unknown"] or getgenv().SelectedRarities["unknow"])) or (getgenv().SelectedMutations and (getgenv().SelectedMutations["unknown"] or getgenv().SelectedMutations["unknow"])) then
-                if rLower:find("unknown") or rLower:find("unknow") or mLower:find("unknown") or mLower:find("unknow") or string.lower(model.Name):find("pack") or string.lower(model.Name):find("box") then
-                    matchRarity = true
-                    matchMutation = true
-                end
-            end
+        if not hasRaritiesSelected and not hasMutationsSelected then
+            matchRarity = true
+            matchMutation = true
         end
 
         if matchRarity and matchMutation then
@@ -3727,7 +3633,7 @@ local function instantBuyLoop()
                     model:SetAttribute("LoggedBuy", true)
                     if getgenv().AFKRuntime and getgenv().AFKRuntime.stats then
                         getgenv().AFKRuntime.stats.bought = (getgenv().AFKRuntime.stats.bought or 0) + 1
-                        local rLow = rLower
+                        local rLow = string.lower(cardRarity)
                         if rLow:find("secret") or rLow:find("divine") or rLow:find("godly") or rLow:find("cosmic") or rLow:find("eternal") or rLow:find("transcendent") then
                             getgenv().AFKRuntime.stats.secret = (getgenv().AFKRuntime.stats.secret or 0) + 1
                         end
@@ -3749,7 +3655,6 @@ local function instantBuyLoop()
                 end
             end
         else
-            -- Only mark card as Rejected if it has been visible for > 1.5 seconds, giving text/attributes time to replicate!
             if tick() - firstSeen > 1.5 then
                 model:SetAttribute("Rejected", true)
             end
