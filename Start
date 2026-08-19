@@ -7,7 +7,7 @@
 local LuarmorConfig = {
     ScriptId = "PayomboyZ_Hub",
     SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
-    GetKeyURL = "https://discord.gg/GBKDAe23C",
+    GetKeyURL = "https://ads.luarmor.net/get_key?for=PBG-fVUxHRHebIHz",
     DiscordURL = "https://discord.gg/GBKDAe23C",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
@@ -858,33 +858,20 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, capAvatarFrame)
     round(capAvatarImg, 21)
 
+    pcall(function()
+        capAvatarImg.Image = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size420x420
+        )
+    end)
+
     -- 👤 USERNAME & ⚡ METRICS (FPS & PING)
-    local initialUser = LocalPlayer and LocalPlayer.Name or "User"
-    local capUserLabel = textLabel(toggleCapsule, "@" .. initialUser, UDim2.new(0, 56, 0, 10), UDim2.new(1, -58, 0, 18), Enum.Font.GothamBold, 12, COLORS.text)
+    local capUserLabel = textLabel(toggleCapsule, "@" .. LocalPlayer.Name, UDim2.new(0, 56, 0, 10), UDim2.new(1, -58, 0, 18), Enum.Font.GothamBold, 12, COLORS.text)
     capUserLabel.ZIndex = 3
 
     local capMetricsLabel = textLabel(toggleCapsule, "⚡ 60 FPS  •  📡 0 ms", UDim2.new(0, 56, 0, 28), UDim2.new(1, -58, 0, 16), Enum.Font.GothamBold, 10, COLORS.cyan)
     capMetricsLabel.ZIndex = 3
-
-    task.spawn(function()
-        local player = Players.LocalPlayer
-        while not player do
-            task.wait(0.1)
-            player = Players.LocalPlayer
-        end
-        capUserLabel.Text = "@" .. player.Name
-        capAvatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=420&h=420"
-        pcall(function()
-            local content, isReady = Players:GetUserThumbnailAsync(
-                player.UserId,
-                Enum.ThumbnailType.HeadShot,
-                Enum.ThumbnailSize.Size420x420
-            )
-            if content and content ~= "" then
-                capAvatarImg.Image = content
-            end
-        end)
-    end)
 
     -- 🔄 REALTIME FPS & PING UPDATE LOOP FOR TOGGLE CAPSULE
     task.spawn(function()
@@ -1082,32 +1069,18 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     onlinePulseUp:Play()
     gui.Destroying:Connect(function() onlinePulseUp:Cancel() end)
 
-    local displayNameLabel = textLabel(userPanel, "PayomboyZ User", UDim2.fromOffset(18, 160), UDim2.new(1, -36, 0, 18), Enum.Font.GothamBold, 13, COLORS.text, Enum.TextXAlignment.Center)
-    local userNameLabel = textLabel(userPanel, "@unknown", UDim2.fromOffset(18, 177), UDim2.new(1, -36, 0, 15), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
-    local userIdLabel = textLabel(userPanel, "ID: -----", UDim2.fromOffset(18, 192), UDim2.new(1, -36, 0, 14), Enum.Font.GothamMedium, 9, COLORS.cyan, Enum.TextXAlignment.Center)
-
-    task.spawn(function()
-        local player = Players.LocalPlayer
-        while not player do
-            task.wait(0.1)
-            player = Players.LocalPlayer
-        end
-        displayNameLabel.Text = player.DisplayName or player.Name
-        userNameLabel.Text = "@" .. player.Name
-        userIdLabel.Text = "ID: " .. tostring(player.UserId)
-
-        avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=420&h=420"
-        pcall(function()
-            local content, isReady = Players:GetUserThumbnailAsync(
-                player.UserId,
-                Enum.ThumbnailType.HeadShot,
-                Enum.ThumbnailSize.Size420x420
-            )
-            if content and content ~= "" then
-                avatar.Image = content
-            end
-        end)
+    pcall(function()
+        avatar.Image = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size420x420
+        )
     end)
+
+    local displayName = LocalPlayer and (LocalPlayer.DisplayName or LocalPlayer.Name) or "PayomboyZ User"
+    local userName = LocalPlayer and LocalPlayer.Name or "unknown"
+    textLabel(userPanel, displayName, UDim2.fromOffset(18, 164), UDim2.new(1, -36, 0, 22), Enum.Font.GothamBold, 14, COLORS.text, Enum.TextXAlignment.Center)
+    textLabel(userPanel, "@" .. userName, UDim2.fromOffset(18, 185), UDim2.new(1, -36, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
 
     local detectedGame = resolveGameName()
     local infoGroup = create("Frame", {
@@ -1599,7 +1572,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local function setDetailsVisible(visible, announce)
         visible = visible and not viewportCompact
         if visible == detailsVisible and not detailsTransitioning then
-            setSnowflakeCount(visible and DESKTOP_SNOWFLAKES or COMPACT_SNOWFLAKES)
             return
         end
 
@@ -1607,7 +1579,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         local transitionVersion = detailsTransitionVersion
         detailsTransitioning = true
         detailsVisible = visible
-        setSnowflakeCount(visible and DESKTOP_SNOWFLAKES or COMPACT_SNOWFLAKES)
 
         columnDivider.Visible = true
         if visible then
