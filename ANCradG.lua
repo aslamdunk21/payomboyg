@@ -3,131 +3,30 @@
 -- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Button
 
 local Fluent = nil
-local fluentURLs = {
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
+local fluentUrls = {
     "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua"
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/main.lua",
+    "https://raw.githubusercontent.com/disco0000/Fluent/main/main.lua",
+    "https://raw.githubusercontent.com/Anxzety/Fluent/main/main.lua"
 }
-for _, url in ipairs(fluentURLs) do
+
+for _, url in ipairs(fluentUrls) do
     local ok, res = pcall(function()
-        return loadstring(game:HttpGet(url))()
+        local content = game:HttpGet(url)
+        if content and #content > 100 then
+            local func = loadstring(content)
+            if func then return func() end
+        end
     end)
-    if ok and res then
+    if ok and type(res) == "table" then
         Fluent = res
         break
     end
 end
 
 if not Fluent then
-    warn("[PayomboyZ] ไม่สามารถโหลด Fluent UI Library ได้!")
-    return
+    error("Fluent UI Library failed to load from all endpoints!")
 end
-
-local SaveManager = nil
-local saveManagerURLs = {
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/SaveManager.lua",
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/SaveManager.lua"
-}
-for _, url in ipairs(saveManagerURLs) do
-    local ok, res = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if ok and res and type(res) == "table" then
-        SaveManager = res
-        break
-    end
-end
-
-local InterfaceManager = nil
-local interfaceManagerURLs = {
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua",
-    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/Addons/InterfaceManager.lua",
-    "https://raw.githubusercontent.com/dawid-scripts/Fluent/main/Addons/InterfaceManager.lua"
-}
-for _, url in ipairs(interfaceManagerURLs) do
-    local ok, res = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-    if ok and res and type(res) == "table" then
-        InterfaceManager = res
-        break
-    end
-end
-
-pcall(function()
-    local CoreGui = game:GetService("CoreGui")
-    local PlayerGui = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-    local function cleanOldGuis(parent)
-        if not parent then return end
-        for _, v in ipairs(parent:GetChildren()) do
-            if v:IsA("ScreenGui") and (v.Name == "Fluent" or v.Name == "PayomboyZ" or v:FindFirstChild("Main") or v:FindFirstChild("CanvasGroup")) then
-                v:Destroy()
-            end
-        end
-    end
-    cleanOldGuis(CoreGui)
-    cleanOldGuis(PlayerGui)
-end)
-
--- Fix & Prevent Screen Darkening / Blur Effects
-local function disableScreenDarkening()
-    pcall(function()
-        local Lighting = game:GetService("Lighting")
-        for _, v in ipairs(Lighting:GetChildren()) do
-            if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") then
-                local name = string.lower(v.Name)
-                if name:find("fluent") or name:find("acrylic") or name:find("blur") or name:find("dark") or name:find("dim") then
-                    v:Destroy()
-                end
-            end
-        end
-        if not getgenv().PayomboyZ_LightingConn then
-            getgenv().PayomboyZ_LightingConn = Lighting.ChildAdded:Connect(function(child)
-                if child:IsA("BlurEffect") or child:IsA("DepthOfFieldEffect") or child:IsA("ColorCorrectionEffect") then
-                    task.wait(0.05)
-                    local name = string.lower(child.Name)
-                    if name:find("fluent") or name:find("acrylic") or name:find("blur") or name:find("dark") or name:find("dim") then
-                        child:Destroy()
-                    end
-                end
-            end)
-        end
-
-        local CoreGui = game:GetService("CoreGui")
-        local PlayerGui = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-        local containers = { CoreGui, PlayerGui }
-        for _, root in ipairs(containers) do
-            if root then
-                for _, gui in ipairs(root:GetChildren()) do
-                    if gui:IsA("ScreenGui") and (string.find(string.lower(gui.Name), "fluent") or string.find(string.lower(gui.Name), "payomboy")) then
-                        for _, desc in ipairs(gui:GetDescendants()) do
-                            if desc:IsA("Frame") or desc:IsA("CanvasGroup") or desc:IsA("ImageLabel") then
-                                local name = string.lower(desc.Name)
-                                if name == "overlay" or name == "darken" or name == "dimmer" or name == "acrylicpaint" or name == "acrylic" then
-                                    desc.BackgroundTransparency = 1
-                                    desc.Visible = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end
-
-task.spawn(function()
-    for _ = 1, 10 do
-        disableScreenDarkening()
-        task.wait(0.5)
-    end
-end)
-
-pcall(function()
-    if setfpscap then setfpscap(999) end
-end)
 
 local UserInputService = game:GetService("UserInputService")
 local isMobileDevice = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
@@ -140,19 +39,19 @@ local Window = Fluent:CreateWindow({
     TabWidth = defaultTabWidth,
     Size = defaultWindowSize,
     Acrylic = false,
-    Theme = "Dark",
+    Theme = "Rose",
     MinimizeKey = Enum.KeyCode.K
 })
 
 local Tabs = {
     Main = Window:AddTab({ Title = "หลัก", Icon = "home" }),
+    Manage = Window:AddTab({ Title = "จัดการระบบ", Icon = "layout-grid" }),
     Reroll = Window:AddTab({ Title = "รีโรล", Icon = "refresh-cw" }),
     Potion = Window:AddTab({ Title = "น้ำยา", Icon = "flask-conical" }),
-    Manage = Window:AddTab({ Title = "จัดการระบบ", Icon = "folder" }),
     Raid = Window:AddTab({ Title = "เรด & ทาวเวอร์", Icon = "swords" }),
     Trade = Window:AddTab({ Title = "แลกเปลี่ยน", Icon = "arrow-left-right" }),
-    FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor-off" }),
-    Dashboard = Window:AddTab({ Title = "แดชบอร์ด&ตั้งค่า", Icon = "sliders" })
+    FPS = Window:AddTab({ Title = "ลด FPS", Icon = "monitor" }),
+    Dashboard = Window:AddTab({ Title = "แดชบอร์ด & ตั้งค่า", Icon = "sliders" })
 }
 
 local Options = Fluent.Options
@@ -176,13 +75,13 @@ local function dismissPurchasePrompt()
         GuiService:CloseInspectMenu()
     end)
     pcall(function()
-        local purchaseApp = CoreGui:FindFirstChild("PurchasePromptApp")
+        local purchaseApp = CoreGui:FindFirstChild("PurchasePromptApp") or (LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("PurchasePromptApp"))
         if purchaseApp then
             for _, v in ipairs(purchaseApp:GetDescendants()) do
                 if v:IsA("TextButton") or v:IsA("ImageButton") then
-                    local name = string.lower(v.Name or "")
-                    local text = v:IsA("TextButton") and string.lower(v.Text or "") or ""
-                    if name == "cancelframe" or name == "cancelbutton" or name == "errordismissbutton" or text == "cancel" or text == "ok" or text == "ยกเลิก" then
+                    local name = string.lower(v.Name)
+                    local text = v:IsA("TextButton") and string.lower(v.Text) or ""
+                    if name:find("cancel") or name:find("close") or text:find("cancel") or text:find("ยกเลิก") or text:find("ปิด") or v.Name == "CloseButton" or v.Name == "ErrorDismissButton" or v.Name == "ButtonContainer" then
                         if getconnections then
                             for _, c in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() c:Fire() end) end
                             for _, c in ipairs(getconnections(v.Activated)) do pcall(function() c:Fire() end) end
@@ -195,6 +94,8 @@ local function dismissPurchasePrompt()
 end
 
 local function rejectCurrentPromptCards()
+    -- แค่ปิด Robux prompt อย่างเดียว ไม่ reject การ์ดทุกใบบนสายพาน
+    -- (instantBuyLoop จะ reject เฉพาะการ์ดที่ fail ซ้ำๆ เองอยู่แล้ว)
     dismissPurchasePrompt()
 end
 
@@ -267,13 +168,12 @@ local RaritiesList = {
     "Heavenly", "Corrupted", "Striker", "Sacred", "Paradox", "Founder", "Evolved",
     "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
     "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
-    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
-    "Smash", "Emblem", "Chrono", "Limited"
+    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Mystery", "VIP", "Event", "Limited"
 }
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow", "Event"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow"
 }
 
 local TraitsList = {
@@ -308,133 +208,15 @@ local function fireButton(btn)
         end
         if not fired then
             local vim = game:GetService("VirtualInputManager")
-            local guiService = game:GetService("GuiService")
-            local insetY = guiService and guiService:GetGuiInset().Y or 36
             local absPos = btn.AbsolutePosition
             local absSize = btn.AbsoluteSize
             local center = absPos + (absSize / 2)
-            
-            vim:SendMouseButtonEvent(center.X, center.Y + insetY, 0, true, game, 1)
-            task.wait(0.05)
-            vim:SendMouseButtonEvent(center.X, center.Y + insetY, 0, false, game, 1)
-            
-            -- Fallback click without inset if inset offset missed
-            task.wait(0.05)
-            vim:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 1)
-            task.wait(0.05)
-            vim:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 1)
+            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+            task.wait(0.1)
+            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
         end
     end)
 end
-
--- Enlarge Slider knobs for Mobile & Touch Ease (Optimized Zero-Lag Cache)
-local enlargedCache = {}
-local function enlargeSliderKnobs()
-    pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        local coreGui = CoreGui
-        local roots = { playerGui, coreGui }
-        
-        for _, root in ipairs(roots) do
-            if not root then continue end
-            for _, obj in ipairs(root:GetDescendants()) do
-                if not obj:IsA("GuiObject") or enlargedCache[obj] then continue end
-                
-                local name = string.lower(obj.Name or "")
-                
-                -- 1. Explicitly ignore Window Header Controls (Close X, Minimize -, Maximize □)
-                local isHeaderControl = false
-                local ancestor = obj
-                while ancestor do
-                    local aName = string.lower(ancestor.Name or "")
-                    if aName:find("titlebar") or aName:find("header") or aName:find("windowcontrols") 
-                        or aName:find("close") or aName:find("minimize") or aName:find("maximize") 
-                        or aName == "controls" or aName == "topbar" or aName == "buttons"
-                    then
-                        isHeaderControl = true
-                        break
-                    end
-                    ancestor = ancestor.Parent
-                end
-                
-                if isHeaderControl or name == "close" or name == "minimize" or name == "maximize" or name == "closebutton" or name == "minimizebutton" or name == "maximizebutton" or name == "x" then
-                    enlargedCache[obj] = true
-                    continue
-                end
-                
-                -- 2. Target only Slider Knobs
-                local isInsideSlider = false
-                local sliderAncestor = obj.Parent
-                while sliderAncestor and sliderAncestor:IsA("GuiObject") do
-                    local sName = string.lower(sliderAncestor.Name or "")
-                    if sName:find("slider") then
-                        isInsideSlider = true
-                        break
-                    end
-                    sliderAncestor = sliderAncestor.Parent
-                end
-                
-                if isInsideSlider then
-                    if obj:IsA("TextLabel") or name:find("title") or name:find("value") or name:find("sub") 
-                        or name == "slider" or name == "slidercontainer" or name == "sliderframe" or name == "bar" or name == "rail" or name == "fill" or name == "track"
-                    then
-                        continue
-                    end
-                    
-                    local absSize = obj.AbsoluteSize
-                    if absSize.X > 40 then continue end
-                    
-                    local isKnobCandidate = (name == "knob" or name == "dot" or name == "thumb" or name == "handle" or name == "circle" or name == "sliderdot" or name == "sliderknob")
-                                         or (absSize.X > 1 and absSize.X <= 32 and absSize.Y > 1 and absSize.Y <= 32)
-                                         or (obj:FindFirstChildOfClass("UICorner") ~= nil and absSize.X <= 35)
-                    
-                    if isKnobCandidate then
-                        local targetSize = 36
-                        
-                        local p = obj.Parent
-                        while p and p:IsA("GuiObject") do
-                            p.ClipsDescendants = false
-                            if string.lower(p.Name):find("slider") then break end
-                            p = p.Parent
-                        end
-                        
-                        obj.Size = UDim2.fromOffset(targetSize, targetSize)
-                        obj.AnchorPoint = Vector2.new(0.5, 0.5)
-                        obj.ZIndex = math.max(obj.ZIndex or 1, 40)
-                        
-                        local uiCorner = obj:FindFirstChildOfClass("UICorner")
-                        if uiCorner then
-                            uiCorner.CornerRadius = UDim.new(1, 0)
-                        else
-                            local newCorner = Instance.new("UICorner")
-                            newCorner.CornerRadius = UDim.new(1, 0)
-                            newCorner.Parent = obj
-                        end
-                        
-                        enlargedCache[obj] = true
-                        
-                        obj:GetPropertyChangedSignal("Size"):Connect(function()
-                            if obj.Size.X.Offset ~= targetSize or obj.Size.Y.Offset ~= targetSize then
-                                obj.Size = UDim2.fromOffset(targetSize, targetSize)
-                                obj.AnchorPoint = Vector2.new(0.5, 0.5)
-                            end
-                        end)
-                    end
-                end
-            end
-        end
-    end)
-end
-
-task.spawn(function()
-    for _ = 1, 5 do
-        enlargeSliderKnobs()
-        task.wait(0.5)
-    end
-    while task.wait(10) do
-        enlargeSliderKnobs()
-    end
-end)
 
 -- Check if an object is a Pack/Box Card
 local function isPackCard(obj)
@@ -477,64 +259,8 @@ local function isPackCard(obj)
     return isPackByText
 end
 
--- Check if an object is a Boss Card/Ticket or Raid Card/Ticket
-local function isBossOrRaidCard(obj)
-    if not obj then return false end
-    
-    pcall(function()
-        if obj:GetAttribute("IsBoss") == true 
-            or obj:GetAttribute("IsBossCard") == true
-            or obj:GetAttribute("IsBossTicket") == true
-            or obj:GetAttribute("IsRaid") == true
-            or obj:GetAttribute("IsRaidCard") == true
-            or obj:GetAttribute("IsRaidTicket") == true
-            or obj:GetAttribute("BossValue") ~= nil
-            or obj:GetAttribute("RaidValue") ~= nil
-        then
-            return true
-        end
-        local cType = obj:GetAttribute("CardType") or obj:GetAttribute("TicketType") or obj:GetAttribute("Type")
-        if cType and (string.find(string.lower(tostring(cType)), "boss") or string.find(string.lower(tostring(cType)), "raid") or string.find(string.lower(tostring(cType)), "ticket")) then
-            return true
-        end
-    end)
-
-    local name = string.lower(obj.Name or "")
-    local templateAttr = obj:GetAttribute("TemplateName")
-    local template = templateAttr and string.lower(tostring(templateAttr)) or ""
-    local cardNameAttr = obj:GetAttribute("CardName")
-    local cardName = cardNameAttr and string.lower(tostring(cardNameAttr)) or ""
-    
-    local keywords = {"boss ticket", "raid ticket", "bossticket", "raidticket", "บัตรบอส", "บัตรเรด", "บัตร บอส", "บัตร เรด", "บอสการ์ด", "เรดการ์ด", "boss card", "raid card", "boss", "raid", "ticket", "ตั๋ว", "บัตร"}
-    for _, kw in ipairs(keywords) do
-        if string.find(name, kw) or (template ~= "" and string.find(template, kw)) or (cardName ~= "" and string.find(cardName, kw)) then
-            return true
-        end
-    end
-
-    local isBossRaid = false
-    pcall(function()
-        for _, descendant in ipairs(obj:GetDescendants()) do
-            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
-                local txt = string.lower(descendant.Text or "")
-                for _, kw in ipairs(keywords) do
-                    if string.find(txt, kw) then
-                        isBossRaid = true
-                        break
-                    end
-                end
-            end
-            if isBossRaid then break end
-        end
-    end)
-    return isBossRaid
-end
-
 local function getCardRank(item)
     if not item then return "None" end
-    local cachedRank = item:GetAttribute("CachedRank")
-    if cachedRank and cachedRank ~= "" then return cachedRank end
-
     local attr = item:GetAttribute("Rank") 
         or item:GetAttribute("CardRank") 
         or item:GetAttribute("Grade") 
@@ -543,19 +269,14 @@ local function getCardRank(item)
         or item:GetAttribute("CardRarity")
         or item:GetAttribute("Tier")
         or item:GetAttribute("CashBoost")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
-        item:SetAttribute("CachedRank", tostring(attr))
-        return tostring(attr)
-    end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
 
     for _, childName in ipairs({"Rank", "Grade", "CardRank", "CardGrade", "Rarity", "Tier"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
-                item:SetAttribute("CachedRank", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
-                item:SetAttribute("CachedRank", valObj.Text)
                 return valObj.Text
             end
         end
@@ -563,7 +284,7 @@ local function getCardRank(item)
 
     for _, txtObj in ipairs(item:GetDescendants()) do
         if txtObj:IsA("TextLabel") and txtObj.Text then
-            local cleanTxt = string.upper((string.gsub(txtObj.Text, "<[^>]+>", "")))
+            local cleanTxt = string.upper(string.gsub(txtObj.Text, "<[^>]+>", ""))
             cleanTxt = string.match(cleanTxt, "^%s*(.-)%s*$") or ""
             for _, r in ipairs(knownRankList) do
                 local escapedR = string.gsub(r, "%+", "%%+")
@@ -572,7 +293,6 @@ local function getCardRank(item)
                     or string.match(cleanTxt, "[^%w%+%.]" .. escapedR .. "[^%w%+%.]")
                     or string.match(cleanTxt, "[^%w%+%.]" .. escapedR .. "$")
                 then
-                    item:SetAttribute("CachedRank", r)
                     return r
                 end
             end
@@ -583,25 +303,17 @@ end
 
 local function getCardTrait(item)
     if not item then return "None" end
-    local cachedTrait = item:GetAttribute("CachedTrait")
-    if cachedTrait and cachedTrait ~= "" then return cachedTrait end
-
     local attr = item:GetAttribute("Trait") 
         or item:GetAttribute("CardTrait") 
         or item:GetAttribute("MutationTrait")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
-        item:SetAttribute("CachedTrait", tostring(attr))
-        return tostring(attr)
-    end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
 
     for _, childName in ipairs({"Trait", "CardTrait"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
-                item:SetAttribute("CachedTrait", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
-                item:SetAttribute("CachedTrait", valObj.Text)
                 return valObj.Text
             end
         end
@@ -612,7 +324,6 @@ local function getCardTrait(item)
             local cleanTxt = string.gsub(txtObj.Text, "<[^>]+>", "")
             for _, t in ipairs(knownTraitList) do
                 if string.find(string.lower(cleanTxt), string.lower(t)) then
-                    item:SetAttribute("CachedTrait", t)
                     return t
                 end
             end
@@ -623,23 +334,15 @@ end
 
 local function getCardMutation(item)
     if not item then return "Normal" end
-    local cachedMutation = item:GetAttribute("CachedMutation")
-    if cachedMutation and cachedMutation ~= "" then return cachedMutation end
-
     local attr = item:GetAttribute("CardMutation") or item:GetAttribute("Mutation")
-    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then
-        item:SetAttribute("CachedMutation", tostring(attr))
-        return tostring(attr)
-    end
+    if attr and tostring(attr) ~= "" and tostring(attr) ~= "nil" then return tostring(attr) end
 
     for _, childName in ipairs({"Mutation", "CardMutation"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
-                item:SetAttribute("CachedMutation", valObj.Value)
                 return valObj.Value
             elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
-                item:SetAttribute("CachedMutation", valObj.Text)
                 return valObj.Text
             end
         end
@@ -696,89 +399,96 @@ local function GetPlayerNames()
     return names
 end
 
-local function getGameGuis()
-    local gameGuis = {}
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in ipairs(playerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Enabled then
-                local gName = string.lower(gui.Name)
-                if not (gName:find("fluent") or gName:find("payom") or gName:find("dexq") or gName:find("windui") or gName:find("maclib") or gName:find("chat") or gName:find("core") or gName:find("roblox")) then
-                    table.insert(gameGuis, gui)
-                end
+local cachedPlot = nil
+local lastPlotSearch = 0
+local function findPlayerPlot()
+    if cachedPlot and cachedPlot.Parent then return cachedPlot end
+    local now = tick()
+    if now - lastPlotSearch < 3 then return cachedPlot end
+    lastPlotSearch = now
+
+    local plotNum = LocalPlayer:FindFirstChild("PlotNumber") and LocalPlayer.PlotNumber.Value or 0
+    local mapPlots = workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")
+    if mapPlots then
+        if plotNum ~= 0 then
+            local targetPlot = mapPlots:FindFirstChild(tostring(plotNum))
+            if targetPlot then cachedPlot = targetPlot return cachedPlot end
+        end
+        for _, plot in ipairs(mapPlots:GetChildren()) do
+            if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name or plot.Name == tostring(plotNum) then
+                cachedPlot = plot
+                return cachedPlot
             end
         end
     end
-    return gameGuis
-end
 
-local CachedPlayerPlot = nil
-local function findPlayerPlot()
-    if CachedPlayerPlot and CachedPlayerPlot.Parent then return CachedPlayerPlot end
-    local plotNum = LocalPlayer:FindFirstChild("PlotNumber") and LocalPlayer.PlotNumber.Value or 0
-    if plotNum ~= 0 then
-        local plotFolder = workspace:FindFirstChild("MAP")
-            and workspace.MAP:FindFirstChild("Plots")
-            and workspace.MAP.Plots:FindFirstChild(tostring(plotNum))
-        if plotFolder then
-            CachedPlayerPlot = plotFolder
-            return plotFolder
-        end
-    end
-    local plots = workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")
-    if plots then
-        for _, plot in ipairs(plots:GetChildren()) do
-            if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name or plot.Name == tostring(plotNum) then
-                CachedPlayerPlot = plot
-                return plot
+    local plotsFolder = workspace:FindFirstChild("Plots") or workspace:FindFirstChild("Plot")
+    if plotsFolder then
+        for _, plot in ipairs(plotsFolder:GetChildren()) do
+            if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name then
+                cachedPlot = plot
+                return cachedPlot
             end
         end
     end
     return nil
 end
 
-local CachedSpawnPackClickDetector = nil
+local cachedClickDetector = nil
+local lastCDSearch = 0
 local function getSpawnPackClickDetector()
-    if CachedSpawnPackClickDetector and CachedSpawnPackClickDetector.Parent then return CachedSpawnPackClickDetector end
+    if cachedClickDetector and cachedClickDetector.Parent then return cachedClickDetector end
+    local now = tick()
+    if now - lastCDSearch < 3 then return cachedClickDetector end
+    lastCDSearch = now
+
     local plotFolder = findPlayerPlot()
     if plotFolder then
         local plotN0 = plotFolder:FindFirstChild("Plot_N0")
         if plotN0 then
-            for _, v in ipairs(plotN0:GetDescendants()) do
-                if v:IsA("ClickDetector") and v.Parent and v.Parent.Name == "ButtonPart" then
-                    CachedSpawnPackClickDetector = v
-                    return v
-                end
+            local btnPart = plotN0:FindFirstChild("ButtonPart")
+            if btnPart then
+                local cd = btnPart:FindFirstChildWhichIsA("ClickDetector")
+                if cd then cachedClickDetector = cd return cachedClickDetector end
             end
-            for _, v in ipairs(plotN0:GetDescendants()) do
-                if v:IsA("ClickDetector") then
-                    CachedSpawnPackClickDetector = v
-                    return v
-                end
+            for _, child in ipairs(plotN0:GetChildren()) do
+                local cd = child:FindFirstChildWhichIsA("ClickDetector", true)
+                if cd then cachedClickDetector = cd return cachedClickDetector end
             end
+        end
+        for _, desc in ipairs(plotFolder:GetChildren()) do
+            local cd = desc:FindFirstChildWhichIsA("ClickDetector", true)
+            if cd then cachedClickDetector = cd return cachedClickDetector end
         end
     end
     return nil
 end
 
+local lastCardFolderSearch = 0
 local function findCardFolder()
     if getgenv().CardFolder and getgenv().CardFolder.Parent then return true end
+    local now = tick()
+    if now - lastCardFolderSearch < 3 then return false end
+    lastCardFolderSearch = now
+
     local plot = findPlayerPlot()
     if plot then
-        for _, desc in ipairs(plot:GetDescendants()) do
-            if desc:IsA("ProximityPrompt") then
-                local model = desc:FindFirstAncestorOfClass("Model")
-                if model then
-                    local actTxt = string.lower(desc.ActionText or "")
-                    local objTxt = string.lower(desc.ObjectText or "")
-                    if actTxt:find("buy") or actTxt:find("open") or actTxt:find("ซื้อ") or actTxt:find("เปิด") or objTxt:find("card") or objTxt:find("pack") then
-                        getgenv().CardFolder = model.Parent
+        for _, desc in ipairs(plot:GetChildren()) do
+            if desc:IsA("Model") or desc:IsA("Folder") then
+                if desc:GetAttribute("IgnoreTutoBeam") ~= nil or isPackCard(desc) then
+                    getgenv().CardFolder = desc.Parent
+                    return true
+                end
+                for _, sub in ipairs(desc:GetChildren()) do
+                    if sub:IsA("Model") and (sub:GetAttribute("IgnoreTutoBeam") ~= nil or isPackCard(sub)) then
+                        getgenv().CardFolder = sub.Parent
                         return true
                     end
                 end
             end
         end
     end
+    return false
 end
 
 local function GetAllInventorySummary()
@@ -917,43 +627,6 @@ Tabs.Main:AddButton({
     end
 })
 
-local LimitFPSToggle = Tabs.Main:AddToggle("CapFPS30", { Title = "⚡ จำกัด FPS เหลือ 30 (Cap FPS 30)", Default = false })
-LimitFPSToggle:OnChanged(function(state)
-    pcall(function()
-        if setfpscap then
-            setfpscap(state and 30 or 999)
-            Fluent:Notify({ Title = "FPS Cap", Content = state and "จำกัด FPS เหลือ 30 แล้ว" or "ปลดล็อก FPS (ไม่จำกัด Max)", Duration = 3 })
-        else
-            Fluent:Notify({ Title = "ข้อผิดพลาด", Content = "ตัวรันไม่รองรับ setfpscap!", Duration = 3 })
-        end
-    end)
-end)
-
-getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 30
-if tonumber(getgenv().AutoSpawnDelay) and tonumber(getgenv().AutoSpawnDelay) < 30 then
-    getgenv().AutoSpawnDelay = 30
-end
-
-local AutoSpawnDelaySlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
-    Title = "⏱️ ความหน่วงการสุ่มแพ็ก (Auto Spawn Delay)",
-    Description = "30 = 0.3 วินาที (เร็วสุดแนะนำเพื่อลดปิง), 100 = 1.0 วินาที, 200 = 2.0 วินาที",
-    Default = getgenv().AutoSpawnDelay or 30,
-    Min = 30,
-    Max = 200,
-    Rounding = 0
-})
-AutoSpawnDelaySlider:OnChanged(function(Value)
-    getgenv().AutoSpawnDelay = math.max(30, tonumber(Value) or 30)
-end)
-
-local AntiLagToggle = Tabs.Main:AddToggle("PingSaver", { Title = "🚀 โหมดลดปิง & CPU (Reduce Ping & CPU Lag)", Default = false })
-AntiLagToggle:OnChanged(function(state)
-    getgenv().PingSaver = state
-    if state then
-        Fluent:Notify({ Title = "Optimization", Content = "เปิดโหมดลดปิง & ประหยัด CPU แล้ว", Duration = 3 })
-    end
-end)
-
 local AutoSpawnToggle = Tabs.Main:AddToggle("AutoSpawnPack", { Title = "🎲 สุ่มแพ็กอัตโนมัติ", Default = false })
 AutoSpawnToggle:OnChanged(function(state)
     getgenv().AutoSpawnPack = state
@@ -961,7 +634,6 @@ AutoSpawnToggle:OnChanged(function(state)
         task.spawn(function()
             local cd = nil
             local retryCount = 0
-
             while getgenv().AutoSpawnPack do
                 if not cd or not cd.Parent then
                     cd = getSpawnPackClickDetector()
@@ -978,14 +650,31 @@ AutoSpawnToggle:OnChanged(function(state)
                     continue
                 end
                 retryCount = 0
-
-                -- Fire ClickDetector without remote spamming to maintain low ping
-                pcall(fireclickdetector, cd)
-
-                local userVal = tonumber(getgenv().AutoSpawnDelay) or 30
-                if userVal < 30 then userVal = 30 end
-                local delaySec = userVal / 100
-                task.wait(delaySec)
+                if not getgenv().CardFolder then findCardFolder() end
+                local activeCards = 0
+                if getgenv().CardFolder then
+                    for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
+                        if model:IsA("Model") and model:GetAttribute("IgnoreTutoBeam") ~= nil and model:FindFirstChildWhichIsA("ProximityPrompt", true) then
+                            if getgenv().AutoBuyCards and model:GetAttribute("Rejected") then continue end
+                            activeCards = activeCards + 1
+                        end
+                    end
+                end
+                if getgenv().AutoBuyCards then
+                    if activeCards == 0 then
+                        pcall(fireclickdetector, cd)
+                        task.wait(0.3)
+                    else
+                        task.wait(0.05)
+                    end
+                else
+                    pcall(fireclickdetector, cd)
+                    if activeCards >= 3 then
+                        task.wait(0.2)
+                    else
+                        task.wait(0.01)
+                    end
+                end
             end
         end)
     end
@@ -1031,10 +720,6 @@ end)
 
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
-
-    local cRarity = model:GetAttribute("CachedRarity")
-    local cMut = model:GetAttribute("CachedMutation")
-    if cRarity and cMut then return cRarity, cMut end
 
     local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
@@ -1084,7 +769,7 @@ local function getCardModelRarityAndMutation(model)
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs({"uncommon", "common", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour", "smash", "emblem", "chrono", "limited"}) do
+                for _, rName in ipairs({"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
                     if cl:find(rName) then
                         rarity = rName
                         break
@@ -1095,37 +780,18 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
-    model:SetAttribute("CachedRarity", rarity)
-    model:SetAttribute("CachedMutation", mutation)
     return rarity, mutation
 end
 
--- Throttled Instant Buy Loop (Low-Ping & High-Speed)
+-- Heartbeat Instant Buy Loop
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
     for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-        if not model:IsA("Model") then continue end
+        if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
         if model:GetAttribute("Rejected") == true then continue end
-
-        -- Fast Conveyor Arrival Signal (Fire once per model to prevent ping spikes)
-        if not model:GetAttribute("SignalSent") then
-            model:SetAttribute("SignalSent", true)
-            pcall(function()
-                local rs = game:GetService("ReplicatedStorage")
-                local cBoxRE = rs:FindFirstChild("CardBoxRE")
-                local conveyorRE = rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("ConveyorRE")
-                if cBoxRE then
-                    cBoxRE:FireServer("CardReachedArrival", model)
-                end
-                if conveyorRE then
-                    conveyorRE:FireServer("ReachedB", model)
-                    conveyorRE:FireServer("ReachedC", model)
-                end
-            end)
-        end
 
         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
         if not prompt then continue end
@@ -1161,13 +827,12 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.15 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
                     prompt.RequiresLineOfSight = false
                     prompt.MaxActivationDistance = 99999
-                    prompt.HoldDuration = 0
                     fireproximityprompt(prompt)
                 end)
                 if getgenv().DiscordWebhook and getgenv().DiscordWebhook ~= "" then
@@ -1186,33 +851,12 @@ local function instantBuyLoop()
     end
 end
 
-if getgenv().BruteForceLoop then
-    getgenv().BruteForceLoop:Disconnect()
-    getgenv().BruteForceLoop = nil
-end
+if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
+getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
-    if state then
-        task.spawn(function()
-            while getgenv().AutoBuyCards do
-                pcall(instantBuyLoop)
-                task.wait(0.08)
-            end
-        end)
-    end
-end)
-
-getgenv().InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม"
-local FundsActionDropdown = Tabs.Main:AddDropdown("InsufficientFundsAction", {
-    Title = "💰 เมื่อเจอการ์ดซื้อเงินไม่พอซื้อ",
-    Values = {"ข้าม", "หยุดสายพาน"},
-    Multi = false,
-    Default = getgenv().InsufficientFundsAction
-})
-FundsActionDropdown:OnChanged(function(Value)
-    getgenv().InsufficientFundsAction = Value
 end)
 
 local AutoCarryToggle = Tabs.Main:AddToggle("AutoCarry", { Title = "💰 เก็บเงินอัตโนมัติ (Carry)", Default = false })
@@ -1315,7 +959,6 @@ AutoSellBoxToggle:OnChanged(function(state)
                 end
                 
                 if isEquipped and hrp then
-                    getgenv().PauseReroll = true
                     local plotFolder = findPlayerPlot()
                     if plotFolder and plotFolder:FindFirstChild("Plot_N0") and plotFolder.Plot_N0:FindFirstChild("SellPart") then
                         local sellPart = plotFolder.Plot_N0.SellPart
@@ -1326,8 +969,6 @@ AutoSellBoxToggle:OnChanged(function(state)
                                 hrp.CFrame = sellPart.CFrame + Vector3.new(0, 3, 0)
                                 task.wait(0.3)
                                 prompt.RequiresLineOfSight = false
-                                prompt.MaxActivationDistance = 99999
-                                
                                 local timeout = 0
                                 while character:FindFirstChildWhichIsA("Tool") and timeout < 30 do
                                     fireproximityprompt(prompt)
@@ -1338,7 +979,6 @@ AutoSellBoxToggle:OnChanged(function(state)
                             end)
                         end
                     end
-                    getgenv().PauseReroll = false
                 end
                 task.wait(1)
             end
@@ -1366,13 +1006,18 @@ end)
 ---------------------------------------------------------
 -- 2. REROLL TAB (รีโรล)
 ---------------------------------------------------------
+local TraitsList = {
+    "Fortune I", "Vigor I", "Strength I", "Fortune II", "Vigor II", "Strength II",
+    "Fortune III", "Vigor III", "Strength III", "Assassin", "Berserk", "Tank",
+    "Rich", "Emperor", "Phoenix", "Almighty", "Sovereign"
+}
 
 local function GetInventoryCardsForReroll()
     local inventory = {}
     local function scanFolder(folder)
         if not folder then return end
         for _, item in ipairs(folder:GetChildren()) do
-            if item:IsA("Tool") and not isPackCard(item) and not isBossOrRaidCard(item) and (item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or string.find(item.Name, "Card")) then
+            if item:IsA("Tool") and not isPackCard(item) and (item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or string.find(item.Name, "Card")) then
                 local cardName = item:GetAttribute("CardName") or item:GetAttribute("TemplateName") or item.Name
                 local mutation = getCardMutation(item)
                 local trait = getCardTrait(item)
@@ -1397,20 +1042,6 @@ local function GetInventoryCardsForReroll()
     if #list == 0 then table.insert(list, "No cards found") end
     return list
 end
-
-local RerollCardsDropdown, RankCardsDropdown
-
-Tabs.Reroll:AddButton({
-    Title = "🔄 รีเฟรชรายการการ์ดในกระเป๋า",
-    Callback = function()
-        getgenv().CachedTraitRemotes = nil
-        getgenv().CachedRankRemotes = nil
-        local newCards = GetInventoryCardsForReroll()
-        if RerollCardsDropdown then RerollCardsDropdown:SetValues(newCards) end
-        if RankCardsDropdown then RankCardsDropdown:SetValues(newCards) end
-        Fluent:Notify({ Title = "Reroll", Content = "รีเฟรชรายการการ์ดในกระเป๋าเรียบร้อย!", Duration = 3 })
-    end
-})
 
 Tabs.Reroll:AddSection("🎯 ตั้งค่า Trait Reroll")
 
@@ -1437,7 +1068,7 @@ TraitDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRerollCardKey = nil
-RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
+local RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Trait",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -1447,44 +1078,19 @@ RerollCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRerollCardKey = Value
 end)
 
+Tabs.Reroll:AddButton({
+    Title = "🔄 รีเฟรชรายการการ์ด (Trait)",
+    Callback = function()
+        RerollCardsDropdown:SetValues(GetInventoryCardsForReroll())
+        Fluent:Notify({ Title = "Reroll", Content = "รีเฟรชรายการการ์ดแล้ว!", Duration = 3 })
+    end
+})
+
 getgenv().AutoReroll = false
 local AutoRerollToggle = Tabs.Reroll:AddToggle("AutoRerollTrait", { Title = "🔥 รีโรล Trait อัตโนมัติ", Default = false })
 AutoRerollToggle:OnChanged(function(state)
     getgenv().AutoReroll = state
     if state then
-        if not getgenv().SelectedTraits or next(getgenv().SelectedTraits) == nil then
-            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือก Trait ที่ต้องการหยุดก่อน!", Duration = 3 })
-            getgenv().AutoReroll = false
-            AutoRerollToggle:SetValue(false)
-            return
-        end
-
-        local cardKey = getgenv().SelectedRerollCardKey
-        local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
-        if not cardTool or not cardTool.Parent then
-            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือกการ์ดที่ต้องการรีโรลก่อน!", Duration = 3 })
-            getgenv().AutoReroll = false
-            AutoRerollToggle:SetValue(false)
-            return
-        end
-
-        cardTool:SetAttribute("CachedTrait", nil)
-        local initialTrait = getCardTrait(cardTool)
-        local alreadyHasTrait = false
-        for trait, _ in pairs(getgenv().SelectedTraits) do
-            if string.find(string.lower(initialTrait), string.lower(trait)) then
-                alreadyHasTrait = true
-                break
-            end
-        end
-
-        if alreadyHasTrait then
-            Fluent:Notify({ Title = "🔒 ล็อคสถานะ", Content = "การ์ดใบนี้มี Trait ที่เลือกไว้อยู่แล้ว (" .. initialTrait .. ") ไม่อนุญาตให้สุ่ม!", Duration = 4 })
-            getgenv().AutoReroll = false
-            AutoRerollToggle:SetValue(false)
-            return
-        end
-
         task.spawn(function()
             getgenv().NotifiedRerollStart = nil
             while getgenv().AutoReroll do
@@ -1498,12 +1104,11 @@ AutoRerollToggle:OnChanged(function(state)
                     task.wait(1)
                     continue
                 end
-                local currentCardKey = getgenv().SelectedRerollCardKey
-                local currentCardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[currentCardKey]
+                local cardKey = getgenv().SelectedRerollCardKey
+                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
                 
-                if currentCardTool and currentCardTool.Parent then
-                    currentCardTool:SetAttribute("CachedTrait", nil)
-                    local currentTrait = getCardTrait(currentCardTool)
+                if cardTool and cardTool.Parent then
+                    local currentTrait = getCardTrait(cardTool)
                     
                     local hasSelected = false
                     for trait, _ in pairs(getgenv().SelectedTraits) do
@@ -1571,7 +1176,7 @@ AutoRerollToggle:OnChanged(function(state)
                         pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAllTraitRemotes(id)
+                    local function fireAll(id)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
@@ -1589,7 +1194,7 @@ AutoRerollToggle:OnChanged(function(state)
                             end
                         end
                     end
-                    fireAllTraitRemotes(cId)
+                    fireAll(cId)
                     
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
@@ -1601,7 +1206,10 @@ AutoRerollToggle:OnChanged(function(state)
                                 
                                 if text == "ROLL" or text == "REROLL" or text == "SPIN" then
                                     if v.Visible or (v.Parent and v.Parent.Visible) then
-                                        pcall(fireButton, v)
+                                        if getconnections then
+                                            for _, conn in ipairs(getconnections(v.MouseButton1Click)) do pcall(function() conn:Fire() end) end
+                                            for _, conn in ipairs(getconnections(v.Activated)) do pcall(function() conn:Fire() end) end
+                                        end
                                     end
                                 end
                             end
@@ -1620,6 +1228,8 @@ AutoRerollToggle:OnChanged(function(state)
 end)
 
 Tabs.Reroll:AddSection("🌟 ตั้งค่า Rank Reroll")
+
+local RankList = {"F", "E", "D", "C", "B", "A", "S", "SS", "SR", "UR", "LR"}
 
 getgenv().SelectedRanks = {}
 local RankDropdown = Tabs.Reroll:AddDropdown("SelectedRanks", {
@@ -1644,7 +1254,7 @@ RankDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRankCardKey = nil
-RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
+local RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Rank",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -1654,44 +1264,19 @@ RankCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRankCardKey = Value
 end)
 
+Tabs.Reroll:AddButton({
+    Title = "🔄 รีเฟรชรายการการ์ด (Rank)",
+    Callback = function()
+        RankCardsDropdown:SetValues(GetInventoryCardsForReroll())
+        Fluent:Notify({ Title = "Auto Rank", Content = "รีเฟรชรายการการ์ดแล้ว!", Duration = 3 })
+    end
+})
+
 getgenv().AutoRankReroll = false
 local AutoRankRerollToggle = Tabs.Reroll:AddToggle("AutoRerollRank", { Title = "💥 รีโรล Rank อัตโนมัติ", Default = false })
 AutoRankRerollToggle:OnChanged(function(state)
     getgenv().AutoRankReroll = state
     if state then
-        if not getgenv().SelectedRanks or next(getgenv().SelectedRanks) == nil then
-            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือก Rank ที่ต้องการหยุดก่อน!", Duration = 3 })
-            getgenv().AutoRankReroll = false
-            AutoRankRerollToggle:SetValue(false)
-            return
-        end
-
-        local cardKey = getgenv().SelectedRankCardKey
-        local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
-        if not cardTool or not cardTool.Parent then
-            Fluent:Notify({ Title = "แจ้งเตือน", Content = "กรุณาเลือกการ์ดที่ต้องการรีโรลก่อน!", Duration = 3 })
-            getgenv().AutoRankReroll = false
-            AutoRankRerollToggle:SetValue(false)
-            return
-        end
-
-        cardTool:SetAttribute("CachedRank", nil)
-        local initialRank = getCardRank(cardTool)
-        local alreadyHasRank = false
-        for rank, _ in pairs(getgenv().SelectedRanks) do
-            if string.lower(initialRank) == string.lower(rank) then
-                alreadyHasRank = true
-                break
-            end
-        end
-
-        if alreadyHasRank then
-            Fluent:Notify({ Title = "🔒 ล็อคสถานะ", Content = "การ์ดใบนี้มี Rank ที่เลือกไว้อยู่แล้ว (" .. initialRank .. ") ไม่อนุญาตให้สุ่ม!", Duration = 4 })
-            getgenv().AutoRankReroll = false
-            AutoRankRerollToggle:SetValue(false)
-            return
-        end
-
         task.spawn(function()
             getgenv().NotifiedRankRerollStart = nil
             while getgenv().AutoRankReroll do
@@ -1705,12 +1290,11 @@ AutoRankRerollToggle:OnChanged(function(state)
                     task.wait(1)
                     continue
                 end
-                local currentCardKey = getgenv().SelectedRankCardKey
-                local currentCardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[currentCardKey]
+                local cardKey = getgenv().SelectedRankCardKey
+                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
                 
-                if currentCardTool and currentCardTool.Parent then
-                    currentCardTool:SetAttribute("CachedRank", nil)
-                    local currentRank = getCardRank(currentCardTool)
+                if cardTool and cardTool.Parent then
+                    local currentRank = getCardRank(cardTool)
                     
                     local hasSelected = false
                     for rank, _ in pairs(getgenv().SelectedRanks) do
@@ -1790,7 +1374,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                         pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
                     end
                     
-                    local function fireAllRankRemotes(id)
+                    local function fireAll(id)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
@@ -1824,7 +1408,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                             end
                         end
                     end
-                    fireAllRankRemotes(cId)
+                    fireAll(cId)
                 else
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
@@ -1931,6 +1515,9 @@ setupPotionToggle("Cash", "เงิน", "PotionCash", "CashPotion")
 setupPotionToggle("Mutation", "กลายพันธุ์", "PotionMutation", "MutationPotion")
 setupPotionToggle("Production", "ผลผลิต", "PotionProduction", "ProductionPotion")
 
+---------------------------------------------------------
+-- HELPER FUNCTIONS FOR CARD VALUE & RARITY SCORING
+---------------------------------------------------------
 local RarityTiers = {
     ["admin"] = 100000, ["แอดมิน"] = 100000,
     ["godly"] = 50000, ["ก๊อดลี่"] = 50000, ["กอดลี่"] = 50000,
@@ -1949,10 +1536,11 @@ local function parseSuffixValue(txt)
     if numStr then
         local num = tonumber(numStr) or 0
         local mult = 1
-        if suffix == "UD" then mult = 1e36
+        if suffix == "DD" then mult = 1e39
+        elseif suffix == "UD" then mult = 1e36
         elseif suffix == "DC" then mult = 1e33
-        elseif suffix == "NO" or suffix == "N" then mult = 1e30
-        elseif suffix == "OC" or suffix == "O" then mult = 1e27
+        elseif suffix == "NO" then mult = 1e30
+        elseif suffix == "OC" then mult = 1e27
         elseif suffix == "SP" then mult = 1e24
         elseif suffix == "SX" then mult = 1e21
         elseif suffix == "QI" then mult = 1e18
@@ -1964,7 +1552,8 @@ local function parseSuffixValue(txt)
         end
         return num * mult
     end
-    return 0
+    local nOnly = tonumber(string.match(txt, "[%d%.]+"))
+    return nOnly or 0
 end
 
 local function getRarityScore(rarityText)
@@ -1976,35 +1565,33 @@ local function getRarityScore(rarityText)
     return 0
 end
 
+---------------------------------------------------------
+-- 3.5 MANAGE TAB (ระบบจัดการ)
+---------------------------------------------------------
 local function getUnifiedCardScore(item)
     if not item then return 0 end
     local cashScore, rarityScore, mutationScore = 0, 0, 0
-    
-    local function parseScoreFromText(txt)
-        local val = parseSuffixValue(txt)
-        if val > cashScore then cashScore = val end
-        local s = getRarityScore(txt)
-        if s > rarityScore then rarityScore = s end
-        local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
-        cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
-        local MutationScores = {
-            ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
-            ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
-            ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
-        }
-        for mName, mScore in pairs(MutationScores) do
-            if string.find(cleanMut, mName) and mScore > mutationScore then
-                mutationScore = mScore
+    for _, txtObj in ipairs(item:GetDescendants()) do
+        if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
+            local val = parseSuffixValue(txtObj.Text)
+            if val > cashScore then cashScore = val end
+            local s = getRarityScore(txtObj.Text)
+            if s > rarityScore then rarityScore = s end
+            
+            local cleanMut = string.lower(string.gsub(txtObj.Text or "", "<[^>]+>", ""))
+            cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
+            local MutationScores = {
+                ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
+                ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
+                ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
+            }
+            for mName, mScore in pairs(MutationScores) do
+                if string.find(cleanMut, mName) and mScore > mutationScore then
+                    mutationScore = mScore
+                end
             end
         end
     end
-
-    for _, txtObj in ipairs(item:GetDescendants()) do
-        if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-            parseScoreFromText(txtObj.Text)
-        end
-    end
-    
     if cashScore == 0 and rarityScore == 0 then
         local lvl = item:GetAttribute("Level") or item:GetAttribute("CardLevel") or 0
         if tonumber(lvl) then cashScore = tonumber(lvl) end
@@ -2017,16 +1604,11 @@ local function getUnifiedCardScore(item)
             rarityScore = getRarityScore(rName)
         end
     end
-    
     return cashScore + (rarityScore * 1000) + (mutationScore * 100)
 end
 
----------------------------------------------------------
--- 3.5 MANAGE TAB (ระบบจัดการ)
----------------------------------------------------------
-
 getgenv().AutoClaimRewards = false
-local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "กดรับรางวัลอัตโนมัติ (Playtime/Daily)", Default = false })
+local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "🎁 กดรับรางวัลอัตโนมัติ (Playtime/Daily)", Default = false })
 AutoClaimToggle:OnChanged(function(state)
     getgenv().AutoClaimRewards = state
     if state then
@@ -2047,20 +1629,22 @@ AutoClaimToggle:OnChanged(function(state)
                                 
                                 local name = string.upper(v.Name)
                                 if (btnText:find("CLAIM") or btnText:find("COLLECT") or btnText:find("รับ") or name:find("CLAIM") or name:find("COLLECT")) then
-                                    -- กรองปุ่มหลอก หรือปุ่ม Robux หรือ Guild
-                                    if not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") and not name:find("GUILD") and not btnText:find("GUILD") and not btnText:find("กิลด์") then
-                                        local fired = false
-                                        if getconnections then
-                                            for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire(); fired = true end
-                                            for _, conn in pairs(getconnections(v.Activated)) do conn:Fire(); fired = true end
+                                    local isForbidden = false
+                                    local current = v
+                                    while current and (current:IsA("GuiObject") or current:IsA("ScreenGui")) do
+                                        local cName = string.upper(current.Name)
+                                        if cName:find("GUILD") or cName:find("กิลด์") or cName:find("CLAN") 
+                                            or cName:find("ROBUX") or cName:find("PASS") or cName:find("SHOP") 
+                                            or cName:find("REBIRTH") or cName:find("TRADE") or cName:find("GIFT")
+                                        then
+                                            isForbidden = true
+                                            break
                                         end
-                                        if not fired then
-                                            local vim = game:GetService("VirtualInputManager")
-                                            local center = v.AbsolutePosition + (v.AbsoluteSize / 2)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                                            task.wait(0.1)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-                                        end
+                                        current = current.Parent
+                                    end
+
+                                    if not isForbidden and not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") then
+                                        fireButton(v)
                                         task.wait(0.2)
                                     end
                                 end
@@ -2068,7 +1652,7 @@ AutoClaimToggle:OnChanged(function(state)
                         end
                     end
                 end)
-                task.wait(30) -- เช็คทุกๆ 30 วินาที
+                task.wait(30)
             end
         end)
     end
@@ -2102,29 +1686,11 @@ InvBalToggle:OnChanged(function(state)
                         local trashCards = {}
                         
                         for _, t in ipairs(items) do
-                            -- 1. Check if Pack Card (Using Smart Base Logic)
-                            local isPack = false
-                            local name = string.upper(t.Name)
-                            if string.find(name, "PACK") or string.find(name, "BOX") or string.find(name, "แพ็ค") or string.find(name, "กล่อง") then
-                                isPack = true
-                            else
-                                pcall(function()
-                                    for _, desc in ipairs(t:GetDescendants()) do
-                                        if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
-                                            local txt = string.upper(desc.Text)
-                                            if string.find(txt, "PACK") or string.find(txt, "BOX") or string.find(txt, "แพ็ค") or string.find(txt, "กล่อง") then
-                                                isPack = true; break
-                                            end
-                                        end
-                                    end
-                                end)
-                            end
-                            -- ถ้าเป็น Pack Card ต้องหาระดับให้เจอ
+                            local isPack = isPackCard(t)
                             local rank = getCardRank(t)
                             local rankIdx = MinRarityIdx[rank] or 99
                             
                             if isPack and rankIdx == 99 then
-                                -- หา Rank จากชื่อแพ็คถ้า attribute ไม่มี
                                 local upName = string.upper(t.Name)
                                 for r, idx in pairs(MinRarityIdx) do
                                     if string.find(upName, string.upper(r)) then
@@ -2134,14 +1700,12 @@ InvBalToggle:OnChanged(function(state)
                                 end
                             end
                             
-                            -- ห้ามลบของแพง (Mutation โหด หรือ Trait โหด) สำหรับการ์ดปกติ
                             if not isPack then
                                 local mut = string.lower(getCardMutation(t))
                                 if mut ~= "normal" and mut ~= "golden" then continue end
                                 if rank:find("SS") or rank:find("UR") or rank:find("LR") then rankIdx = 99 end
                             end
                             
-                            -- ห้ามขายการ์ดที่มีค่าเงินสูง (O, N, DC, Ud, Dd)
                             local cashScore = 0
                             pcall(function()
                                 for _, desc in ipairs(t:GetDescendants()) do
@@ -2162,14 +1726,13 @@ InvBalToggle:OnChanged(function(state)
                                     end
                                 end
                             end)
-                            if cashScore >= 1e27 then continue end -- ข้ามการ์ดมูลค่าสูง
+                            if cashScore >= 1e27 then continue end
                             
                             if rankIdx < threshold then
                                 table.insert(trashCards, t)
                             end
                         end
                         
-                        -- ขายการ์ดขยะแบบรายละเอียดอ่อน (ทีละใบ) เพื่อป้องกันการเผลอขายแบบ Sell All ทับกัน
                         if #trashCards > 0 and char and char:FindFirstChild("Humanoid") then
                             for _, t in ipairs(trashCards) do
                                 pcall(function()
@@ -2180,7 +1743,6 @@ InvBalToggle:OnChanged(function(state)
                                         rem.SellRE:FireServer("SellHand")
                                     end
                                     task.wait(0.2)
-                                    -- ถ้ายังขายไม่สำเร็จจริงๆ ลบทิ้งเพื่อไม่ให้กระเป๋าเต็ม
                                     if t and t.Parent then t:Destroy() end
                                 end)
                             end
@@ -2194,34 +1756,14 @@ InvBalToggle:OnChanged(function(state)
 end)
 
 Tabs.Manage:AddSection("🧠 ระบบแท่นอัจฉริยะ (Smart Base)")
-local PackRaritiesList = RaritiesList
 local function GetInventoryPackCards()
     local packs = {}
     local function scanFolder(folder)
         if not folder then return end
         for _, t in ipairs(folder:GetChildren()) do
-            if t:IsA("Tool") then
-                local isPack = false
-                local name = string.upper(t.Name)
-                if string.find(name, "PACK") or string.find(name, "BOX") or string.find(name, "แพ็ค") or string.find(name, "กล่อง") then
-                    isPack = true
-                else
-                    pcall(function()
-                        for _, desc in ipairs(t:GetDescendants()) do
-                            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
-                                local txt = string.upper(desc.Text)
-                                if string.find(txt, "PACK") or string.find(txt, "BOX") or string.find(txt, "แพ็ค") or string.find(txt, "กล่อง") then
-                                    isPack = true; break
-                                end
-                            end
-                        end
-                    end)
-                end
-                
-                if isPack then
-                    local packName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
-                    packs[packName] = true
-                end
+            if t:IsA("Tool") and isPackCard(t) then
+                local packName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
+                packs[packName] = true
             end
         end
     end
@@ -2274,8 +1816,6 @@ SmartBaseToggle:OnChanged(function(state)
                     local plotFolder = findPlayerPlot()
                     if plotFolder then
                         local baseDescendants = plotFolder:GetDescendants()
-                        
-                        -- 1. นับจำนวน Pack Card ที่กำลังเปิด/วางอยู่บนฐานจริงในปัจจุบัน (เช็คจาก ProximityPrompt OPEN/SKIP)
                         local countedModels = {}
                         local packsOnBaseCount = 0
                         for _, desc in ipairs(baseDescendants) do
@@ -2294,10 +1834,8 @@ SmartBaseToggle:OnChanged(function(state)
                             end
                         end
                         
-                        -- โควต้า Pack Card ที่อนุญาตให้วางเพิ่มได้ (จำกัดไม่เกิน 10 ใบ)
                         local maxPlace = math.max(0, 10 - packsOnBaseCount)
                         if maxPlace > 0 then
-                            -- 2. ค้นหา Pack Cards ในกระเป๋าที่เข้าเงื่อนไข
                             local packsToPlace = {}
                             local bp = LocalPlayer:FindFirstChild("Backpack")
                             local char = LocalPlayer.Character
@@ -2330,15 +1868,8 @@ SmartBaseToggle:OnChanged(function(state)
                             local function scanForPacks(folder)
                                 if not folder then return end
                                 for _, t in ipairs(folder:GetChildren()) do
-                                    if t:IsA("Tool") then
-                                        local name = string.upper(t.Name)
-                                        local isPack = string.find(name, "PACK") or string.find(name, "BOX") or string.find(name, "แพ็ค") or string.find(name, "กล่อง")
-                                        if not isPack then
-                                            isPack = isPackCard(t)
-                                        end
-                                        if isPack and isAllowed(t) then
-                                            table.insert(packsToPlace, t)
-                                        end
+                                    if t:IsA("Tool") and isPackCard(t) and isAllowed(t) then
+                                        table.insert(packsToPlace, t)
                                     end
                                 end
                             end
@@ -2346,9 +1877,7 @@ SmartBaseToggle:OnChanged(function(state)
                             if char then scanForPacks(char) end
                             
                             if #packsToPlace > 0 then
-                                -- 3. สแกนหาแท่นวาง (แท่นว่าง Place ให้คะแนน -1 หรือการ์ดธรรมดาที่เงินน้อยที่สุด)
                                 local candidates = {}
-                                
                                 for _, desc in ipairs(baseDescendants) do
                                     if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
                                         local actTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name or "")
@@ -2376,22 +1905,6 @@ SmartBaseToggle:OnChanged(function(state)
                                                 elseif (isRemovePrompt or (model and model ~= plotFolder)) and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
                                                     local isAlreadyPack = isPackCard(model)
                                                     if not isAlreadyPack then
-                                                        for _, tObj in ipairs(model:GetDescendants()) do
-                                                            if desc:IsA("ProximityPrompt") then
-                                                                local pName = string.upper(tObj.Name or "")
-                                                                if pName:find("OPEN") or pName:find("SKIP") then isAlreadyPack = true; break end
-                                                            end
-                                                            if (tObj:IsA("TextLabel") or tObj:IsA("TextButton")) and tObj.Text then
-                                                                local tUpper = string.upper(tObj.Text)
-                                                                if tUpper:find("PACK") or tUpper:find("BOX") or tUpper:find("OPENING") or tUpper:find("SKIP") or tUpper:find("แพ็ค") or tUpper:find("กล่อง") then
-                                                                    isAlreadyPack = true
-                                                                    break
-                                                                end
-                                                            end
-                                                        end
-                                                    end
-                                                    
-                                                    if not isAlreadyPack then
                                                         local score = getUnifiedCardScore(model)
                                                         table.insert(candidates, { prompt = desc, score = score, pos = targetPos, isRemove = true, model = model })
                                                     end
@@ -2415,7 +1928,6 @@ SmartBaseToggle:OnChanged(function(state)
                                             if target.isEmpty then
                                                 char.Humanoid:EquipTool(packTool)
                                                 task.wait(0.4)
-                                                
                                                 char.HumanoidRootPart.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
                                                 task.wait(0.4)
                                                 
@@ -2446,7 +1958,6 @@ SmartBaseToggle:OnChanged(function(state)
                                                 end
                                                 
                                                 task.wait(1.5)
-                                                
                                                 char.Humanoid:EquipTool(packTool)
                                                 task.wait(0.4)
                                                 
@@ -2515,12 +2026,10 @@ AutoOpenPackToggle:OnChanged(function(state)
                                 if actTxt:find("OPEN") or actTxt:find("เปิด") then
                                     local model = desc:FindFirstAncestorOfClass("Model")
                                     if model then
-                                        -- เช็คคูลดาวน์จาก Attribute
                                         local isReady = false
                                         if model:GetAttribute("Progress") == 1 or model:GetAttribute("IsReady") == true then
                                             isReady = true
                                         end
-                                        -- หรือเช็คจากเวลาที่เหลือบน Text
                                         if not isReady then
                                             local hasTimeText = false
                                             for _, txtObj in ipairs(model:GetDescendants()) do
@@ -2531,7 +2040,7 @@ AutoOpenPackToggle:OnChanged(function(state)
                                                     end
                                                 end
                                             end
-                                            if not hasTimeText then isReady = true end -- ถ้าไม่นับถอยหลังแล้ว แปลว่าเปิดได้
+                                            if not hasTimeText then isReady = true end
                                         end
                                         
                                         if isReady then
@@ -2580,7 +2089,7 @@ local UpgradeBudgetInput = Tabs.Manage:AddInput("UpgradeBudget", {
         getgenv().UpgradeBudget = tonumber(Value) or 0
     end
 })
-getgenv().UpgradeBudget = 1000 -- Default value
+getgenv().UpgradeBudget = 1000
 
 local UpgradePriorityDrop = Tabs.Manage:AddDropdown("UpgradePriority", {
     Title = "จัดลำดับความสำคัญ (Priority)",
@@ -2628,8 +2137,6 @@ AutoUpgradeToggle:OnChanged(function(state)
 
                     if availableCash > 0 then
                         local upgradeFrames = {}
-                        
-                        -- 1. อัปเกรดจากหน้าต่าง UI (Base Expansion, Luck, Cash, Time, Speed)
                         local gui = LocalPlayer:FindFirstChild("PlayerGui")
                         if gui then
                             for _, txt in ipairs(gui:GetDescendants()) do
@@ -2642,7 +2149,6 @@ AutoUpgradeToggle:OnChanged(function(state)
                                 ) then
                                     local parentFrame = txt.Parent
                                     if parentFrame then
-                                        local btn
                                         for _, child in ipairs(parentFrame:GetDescendants()) do
                                             if child:IsA("TextButton") or child:IsA("ImageButton") then
                                                 local bTxt = ""
@@ -2653,19 +2159,17 @@ AutoUpgradeToggle:OnChanged(function(state)
                                                 if bTxt ~= "" and not bTxt:find("MAX") then
                                                     local cost = parseNum(bTxt)
                                                     if cost > 0 then
-                                                        btn = { button = child, cost = cost, name = txt.Text, type = "ui" }
+                                                        table.insert(upgradeFrames, { button = child, cost = cost, name = txt.Text, type = "ui" })
                                                         break
                                                     end
                                                 end
                                             end
                                         end
-                                        if btn then table.insert(upgradeFrames, btn) end
                                     end
                                 end
                             end
                         end
 
-                        -- 2. อัปเกรดจาก ProximityPrompt บนฐาน
                         local plot = findPlayerPlot()
                         if plot and plot:FindFirstChild("Plot_N0") then
                             for _, prompt in ipairs(plot.Plot_N0:GetDescendants()) do
@@ -2681,10 +2185,8 @@ AutoUpgradeToggle:OnChanged(function(state)
                             end
                         end
 
-                        -- 3. เรียงลำดับตามราคา
                         table.sort(upgradeFrames, function(a, b) return a.cost < b.cost end)
 
-                        -- 4. ทำการอัปเกรด
                         for _, up in ipairs(upgradeFrames) do
                             if availableCash >= up.cost then
                                 if up.type == "ui" and up.button then
@@ -2701,7 +2203,7 @@ AutoUpgradeToggle:OnChanged(function(state)
                                     up.prompt.MaxActivationDistance = 99999
                                     fireproximityprompt(up.prompt)
                                     availableCash = availableCash - up.cost
-                                    task.wait(0.5)
+                                    task.wait(0.3)
                                 end
                             end
                         end
@@ -2716,6 +2218,49 @@ end)
 ---------------------------------------------------------
 -- 4. RAID & TOWER TAB (เรด & ทาวเวอร์)
 ---------------------------------------------------------
+local RarityTiers = {
+    ["admin"] = 100000, ["แอดมิน"] = 100000,
+    ["godly"] = 50000, ["ก๊อดลี่"] = 50000, ["กอดลี่"] = 50000,
+    ["secret"] = 10000, ["ซีเคร็ท"] = 10000, ["ซีเครท"] = 10000,
+    ["mythical"] = 9000, ["มิทิคอล"] = 9000,
+    ["legendary"] = 8000, ["เลเจนดารี่"] = 8000,
+    ["epic"] = 7000, ["เอพิก"] = 7000,
+    ["rare"] = 6000, ["แรร์"] = 6000,
+    ["uncommon"] = 5000, ["อันคอมมอน"] = 5000,
+    ["common"] = 4000, ["คอมมอน"] = 4000,
+}
+
+local function parseSuffixValue(txt)
+    if not txt then return 0 end
+    local numStr, suffix = string.match(string.upper(txt), "([%d%.]+)%s*([A-Z]+)")
+    if numStr then
+        local num = tonumber(numStr) or 0
+        local mult = 1
+        if suffix == "DC" then mult = 1e33
+        elseif suffix == "NO" then mult = 1e30
+        elseif suffix == "OC" then mult = 1e27
+        elseif suffix == "SP" then mult = 1e24
+        elseif suffix == "SX" then mult = 1e21
+        elseif suffix == "QI" then mult = 1e18
+        elseif suffix == "QA" then mult = 1e15
+        elseif suffix == "T" then mult = 1e12
+        elseif suffix == "B" then mult = 1e9
+        elseif suffix == "M" then mult = 1e6
+        elseif suffix == "K" then mult = 1e3
+        end
+        return num * mult
+    end
+    return 0
+end
+
+local function getRarityScore(rarityText)
+    if not rarityText then return 0 end
+    local clean = string.lower(string.gsub(rarityText, "<[^>]+>", ""))
+    for k, score in pairs(RarityTiers) do
+        if string.find(clean, k) then return score end
+    end
+    return 0
+end
 
 local function collect4BestBaseCards()
     pcall(function()
@@ -2723,130 +2268,122 @@ local function collect4BestBaseCards()
         local hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local allCards = {}
-        
-        local function scanInv(container)
-            if not container then return end
-            for _, t in ipairs(container:GetChildren()) do
-                if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then
-                    local score = getUnifiedCardScore(t)
-                    table.insert(allCards, { item = t, score = score, source = "Inv", uuid = t.Name })
-                end
-            end
-        end
-        scanInv(LocalPlayer:FindFirstChild("Backpack"))
-        scanInv(character)
+        local plotFolder = findPlayerPlot()
+        if not plotFolder then return end
 
-        if getgenv().TowerCardSource ~= "จากในกระเป๋า (Inventory)" then
-            local plotFolder = findPlayerPlot()
-            if plotFolder then
-                for _, desc in ipairs(plotFolder:GetDescendants()) do
-                    if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                        local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
-                        
-                        local isIgnoredPrompt = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
-                            or string.find(pText, "SPAWN") or string.find(pText, "สุ่ม")
-                            or string.find(pText, "OPEN") or string.find(pText, "เปิด")
-                            or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์")
-                            or string.find(pText, "UPGRADE") or string.find(pText, "อัปเกรด")
-                            or string.find(pText, "CLAIM") or string.find(pText, "รับ")
-                            or string.find(pText, "SELL") or string.find(pText, "ขาย")
-                            or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
-                            or string.find(pText, "JOIN") or string.find(pText, "ENTER")
-                            or string.find(pText, "SKIP") or string.find(pText, "ข้าม")
-                            or string.find(pText, "MASTER") or string.find(pText, "ROBUX")
-                            or string.find(pText, "BOSS") or string.find(pText, "ARTIFACT")
-                            or string.find(pText, "LUCK") or string.find(pText, "CASH")
-                            or string.find(pText, "BOOST") or string.find(pText, "GEMS")
-                            or string.find(pText, "PASS") or string.find(pText, "PREMIUM") or string.find(pText, "VIP")
-                            or string.find(pText, "RAID") or string.find(pText, "บอส") or string.find(pText, "เรด") or string.find(pText, "ตั๋ว") or string.find(pText, "บัตร")
-                        
-                        if not isIgnoredPrompt then
-                            local model = desc:FindFirstAncestorOfClass("Model")
-                            if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
-                                local isPack = isPackCard(model)
-                                local isBossRaid = isBossOrRaidCard(model)
-                                
-                                if not isPack and not isBossRaid then
-                                    for _, txtObj in ipairs(model:GetDescendants()) do
-                                        if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-                                            local txtUpper = string.upper(txtObj.Text or "")
-                                            if string.find(txtUpper, "PACK") or string.find(txtUpper, "แพ็ค") or string.find(txtUpper, "BOX") or string.find(txtUpper, "กล่อง") then
-                                                isPack = true
-                                                break
-                                            end
-                                            if string.find(txtUpper, "BOSS") or string.find(txtUpper, "RAID") or string.find(txtUpper, "บอส") or string.find(txtUpper, "เรด") or string.find(txtUpper, "บัตร") or string.find(txtUpper, "ตั๋ว") then
-                                                isBossRaid = true
-                                                break
-                                            end
-                                        end
-                                    end
-                                end
-                                
-                                if not isPack and not isBossRaid then
-                                    local score = getUnifiedCardScore(model)
-                                    if score > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
-                                        table.insert(allCards, { item = model, score = score, source = "Plot", interact = desc })
+        local cardList = {}
+        for _, desc in ipairs(plotFolder:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
+                
+                local isIgnoredPrompt = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
+                    or string.find(pText, "SPAWN") or string.find(pText, "สุ่ม")
+                    or string.find(pText, "OPEN") or string.find(pText, "เปิด")
+                    or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์")
+                    or string.find(pText, "UPGRADE") or string.find(pText, "อัปเกรด")
+                    or string.find(pText, "CLAIM") or string.find(pText, "รับ")
+                    or string.find(pText, "SELL") or string.find(pText, "ขาย")
+                    or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
+                    or string.find(pText, "JOIN") or string.find(pText, "ENTER")
+                
+                if not isIgnoredPrompt then
+                    local model = desc:FindFirstAncestorOfClass("Model")
+                    if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
+                        local isPack = isPackCard(model)
+                        if not isPack then
+                            for _, txtObj in ipairs(model:GetDescendants()) do
+                                if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
+                                    local txtUpper = string.upper(txtObj.Text or "")
+                                    if string.find(txtUpper, "PACK") or string.find(txtUpper, "แพ็ค") or string.find(txtUpper, "BOX") or string.find(txtUpper, "กล่อง") then
+                                        isPack = true
+                                        break
                                     end
                                 end
                             end
+                        end
+                        if isPack then continue end
+                        
+                        local cashScore, rarityScore, mutationScore = 0, 0, 0
+                        for _, txtObj in ipairs(model:GetDescendants()) do
+                            if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
+                                local val = parseSuffixValue(txtObj.Text)
+                                if val > cashScore then cashScore = val end
+                                local s = getRarityScore(txtObj.Text)
+                                if s > rarityScore then rarityScore = s end
+                                
+                                local cleanMut = string.lower(string.gsub(txtObj.Text or "", "<[^>]+>", ""))
+                                cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
+                                local MutationScores = {
+                                    ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
+                                    ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
+                                    ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
+                                }
+                                for mName, mScore in pairs(MutationScores) do
+                                    if string.find(cleanMut, mName) and mScore > mutationScore then
+                                        mutationScore = mScore
+                                    end
+                                end
+                            end
+                        end
+                        
+                        if cashScore == 0 and rarityScore == 0 then
+                            local lvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel") or 0
+                            if tonumber(lvl) then cashScore = tonumber(lvl) end
+                            if cashScore == 0 then
+                                local val = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier")
+                                if tonumber(val) then cashScore = tonumber(val) end
+                            end
+                        end
+
+                        local totalScore = cashScore + (rarityScore * 1000) + (mutationScore * 100)
+                        if totalScore > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
+                            table.insert(cardList, { interact = desc, score = totalScore, model = model })
                         end
                     end
                 end
             end
         end
 
-        if #allCards == 0 then return end
-        table.sort(allCards, function(a, b) return a.score > b.score end)
+        if #cardList == 0 then return end
+        table.sort(cardList, function(a, b) return a.score > b.score end)
 
         local originalCFrame = hrp.CFrame
         getgenv().CollectedCardPositions = {}
-        
-        -- หน่วงเวลานิดนึงก่อนเริ่มเก็บใบแรก เผื่อเซิร์ฟเวอร์ยัง sync ตำแหน่งไม่ทัน
-        task.wait(1)
 
-        for i = 1, math.min(4, #allCards) do
-            local card = allCards[i]
-            if card.source == "Plot" and card.interact and card.interact.Parent then
+        for i = 1, math.min(4, #cardList) do
+            local item = cardList[i]
+            if item and item.interact and item.interact.Parent then
                 pcall(function()
                     local targetPos
-                    if card.interact.Parent:IsA("BasePart") then
-                        targetPos = card.interact.Parent.Position
-                    elseif card.interact.Parent:IsA("Attachment") then
-                        targetPos = card.interact.Parent.WorldPosition
-                    elseif card.item and card.item.PrimaryPart then
-                        targetPos = card.item.PrimaryPart.Position
+                    if item.interact.Parent:IsA("BasePart") then
+                        targetPos = item.interact.Parent.Position
+                    elseif item.interact.Parent:IsA("Attachment") then
+                        targetPos = item.interact.Parent.WorldPosition
+                    elseif item.model and item.model.PrimaryPart then
+                        targetPos = item.model.PrimaryPart.Position
                     end
                     
                     if targetPos and hrp then
-                        table.insert(getgenv().CollectedCardPositions, { pos = targetPos, score = card.score, assumedName = card.item.Name })
+                        table.insert(getgenv().CollectedCardPositions, targetPos)
                         hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
+                        task.wait(0.8)
                         
-                        -- ถ้าเป็นใบแรก ให้รอนานกว่าปกติหน่อย
-                        if i == 1 then
-                            task.wait(1.5)
-                        else
-                            task.wait(0.8)
-                        end
-                        
-                        if card.interact:IsA("ProximityPrompt") then
-                            card.interact.RequiresLineOfSight = false
-                            card.interact.MaxActivationDistance = 99999
-                            card.interact.HoldDuration = 0
-                            -- สแปมกดเก็บการ์ดจนกว่าการ์ดจะหายไปจากฐาน (เช็คจาก Parent) หรือครบ 8 ครั้ง
-                            for _ = 1, 8 do
-                                if not card.interact or not card.interact.Parent then break end
-                                fireproximityprompt(card.interact)
-                                task.wait(0.4)
+                        if item.interact:IsA("ProximityPrompt") then
+                            item.interact.RequiresLineOfSight = false
+                            item.interact.MaxActivationDistance = 99999
+                            item.interact.HoldDuration = 0
+                            for _ = 1, 5 do
+                                if not item.interact or not item.interact.Parent then break end
+                                fireproximityprompt(item.interact)
+                                task.wait(0.3)
                             end
-                        elseif card.interact:IsA("ClickDetector") then
-                            for _ = 1, 8 do
-                                if not card.interact or not card.interact.Parent then break end
-                                fireclickdetector(card.interact)
-                                task.wait(0.4)
+                        elseif item.interact:IsA("ClickDetector") then
+                            for _ = 1, 5 do
+                                fireclickdetector(item.interact)
+                                task.wait(0.3)
                             end
                         end
-                        task.wait(0.5)
+                        task.wait(1.0)
                     end
                 end)
             end
@@ -2861,12 +2398,12 @@ end
 
 local function placeCollectedCardsBack()
     pcall(function()
-        local collected = getgenv().CollectedCardPositions
-        if not collected or #collected == 0 then return end
+        local positions = getgenv().CollectedCardPositions
+        if not positions or #positions == 0 then return end
 
         local startCF = LocalPlayer.Character and LocalPlayer.Character:GetPivot()
 
-        for _, record in ipairs(collected) do
+        for _, pos in ipairs(positions) do
             pcall(function()
                 local character = LocalPlayer.Character
                 local hrp = character and character:FindFirstChild("HumanoidRootPart")
@@ -2874,33 +2411,15 @@ local function placeCollectedCardsBack()
                 if not hrp or not humanoid then return end
 
                 local tool
-                local bestScoreMatch = -1
-                
-                local function checkContainer(container)
-                    if not container then return end
-                    for _, t in ipairs(container:GetChildren()) do
-                        if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then
-                            local s = getUnifiedCardScore(t)
-                            if s == record.score or t.Name == record.assumedName then
-                                tool = t
-                                bestScoreMatch = s
-                                if s == record.score then return true end
-                            end
-                        end
+                local backpack = LocalPlayer:FindFirstChild("Backpack")
+                if backpack then
+                    for _, t in ipairs(backpack:GetChildren()) do
+                        if t:IsA("Tool") and not isPackCard(t) then tool = t break end
                     end
-                    return false
                 end
-                
-                if not checkContainer(LocalPlayer:FindFirstChild("Backpack")) then
-                    checkContainer(character)
-                end
-                
-                if not tool then
-                    local backpack = LocalPlayer:FindFirstChild("Backpack")
-                    if backpack then
-                        for _, t in ipairs(backpack:GetChildren()) do
-                            if t:IsA("Tool") and not isPackCard(t) and not isBossOrRaidCard(t) then tool = t; break; end
-                        end
+                if not tool and character then
+                    for _, t in ipairs(character:GetChildren()) do
+                        if t:IsA("Tool") and not isPackCard(t) then tool = t break end
                     end
                 end
 
@@ -2911,7 +2430,7 @@ local function placeCollectedCardsBack()
                     return
                 end
 
-                hrp.CFrame = CFrame.new(record.pos) + Vector3.new(0, 2, 0)
+                hrp.CFrame = CFrame.new(pos) + Vector3.new(0, 2, 0)
                 task.wait(0.8)
 
                 local plotFolder = findPlayerPlot()
@@ -2922,14 +2441,14 @@ local function placeCollectedCardsBack()
                             if desc.Parent:IsA("BasePart") then descPos = desc.Parent.Position
                             elseif desc.Parent:IsA("Attachment") then descPos = desc.Parent.WorldPosition end
                             
-                            if descPos and (descPos - record.pos).Magnitude < 5 then
+                            if descPos and (descPos - pos).Magnitude < 5 then
                                 if desc:IsA("ProximityPrompt") then
                                     desc.RequiresLineOfSight = false
                                     desc.MaxActivationDistance = 99999
                                     desc.HoldDuration = 0
-                                    for _ = 1, 5 do fireproximityprompt(desc); task.wait(0.3); end
+                                    for _ = 1, 5 do fireproximityprompt(desc) task.wait(0.3) end
                                 elseif desc:IsA("ClickDetector") then
-                                    for _ = 1, 4 do fireclickdetector(desc); task.wait(0.3); end
+                                    for _ = 1, 4 do fireclickdetector(desc) task.wait(0.3) end
                                 end
                                 break
                             end
@@ -2948,125 +2467,17 @@ local function placeCollectedCardsBack()
     end)
 end
 
-local function getMinutesToNextBoss()
-    local min = tonumber(os.date("!%M"))
-    if min >= 58 or min <= 5 then return 0 end
-    return 60 - min
-end
-
 local function isBossTimeWindow()
-    local min = tonumber(os.date("!%M"))
+    local min = tonumber(os.date("%M"))
     return min <= 5 or min >= 58
-end
-
-local function closeBossRaidUI()
-    pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if not playerGui then return end
-        for _, v in ipairs(playerGui:GetDescendants()) do
-            if (v:IsA("TextButton") or v:IsA("ImageButton")) and v.Visible then
-                local txt = v:IsA("TextButton") and v.Text or ""
-                local cleanTxt = string.upper(string.match(string.gsub(txt, "<[^>]+>", ""), "^%s*(.-)%s*$") or "")
-                local name = string.upper(v.Name or "")
-                if cleanTxt == "X" or name == "CLOSE" or name == "CLOSEBUTTON" or name == "EXIT" or name == "XBUTTON" or name == "XBTN" then
-                    local p = v.Parent
-                    local isRaidUI = false
-                    while p and p:IsA("GuiObject") do
-                        local pName = string.upper(p.Name)
-                        if pName:find("RAID") or pName:find("BOSS") then
-                            isRaidUI = true
-                            break
-                        end
-                        p = p.Parent
-                    end
-                    if isRaidUI or cleanTxt == "X" then
-                        fireButton(v)
-                        task.wait(0.1)
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function exitTowerNow()
-    getgenv().AutoReplayToggled = false
-    closeBossRaidUI()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        local exitButtons = {}
-        local autoReplayButtons = {}
-
-        for _, v in ipairs(playerGui:GetDescendants()) do
-            if v:IsA("TextButton") or v:IsA("ImageButton") or v:IsA("TextLabel") then
-                local cleanText = (v:IsA("TextLabel") or v:IsA("TextButton")) and string.gsub(v.Text or "", "<[^>]+>", "") or ""
-                local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
-                local name = string.upper(v.Name or "")
-
-                local btn = (v:IsA("TextButton") or v:IsA("ImageButton")) and v 
-                    or v:FindFirstAncestorWhichIsA("TextButton") 
-                    or v:FindFirstAncestorWhichIsA("ImageButton")
-
-                if btn then
-                    if text == "AUTO REPLAY" or name:find("AUTOREPLAY") or name:find("REPLAY") then
-                        table.insert(autoReplayButtons, btn)
-                    end
-
-                    if text:find("EXIT") or text:find("LEAVE") or text:find("QUIT") or text:find("ABANDON") 
-                        or text:find("CANCEL") or text:find("ออก") or text:find("ถอนตัว")
-                        or name:find("EXIT") or name:find("LEAVE") or name:find("QUIT") or name:find("CLOSE")
-                        or name:find("ABANDON") or name:find("CANCEL") or name:find("RETURN")
-                    then
-                        table.insert(exitButtons, btn)
-                    end
-                end
-            end
-        end
-
-        for _, btn in ipairs(autoReplayButtons) do
-            fireButton(btn)
-            task.wait(0.2)
-        end
-
-        for _, btn in ipairs(exitButtons) do
-            fireButton(btn)
-            task.wait(0.2)
-        end
-    end
-
-    local character = LocalPlayer.Character
-    if getgenv().TowerOriginalCFrame and character then
-        character:PivotTo(getgenv().TowerOriginalCFrame)
-        getgenv().TowerOriginalCFrame = nil
-    end
-
-    pcall(placeCollectedCardsBack)
-    getgenv().TowerHasCollected = false
 end
 
 
 -- UI Component Setup
 
-getgenv().TowerCardSource = getgenv().TowerCardSource or "จากบนฐาน (Plot)"
-local TowerSourceDropdown = Tabs.Raid:AddDropdown("TowerCardSource", {
-    Title = "แหล่งที่มาของการ์ดหอคอย",
-    Values = {"จากบนฐาน (Plot)", "จากในกระเป๋า (Inventory)"},
-    Multi = false,
-    Default = getgenv().TowerCardSource
-})
-TowerSourceDropdown:OnChanged(function(Value)
-    getgenv().TowerCardSource = Value
-end)
-
 local AutoTowerToggle = Tabs.Raid:AddToggle("AutoTower", { Title = "🏰 ลงหอคอยอัตโนมัติ (Auto Tower)", Default = false })
 AutoTowerToggle:OnChanged(function(state)
     getgenv().AutoTower = state
-    if state then
-        getgenv().AutoBossRaid = false
-        getgenv().AutoTowerAndBoss = false
-        if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
-        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
-    end
     if not state then
         local cam = workspace.CurrentCamera
         local character = LocalPlayer.Character
@@ -3158,7 +2569,6 @@ AutoTowerToggle:OnChanged(function(state)
 
                     if openPrompt and not inTowerUI and not inBattle then
                         if not getgenv().TowerHasCollected then
-                            closeBossRaidUI()
                             collect4BestBaseCards()
                             getgenv().TowerHasCollected = true
                             task.wait(0.5)
@@ -3182,8 +2592,8 @@ AutoTowerToggle:OnChanged(function(state)
                         task.wait(0.4)
                     end
 
-                    if openBtn and not inTowerUI and not inBattle then fireButton(openBtn); task.wait(0.4) end
-                    if equipBtn then fireButton(equipBtn); task.wait(0.4) end
+                    if openBtn and not inTowerUI and not inBattle then fireButton(openBtn) task.wait(0.4) end
+                    if equipBtn then fireButton(equipBtn) task.wait(0.4) end
                     if battleBtn then
                         fireButton(battleBtn)
                         task.wait(0.5)
@@ -3193,16 +2603,14 @@ AutoTowerToggle:OnChanged(function(state)
                             placeCollectedCardsBack()
                         end
                         getgenv().TowerHasCollected = false
-                        getgenv().AutoReplayToggled = false
                     end
                     if autoReplayBtn and not getgenv().AutoReplayToggled then
                         fireButton(autoReplayBtn)
                         getgenv().AutoReplayToggled = true
                         task.wait(0.3)
                     end
-                    if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                    if playBtn then fireButton(playBtn); task.wait(0.2); end
-                    if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
+                    if nextBtn then fireButton(nextBtn) task.wait(0.2) end
+                    if playBtn then fireButton(playBtn) task.wait(0.2) end
                 end
                 task.wait(0.2)
             end
@@ -3210,35 +2618,11 @@ AutoTowerToggle:OnChanged(function(state)
     end
 end)
 
-Tabs.Raid:AddButton({
-    Title = "🛑 ปิดหอคอยตอนนี้ (Exit Tower)",
-    Callback = function()
-        getgenv().AutoTower = false
-        getgenv().AutoTowerAndBoss = false
-        if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
-        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
-        exitTowerNow()
-        Fluent:Notify({ Title = "Tower", Content = "ยกเลิก Auto Replay และออกจากหอคอยแล้ว!", Duration = 3 })
-    end
-})
-
-getgenv().BossCardSource = getgenv().BossCardSource or "จากบนฐาน (Plot)"
-local BossSourceDropdown = Tabs.Raid:AddDropdown("BossCardSource", {
-    Title = "แหล่งที่มาของการ์ดบอสเรด",
-    Values = {"จากบนฐาน (Plot)", "จากในกระเป๋า (Inventory)"},
-    Multi = false,
-    Default = getgenv().BossCardSource
-})
-BossSourceDropdown:OnChanged(function(Value)
-    getgenv().BossCardSource = Value
-end)
-
-getgenv().BossRaidDifficulty = getgenv().BossRaidDifficulty or "NIGHTMARE"
 local BossDiffDropdown = Tabs.Raid:AddDropdown("BossRaidDifficulty", {
     Title = "⚔️ ระดับความยากบอสเรด",
     Values = { "EASY", "MEDIUM", "HARD", "NIGHTMARE" },
     Multi = false,
-    Default = getgenv().BossRaidDifficulty
+    Default = "NIGHTMARE"
 })
 BossDiffDropdown:OnChanged(function(Value)
     getgenv().BossRaidDifficulty = Value
@@ -3249,10 +2633,7 @@ AutoBossToggle:OnChanged(function(state)
     getgenv().AutoBossRaid = state
     if state then
         getgenv().AutoTower = false
-        getgenv().AutoTowerAndBoss = false
         if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
-        if Options and Options.AutoTowerAndBoss then Options.AutoTowerAndBoss:SetValue(false) end
-        getgenv().BossHasCollected = false
         
         task.spawn(function()
             while getgenv().AutoBossRaid do
@@ -3260,7 +2641,6 @@ AutoBossToggle:OnChanged(function(state)
                 if playerGui then
                     local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
                     local alreadyFought = false
-                    local targetDiff = string.upper(tostring(getgenv().BossRaidDifficulty or "NIGHTMARE"))
 
                     local function isGuiVisible(gui)
                         if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
@@ -3298,7 +2678,7 @@ AutoBossToggle:OnChanged(function(state)
                             elseif text == "BATTLE" then
                                 local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                 if btn and isGuiVisible(btn) then battleBtn = btn end
-                            elseif text == targetDiff then
+                            elseif text == getgenv().BossRaidDifficulty then
                                 local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
                                 if btn and isGuiVisible(btn) then diffBtn = btn end
                             elseif text == "AUTO REPLAY" then
@@ -3321,14 +2701,9 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     if alreadyFought then
-                        closeBossRaidUI()
                         getgenv().AutoBossRaid = false
                         if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
                         Fluent:Notify({ Title = "บอสเรด", Content = "คุณสู้บอสไปแล้วในชั่วโมงนี้! หยุดลงบอสเรด", Duration = 5 })
-                        if getgenv().BossHasCollected then
-                            placeCollectedCardsBack()
-                            getgenv().BossHasCollected = false
-                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -3338,24 +2713,15 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
-                    if not inBattle then
-                        if getgenv().BossCardSource == "จากบนฐาน (Plot)" and not getgenv().BossHasCollected then
-                            if not getgenv().BossOriginalCFrame and LocalPlayer.Character then
-                                getgenv().BossOriginalCFrame = LocalPlayer.Character:GetPivot()
-                            end
-                            collect4BestBaseCards()
-                            getgenv().BossHasCollected = true
-                            task.wait(0.5)
-                        end
-
+                    if not inBattle and isBossTimeWindow() then
                         local bossPrompt, portalPrompt
                         for _, p in ipairs(workspace:GetDescendants()) do
                             if p:IsA("ProximityPrompt") then
-                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or "") .. " " .. p.Name)
-                                if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
+                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or ""))
+                                if string.find(pText, "BOSS RAID") and string.find(pText, "TELEPORT") then
                                     portalPrompt = p
-                                elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
-                                    if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") or string.find(pText, "ENTER") then
+                                elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") and not string.find(pText, "TELEPORT") then
+                                    if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") then
                                         bossPrompt = p
                                     end
                                 end
@@ -3389,15 +2755,11 @@ AutoBossToggle:OnChanged(function(state)
                         end
                     end
 
-                    if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn); task.wait(0.1) end
-                    if equipBtn then fireButton(equipBtn); task.wait(0.1) end
+                    if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn) task.wait(0.1) end
+                    if equipBtn then fireButton(equipBtn) task.wait(0.1) end
                     if battleBtn then
                         fireButton(battleBtn)
                         task.wait(0.2)
-                        if getgenv().BossHasCollected then
-                            placeCollectedCardsBack()
-                            getgenv().BossHasCollected = false
-                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -3428,10 +2790,6 @@ AutoBossToggle:OnChanged(function(state)
                     end
 
                     if autoReplayBtn or showBattleBtn then
-                        if getgenv().BossHasCollected then
-                            placeCollectedCardsBack()
-                            getgenv().BossHasCollected = false
-                        end
                         local character = LocalPlayer.Character
                         if getgenv().BossOriginalCFrame and character then
                             character:PivotTo(getgenv().BossOriginalCFrame)
@@ -3439,376 +2797,18 @@ AutoBossToggle:OnChanged(function(state)
                         end
                     end
 
-                    if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
-                    if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                    if playBtn then fireButton(playBtn); task.wait(0.2); end
+                    if hideBattleBtn then fireButton(hideBattleBtn) task.wait(0.2) end
+                    if nextBtn then fireButton(nextBtn) task.wait(0.2) end
+                    if playBtn then fireButton(playBtn) task.wait(0.2) end
                 end
                 task.wait(0.2)
             end
         end)
     else
-        if getgenv().BossHasCollected then
-            placeCollectedCardsBack()
-            getgenv().BossHasCollected = false
-        end
         local character = LocalPlayer.Character
         if getgenv().BossOriginalCFrame and character then
             character:PivotTo(getgenv().BossOriginalCFrame)
             getgenv().BossOriginalCFrame = nil
-        end
-        getgenv().AutoReplayToggledBoss = false
-    end
-end)
-
-local AutoTowerAndBossToggle = Tabs.Raid:AddToggle("AutoTowerAndBoss", { Title = "⚔️🔄 ลงออโต้หอคอย & เรดบอส (Auto Tower & Boss Raid)", Default = false })
-AutoTowerAndBossToggle:OnChanged(function(state)
-    getgenv().AutoTowerAndBoss = state
-    if state then
-        getgenv().AutoTower = false
-        getgenv().AutoBossRaid = false
-        if Options and Options.AutoTower then Options.AutoTower:SetValue(false) end
-        if Options and Options.AutoBossRaid then Options.AutoBossRaid:SetValue(false) end
-
-        task.spawn(function()
-            local lastBossHour = -1
-            getgenv().BossDoneThisHour = false
-
-            while getgenv().AutoTowerAndBoss do
-                local currentHour = tonumber(os.date("!%H"))
-                local currentMin = tonumber(os.date("!%M"))
-
-                if currentHour ~= lastBossHour and currentMin > 5 and currentMin < 58 then
-                    lastBossHour = currentHour
-                    getgenv().BossDoneThisHour = false
-                end
-
-                local bossWindow = isBossTimeWindow()
-
-                if bossWindow and not getgenv().BossDoneThisHour then
-                    Fluent:Notify({ Title = "ออโต้ผสม", Content = "ถึงเวลาบอสเรดเกิด! ออกจากหอคอยเพื่อไปสู้บอส...", Duration = 4 })
-                    
-                    exitTowerNow()
-                    task.wait(1)
-
-                    getgenv().BossHasCollected = false
-                    local bossFinished = false
-
-                    while getgenv().AutoTowerAndBoss and not bossFinished do
-                        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                        if playerGui then
-                            local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn, nextBtn, playBtn
-                            local alreadyFought = false
-                            local targetDiff = string.upper(tostring(getgenv().BossRaidDifficulty or "NIGHTMARE"))
-
-                            local function isGuiVisible(gui)
-                                if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
-                                local current = gui.Parent
-                                while current and current:IsA("GuiObject") do
-                                    if not current.Visible then return false end
-                                    current = current.Parent
-                                end
-                                return not (current and current:IsA("ScreenGui")) or current.Enabled
-                            end
-
-                            for _, v in ipairs(playerGui:GetDescendants()) do
-                                if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
-                                    local cleanText = string.gsub(v.Text, "<[^>]+>", "")
-                                    local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
-                                    
-                                    if string.find(text, "ALREADY FOUGHT THE BOSS") and isGuiVisible(v) then
-                                        alreadyFought = true
-                                    end
-
-                                    local isInventoryBtn = false
-                                    local parentObj = v.Parent
-                                    while parentObj and parentObj:IsA("GuiObject") do
-                                        local pName = string.lower(parentObj.Name)
-                                        if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
-                                            isInventoryBtn = true
-                                            break
-                                        end
-                                        parentObj = parentObj.Parent
-                                    end
-
-                                    if (text == "EQUIP BEST" or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then equipBtn = btn end
-                                    elseif text == "BATTLE" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then battleBtn = btn end
-                                    elseif text == targetDiff then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then diffBtn = btn end
-                                    elseif text == "AUTO REPLAY" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then autoReplayBtn = btn end
-                                    elseif text == "SHOW BATTLE" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then showBattleBtn = btn end
-                                    elseif text == "HIDE BATTLE" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then hideBattleBtn = btn end
-                                    elseif text == "NEXT" or text == "NEXT FLOOR" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then nextBtn = btn end
-                                    elseif text == "PLAY" then
-                                        local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                        if btn and isGuiVisible(btn) then playBtn = btn end
-                                    end
-                                end
-                            end
-
-                            if alreadyFought then
-                                closeBossRaidUI()
-                                getgenv().BossDoneThisHour = true
-                                bossFinished = true
-                                Fluent:Notify({ Title = "ออโต้ผสม", Content = "สู้บอสเรดเรียบร้อยแล้ว! กำลังกลับไปลงหอคอยต่อ...", Duration = 4 })
-                                if getgenv().BossHasCollected then
-                                    placeCollectedCardsBack()
-                                    getgenv().BossHasCollected = false
-                                end
-                                local character = LocalPlayer.Character
-                                if getgenv().BossOriginalCFrame and character then
-                                    character:PivotTo(getgenv().BossOriginalCFrame)
-                                    getgenv().BossOriginalCFrame = nil
-                                end
-                                break
-                            end
-
-                            local inBattle = equipBtn or battleBtn or autoReplayBtn or showBattleBtn
-                            if not inBattle then
-                                if getgenv().BossCardSource == "จากบนฐาน (Plot)" and not getgenv().BossHasCollected then
-                                    if not getgenv().BossOriginalCFrame and LocalPlayer.Character then
-                                        getgenv().BossOriginalCFrame = LocalPlayer.Character:GetPivot()
-                                    end
-                                    collect4BestBaseCards()
-                                    getgenv().BossHasCollected = true
-                                    task.wait(0.5)
-                                end
-
-                                local bossPrompt, portalPrompt
-                                for _, p in ipairs(workspace:GetDescendants()) do
-                                    if p:IsA("ProximityPrompt") then
-                                        local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or "") .. " " .. p.Name)
-                                        if (string.find(pText, "BOSS RAID") or string.find(pText, "BOSS")) and string.find(pText, "TELEPORT") then
-                                            portalPrompt = p
-                                        elseif not string.find(pText, "SHOP") and not string.find(pText, "RETURN") and not string.find(pText, "BACK") then
-                                            if string.find(pText, "TITAN") or string.find(pText, "BOSS") or string.find(pText, "RAID") or string.find(pText, "FIGHT") or string.find(pText, "ENTER") then
-                                                bossPrompt = p
-                                            end
-                                        end
-                                    end
-                                end
-
-                                local targetPrompt = bossPrompt or portalPrompt
-                                if targetPrompt then
-                                    pcall(function()
-                                        local character = LocalPlayer.Character
-                                        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                                        if hrp then
-                                            local targetPos = targetPrompt.Parent:IsA("BasePart") and targetPrompt.Parent.Position
-                                                or (targetPrompt.Parent:IsA("Attachment") and targetPrompt.Parent.WorldPosition)
-                                                or (targetPrompt.Parent:IsA("Model") and targetPrompt.Parent.PrimaryPart and targetPrompt.Parent.PrimaryPart.Position)
-                                            if targetPos then
-                                                if (hrp.Position - targetPos).Magnitude > 15 then
-                                                    if not getgenv().BossOriginalCFrame then
-                                                        getgenv().BossOriginalCFrame = character:GetPivot()
-                                                    end
-                                                    character:PivotTo(CFrame.new(targetPos) + Vector3.new(0, 3, 0))
-                                                    task.wait(0.1)
-                                                end
-                                            end
-                                        end
-                                        targetPrompt.RequiresLineOfSight = false
-                                        targetPrompt.MaxActivationDistance = 99999
-                                        fireproximityprompt(targetPrompt)
-                                    end)
-                                    task.wait(0.5)
-                                end
-                            end
-
-                            if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn); task.wait(0.1) end
-                            if equipBtn then fireButton(equipBtn); task.wait(0.1) end
-                            if battleBtn then
-                                fireButton(battleBtn)
-                                task.wait(0.2)
-                                if getgenv().BossHasCollected then
-                                    placeCollectedCardsBack()
-                                    getgenv().BossHasCollected = false
-                                end
-                                local character = LocalPlayer.Character
-                                if getgenv().BossOriginalCFrame and character then
-                                    character:PivotTo(getgenv().BossOriginalCFrame)
-                                    getgenv().BossOriginalCFrame = nil
-                                end
-                            end
-
-                            if autoReplayBtn then
-                                local color = autoReplayBtn.BackgroundColor3
-                                if autoReplayBtn.BackgroundTransparency > 0.5 and autoReplayBtn.Parent and autoReplayBtn.Parent:IsA("GuiObject") then
-                                    color = autoReplayBtn.Parent.BackgroundColor3
-                                end
-                                if autoReplayBtn:IsA("ImageButton") and autoReplayBtn.ImageColor3 ~= Color3.new(1, 1, 1) then
-                                    color = autoReplayBtn.ImageColor3
-                                end
-                                local isGreen = (color.G > color.R + 0.1)
-                                if isGreen then
-                                    getgenv().AutoReplayToggledBoss = true
-                                elseif not getgenv().AutoReplayToggledBoss then
-                                    fireButton(autoReplayBtn)
-                                    getgenv().AutoReplayToggledBoss = true
-                                    task.wait(0.2)
-                                end
-                            end
-
-                            if autoReplayBtn or showBattleBtn then
-                                if getgenv().BossHasCollected then
-                                    placeCollectedCardsBack()
-                                    getgenv().BossHasCollected = false
-                                end
-                                local character = LocalPlayer.Character
-                                if getgenv().BossOriginalCFrame and character then
-                                    character:PivotTo(getgenv().BossOriginalCFrame)
-                                    getgenv().BossOriginalCFrame = nil
-                                end
-                            end
-
-                            if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
-                            if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                            if playBtn then fireButton(playBtn); task.wait(0.2); end
-                        end
-                        task.wait(0.3)
-                    end
-                else
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                    if playerGui then
-                        local equipBtn, battleBtn, nextBtn, playBtn, openBtn, autoReplayBtn, hideBattleBtn, showBattleBtn
-                        local function isGuiVisible(gui)
-                            if not gui or (gui:IsA("GuiObject") and not gui.Visible) then return false end
-                            local current = gui.Parent
-                            while current and current:IsA("GuiObject") do
-                                if not current.Visible then return false end
-                                current = current.Parent
-                            end
-                            return not (current and current:IsA("ScreenGui")) or current.Enabled
-                        end
-                        
-                        for _, v in ipairs(playerGui:GetDescendants()) do
-                            if (v:IsA("TextButton") or v:IsA("TextLabel")) and v.Text then
-                                local cleanText = string.gsub(v.Text, "<[^>]+>", "")
-                                local text = string.upper(string.match(cleanText, "^%s*(.-)%s*$") or "")
-                                
-                                local isInventoryBtn = false
-                                local parentObj = v.Parent
-                                while parentObj and parentObj:IsA("GuiObject") do
-                                    local pName = string.lower(parentObj.Name)
-                                    if pName:find("inventory") or pName:find("backpack") or pName:find("cardbag") or pName:find("bag") or pName:find("คลัง") then
-                                        isInventoryBtn = true
-                                        break
-                                    end
-                                    parentObj = parentObj.Parent
-                                end
-
-                                if (text == "EQUIP BEST" or text == "สวมใส่ดีที่สุด" or text == "สวมใส่ที่ดีที่สุด") and not isInventoryBtn then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then equipBtn = btn end
-                                elseif text == "BATTLE" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then battleBtn = btn end
-                                elseif text == "NEXT" or text == "NEXT FLOOR" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then nextBtn = btn end
-                                elseif text == "PLAY" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then playBtn = btn end
-                                elseif text == "AUTO REPLAY" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then autoReplayBtn = btn end
-                                elseif text == "HIDE BATTLE" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then hideBattleBtn = btn end
-                                elseif text == "SHOW BATTLE" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and isGuiVisible(btn) then showBattleBtn = btn end
-                                elseif string.find(text, "OPEN INFINITY TOWER") then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn then openBtn = btn end
-                                end
-                            end
-                        end
-
-                        local openPrompt
-                        for _, p in ipairs(workspace:GetDescendants()) do
-                            if p:IsA("ProximityPrompt") then
-                                local pText = string.upper(p.ActionText .. " " .. p.ObjectText)
-                                if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") then
-                                    openPrompt = p
-                                    break
-                                end
-                            end
-                        end
-
-                        local inTowerUI = equipBtn or battleBtn
-                        local inBattle = autoReplayBtn or showBattleBtn
-
-                        if openPrompt and not inTowerUI and not inBattle then
-                            closeBossRaidUI()
-                            if getgenv().TowerCardSource == "จากบนฐาน (Plot)" and not getgenv().TowerHasCollected then
-                                collect4BestBaseCards()
-                                getgenv().TowerHasCollected = true
-                                task.wait(0.5)
-                            end
-                            pcall(function()
-                                local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                                if hrp then
-                                    local targetPos = openPrompt.Parent:IsA("BasePart") and openPrompt.Parent.Position
-                                        or (openPrompt.Parent:IsA("Attachment") and openPrompt.Parent.WorldPosition)
-                                        or (openPrompt.Parent:IsA("Model") and openPrompt.Parent.PrimaryPart and openPrompt.Parent.PrimaryPart.Position)
-                                    if targetPos and (hrp.Position - targetPos).Magnitude > 15 then
-                                        if not getgenv().TowerOriginalCFrame then getgenv().TowerOriginalCFrame = LocalPlayer.Character:GetPivot() end
-                                        LocalPlayer.Character:PivotTo(CFrame.new(targetPos) + Vector3.new(0, 3, 0))
-                                        task.wait(0.2)
-                                    end
-                                end
-                                openPrompt.RequiresLineOfSight = false
-                                openPrompt.MaxActivationDistance = 99999
-                                fireproximityprompt(openPrompt)
-                            end)
-                            task.wait(0.4)
-                        end
-
-                        if openBtn and not inTowerUI and not inBattle then fireButton(openBtn); task.wait(0.4) end
-                        if equipBtn then fireButton(equipBtn); task.wait(0.4) end
-                        if battleBtn then
-                            fireButton(battleBtn)
-                            task.wait(0.5)
-                            if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
-                                LocalPlayer.Character:PivotTo(getgenv().TowerOriginalCFrame)
-                                getgenv().TowerOriginalCFrame = nil
-                                placeCollectedCardsBack()
-                            end
-                            getgenv().TowerHasCollected = false
-                            getgenv().AutoReplayToggled = false
-                        end
-                        if autoReplayBtn and not getgenv().AutoReplayToggled then
-                            fireButton(autoReplayBtn)
-                            getgenv().AutoReplayToggled = true
-                            task.wait(0.3)
-                        end
-                        if nextBtn then fireButton(nextBtn); task.wait(0.2); end
-                        if playBtn then fireButton(playBtn); task.wait(0.2); end
-                        if hideBattleBtn then fireButton(hideBattleBtn); task.wait(0.2); end
-                    end
-                end
-
-                task.wait(0.3)
-            end
-        end)
-    else
-        exitTowerNow()
-        if getgenv().BossHasCollected then
-            placeCollectedCardsBack()
-            getgenv().BossHasCollected = false
         end
     end
 end)
@@ -4059,6 +3059,166 @@ AutoAcceptToggle:OnChanged(function(state)
 end)
 
 ---------------------------------------------------------
+-- 5.5 FPS TAB (ลด FPS)
+---------------------------------------------------------
+Tabs.FPS:AddSection("⚡ การตั้งค่าประสิทธิภาพ (Performance)")
+
+getgenv().FPSCap = getgenv().FPSCap or "ไม่จำกัด (Max)"
+local FPSDropdown = Tabs.FPS:AddDropdown("FPSCapLimit", {
+    Title = "⏱️ จำกัดเฟรมเรต (FPS Cap)",
+    Description = "เลือกระดับ FPS เพื่อลดการทำงานของการ์ดจอ/ซีพียู",
+    Values = {"ไม่จำกัด (Max)", "60 FPS", "30 FPS", "15 FPS", "5 FPS"},
+    Multi = false,
+    Default = getgenv().FPSCap
+})
+
+FPSDropdown:OnChanged(function(Value)
+    getgenv().FPSCap = Value
+    if setfpscap then
+        if Value == "60 FPS" then setfpscap(60)
+        elseif Value == "30 FPS" then setfpscap(30)
+        elseif Value == "15 FPS" then setfpscap(15)
+        elseif Value == "5 FPS" then setfpscap(5)
+        else setfpscap(999) end
+    end
+end)
+
+local AFKToggle = Tabs.FPS:AddToggle("AFKModeWhiteScreen", {
+    Title = "📺 โหมดจอขาว (AFK Mode)",
+    Description = "ปิดการเรนเดอร์ภาพ 3D และแสดงจอดำ (ประหยัด GPU 99%)",
+    Default = false
+})
+
+local afkScreenGui = nil
+AFKToggle:OnChanged(function(state)
+    getgenv().AFKMode = state
+    pcall(function()
+        if state then
+            if not afkScreenGui then
+                afkScreenGui = Instance.new("ScreenGui")
+                afkScreenGui.Name = "PayomboyZ_AFK"
+                afkScreenGui.IgnoreGuiInset = true
+                afkScreenGui.ResetOnSpawn = false
+                afkScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+                
+                local button = Instance.new("TextButton")
+                button.Size = UDim2.new(1, 0, 1, 0)
+                button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                button.Text = "🌙 AFK Mode กำลังทำงาน...\n(ประหยัดพลังงาน GPU)\n\nคลิกที่นี่เพื่อปิดโหมดนี้"
+                button.TextColor3 = Color3.fromRGB(200, 200, 200)
+                button.Font = Enum.Font.GothamBold
+                button.TextSize = 24
+                button.Parent = afkScreenGui
+
+                button.MouseButton1Click:Connect(function()
+                    if Options.AFKModeWhiteScreen then
+                        Options.AFKModeWhiteScreen:SetValue(false)
+                    end
+                end)
+            end
+            afkScreenGui.Parent = CoreGui
+            RunService:Set3dRenderingEnabled(false)
+        else
+            if afkScreenGui then afkScreenGui.Parent = nil end
+            RunService:Set3dRenderingEnabled(true)
+        end
+    end)
+end)
+
+local originalStates = {}
+local PotatoToggle = Tabs.FPS:AddToggle("PotatoGraphics", {
+    Title = "🥔 โหมดภาพกาก (Potato Graphics)",
+    Description = "ลบพื้นผิวและเงาในเกม (เปิด/ปิด ได้)",
+    Default = false
+})
+
+PotatoToggle:OnChanged(function(state)
+    getgenv().PotatoGraphics = state
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        if state then
+            Lighting.GlobalShadows = false
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and not v:IsA("MeshPart") then
+                    if originalStates[v] == nil then
+                        originalStates[v] = { Material = v.Material, Reflectance = v.Reflectance }
+                    end
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    if originalStates[v] == nil then
+                        originalStates[v] = { Transparency = v.Transparency }
+                    end
+                    v.Transparency = 1
+                end
+            end
+            Fluent:Notify({ Title = "ลด FPS", Content = "เปิดโหมดภาพกากเรียบร้อยแล้ว!", Duration = 3 })
+        else
+            Lighting.GlobalShadows = true
+            for obj, data in pairs(originalStates) do
+                if obj and obj.Parent then
+                    if data.Material then obj.Material = data.Material end
+                    if data.Reflectance then obj.Reflectance = data.Reflectance end
+                    if data.Transparency then obj.Transparency = data.Transparency end
+                end
+            end
+            originalStates = {}
+            Fluent:Notify({ Title = "ลด FPS", Content = "ปิดโหมดภาพกาก (คืนค่าเดิม)", Duration = 3 })
+        end
+    end)
+end)
+
+local visualConn = nil
+local DisableEffectsToggle = Tabs.FPS:AddToggle("DisableVisualEffects", {
+    Title = "✨ ปิดเอฟเฟกต์ทั้งหมด (Disable Effects)",
+    Description = "ปิดการแสดงผล Particle, Beam, Trail ถาวรขณะเปิด",
+    Default = false
+})
+
+DisableEffectsToggle:OnChanged(function(state)
+    getgenv().DisableVisualEffects = state
+    if visualConn then visualConn:Disconnect(); visualConn = nil end
+    if state then
+        pcall(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                    v.Enabled = false
+                end
+            end
+        end)
+        visualConn = workspace.DescendantAdded:Connect(function(v)
+            if getgenv().DisableVisualEffects then
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
+                    v.Enabled = false
+                end
+            end
+        end)
+    end
+end)
+
+Tabs.FPS:AddButton({
+    Title = "☀️ ฟื้นฟูแสงและสีหน้าจอ (Restore Screen Brightness)",
+    Description = "ลบเอฟเฟกต์มืด/เบลอ และคืนค่าความสว่างปกติของเกมทันที",
+    Callback = function()
+        pcall(function()
+            disableScreenDarkening()
+            local Lighting = game:GetService("Lighting")
+            for _, v in ipairs(Lighting:GetChildren()) do
+                if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") then
+                    v:Destroy()
+                end
+            end
+            Lighting.GlobalShadows = true
+            Lighting.Brightness = 2
+            Lighting.ClockTime = 14
+            Lighting.FogEnd = 100000
+            Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+            Fluent:Notify({ Title = "แสงสว่าง", Content = "ฟื้นฟูแสงและสีหน้าจอปกติเรียบร้อยแล้ว!", Duration = 3 })
+        end)
+    end
+})
+
+---------------------------------------------------------
 -- 6. DASHBOARD & CONFIG TAB (แดชบอร์ด & ตั้งค่า)
 ---------------------------------------------------------
 Tabs.Dashboard:AddSection("📊 สถานะคลังการ์ด")
@@ -4237,10 +3397,6 @@ local function SaveConfig(name)
         RerollSpeed = getgenv().RerollSpeed or 0.05,
         SelectedTraits = getgenv().SelectedTraits or {},
         SelectedRanks = getgenv().SelectedRanks or {},
-        InsufficientFundsAction = getgenv().InsufficientFundsAction or "ข้าม",
-        FPSCap = getgenv().FPSCap or "ไม่จำกัด (Max)",
-        AFKMode = getgenv().AFKMode or false,
-        DisableVisualEffects = getgenv().DisableVisualEffects or false,
     }
     if writefile then
         pcall(function()
@@ -4279,10 +3435,6 @@ local function LoadConfig(name)
             getgenv().BossRaidDifficulty = data.BossRaidDifficulty or "NIGHTMARE"
             getgenv().SelectedTraits = data.SelectedTraits or {}
             getgenv().SelectedRanks = data.SelectedRanks or {}
-            getgenv().InsufficientFundsAction = data.InsufficientFundsAction or "ข้าม"
-            getgenv().FPSCap = data.FPSCap or "ไม่จำกัด (Max)"
-            getgenv().AFKMode = data.AFKMode or false
-            getgenv().DisableVisualEffects = data.DisableVisualEffects or false
 
             -- Sync Rarities Multi-Dropdown UI
             local dictR = {}
@@ -4328,15 +3480,11 @@ local function LoadConfig(name)
             safeSetToggle("AutoUseProduction", data.AutoUseProduction)
             safeSetToggle("AutoTower", data.AutoTower)
             safeSetToggle("AutoBossRaid", data.AutoBossRaid)
-            safeSetToggle("AFKModeWhiteScreen", data.AFKMode)
-            safeSetToggle("DisableVisualEffects", data.DisableVisualEffects)
 
             if Options.AutoCarryDelay and data.AutoCarryDelay then pcall(function() Options.AutoCarryDelay:SetValue(tonumber(data.AutoCarryDelay)) end) end
             if Options.RerollSpeed and data.RerollSpeed then pcall(function() Options.RerollSpeed:SetValue(tonumber(data.RerollSpeed)) end) end
             if Options.BossRaidDifficulty and data.BossRaidDifficulty then pcall(function() Options.BossRaidDifficulty:SetValue(tostring(data.BossRaidDifficulty)) end) end
             if Options.DiscordWebhook and data.Webhook then pcall(function() Options.DiscordWebhook:SetValue(tostring(data.Webhook)) end) end
-            if Options.InsufficientFundsAction and data.InsufficientFundsAction then pcall(function() Options.InsufficientFundsAction:SetValue(tostring(data.InsufficientFundsAction)) end) end
-            if Options.FPSCapLimit and data.FPSCap then pcall(function() Options.FPSCapLimit:SetValue(tostring(data.FPSCap)) end) end
 
             Fluent:Notify({ Title = "การตั้งค่า", Content = "โหลดการตั้งค่าสำเร็จ: " .. name, Duration = 3 })
         else
@@ -4435,167 +3583,6 @@ if ConfigData.Autoload ~= "" and ConfigData.Autoload ~= "ไม่มีกา�
 end
 
 ---------------------------------------------------------
--- FPS OPTIMIZATION & PERFORMANCE
----------------------------------------------------------
-Tabs.FPS:AddSection("⚡ การตั้งค่าประสิทธิภาพ (Performance)")
-
-getgenv().FPSCap = getgenv().FPSCap or "ไม่จำกัด (Max)"
-local FPSDropdown = Tabs.FPS:AddDropdown("FPSCapLimit", {
-    Title = "⏱️ จำกัดเฟรมเรต (FPS Cap)",
-    Description = "เลือกระดับ FPS เพื่อลดการทำงานของการ์ดจอ/ซีพียู",
-    Values = {"ไม่จำกัด (Max)", "60 FPS", "30 FPS", "15 FPS", "5 FPS"},
-    Multi = false,
-    Default = getgenv().FPSCap
-})
-
-FPSDropdown:OnChanged(function(Value)
-    getgenv().FPSCap = Value
-    if setfpscap then
-        if Value == "60 FPS" then setfpscap(60)
-        elseif Value == "30 FPS" then setfpscap(30)
-        elseif Value == "15 FPS" then setfpscap(15)
-        elseif Value == "5 FPS" then setfpscap(5)
-        else setfpscap(999) end
-    end
-end)
-
-local AFKToggle = Tabs.FPS:AddToggle("AFKModeWhiteScreen", {
-    Title = "📺 โหมดจอขาว (AFK Mode)",
-    Description = "ปิดการเรนเดอร์ภาพ 3D และแสดงจอดำ (ประหยัด GPU 99%)",
-    Default = (ConfigData.AFKMode == true) or false
-})
-
-local afkScreenGui = nil
-AFKToggle:OnChanged(function(state)
-    getgenv().AFKMode = state
-    pcall(function()
-        if state then
-            if not afkScreenGui then
-                afkScreenGui = Instance.new("ScreenGui")
-                afkScreenGui.Name = "PayomboyZ_AFK"
-                afkScreenGui.IgnoreGuiInset = true
-                afkScreenGui.ResetOnSpawn = false
-                afkScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-                
-                local button = Instance.new("TextButton")
-                button.Size = UDim2.new(1, 0, 1, 0)
-                button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                button.Text = "🌙 AFK Mode กำลังทำงาน...\n(ประหยัดพลังงาน GPU)\n\nคลิกที่นี่เพื่อปิดโหมดนี้"
-                button.TextColor3 = Color3.fromRGB(200, 200, 200)
-                button.Font = Enum.Font.GothamBold
-                button.TextSize = 24
-                button.Parent = afkScreenGui
-
-                button.MouseButton1Click:Connect(function()
-                    if Options.AFKModeWhiteScreen then
-                        Options.AFKModeWhiteScreen:SetValue(false)
-                    end
-                end)
-            end
-            afkScreenGui.Parent = CoreGui
-            RunService:Set3dRenderingEnabled(false)
-        else
-            if afkScreenGui then afkScreenGui.Parent = nil end
-            RunService:Set3dRenderingEnabled(true)
-        end
-    end)
-end)
-
-local originalStates = {}
-local PotatoToggle = Tabs.FPS:AddToggle("PotatoGraphics", {
-    Title = "🥔 โหมดภาพกาก (Potato Graphics)",
-    Description = "ลบพื้นผิวและเงาในเกม (เปิด/ปิด ได้)",
-    Default = false
-})
-
-PotatoToggle:OnChanged(function(state)
-    getgenv().PotatoGraphics = state
-    pcall(function()
-        local Lighting = game:GetService("Lighting")
-        if state then
-            Lighting.GlobalShadows = false
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v:IsA("BasePart") and not v:IsA("MeshPart") then
-                    if originalStates[v] == nil then
-                        originalStates[v] = { Material = v.Material, Reflectance = v.Reflectance }
-                    end
-                    v.Material = Enum.Material.SmoothPlastic
-                    v.Reflectance = 0
-                elseif v:IsA("Decal") or v:IsA("Texture") then
-                    if originalStates[v] == nil then
-                        originalStates[v] = { Transparency = v.Transparency }
-                    end
-                    v.Transparency = 1
-                end
-            end
-            Fluent:Notify({ Title = "ลด FPS", Content = "เปิดโหมดภาพกากเรียบร้อยแล้ว!", Duration = 3 })
-        else
-            Lighting.GlobalShadows = true
-            for obj, data in pairs(originalStates) do
-                if obj and obj.Parent then
-                    if data.Material then obj.Material = data.Material end
-                    if data.Reflectance then obj.Reflectance = data.Reflectance end
-                    if data.Transparency then obj.Transparency = data.Transparency end
-                end
-            end
-            originalStates = {} -- Clear memory
-            Fluent:Notify({ Title = "ลด FPS", Content = "ปิดโหมดภาพกาก (คืนค่าเดิม)", Duration = 3 })
-        end
-    end)
-end)
-
-local visualConn = nil
-local DisableEffectsToggle = Tabs.FPS:AddToggle("DisableVisualEffects", {
-    Title = "✨ ปิดเอฟเฟกต์ทั้งหมด (Disable Effects)",
-    Description = "ปิดการแสดงผล Particle, Beam, Trail ถาวรขณะเปิด",
-    Default = false
-})
-
-DisableEffectsToggle:OnChanged(function(state)
-    getgenv().DisableVisualEffects = state
-    if visualConn then visualConn:Disconnect(); visualConn = nil end
-    if state then
-        pcall(function()
-            for _, v in ipairs(workspace:GetDescendants()) do
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                    v.Enabled = false
-                end
-            end
-        end)
-        visualConn = workspace.DescendantAdded:Connect(function(v)
-            if getgenv().DisableVisualEffects then
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                    v.Enabled = false
-                end
-            end
-        end)
-    end
-end)
-
-Tabs.FPS:AddButton({
-    Title = "☀️ ฟื้นฟูแสงและสีหน้าจอ (Restore Screen Brightness)",
-    Description = "ลบเอฟเฟกต์มืด/เบลอ และคืนค่าความสว่างปกติของเกมทันที",
-    Callback = function()
-        pcall(function()
-            disableScreenDarkening()
-            local Lighting = game:GetService("Lighting")
-            for _, v in ipairs(Lighting:GetChildren()) do
-                if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") then
-                    v:Destroy()
-                end
-            end
-            Lighting.GlobalShadows = true
-            Lighting.Brightness = 2
-            Lighting.ClockTime = 14
-            Lighting.FogEnd = 100000
-            Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
-            Fluent:Notify({ Title = "แสงสว่าง", Content = "ฟื้นฟูแสงและสีหน้าจอปกติเรียบร้อยแล้ว!", Duration = 3 })
-        end)
-    end
-})
-
-
----------------------------------------------------------
 -- UI SCALE & MOBILE POPUP DRAGGABLE BUTTON
 ---------------------------------------------------------
 Tabs.Dashboard:AddSection("📱 การปรับขนาด UI (Mobile Scale)")
@@ -4672,17 +3659,17 @@ pcall(function()
 
     local toggleWrapper = Instance.new("TextButton")
     toggleWrapper.Name = "FloatingToggleButton"
-    toggleWrapper.Size = UDim2.new(0, 180, 0, 50) -- ขยายให้กว้างขึ้นเพื่อใส่ชื่อ, FPS และ Ping
+    toggleWrapper.Size = UDim2.new(0, 180, 0, 50)
     toggleWrapper.Position = UDim2.new(0, 15, 0.35, 0)
     toggleWrapper.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    toggleWrapper.Text = "" -- ไม่แสดงข้อความของปุ่มหลัก
+    toggleWrapper.Text = ""
     toggleWrapper.AutoButtonColor = false
     toggleWrapper.Active = true
     toggleWrapper.Draggable = true
     toggleWrapper.Parent = mobileGui
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 25) -- ขอบมนแบบแคปซูล
+    corner.CornerRadius = UDim.new(0, 25)
     corner.Parent = toggleWrapper
 
     local stroke = Instance.new("UIStroke")
@@ -4690,7 +3677,6 @@ pcall(function()
     stroke.Thickness = 2
     stroke.Parent = toggleWrapper
 
-    -- ภาพ Avatar ซ้ายมือ
     local avatarImg = Instance.new("ImageLabel")
     avatarImg.Name = "Avatar"
     avatarImg.Size = UDim2.new(0, 40, 0, 40)
@@ -4706,10 +3692,9 @@ pcall(function()
     avatarImg.Parent = toggleWrapper
 
     local avCorner = Instance.new("UICorner")
-    avCorner.CornerRadius = UDim.new(1, 0) -- ทำให้รูปกลม
+    avCorner.CornerRadius = UDim.new(1, 0)
     avCorner.Parent = avatarImg
 
-    -- ป้ายชื่อ (Title)
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Name = "Title"
     nameLabel.Size = UDim2.new(0, 125, 0, 18)
@@ -4722,7 +3707,6 @@ pcall(function()
     nameLabel.TextXAlignment = Enum.TextXAlignment.Left
     nameLabel.Parent = toggleWrapper
 
-    -- ป้าย FPS & Ping (เท่ๆ)
     local fpsLabel = Instance.new("TextLabel")
     fpsLabel.Name = "FPSLabel"
     fpsLabel.Size = UDim2.new(0, 125, 0, 15)
@@ -4735,7 +3719,6 @@ pcall(function()
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
     fpsLabel.Parent = toggleWrapper
 
-    -- Lightweight 1s Background Performance Counter
     task.spawn(function()
         local Stats = game:GetService("Stats")
         while task.wait(1) do
@@ -4763,51 +3746,10 @@ pcall(function()
     end)
 end)
 
--- Profile Box removed as requested because Toggle now acts as the profile.
+Fluent:Notify({
+    Title = "PayomboyZ",
+    Content = "ปรับแต่งหน้าจอสำหรับมือถือสมบูรณ์! ✅\nปรับ UIScale = " .. tostring(initialScale),
+    Duration = 6
+})
 
--- Hand the library over to our managers (SaveManager & InterfaceManager)
-if SaveManager and InterfaceManager then
-    SaveManager:SetLibrary(Fluent)
-    InterfaceManager:SetLibrary(Fluent)
-
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetIgnoreIndexes({"SelectedRerollCard", "SelectedRankCard", "SelectedTradePlayer", "SelectedTradeCards", "ConfigNameInput"})
-
-    InterfaceManager:SetFolder("PayomboyZ_Config")
-    SaveManager:SetFolder("PayomboyZ_Config/AnimeCardFarm")
-
-    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
-    SaveManager:BuildConfigSection(Tabs.Dashboard)
-
-    Window:SelectTab(1)
-
-    Fluent:Notify({
-        Title = "PayomboyZ",
-        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
-        Duration = 8
-    })
-
-    pcall(function()
-        SaveManager:LoadAutoloadConfig()
-    end)
-elseif InterfaceManager then
-    InterfaceManager:SetLibrary(Fluent)
-    InterfaceManager:SetFolder("PayomboyZ_Config")
-    InterfaceManager:BuildInterfaceSection(Tabs.Dashboard)
-
-    Window:SelectTab(1)
-
-    Fluent:Notify({
-        Title = "PayomboyZ",
-        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
-        Duration = 8
-    })
-else
-    Window:SelectTab(1)
-
-    Fluent:Notify({
-        Title = "PayomboyZ",
-        Content = "สคริปต์ PayomboyZ โหลดเรียบร้อยแล้ว! ✅",
-        Duration = 8
-    })
-end
+Window:SelectTab(1)
