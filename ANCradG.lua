@@ -2700,9 +2700,7 @@ local function afkPaintBelt()
                     table.remove(Runtime.beltLog, 31)
                 end
 
-                if logLine then
-                    logLine("SCAN", ("พบการ์ดบนสายพาน: %s [%s]"):format(entry.name, entry.mutation))
-                end
+                -- SCAN logs removed from main history log per user request (only BUY, TOWER, and RAID logged)
             end
         end
     end
@@ -3848,6 +3846,21 @@ local function GetInventoryCardsForReroll()
     return list
 end
 
+getgenv().RerollSpeed = 1.5
+Tabs.Reroll:AddSection("🔄 ตั้งค่าความเร็วการรีโรล")
+
+local RerollSpeedSlider = Tabs.Reroll:AddSlider("RerollSpeed", {
+    Title = "⏱️ หน่วงเวลาในการรีโรล (วินาที)",
+    Description = "ปรับระยะเวลารอระหว่างการยิงรีโมทในแต่ละรอบ เพื่อป้องกันปิงสูงและข้อความซ้ำ",
+    Default = 1.5,
+    Min = 0.5,
+    Max = 5.0,
+    Rounding = 1,
+    Callback = function(Value)
+        getgenv().RerollSpeed = tonumber(Value) or 1.5
+    end
+})
+
 Tabs.Reroll:AddSection("🔄 ระบบรีเฟรชการ์ด (Reroll Card List)")
 
 Tabs.Reroll:AddButton({
@@ -3884,15 +3897,26 @@ TraitDropdown:OnChanged(function(Value)
     end
 end)
 
-getgenv().SelectedRerollCardKey = nil
+getgenv().SelectedRerollCardKeys = {}
 RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
-    Title = "เลือกการ์ดที่ต้องการรีโรล Trait",
+    Title = "เลือกการ์ดที่ต้องการรีโรล Trait (เลือกได้หลายใบ)",
     Values = GetInventoryCardsForReroll(),
-    Multi = false,
-    Default = "No cards found"
+    Multi = true,
+    Default = {}
 })
 RerollCardsDropdown:OnChanged(function(Value)
-    getgenv().SelectedRerollCardKey = Value
+    getgenv().SelectedRerollCardKeys = {}
+    if type(Value) == "table" then
+        for k, v in pairs(Value) do
+            if type(k) == "number" then
+                table.insert(getgenv().SelectedRerollCardKeys, tostring(v))
+            elseif v then
+                table.insert(getgenv().SelectedRerollCardKeys, tostring(k))
+            end
+        end
+    elseif type(Value) == "string" and Value ~= "No cards found" then
+        table.insert(getgenv().SelectedRerollCardKeys, Value)
+    end
 end)
 
 -- Cache matching remotes for Trait Reroll to avoid high ping / CPU spikes
@@ -3913,8 +3937,13 @@ local function getCachedTraitRemotes()
     return list
 end
 
--- Helper logger for Trait & Rank reroll status in AFK dashboard
-local function logTraitRoll(msg)
+-- Helper logger for Trait & Rank reroll status in AFK dashboard (Deduplicated)
+local lastTraitLogMsg = ""
+local function logTraitRoll(msg, force)
+    if not force and msg == lastTraitLogMsg then
+        return -- Avoid duplicate logging
+    end
+    lastTraitLogMsg = msg
     local timestamp = os.date("%H:%M:%S")
     local logText = string.format("[%s] [TRAIT] %s", timestamp, msg)
     Runtime.traitLog = Runtime.traitLog or {}
@@ -3925,7 +3954,12 @@ local function logTraitRoll(msg)
     end
 end
 
-local function logRankRoll(msg)
+local lastRankLogMsg = ""
+local function logRankRoll(msg, force)
+    if not force and msg == lastRankLogMsg then
+        return -- Avoid duplicate logging
+    end
+    lastRankLogMsg = msg
     local timestamp = os.date("%H:%M:%S")
     local logText = string.format("[%s] [RANK] %s", timestamp, msg)
     Runtime.rankLog = Runtime.rankLog or {}
@@ -3941,44 +3975,68 @@ local AutoRerollToggle = Tabs.Reroll:AddToggle("AutoRerollTrait", { Title = "�
 AutoRerollToggle:OnChanged(function(state)
     getgenv().AutoReroll = state
     if state then
-        logTraitRoll("เริ่มระบบสุ่ม/รี Trait อัตโนมัติ...")
+        lastTraitLogMsg = ""
+        logTraitRoll("เริ่มระบบสุ่ม/รี Trait อัตโนมัติ...", true)
         task.spawn(function()
             getgenv().NotifiedRerollStart = nil
-            while getgenv().AutoReroll do
-                if getgenv().PauseReroll then
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        if char and char:FindFirstChild("Humanoid") then
-                            char.Humanoid:UnequipTools()
-                        end
-                    end)
-                    task.wait(1)
+            
+            local cardKeys = getgenv().SelectedRerollCardKeys or {}
+            if #cardKeys == 0 then
+                logTraitRoll("❌ กรุณาเลือกการ์ดที่ต้องการรีโรลอย่างน้อย 1 ใบ!", true)
+                Fluent:Notify({ Title = "Auto Reroll", Content = "กรุณาเลือกการ์ดอย่างน้อย 1 ใบ", Duration = 3 })
+                getgenv().AutoReroll = false
+                if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+                return
+            end
+
+            for index, cardKey in ipairs(cardKeys) do
+                if not getgenv().AutoReroll then break end
+
+                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                if not (cardTool and cardTool.Parent) then
+                    logTraitRoll(string.format("⚠️ ข้ามการ์ด [%d/%d]: ไม่พบการ์ดในกระเป๋าแล้ว", index, #cardKeys), true)
                     continue
                 end
-                local cardKey = getgenv().SelectedRerollCardKey
-                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
-                
-                if cardTool and cardTool.Parent then
+
+                local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
+                logTraitRoll(string.format("📌 เริ่มรีการ์ด [%d/%d]: %s", index, #cardKeys, cardName), true)
+
+                local finishedThisCard = false
+                while getgenv().AutoReroll and not finishedThisCard do
+                    if getgenv().PauseReroll then
+                        pcall(function()
+                            local char = LocalPlayer.Character
+                            if char and char:FindFirstChild("Humanoid") then
+                                char.Humanoid:UnequipTools()
+                            end
+                        end)
+                        task.wait(1)
+                        continue
+                    end
+
+                    if not (cardTool and cardTool.Parent) then
+                        logTraitRoll(string.format("❌ การ์ด %s หายจากกระเป๋า -> เปลี่ยนไปรีใบถัดไป", cardName), true)
+                        break
+                    end
+
                     local currentTrait = getCardTrait(cardTool)
-                    local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
-                    
+
                     local hasSelected = false
-                    for trait, _ in pairs(getgenv().SelectedTraits) do
+                    for trait, _ in pairs(getgenv().SelectedTraits or {}) do
                         if string.find(string.lower(currentTrait), string.lower(trait)) then
                             hasSelected = true
                             break
                         end
                     end
-                    
+
                     if hasSelected then
-                        logTraitRoll(string.format("🎯 สำเร็จ! ได้รับ Trait: %s (%s)", currentTrait, cardName))
-                        Fluent:Notify({ Title = "Auto Reroll", Content = "ได้รับ Trait ที่ต้องการแล้ว: " .. currentTrait, Duration = 5 })
-                        getgenv().AutoReroll = false
-                        if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+                        logTraitRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Trait: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentTrait), true)
+                        Fluent:Notify({ Title = "Auto Reroll", Content = ("%s ได้รับ Trait: %s แล้ว!"):format(cardName, currentTrait), Duration = 4 })
+                        finishedThisCard = true
                         break
                     end
-                    
-                    logTraitRoll(string.format("รี Trait (%s) -> ปัจจุบัน: %s", cardName, currentTrait ~= "" and currentTrait or "None"))
+
+                    logTraitRoll(string.format("[%d/%d] รี Trait (%s) -> ปัจจุบัน: %s", index, #cardKeys, cardName, currentTrait ~= "" and currentTrait or "None"))
 
                     pcall(function()
                         local char = LocalPlayer.Character
@@ -3989,61 +4047,27 @@ AutoRerollToggle:OnChanged(function(state)
                     end)
 
                     local cId = cardTool:GetAttribute("UUID") or cardTool:GetAttribute("Id") or cardTool:GetAttribute("CardId") or cardTool.Name
-                    
+
                     if not getgenv().NotifiedRerollStart then
-                        Fluent:Notify({ Title = "Auto Reroll", Content = "เริ่มการรีโรล...", Duration = 3 })
+                        Fluent:Notify({ Title = "Auto Reroll", Content = "กำลังรีโรล Trait อัตโนมัติ...", Duration = 3 })
                         getgenv().NotifiedRerollStart = true
                     end
-                    
+
                     local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
                     local TraitRollRE = Remotes and Remotes:FindFirstChild("TraitRollRE")
-                    
+
                     if TraitRollRE and TraitRollRE:IsA("RemoteEvent") then
                         pcall(function() TraitRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Equip", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Insert", cardTool) end)
-                        pcall(function() TraitRollRE:FireServer("Select", {Tool = cardTool}) end)
-                        
-                        local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll"
-                        }
-                        
-                        for _, arg in ipairs(rollArgs) do
-                            pcall(function() TraitRollRE:FireServer(arg) end)
-                            pcall(function() TraitRollRE:FireServer("Roll", arg) end)
-                            pcall(function() TraitRollRE:FireServer("Reroll", arg) end)
-                            pcall(function() TraitRollRE:FireServer(arg, "Roll") end)
-                        end
-                        
-                        pcall(function() TraitRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollTrait", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() TraitRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() TraitRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer("Reroll", cardTool) end)
+                        pcall(function() TraitRollRE:FireServer({Tool = cardTool}) end)
                     end
-                    
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
-                        local remotes = getCachedTraitRemotes()
-                        for _, obj in ipairs(remotes) do
-                            for _, arg in ipairs(argsToTry) do
-                                pcall(function() obj:FireServer(arg) end)
-                            end
-                        end
+
+                    local remotes = getCachedTraitRemotes()
+                    for _, obj in ipairs(remotes) do
+                        pcall(function() obj:FireServer(cId) end)
                     end
-                    fireAll(cId)
-                    
+
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
                         for _, v in ipairs(playerGui:GetDescendants()) do
@@ -4051,7 +4075,7 @@ AutoRerollToggle:OnChanged(function(state)
                                 local text = ""
                                 if v:IsA("TextButton") then text = string.upper(v.Text)
                                 elseif v:FindFirstChildWhichIsA("TextLabel") then text = string.upper(v:FindFirstChildWhichIsA("TextLabel").Text) end
-                                
+
                                 if text == "ROLL" or text == "REROLL" or text == "SPIN" then
                                     if v.Visible or (v.Parent and v.Parent.Visible) then
                                         if getconnections then
@@ -4063,19 +4087,22 @@ AutoRerollToggle:OnChanged(function(state)
                             end
                         end
                     end
-                else
-                    logTraitRoll("❌ ไม่พบการ์ดที่เลือก! กรุณาเลือกใหม่")
-                    Fluent:Notify({ Title = "Auto Reroll", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
-                    getgenv().AutoReroll = false
-                    if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+
+                    task.wait(math.max(0.5, tonumber(getgenv().RerollSpeed) or 1.5))
                 end
-                
-                task.wait(getgenv().RerollSpeed or 1.5)
             end
-            logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว")
+
+            if getgenv().AutoReroll then
+                logTraitRoll("🎉 สำเร็จ! รีโรล Trait ครบทุกใบที่เลือกแล้ว", true)
+                Fluent:Notify({ Title = "Auto Reroll", Content = "รีโรล Trait ครบทุกใบที่เลือกเรียบร้อยแล้ว!", Duration = 5 })
+                getgenv().AutoReroll = false
+                if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+            else
+                logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว", true)
+            end
         end)
     else
-        logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว")
+        logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว", true)
     end
 end)
 
@@ -4105,15 +4132,26 @@ RankDropdown:OnChanged(function(Value)
     end
 end)
 
-getgenv().SelectedRankCardKey = nil
+getgenv().SelectedRankCardKeys = {}
 RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
-    Title = "เลือกการ์ดที่ต้องการรีโรล Rank",
+    Title = "เลือกการ์ดที่ต้องการรีโรล Rank (เลือกได้หลายใบ)",
     Values = GetInventoryCardsForReroll(),
-    Multi = false,
-    Default = "No cards found"
+    Multi = true,
+    Default = {}
 })
 RankCardsDropdown:OnChanged(function(Value)
-    getgenv().SelectedRankCardKey = Value
+    getgenv().SelectedRankCardKeys = {}
+    if type(Value) == "table" then
+        for k, v in pairs(Value) do
+            if type(k) == "number" then
+                table.insert(getgenv().SelectedRankCardKeys, tostring(v))
+            elseif v then
+                table.insert(getgenv().SelectedRankCardKeys, tostring(k))
+            end
+        end
+    elseif type(Value) == "string" and Value ~= "No cards found" then
+        table.insert(getgenv().SelectedRankCardKeys, Value)
+    end
 end)
 
 -- Cache matching remotes for Rank Reroll to avoid high ping / CPU spikes
@@ -4151,44 +4189,68 @@ local AutoRankRerollToggle = Tabs.Reroll:AddToggle("AutoRerollRank", { Title = "
 AutoRankRerollToggle:OnChanged(function(state)
     getgenv().AutoRankReroll = state
     if state then
-        logRankRoll("เริ่มระบบสุ่ม/รี Rank อัตโนมัติ...")
+        lastRankLogMsg = ""
+        logRankRoll("เริ่มระบบสุ่ม/รี Rank อัตโนมัติ...", true)
         task.spawn(function()
             getgenv().NotifiedRankRerollStart = nil
-            while getgenv().AutoRankReroll do
-                if getgenv().PauseReroll then
-                    pcall(function()
-                        local char = LocalPlayer.Character
-                        if char and char:FindFirstChild("Humanoid") then
-                            char.Humanoid:UnequipTools()
-                        end
-                    end)
-                    task.wait(1)
+            
+            local cardKeys = getgenv().SelectedRankCardKeys or {}
+            if #cardKeys == 0 then
+                logRankRoll("❌ กรุณาเลือกการ์ดที่ต้องการรีโรลอย่างน้อย 1 ใบ!", true)
+                Fluent:Notify({ Title = "Auto Rank", Content = "กรุณาเลือกการ์ดอย่างน้อย 1 ใบ", Duration = 3 })
+                getgenv().AutoRankReroll = false
+                if Options and Options.AutoRerollRank then Options.AutoRankReroll:SetValue(false) end
+                return
+            end
+
+            for index, cardKey in ipairs(cardKeys) do
+                if not getgenv().AutoRankReroll then break end
+
+                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                if not (cardTool and cardTool.Parent) then
+                    logRankRoll(string.format("⚠️ ข้ามการ์ด [%d/%d]: ไม่พบการ์ดในกระเป๋าแล้ว", index, #cardKeys), true)
                     continue
                 end
-                local cardKey = getgenv().SelectedRankCardKey
-                local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
-                
-                if cardTool and cardTool.Parent then
+
+                local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
+                logRankRoll(string.format("📌 เริ่มรีการ์ด [%d/%d]: %s", index, #cardKeys, cardName), true)
+
+                local finishedThisCard = false
+                while getgenv().AutoRankReroll and not finishedThisCard do
+                    if getgenv().PauseReroll then
+                        pcall(function()
+                            local char = LocalPlayer.Character
+                            if char and char:FindFirstChild("Humanoid") then
+                                char.Humanoid:UnequipTools()
+                            end
+                        end)
+                        task.wait(1)
+                        continue
+                    end
+
+                    if not (cardTool and cardTool.Parent) then
+                        logRankRoll(string.format("❌ การ์ด %s หายจากกระเป๋า -> เปลี่ยนไปรีใบถัดไป", cardName), true)
+                        break
+                    end
+
                     local currentRank = getCardRank(cardTool)
-                    local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
-                    
+
                     local hasSelected = false
-                    for rank, _ in pairs(getgenv().SelectedRanks) do
+                    for rank, _ in pairs(getgenv().SelectedRanks or {}) do
                         if string.lower(currentRank) == string.lower(rank) then
                             hasSelected = true
                             break
                         end
                     end
-                    
+
                     if hasSelected then
-                        logRankRoll(string.format("🎯 สำเร็จ! ได้รับ Rank: %s (%s)", currentRank, cardName))
-                        Fluent:Notify({ Title = "Auto Rank", Content = "ได้รับ Rank ที่ต้องการแล้ว: " .. currentRank, Duration = 5 })
-                        getgenv().AutoRankReroll = false
-                        if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
+                        logRankRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Rank: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentRank), true)
+                        Fluent:Notify({ Title = "Auto Rank", Content = ("%s ได้รับ Rank: %s แล้ว!"):format(cardName, currentRank), Duration = 4 })
+                        finishedThisCard = true
                         break
                     end
-                    
-                    logRankRoll(string.format("รี Rank (%s) -> ปัจจุบัน: %s", cardName, currentRank ~= "" and currentRank or "None"))
+
+                    logRankRoll(string.format("[%d/%d] รี Rank (%s) -> ปัจจุบัน: %s", index, #cardKeys, cardName, currentRank ~= "" and currentRank or "None"))
 
                     pcall(function()
                         local char = LocalPlayer.Character
@@ -4199,94 +4261,42 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end)
 
                     local cId = cardTool:GetAttribute("UUID") or cardTool:GetAttribute("Id") or cardTool:GetAttribute("CardId") or cardTool.Name
-                    
+
                     if not getgenv().NotifiedRankRerollStart then
-                        Fluent:Notify({ Title = "Auto Rank", Content = "เริ่มการรีโรล Rank...", Duration = 3 })
+                        Fluent:Notify({ Title = "Auto Rank", Content = "กำลังรีโรล Rank อัตโนมัติ...", Duration = 3 })
                         getgenv().NotifiedRankRerollStart = true
                     end
-                    
+
                     local Remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
                     local RankRollRE = Remotes and (Remotes:FindFirstChild("GradeRollRE") or Remotes:FindFirstChild("RankRollRE") or Remotes:FindFirstChild("RollRankRE") or Remotes:FindFirstChild("RankRE") or Remotes:FindFirstChild("CardRankingRE") or Remotes:FindFirstChild("RankRerollRE") or Remotes:FindFirstChild("Rank"))
-                    
+
                     if RankRollRE and RankRollRE:IsA("RemoteEvent") then
                         pcall(function() RankRollRE:FireServer("Select", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Equip", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Insert", cardTool) end)
-                        pcall(function() RankRollRE:FireServer("Select", {Tool = cardTool}) end)
-                        
-                        local rollArgs = {
-                            cardTool,
-                            { Tool = cardTool },
-                            { Card = cardTool },
-                            cId,
-                            { UUID = cId },
-                            { Id = cId },
-                            "Roll",
-                            "Reroll",
-                            "Rank",
-                            "Grade"
-                        }
-                        
-                        for _, arg in ipairs(rollArgs) do
-                            pcall(function() RankRollRE:FireServer(arg) end)
-                            pcall(function() RankRollRE:FireServer("Roll", arg) end)
-                            pcall(function() RankRollRE:FireServer("Rank", arg) end)
-                            pcall(function() RankRollRE:FireServer("Grade", arg) end)
-                            pcall(function() RankRollRE:FireServer(arg, "Roll") end)
-                            pcall(function() RankRollRE:FireServer(arg, "Rank") end)
-                            pcall(function() RankRollRE:FireServer(arg, "Grade") end)
-                        end
-                        
-                        pcall(function() RankRollRE:FireServer({Kind = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Command = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Type = "Roll", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Rank", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Kind = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer({Action = "Grade", Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollRank", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollGrade", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("RollResult", {Tool = cardTool}) end)
-                        pcall(function() RankRollRE:FireServer("Roll", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Rank", {Tool = cardTool, Currency = "Gems"}) end)
-                        pcall(function() RankRollRE:FireServer("Grade", {Tool = cardTool, Currency = "Gems"}) end)
+                        pcall(function() RankRollRE:FireServer("Roll", cardTool) end)
+                        pcall(function() RankRollRE:FireServer("Rank", cardTool) end)
+                        pcall(function() RankRollRE:FireServer({Tool = cardTool}) end)
                     end
-                    
-                    local function fireAll(id)
-                        local argsToTry = {
-                            id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
-                        }
-                        local cached = getCachedRankRemotes()
-                        for _, obj in ipairs(cached.events) do
-                            for _, arg in ipairs(argsToTry) do
-                                pcall(function() obj:FireServer(arg) end)
-                                pcall(function() obj:FireServer("Roll", arg) end)
-                                pcall(function() obj:FireServer("Rank", arg) end)
-                            end
-                        end
-                        for _, obj in ipairs(cached.funcs) do
-                            for _, arg in ipairs(argsToTry) do
-                                task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                            end
-                        end
+
+                    local cached = getCachedRankRemotes()
+                    for _, obj in ipairs(cached.events) do
+                        pcall(function() obj:FireServer(cId) end)
                     end
-                    fireAll(cId)
-                else
-                    logRankRoll("❌ ไม่พบการ์ดที่เลือก! กรุณาเลือกใหม่")
-                    Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
-                    getgenv().AutoRankReroll = false
-                    if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
+
+                    task.wait(math.max(0.5, tonumber(getgenv().RerollSpeed) or 1.5))
                 end
-                
-                task.wait(getgenv().RerollSpeed or 1.5)
             end
-            logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว")
+
+            if getgenv().AutoRankReroll then
+                logRankRoll("🎉 สำเร็จ! รีโรล Rank ครบทุกใบที่เลือกแล้ว", true)
+                Fluent:Notify({ Title = "Auto Rank", Content = "รีโรล Rank ครบทุกใบที่เลือกเรียบร้อยแล้ว!", Duration = 5 })
+                getgenv().AutoRankReroll = false
+                if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
+            else
+                logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว", true)
+            end
         end)
     else
-        logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว")
+        logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว", true)
     end
 end)
 
@@ -5625,6 +5635,7 @@ local function startRaidTowerManagerLoop()
                         if diffBtn and not (autoReplayBtn or showBattleBtn) then fireButton(diffBtn) task.wait(0.1) end
                         if equipBtn then fireButton(equipBtn) task.wait(0.1) end
                         if battleBtn then
+                            if logLine then pcall(function() logLine("RAID", "🐉 เริ่มเข้าต่อสู้บอสเรด (Boss Raid)") end) end
                             fireButton(battleBtn)
                             getgenv().BossFoughtHourKey = getCurrentHourKey()
                             task.wait(0.2)
@@ -5736,6 +5747,7 @@ local function startRaidTowerManagerLoop()
                     if openBtn and not inTowerUI and not inBattle then fireButton(openBtn) task.wait(0.4) end
                     if equipBtn then fireButton(equipBtn) task.wait(0.4) end
                     if battleBtn then
+                        if logLine then pcall(function() logLine("TOWER", "🏰 เริ่มเข้าต่อสู้หอคอย (Infinity Tower)") end) end
                         fireButton(battleBtn)
                         task.wait(0.5)
                         if getgenv().TowerOriginalCFrame and LocalPlayer.Character then
