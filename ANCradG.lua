@@ -168,7 +168,8 @@ local RaritiesList = {
     "Heavenly", "Corrupted", "Striker", "Sacred", "Paradox", "Founder", "Evolved",
     "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
     "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
-    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Mystery", "VIP", "Event", "Limited"
+    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
+    "Smash", "Emblem", "Chrono", "Limited"
 }
 
 local MutationsList = {
