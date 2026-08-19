@@ -4543,102 +4543,6 @@ local function parseSuffixValue(txt)
     return nOnly or 0
 end
 
-local function getRarityScore(rarityText)
-    if not rarityText then return 0 end
-    local clean = string.lower(string.gsub(rarityText, "<[^>]+>", ""))
-    for k, score in pairs(RarityTiers) do
-        if string.find(clean, k) then return score end
-    end
-    return 0
-end
-
----------------------------------------------------------
--- 3.5 MANAGE TAB (ระบบจัดการ)
----------------------------------------------------------
-local function getUnifiedCardScore(item)
-    if not item then return 0 end
-    local cashScore, rarityScore, mutationScore = 0, 0, 0
-    for _, txtObj in ipairs(item:GetDescendants()) do
-        if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
-            local val = parseSuffixValue(txtObj.Text)
-            if val > cashScore then cashScore = val end
-            local s = getRarityScore(txtObj.Text)
-            if s > rarityScore then rarityScore = s end
-            
-            local cleanMut = string.lower(string.gsub(txtObj.Text or "", "<[^>]+>", ""))
-            cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
-            local MutationScores = {
-                ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
-                ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
-                ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
-            }
-            for mName, mScore in pairs(MutationScores) do
-                if string.find(cleanMut, mName) and mScore > mutationScore then
-                    mutationScore = mScore
-                end
-            end
-        end
-    end
-    if cashScore == 0 and rarityScore == 0 then
-        local lvl = item:GetAttribute("Level") or item:GetAttribute("CardLevel") or 0
-        if tonumber(lvl) then cashScore = tonumber(lvl) end
-        if cashScore == 0 then
-            local val = item:GetAttribute("CashMultiplier") or item:GetAttribute("Multiplier")
-            if tonumber(val) then cashScore = tonumber(val) end
-        end
-        if cashScore == 0 and rarityScore == 0 and getCardRank then
-            local rName = getCardRank(item)
-            rarityScore = getRarityScore(rName)
-        end
-    end
-    return cashScore + (rarityScore * 1000) + (mutationScore * 100)
-end
-
-getgenv().AutoClaimRewards = false
-local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "🎁 กดรับรางวัลอัตโนมัติ (Playtime/Daily)", Default = false })
-AutoClaimToggle:OnChanged(function(state)
-    getgenv().AutoClaimRewards = state
-    if state then
-        task.spawn(function()
-            while getgenv().AutoClaimRewards do
-                pcall(function()
-                    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-                    if playerGui then
-                        for _, v in ipairs(playerGui:GetDescendants()) do
-                            if (v:IsA("TextButton") or v:IsA("ImageButton")) and v.Visible then
-                                local btnText = ""
-                                if v:IsA("TextButton") then
-                                    btnText = string.upper(string.match(v.Text or "", "^%s*(.-)%s*$") or "")
-                                else
-                                    local txtLabel = v:FindFirstChildWhichIsA("TextLabel")
-                                    if txtLabel then btnText = string.upper(string.match(txtLabel.Text or "", "^%s*(.-)%s*$") or "") end
-                                end
-                                
-                                local name = string.upper(v.Name)
-                                if (btnText:find("CLAIM") or btnText:find("COLLECT") or btnText:find("รับ") or name:find("CLAIM") or name:find("COLLECT")) then
-                                    -- กรองปุ่มหลอก หรือปุ่ม Robux หรือ Guild
-                                    if not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") and not name:find("GUILD") and not btnText:find("GUILD") and not btnText:find("กิลด์") then
-                                        local fired = false
-                                        if getconnections then
-                                            for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire(); fired = true end
-                                            for _, conn in pairs(getconnections(v.Activated)) do conn:Fire(); fired = true end
-                                        end
-                                        if not fired then
-                                            fireButton(v)
-                                        end
-                                        task.wait(0.2)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-                task.wait(30)
-            end
-        end)
-    end
-end)
-
 Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing)")
 local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { Title = "เคลียร์ขยะอัตโนมัติเมื่อกระเป๋าเต็ม", Default = false })
 local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
@@ -4659,7 +4563,7 @@ local function getToolRarity(item)
         or item:GetAttribute("CardName")
     if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
 
-    for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade"}) do
+    for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade", "TemplateName", "CardName"}) do
         local valObj = item:FindFirstChild(childName)
         if valObj then
             if valObj:IsA("StringValue") and valObj.Value ~= "" then
@@ -4670,11 +4574,19 @@ local function getToolRarity(item)
         end
     end
 
+    local cleanItemName = string.lower(item.Name or "")
+    for _, rName in ipairs(RaritiesList or {}) do
+        local lowerR = string.lower(rName)
+        if cleanItemName:find(lowerR, 1, true) then
+            return rName
+        end
+    end
+
     for _, txtObj in ipairs(item:GetDescendants()) do
         if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
             local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
             for _, rName in ipairs(RaritiesList or {}) do
-                if string.find(cleanTxt, string.lower(rName)) then
+                if string.find(cleanTxt, string.lower(rName), 1, true) then
                     return rName
                 end
             end
@@ -4738,28 +4650,6 @@ InvBalToggle:OnChanged(function(state)
                                 end
                             end
                             
-                            local cashScore = 0
-                            pcall(function()
-                                for _, desc in ipairs(t:GetDescendants()) do
-                                    if desc:IsA("TextLabel") and desc.Text then
-                                        local txt = string.upper(desc.Text)
-                                        local nStr, suf = string.match(txt, "([%d%.]+)%s*([A-Z]+)")
-                                        if nStr and suf then
-                                            local mult = 0
-                                            if suf == "DD" then mult = 1e39
-                                            elseif suf == "UD" then mult = 1e36
-                                            elseif suf == "DC" then mult = 1e33
-                                            elseif suf == "NO" or suf == "N" then mult = 1e30
-                                            elseif suf == "OC" or suf == "O" then mult = 1e27
-                                            end
-                                            local v = (tonumber(nStr) or 0) * mult
-                                            if v > cashScore then cashScore = v end
-                                        end
-                                    end
-                                end
-                            end)
-                            if cashScore >= 1e27 then continue end
-                            
                             if rIdx < threshold then
                                 table.insert(trashCards, t)
                             end
@@ -4771,14 +4661,21 @@ InvBalToggle:OnChanged(function(state)
                                     char.Humanoid:EquipTool(t)
                                     task.wait(0.15)
                                     local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                                    if rem and rem:FindFirstChild("SellRE") then
-                                        rem.SellRE:FireServer("SellHand")
+                                    if rem then
+                                        if rem:FindFirstChild("SellRE") then
+                                            rem.SellRE:FireServer("SellHand")
+                                            rem.SellRE:FireServer("Sell", t)
+                                            rem.SellRE:FireServer(t)
+                                        end
+                                        if rem:FindFirstChild("Sell") then
+                                            rem.Sell:FireServer(t)
+                                        end
                                     end
                                     task.wait(0.15)
                                     if t and t.Parent then t:Destroy() end
                                 end)
                             end
-                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์การ์ดขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
+                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์การ์ด/แพ็กขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
                         end
                     end
                 end)
