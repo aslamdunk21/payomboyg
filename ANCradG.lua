@@ -1146,8 +1146,11 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         function TabObj:AddDropdown(id, dCfg)
             local title = dCfg.Title or id
             local values = dCfg.Values or {}
-            local defaultVal = dCfg.Value or (values[1] or "")
             local isMulti = dCfg.Multi == true
+            local defaultVal = dCfg.Default
+            if defaultVal == nil then
+                defaultVal = dCfg.Value or (isMulti and {} or (values[1] or ""))
+            end
 
             local frame = Instance.new("Frame")
             frame.Size = UDim2.new(1, -10, 0, 52)
@@ -1223,6 +1226,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
             function OptionObj:OnChanged(cb)
                 table.insert(OptionObj.ChangedCallbacks, cb)
+                pcall(function() cb(OptionObj.Value) end)
             end
 
             function OptionObj:SetValue(val)
@@ -2335,10 +2339,19 @@ local function getCardModelRarityAndMutation(model)
     end
 
     if rarity == "" then
+        local searchRarities = {
+            "common", "uncommon", "rare", "epic", "legendary", "mythic", "secret",
+            "divine", "transcendent", "shadow", "emperor", "demon", "manga", "celestial",
+            "heavenly", "corrupted", "striker", "sacred", "paradox", "founder", "evolved",
+            "magic", "oni", "chaos", "ruin", "reborn", "beast", "nordic", "hunter",
+            "soul", "swordsman", "gamer", "revenge", "chainsaw", "eternity", "academy",
+            "dynasty", "grail", "conquest", "blaze", "devour", "raven", "arcane", "nightfall",
+            "smash", "emblem", "chrono", "event", "newpack", "limited", "unknown", "unknow"
+        }
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs({"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour", "unknown", "unknow"}) do
+                for _, rName in ipairs(searchRarities) do
                     if cl:find(rName) then
                         rarity = rName
                         break
@@ -2356,6 +2369,13 @@ local function getCardModelRarityAndMutation(model)
         elseif mName:find("unknow") then
             rarity = "Unknow"
         end
+    end
+
+    -- Clean pack/box suffix from rarity string if needed
+    if rarity ~= "" then
+        local cleanedRarity = string.gsub(rarity, "%s+[Pp][Aa][Cc][Kk]$", "")
+        cleanedRarity = string.gsub(cleanedRarity, "%s+[Bb][Oo][Xx]$", "")
+        if cleanedRarity ~= "" then rarity = cleanedRarity end
     end
 
     return rarity, mutation
@@ -2397,21 +2417,39 @@ local function instantBuyLoop()
         local rLower = string.lower(tostring(cardRarity))
         local mLower = string.lower(tostring(cardMutation))
 
-        local matchRarity = (next(getgenv().SelectedRarities) == nil)
-        if not matchRarity and rLower ~= "" then
+        local hasRarityFilter = (next(getgenv().SelectedRarities) ~= nil)
+        local hasMutationFilter = (next(getgenv().SelectedMutations) ~= nil)
+
+        local matchRarity = not hasRarityFilter
+        if hasRarityFilter and rLower ~= "" then
             if getgenv().SelectedRarities[rLower] == true then
                 matchRarity = true
             elseif (rLower:find("unknown") or rLower:find("unknow")) and (getgenv().SelectedRarities["unknown"] == true or getgenv().SelectedRarities["unknow"] == true) then
                 matchRarity = true
+            else
+                -- Substring/Fuzzy match for pack titles or names
+                for selRarity, _ in pairs(getgenv().SelectedRarities) do
+                    if selRarity ~= "" and (rLower:find(selRarity, 1, true) or selRarity:find(rLower, 1, true)) then
+                        matchRarity = true
+                        break
+                    end
+                end
             end
         end
 
-        local matchMutation = (next(getgenv().SelectedMutations) == nil)
-        if not matchMutation and mLower ~= "" then
+        local matchMutation = not hasMutationFilter
+        if hasMutationFilter and mLower ~= "" then
             if getgenv().SelectedMutations[mLower] == true then
                 matchMutation = true
             elseif (mLower:find("unknown") or mLower:find("unknow")) and (getgenv().SelectedMutations["unknown"] == true or getgenv().SelectedMutations["unknow"] == true) then
                 matchMutation = true
+            else
+                for selMut, _ in pairs(getgenv().SelectedMutations) do
+                    if selMut ~= "" and (mLower:find(selMut, 1, true) or selMut:find(mLower, 1, true)) then
+                        matchMutation = true
+                        break
+                    end
+                end
             end
         end
 
@@ -2424,7 +2462,7 @@ local function instantBuyLoop()
             end
         end
 
-        if next(getgenv().SelectedRarities) == nil and next(getgenv().SelectedMutations) == nil then
+        if not hasRarityFilter and not hasMutationFilter then
             matchRarity = true
             matchMutation = true
         end
@@ -5342,4 +5380,3 @@ Fluent:Notify({
 })
 
 Window:SelectTab(1)
-
