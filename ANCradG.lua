@@ -2146,9 +2146,1152 @@ local function SendWebhook(url, rarity, mutation)
     end)
 end
 
+----------------------------------------------------------------
+-- AFK Mode Overlay ("ไก่ตัน") System Engine
+----------------------------------------------------------------
+getgenv().AFKRuntime = getgenv().AFKRuntime or {
+    log = {},
+    traitLog = {},
+    rankLog = {},
+    beltLog = {},
+    stats = { bought = 0, secret = 0 },
+    afkOn = false,
+    afkGui = nil
+}
+local Runtime = getgenv().AFKRuntime
+
+local afkPushTraitLog
+local afkPushRankLog
+
+local function logLine(kind, text)
+    if not text then return end
+    local timeStr = os.date("%H:%M:%S")
+    local lineText = ("[%s] [%s] %s"):format(timeStr, string.upper(kind), text)
+    table.insert(Runtime.log, 1, lineText)
+    if #Runtime.log > 40 then
+        table.remove(Runtime.log, 41)
+    end
+
+    local kLower = string.lower(kind or "")
+    local tLower = string.lower(text or "")
+    if kLower:find("trait") or tLower:find("trait") or tLower:find("ไตรท์") then
+        Runtime.traitLog = Runtime.traitLog or {}
+        table.insert(Runtime.traitLog, 1, lineText)
+        if #Runtime.traitLog > 20 then table.remove(Runtime.traitLog, 21) end
+        if afkPushTraitLog then pcall(afkPushTraitLog, lineText) end
+    elseif kLower:find("rank") or tLower:find("rank") or tLower:find("แรงค์") then
+        Runtime.rankLog = Runtime.rankLog or {}
+        table.insert(Runtime.rankLog, 1, lineText)
+        if #Runtime.rankLog > 20 then table.remove(Runtime.rankLog, 21) end
+        if afkPushRankLog then pcall(afkPushRankLog, lineText) end
+    end
+
+    if getgenv().AFK_Obj then
+        getgenv().AFK_Obj.logDirty = true
+    end
+end
+
+local AFK_MAX_LOGS     = 40
+local AFK_MAX_BELT     = 30
+local AFK_MAX_CARDS    = 60
+local AFK_FPS_CAP      = 10
+
+local AFK_COLOR = {
+    bg        = Color3.fromRGB(0, 0, 0),
+    panel     = Color3.fromRGB(24, 24, 28),
+    raised    = Color3.fromRGB(36, 36, 42),
+    separator = Color3.fromRGB(56, 56, 64),
+    label     = Color3.fromRGB(255, 255, 255),
+    label2    = Color3.fromRGB(160, 160, 170),
+    label3    = Color3.fromRGB(110, 110, 120),
+    blue      = Color3.fromRGB(10, 132, 255),
+    green     = Color3.fromRGB(48, 209, 88),
+    red       = Color3.fromRGB(255, 69, 58),
+    orange    = Color3.fromRGB(255, 159, 10),
+    yellow    = Color3.fromRGB(255, 214, 10),
+    teal      = Color3.fromRGB(100, 210, 255),
+    purple    = Color3.fromRGB(191, 90, 242),
+}
+
+local AFK_RARITY_COLOR = {
+    Common       = Color3.fromRGB(160, 160, 170),
+    Uncommon     = Color3.fromRGB(48, 209, 88),
+    Rare         = Color3.fromRGB(10, 132, 255),
+    Epic         = Color3.fromRGB(191, 90, 242),
+    Legendary    = Color3.fromRGB(255, 159, 10),
+    Mythic       = Color3.fromRGB(255, 55, 95),
+    Divine       = Color3.fromRGB(100, 210, 255),
+    Secret       = Color3.fromRGB(255, 214, 10),
+    Godly        = Color3.fromRGB(255, 105, 180),
+    Transcendent = Color3.fromRGB(175, 238, 238),
+    Cosmic       = Color3.fromRGB(94, 92, 230),
+    Eternal      = Color3.fromRGB(255, 69, 58),
+}
+
+local AFK_TOUCH = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local AFK = {
+    on          = false,
+    gui         = nil,
+    conns       = {},
+    startAt     = 0,
+    lastSec     = -1,
+    wantShow    = false,
+    wantHide    = false,
+    logDirty    = false,
+    beltDirty   = false,
+    invDirty    = false,
+    pool        = {},
+    poolHead    = 0,
+    beltRows    = {},
+    invRows     = {},
+    prevFps     = nil,
+    prev3D      = nil,
+    prevQuality = nil,
+    stat        = {},
+    logList     = nil,
+    beltList    = nil,
+    invList     = nil,
+}
+getgenv().AFK_Obj = AFK
+
+local function afkCorner(parent, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 12)
+    c.Parent = parent
+    return c
+end
+
+local function afkStroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or AFK_COLOR.separator
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function afkPad(parent, all)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop    = UDim.new(0, all)
+    p.PaddingBottom = UDim.new(0, all)
+    p.PaddingLeft   = UDim.new(0, all)
+    p.PaddingRight  = UDim.new(0, all)
+    p.Parent = parent
+    return p
+end
+
+local function afkText(parent, props)
+    local t = Instance.new("TextLabel")
+    t.BackgroundTransparency = 1
+    t.RichText = false
+    t.Font = props.font or Enum.Font.Gotham
+    t.TextSize = props.size or 13
+    t.TextColor3 = props.color or AFK_COLOR.label
+    t.TextXAlignment = props.align or Enum.TextXAlignment.Left
+    t.TextYAlignment = Enum.TextYAlignment.Center
+    t.Text = props.text or ""
+    t.Size = props.sizeUDim or UDim2.new(1, 0, 1, 0)
+    if props.pos then t.Position = props.pos end
+    if props.truncate then t.TextTruncate = Enum.TextTruncate.AtEnd end
+    t.Parent = parent
+    return t
+end
+
+local function afkCard(parent, props)
+    local f = Instance.new("Frame")
+    f.BackgroundColor3 = props.color or AFK_COLOR.panel
+    f.BorderSizePixel = 0
+    f.Size = props.size or UDim2.new(1, 0, 1, 0)
+    if props.pos then f.Position = props.pos end
+    if props.anchor then f.AnchorPoint = props.anchor end
+    afkCorner(f, props.radius or 14)
+    if props.stroke ~= false then afkStroke(f, AFK_COLOR.separator, 1, 0.35) end
+    f.Parent = parent
+    return f
+end
+
+local function afkClock(sec)
+    sec = math.max(0, math.floor(sec))
+    return ("%02d:%02d:%02d"):format(math.floor(sec / 3600), math.floor(sec % 3600 / 60), sec % 60)
+end
+
+local function formatNumber(n)
+    if not n or type(n) ~= "number" then return tostring(n or 0) end
+    if n >= 1e12 then return string.format("%.2fT", n / 1e12)
+    elseif n >= 1e9 then return string.format("%.2fB", n / 1e9)
+    elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
+    elseif n >= 1e3 then return string.format("%.2fK", n / 1e3)
+    else return tostring(math.floor(n)) end
+end
+
+local function getPlayerMoney()
+    local amount = nil
+    pcall(function()
+        local ls = LocalPlayer:FindFirstChild("leaderstats")
+        if ls then
+            for _, v in ipairs(ls:GetChildren()) do
+                if v:IsA("ValueBase") then
+                    local name = string.lower(v.Name)
+                    if name:find("money") or name:find("yen") or name:find("cash") or name:find("coins") or name:find("gold") then
+                        amount = v.Value
+                        break
+                    end
+                end
+            end
+            if not amount and ls:FindFirstChildOfClass("ValueBase") then
+                amount = ls:FindFirstChildOfClass("ValueBase").Value
+            end
+        end
+        if not amount then
+            for _, childName in ipairs({"Data", "PlayerData", "Values", "leaderstats"}) do
+                local folder = LocalPlayer:FindFirstChild(childName)
+                if folder then
+                    for _, v in ipairs(folder:GetChildren()) do
+                        if v:IsA("ValueBase") then
+                            local name = string.lower(v.Name)
+                            if name:find("money") or name:find("yen") or name:find("cash") or name:find("coins") then
+                                amount = v.Value
+                                break
+                            end
+                        end
+                    end
+                end
+                if amount then break end
+            end
+        end
+    end)
+
+    if amount and type(amount) == "number" then
+        return formatNumber(amount)
+    elseif amount then
+        return tostring(amount)
+    end
+
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, v in ipairs(playerGui:GetDescendants()) do
+                if v:IsA("TextLabel") and v.Visible and v.Text then
+                    local txt = v.Text
+                    if (txt:find("¥") or txt:find("%$") or txt:find("Yen")) and string.match(txt, "%d+") then
+                        amount = txt
+                        break
+                    end
+                end
+            end
+        end
+    end)
+
+    return amount or "0"
+end
+
+local function getTowerAndBossStatus()
+    local towerStatus = "ไม่ได้ลงหอคอย"
+    local bossStatus = ""
+    
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, v in ipairs(playerGui:GetDescendants()) do
+                if v:IsA("TextLabel") and v.Text and v.Visible then
+                    local clean = string.gsub(v.Text, "<[^>]+>", "")
+                    local floorNum = string.match(clean, "[Ff][Ll][Oo][Oo][Rr]%s*(%d+)") or string.match(clean, "ชั้นที่%s*(%d+)")
+                    if floorNum then
+                        towerStatus = "กำลังลงชั้นที่ " .. floorNum
+                        break
+                    end
+                end
+            end
+        end
+        
+        if towerStatus == "ไม่ได้ลงหอคอย" then
+            if getgenv().AutoReplayToggled or getgenv().AutoTower then
+                towerStatus = "กำลังดำเนินการ..."
+            end
+        end
+        
+        local isBossTime = isBossTimeWindow and isBossTimeWindow() or false
+        local bossDone = hasFoughtBossThisHour and hasFoughtBossThisHour() or false
+        if getgenv().AutoReplayToggledBoss then
+            bossStatus = "⚔️ กำลังสู้บอส!"
+        elseif isBossTime and not bossDone then
+            bossStatus = "⚡ บอสเปิดอยู่!"
+        else
+            local now = os.date("*t")
+            local remMin = 59 - now.min
+            local remSec = 59 - now.sec
+            
+            local dynamicTimer = ""
+            if playerGui then
+                for _, v in ipairs(playerGui:GetDescendants()) do
+                    if v:IsA("TextLabel") and v.Visible and v.Text then
+                        local clean = string.gsub(v.Text, "<[^>]+>", "")
+                        local lower = string.lower(clean)
+                        if lower:find("boss") or lower:find("บอส") then
+                            local tm = string.match(clean, "%d+:%d+") or string.match(clean, "%d+%s*m")
+                            if tm then
+                                dynamicTimer = tm
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+
+            if dynamicTimer ~= "" then
+                bossStatus = "เกิดใน " .. dynamicTimer
+            elseif remMin == 0 and remSec < 10 then
+                bossStatus = "⚡ บอสเปิดอยู่!"
+            else
+                bossStatus = string.format("เกิดใน %02d:%02d นาที", remMin, remSec)
+            end
+        end
+    end)
+    
+    return towerStatus, bossStatus
+end
+
+local function afkEnterLowPower()
+    pcall(function()
+        if getfpscap then AFK.prevFps = getfpscap() end
+        if setfpscap then pcall(function() setfpscap(AFK_FPS_CAP) end) end
+    end)
+    pcall(function()
+        AFK.prevQuality = settings().Rendering.QualityLevel
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    pcall(function()
+        if RunService.Set3dRenderingEnabled then
+            AFK.prev3D = true
+            RunService:Set3dRenderingEnabled(false)
+        end
+    end)
+end
+
+local function afkExitLowPower()
+    pcall(function()
+        if setfpscap then pcall(function() setfpscap((AFK.prevFps and AFK.prevFps > 0) and AFK.prevFps or 240) end) end
+    end)
+    pcall(function()
+        if AFK.prevQuality then settings().Rendering.QualityLevel = AFK.prevQuality end
+    end)
+    pcall(function()
+        if AFK.prev3D and RunService.Set3dRenderingEnabled then
+            RunService:Set3dRenderingEnabled(true)
+        end
+    end)
+    AFK.prevFps, AFK.prevQuality, AFK.prev3D = nil, nil, nil
+end
+
+local function afkPushLog(text)
+    if not AFK.on or not AFK.logList or not text then return end
+    AFK.poolHead = AFK.poolHead % AFK_MAX_LOGS + 1
+    local row = AFK.pool[AFK.poolHead]
+    if not row then return end
+    row.Text = text
+    row.Visible = true
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r and r.Visible then
+            r.LayoutOrder = (AFK.poolHead - i) % AFK_MAX_LOGS
+        end
+    end
+end
+
+local AFK_MAX_TRAIT = 20
+local AFK_MAX_RANK  = 20
+
+afkPushTraitLog = function(text)
+    if not AFK.on or not AFK.traitPool or not text then return end
+    AFK.traitHead = (AFK.traitHead or 0) % AFK_MAX_TRAIT + 1
+    local row = AFK.traitPool[AFK.traitHead]
+    if not row then return end
+    row.Text = text
+    row.Visible = true
+    for i = 1, AFK_MAX_TRAIT do
+        local r = AFK.traitPool[i]
+        if r and r.Visible then
+            r.LayoutOrder = ((AFK.traitHead or 0) - i) % AFK_MAX_TRAIT
+        end
+    end
+end
+
+afkPushRankLog = function(text)
+    if not AFK.on or not AFK.rankPool or not text then return end
+    AFK.rankHead = (AFK.rankHead or 0) % AFK_MAX_RANK + 1
+    local row = AFK.rankPool[AFK.rankHead]
+    if not row then return end
+    row.Text = text
+    row.Visible = true
+    for i = 1, AFK_MAX_RANK do
+        local r = AFK.rankPool[i]
+        if r and r.Visible then
+            r.LayoutOrder = ((AFK.rankHead or 0) - i) % AFK_MAX_RANK
+        end
+    end
+end
+
+local function afkSeedLogs()
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r then r.Visible = false end
+    end
+    AFK.poolHead = 0
+    for i = math.min(#Runtime.log, AFK_MAX_LOGS), 1, -1 do
+        afkPushLog(Runtime.log[i])
+    end
+
+    if AFK.traitPool then
+        for i = 1, AFK_MAX_TRAIT do
+            local r = AFK.traitPool[i]
+            if r then r.Visible = false end
+        end
+        AFK.traitHead = 0
+        local tLogs = Runtime.traitLog or {}
+        if #tLogs == 0 then
+            afkPushTraitLog("[" .. os.date("%H:%M:%S") .. "] [TRAIT] รอระบบสุ่ม/รี Trait...")
+        else
+            for i = math.min(#tLogs, AFK_MAX_TRAIT), 1, -1 do
+                afkPushTraitLog(tLogs[i])
+            end
+        end
+    end
+
+    if AFK.rankPool then
+        for i = 1, AFK_MAX_RANK do
+            local r = AFK.rankPool[i]
+            if r then r.Visible = false end
+        end
+        AFK.rankHead = 0
+        local rLogs = Runtime.rankLog or {}
+        if #rLogs == 0 then
+            afkPushRankLog("[" .. os.date("%H:%M:%S") .. "] [RANK] รอระบบสุ่ม/รี Rank...")
+        else
+            for i = math.min(#rLogs, AFK_MAX_RANK), 1, -1 do
+                afkPushRankLog(rLogs[i])
+            end
+        end
+    end
+end
+
+local function getCardImage(obj)
+    if not obj then return "" end
+    local foundImg = ""
+    pcall(function()
+        for _, attrName in ipairs({"Image", "Texture", "Icon", "CardImage", "Thumbnail", "AssetId", "CardIcon"}) do
+            local val = obj:GetAttribute(attrName)
+            if val and tostring(val) ~= "" then
+                local str = tostring(val)
+                if string.find(str, "rbxassetid://") or string.find(str, "http") then
+                    foundImg = str
+                    return
+                elseif tonumber(str) then
+                    foundImg = "rbxassetid://" .. str
+                    return
+                end
+            end
+        end
+    end)
+    if foundImg ~= "" then return foundImg end
+
+    if obj:IsA("Tool") then
+        pcall(function()
+            if obj.TextureId and obj.TextureId ~= "" then
+                foundImg = obj.TextureId
+            end
+        end)
+        if foundImg ~= "" then return foundImg end
+    end
+
+    pcall(function()
+        local imgObj = obj:FindFirstChildWhichIsA("ImageLabel", true) or obj:FindFirstChildWhichIsA("ImageButton", true)
+        if imgObj and imgObj.Image and imgObj.Image ~= "" then
+            foundImg = imgObj.Image
+        end
+    end)
+    if foundImg ~= "" then return foundImg end
+
+    pcall(function()
+        local decal = obj:FindFirstChildWhichIsA("Decal", true) or obj:FindFirstChildWhichIsA("Texture", true)
+        if decal and decal.Texture and decal.Texture ~= "" then
+            foundImg = decal.Texture
+        end
+    end)
+    if foundImg ~= "" then return foundImg end
+
+    pcall(function()
+        local mesh = obj:FindFirstChildWhichIsA("MeshPart", true) or obj:FindFirstChildWhichIsA("SpecialMesh", true)
+        if mesh then
+            if mesh:IsA("MeshPart") and mesh.TextureID ~= "" then
+                foundImg = mesh.TextureID
+            elseif mesh:IsA("SpecialMesh") and mesh.TextureId ~= "" then
+                foundImg = mesh.TextureId
+            end
+        end
+    end)
+    if foundImg ~= "" then return foundImg end
+
+    return "rbxassetid://10723415903"
+end
+
+local function getCardModelRarityAndMutation(model)
+    if not model then return "Common", "Normal" end
+    local rName = ""
+    local mName = ""
+    pcall(function()
+        rName = model:GetAttribute("Rarity") or model:GetAttribute("CardRarity") or model:GetAttribute("TemplateName") or ""
+        mName = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation") or ""
+        
+        if rName == "" then
+            local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then
+                local txt = prompt.ActionText .. " " .. prompt.ObjectText
+                for _, r in ipairs(RaritiesList or {}) do
+                    if string.find(string.lower(txt), string.lower(r)) then
+                        rName = r
+                        break
+                    end
+                end
+            end
+        end
+    end)
+    return (rName ~= "" and rName or model.Name), (mName ~= "" and mName or "Normal")
+end
+
+local function afkPaintBelt()
+    if not AFK.on or not AFK.beltList then return end
+    if not getgenv().CardFolder then findCardFolder() end
+    if not getgenv().CardFolder then return end
+
+    Runtime.beltLog = Runtime.beltLog or {}
+
+    -- Scan active models in workspace card folder and push to history feed
+    for _, m in ipairs(getgenv().CardFolder:GetChildren()) do
+        if m:IsA("Model") and m:GetAttribute("IgnoreTutoBeam") ~= nil then
+            if not m:GetAttribute("LoggedBeltScan") then
+                m:SetAttribute("LoggedBeltScan", true)
+                local rName, mName = getCardModelRarityAndMutation(m)
+                local isRejected = m:GetAttribute("Rejected") == true
+                local isRobux = false
+
+                local prompt = m:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then
+                    local pTxt = (prompt.ActionText .. " " .. prompt.ObjectText .. " " .. prompt.Name):lower()
+                    if pTxt:find("robux") or pTxt:find("r%$") or prompt:GetAttribute("IsRobux") or m:GetAttribute("IsRobux") then
+                        isRobux = true
+                    end
+                end
+
+                local img = getCardImage(m)
+                local entry = {
+                    name = rName ~= "" and rName or m.Name,
+                    mutation = mName ~= "" and mName or "Normal",
+                    rarity = rName,
+                    img = img,
+                    isRobux = isRobux,
+                    isRejected = isRejected,
+                    model = m,
+                    time = os.date("%H:%M:%S")
+                }
+                table.insert(Runtime.beltLog, 1, entry)
+                if #Runtime.beltLog > 30 then
+                    table.remove(Runtime.beltLog, 31)
+                end
+
+                if logLine then
+                    logLine("SCAN", ("พบการ์ดบนสายพาน: %s [%s]"):format(entry.name, entry.mutation))
+                end
+            end
+        end
+    end
+
+    -- Render historical belt scan feed into AFK.beltRows
+    local logs = Runtime.beltLog or {}
+    local slots = #AFK.beltRows
+    local shown = math.min(#logs, slots)
+
+    for i = 1, shown do
+        local data = logs[i]
+        local row = AFK.beltRows[i]
+
+        local isRejected = data.isRejected
+        local isBought = false
+        if data.model and data.model.Parent then
+            if data.model:GetAttribute("Rejected") then isRejected = true end
+            if data.model:GetAttribute("LoggedBuy") then isBought = true end
+        end
+
+        local col = AFK_RARITY_COLOR[data.rarity] or AFK_COLOR.label
+        row.CardTitle.Text = data.name .. (data.mutation ~= "" and (" [" .. data.mutation .. "]") or "")
+        row.CardTitle.TextColor3 = col
+
+        if row:FindFirstChild("CardIcon") then
+            row.CardIcon.Image = (data.img and data.img ~= "") and data.img or "rbxassetid://10723415903"
+        end
+
+        if data.isRobux then
+            row.StatusBadge.Text = "💎 Robux"
+            row.StatusBadge.TextColor3 = AFK_COLOR.purple
+        elseif isBought then
+            row.StatusBadge.Text = "✅ ซื้อแล้ว"
+            row.StatusBadge.TextColor3 = AFK_COLOR.green
+        elseif isRejected then
+            row.StatusBadge.Text = "❌ ข้าม"
+            row.StatusBadge.TextColor3 = AFK_COLOR.red
+        else
+            row.StatusBadge.Text = "🎯 ผ่านสายพาน (" .. (data.time or "") .. ")"
+            row.StatusBadge.TextColor3 = AFK_COLOR.orange
+        end
+
+        row.Visible = true
+    end
+
+    for i = shown + 1, slots do
+        AFK.beltRows[i].Visible = false
+    end
+end
+
+local function afkPaintInventory()
+    if not AFK.on or not AFK.invList then return end
+    local items = {}
+    
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    if bp then for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
+    if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
+
+    local slots = #AFK.invRows
+    local shown = math.min(#items, slots)
+
+    for i = 1, shown do
+        local tool = items[i]
+        local row = AFK.invRows[i]
+        local rName = getCardRank(tool)
+        local mName = getCardMutation(tool)
+
+        local col = AFK_RARITY_COLOR[rName] or AFK_COLOR.label2
+        row.ItemName.Text = tool.Name
+        row.ItemDetails.Text = ("Rank: %s | Mut: %s"):format(rName ~= "" and rName or "None", mName ~= "" and mName or "Normal")
+        row.ItemDetails.TextColor3 = col
+
+        if row:FindFirstChild("CardIcon") then
+            local tImg = getCardImage(tool)
+            row.CardIcon.Image = tImg
+        end
+
+        row.Visible = true
+    end
+
+    for i = shown + 1, slots do
+        AFK.invRows[i].Visible = false
+    end
+end
+
+local function afkPump()
+    if AFK.wantShow then
+        AFK.wantShow = false
+        if AFK.gui then AFK.gui.Enabled = true end
+        afkEnterLowPower()
+    end
+    if AFK.wantHide then
+        AFK.wantHide = false
+        if AFK.gui then AFK.gui.Enabled = false end
+        afkExitLowPower()
+    end
+
+    if not AFK.on then return end
+
+    if AFK.logDirty then
+        AFK.logDirty = false
+        afkPushLog(Runtime.log[1])
+    end
+
+    local sec = math.floor(os.clock() - AFK.startAt)
+    if sec == AFK.lastSec then return end
+    AFK.lastSec = sec
+
+    local s = AFK.stat
+    if s.bought then s.bought.Text = tostring(Runtime.stats.bought or 0) end
+    if s.money  then s.money.Text  = getPlayerMoney() end
+    if s.time   then s.time.Text   = afkClock(sec) end
+
+    local tStatus, bStatus = getTowerAndBossStatus()
+    if s.tower  then s.tower.Text  = tStatus end
+    if s.boss   then s.boss.Text   = bStatus end
+
+    pcall(afkPaintBelt)
+    if sec % 3 == 0 then pcall(afkPaintInventory) end
+end
+
+local afkClose
+
+local function afkBuild()
+    pcall(function()
+        if Runtime.afkGui then Runtime.afkGui:Destroy() end
+    end)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ANIME_AFK"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 9999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local parented = false
+    pcall(function()
+        gui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
+        parented = gui.Parent ~= nil
+    end)
+    if not parented then
+        pcall(function() if gethui then gui.Parent = gethui() parented = true end end)
+    end
+    if not parented then
+        pcall(function() gui.Parent = game:GetService("CoreGui") end)
+    end
+
+    local root = Instance.new("Frame")
+    root.Name = "Root"
+    root.BackgroundColor3 = AFK_COLOR.bg
+    root.BorderSizePixel = 0
+    root.Size = UDim2.fromScale(1, 1)
+    root.Parent = gui
+
+    local scale = Instance.new("UIScale")
+    scale.Scale = AFK_TOUCH and 0.85 or 1.0
+    scale.Parent = root
+
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.BackgroundTransparency = 1
+    body.Size = UDim2.fromScale(1, 1)
+    body.Parent = root
+    afkPad(body, 16)
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.BackgroundTransparency = 1
+    header.Size = UDim2.new(1, 0, 0, 44)
+    header.Parent = body
+
+    afkText(header, {
+        text = "🌙 โหมด AFK (ไก่ตัน)", font = Enum.Font.GothamBold, size = 24,
+        sizeUDim = UDim2.new(1, -200, 0, 28), pos = UDim2.fromOffset(0, 0),
+    })
+    afkText(header, {
+        text = "Anime Card Auto Farming & Monitoring Dashboard", font = Enum.Font.Gotham, size = 11, color = AFK_COLOR.label3,
+        sizeUDim = UDim2.new(1, -200, 0, 14), pos = UDim2.fromOffset(2, 28),
+    })
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "Close"
+    closeBtn.AnchorPoint = Vector2.new(1, 0)
+    closeBtn.Position = UDim2.new(1, 0, 0, 4)
+    closeBtn.Size = UDim2.fromOffset(150, 36)
+    closeBtn.BackgroundColor3 = AFK_COLOR.panel
+    closeBtn.BorderSizePixel = 0
+    closeBtn.AutoButtonColor = true
+    closeBtn.Font = Enum.Font.GothamMedium
+    closeBtn.TextSize = 13
+    closeBtn.TextColor3 = AFK_COLOR.red
+    closeBtn.Text = "❌ ปิดโหมด AFK"
+    closeBtn.Parent = header
+    afkCorner(closeBtn, 10)
+    afkStroke(closeBtn, AFK_COLOR.red, 1, 0.5)
+
+    -- 5 Stat Cards Header Row
+    local stats = Instance.new("Frame")
+    stats.Name = "Stats"
+    stats.BackgroundTransparency = 1
+    stats.Position = UDim2.fromOffset(0, 52)
+    stats.Size = UDim2.new(1, 0, 0, 64)
+    stats.Parent = body
+
+    local statLayout = Instance.new("UIListLayout")
+    statLayout.FillDirection = Enum.FillDirection.Horizontal
+    statLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    statLayout.Padding = UDim.new(0, 8)
+    statLayout.Parent = stats
+
+    local function statCard(order, caption, value, color)
+        local card = afkCard(stats, {
+            size = UDim2.new(0.2, -7, 1, 0), radius = 12,
+        })
+        card.LayoutOrder = order
+        afkText(card, {
+            text = caption, font = Enum.Font.Gotham, size = 10, color = AFK_COLOR.label3,
+            sizeUDim = UDim2.new(1, -16, 0, 12), pos = UDim2.fromOffset(10, 8),
+        })
+        local val = afkText(card, {
+            text = value, font = Enum.Font.GothamBold, size = 16, color = color or AFK_COLOR.label,
+            sizeUDim = UDim2.new(1, -16, 0, 34), pos = UDim2.fromOffset(10, 22), truncate = true,
+        })
+        return val
+    end
+
+    AFK.stat.bought = statCard(1, "📦 ซื้อการ์ดแล้ว", "0", AFK_COLOR.green)
+    AFK.stat.money  = statCard(2, "💰 เงินในปัจจุบัน", "0", AFK_COLOR.yellow)
+    AFK.stat.tower  = statCard(3, "🏰 หอคอย", "ไม่ได้ลง", AFK_COLOR.teal)
+    AFK.stat.boss   = statCard(4, "🐉 บอสเรด", "เกิดใน 00:00", AFK_COLOR.orange)
+    AFK.stat.time   = statCard(5, "⏱️ เวลา AFK", "00:00:00", AFK_COLOR.label)
+
+    -- 3 Columns Layout
+    local topOffset = 126
+    local columns = Instance.new("Frame")
+    columns.Name = "Columns"
+    columns.BackgroundTransparency = 1
+    columns.Position = UDim2.fromOffset(0, topOffset)
+    columns.Size = UDim2.new(1, 0, 1, -topOffset)
+    columns.Parent = body
+
+    local function panel(order, widthScale, xScale, xOffset, title)
+        local p = afkCard(columns, {
+            size = UDim2.new(widthScale, -8, 1, 0),
+            pos  = UDim2.new(xScale, xOffset, 0, 0),
+            radius = 14,
+        })
+        p.LayoutOrder = order
+
+        afkText(p, {
+            text = title, font = Enum.Font.GothamMedium, size = 12, color = AFK_COLOR.label2,
+            sizeUDim = UDim2.new(1, -24, 0, 16), pos = UDim2.fromOffset(12, 10),
+        })
+
+        local line = Instance.new("Frame")
+        line.BackgroundColor3 = AFK_COLOR.separator
+        line.BackgroundTransparency = 0.4
+        line.BorderSizePixel = 0
+        line.Position = UDim2.fromOffset(12, 30)
+        line.Size = UDim2.new(1, -24, 0, 1)
+        line.Parent = p
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.Position = UDim2.fromOffset(10, 36)
+        scroll.Size = UDim2.new(1, -20, 1, -44)
+        scroll.ScrollBarThickness = 2
+        scroll.ScrollBarImageColor3 = AFK_COLOR.separator
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.CanvasSize = UDim2.new()
+        scroll.Parent = p
+
+        return p, scroll
+    end
+
+    local _, logScroll = panel(1, 0.33, 0, 0, "📜 ประวัติการทำงาน")
+
+    -- Column 2 Container (Divided into 3 sub-panels)
+    local col2 = Instance.new("Frame")
+    col2.Name = "Col2Container"
+    col2.BackgroundTransparency = 1
+    col2.Position = UDim2.new(0.33, 4, 0, 0)
+    col2.Size = UDim2.new(0.35, -8, 1, 0)
+    col2.Parent = columns
+
+    local col2Layout = Instance.new("UIListLayout")
+    col2Layout.SortOrder = Enum.SortOrder.LayoutOrder
+    col2Layout.Padding = UDim.new(0, 6)
+    col2Layout.Parent = col2
+
+    local function subPanel(order, heightScale, yOffset, title)
+        local p = afkCard(col2, {
+            size = UDim2.new(1, 0, heightScale, yOffset),
+            radius = 12,
+        })
+        p.LayoutOrder = order
+
+        afkText(p, {
+            text = title, font = Enum.Font.GothamMedium, size = 11, color = AFK_COLOR.label2,
+            sizeUDim = UDim2.new(1, -20, 0, 14), pos = UDim2.fromOffset(10, 6),
+        })
+
+        local line = Instance.new("Frame")
+        line.BackgroundColor3 = AFK_COLOR.separator
+        line.BackgroundTransparency = 0.4
+        line.BorderSizePixel = 0
+        line.Position = UDim2.fromOffset(10, 22)
+        line.Size = UDim2.new(1, -20, 0, 1)
+        line.Parent = p
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.Position = UDim2.fromOffset(8, 26)
+        scroll.Size = UDim2.new(1, -16, 1, -30)
+        scroll.ScrollBarThickness = 2
+        scroll.ScrollBarImageColor3 = AFK_COLOR.separator
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.CanvasSize = UDim2.new()
+        scroll.Parent = p
+
+        return p, scroll
+    end
+
+    local _, beltScroll  = subPanel(1, 0.38, -4, "🎯 สแกนสายพานการ์ด")
+    local _, traitScroll = subPanel(2, 0.31, -4, "🔮 สถานะการรี Trait")
+    local _, rankScroll  = subPanel(3, 0.31, -4, "⭐ สถานะการรี Rank")
+
+    local _, invScroll = panel(3, 0.32, 0.68, 8, "🎒 การ์ดในกระเป๋า")
+
+    AFK.logList, AFK.beltList, AFK.invList = logScroll, beltScroll, invScroll
+
+    -- Log Pool
+    local logLayout = Instance.new("UIListLayout")
+    logLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    logLayout.Padding = UDim.new(0, 4)
+    logLayout.Parent = logScroll
+
+    for i = 1, AFK_MAX_LOGS do
+        local row = Instance.new("TextLabel")
+        row.Name = "Log" .. i
+        row.BackgroundTransparency = 1
+        row.Size = UDim2.new(1, -4, 0, 16)
+        row.Font = Enum.Font.Code
+        row.TextSize = 11
+        row.TextColor3 = AFK_COLOR.label2
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextTruncate = Enum.TextTruncate.AtEnd
+        row.Visible = false
+        row.Text = ""
+        row.Parent = logScroll
+        AFK.pool[i] = row
+    end
+
+    -- Belt Pool
+    local beltLayout = Instance.new("UIListLayout")
+    beltLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    beltLayout.Padding = UDim.new(0, 4)
+    beltLayout.Parent = beltScroll
+
+    for i = 1, AFK_MAX_BELT do
+        local row = Instance.new("Frame")
+        row.Name = "Belt" .. i
+        row.BackgroundColor3 = AFK_COLOR.raised
+        row.Size = UDim2.new(1, 0, 0, 34)
+        row.Visible = false
+        afkCorner(row, 6)
+
+        local icon = Instance.new("ImageLabel")
+        icon.Name = "CardIcon"
+        icon.Size = UDim2.fromOffset(26, 26)
+        icon.Position = UDim2.fromOffset(4, 4)
+        icon.BackgroundColor3 = AFK_COLOR.bg
+        icon.BackgroundTransparency = 0.2
+        icon.ScaleType = Enum.ScaleType.Fit
+        icon.Parent = row
+        afkCorner(icon, 6)
+
+        local t = afkText(row, {
+            text = "", font = Enum.Font.GothamMedium, size = 11, truncate = true,
+            sizeUDim = UDim2.new(0.68, -34, 1, 0), pos = UDim2.fromOffset(34, 0),
+        })
+        t.Name = "CardTitle"
+
+        local st = afkText(row, {
+            text = "", font = Enum.Font.GothamBold, size = 10, align = Enum.TextXAlignment.Right,
+            sizeUDim = UDim2.new(0.32, -8, 1, 0), pos = UDim2.new(0.68, 0, 0, 0),
+        })
+        st.Name = "StatusBadge"
+
+        row.Parent = beltScroll
+        AFK.beltRows[i] = row
+    end
+
+    -- Trait Log Pool
+    AFK.traitPool = {}
+    local traitLayout = Instance.new("UIListLayout")
+    traitLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    traitLayout.Padding = UDim.new(0, 3)
+    traitLayout.Parent = traitScroll
+
+    for i = 1, AFK_MAX_TRAIT do
+        local row = Instance.new("TextLabel")
+        row.Name = "TraitLog" .. i
+        row.BackgroundTransparency = 1
+        row.Size = UDim2.new(1, -4, 0, 16)
+        row.Font = Enum.Font.Code
+        row.TextSize = 10
+        row.TextColor3 = AFK_COLOR.purple
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextTruncate = Enum.TextTruncate.AtEnd
+        row.Visible = false
+        row.Text = ""
+        row.Parent = traitScroll
+        AFK.traitPool[i] = row
+    end
+
+    -- Rank Log Pool
+    AFK.rankPool = {}
+    local rankLayout = Instance.new("UIListLayout")
+    rankLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rankLayout.Padding = UDim.new(0, 3)
+    rankLayout.Parent = rankScroll
+
+    for i = 1, AFK_MAX_RANK do
+        local row = Instance.new("TextLabel")
+        row.Name = "RankLog" .. i
+        row.BackgroundTransparency = 1
+        row.Size = UDim2.new(1, -4, 0, 16)
+        row.Font = Enum.Font.Code
+        row.TextSize = 10
+        row.TextColor3 = AFK_COLOR.yellow
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextTruncate = Enum.TextTruncate.AtEnd
+        row.Visible = false
+        row.Text = ""
+        row.Parent = rankScroll
+        AFK.rankPool[i] = row
+    end
+
+    -- Inventory Pool
+    local invLayout = Instance.new("UIListLayout")
+    invLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    invLayout.Padding = UDim.new(0, 4)
+    invLayout.Parent = invScroll
+
+    for i = 1, AFK_MAX_CARDS do
+        local row = Instance.new("Frame")
+        row.Name = "Inv" .. i
+        row.BackgroundColor3 = AFK_COLOR.raised
+        row.Size = UDim2.new(1, 0, 0, 34)
+        row.Visible = false
+        afkCorner(row, 6)
+
+        local icon = Instance.new("ImageLabel")
+        icon.Name = "CardIcon"
+        icon.Size = UDim2.fromOffset(26, 26)
+        icon.Position = UDim2.fromOffset(4, 4)
+        icon.BackgroundColor3 = AFK_COLOR.bg
+        icon.BackgroundTransparency = 0.2
+        icon.ScaleType = Enum.ScaleType.Fit
+        icon.Parent = row
+        afkCorner(icon, 6)
+
+        local nm = afkText(row, {
+            text = "", font = Enum.Font.GothamMedium, size = 11, truncate = true,
+            sizeUDim = UDim2.new(0.55, -34, 1, 0), pos = UDim2.fromOffset(34, 0),
+        })
+        nm.Name = "ItemName"
+
+        local dt = afkText(row, {
+            text = "", font = Enum.Font.Gotham, size = 10, align = Enum.TextXAlignment.Right, truncate = true,
+            sizeUDim = UDim2.new(0.45, -8, 1, 0), pos = UDim2.new(0.55, 0, 0, 0),
+        })
+        dt.Name = "ItemDetails"
+
+        row.Parent = invScroll
+        AFK.invRows[i] = row
+    end
+
+    closeBtn.MouseButton1Click:Connect(function()
+        afkClose()
+    end)
+
+    AFK.gui = gui
+    Runtime.afkGui = gui
+end
+
+local function afkOpen()
+    AFK.on = true
+    AFK.startAt = os.clock()
+    AFK.lastSec = -1
+    AFK.wantShow = true
+    if AFK.gui then AFK.gui.Enabled = true end
+    afkEnterLowPower()
+    afkSeedLogs()
+    logLine("afk", "เปิดใช้งานโหมด AFK (ไก่ตัน) เรียบร้อย")
+end
+
+afkClose = function()
+    AFK.on = false
+    AFK.wantHide = true
+    if AFK.gui then AFK.gui.Enabled = false end
+    afkExitLowPower()
+    
+    -- ล้างประวัติ Log และเคลียร์ Memory ใน UI Pool เพื่อไม่ให้หนักเครื่อง
+    pcall(function()
+        Runtime.log = {}
+        Runtime.traitLog = {}
+        Runtime.rankLog = {}
+        Runtime.beltLog = {}
+        
+        AFK.poolHead = 0
+        AFK.traitHead = 0
+        AFK.rankHead = 0
+        
+        if AFK.pool then
+            for i = 1, #AFK.pool do
+                local r = AFK.pool[i]
+                if r then r.Visible = false; r.Text = "" end
+            end
+        end
+        if AFK.traitPool then
+            for i = 1, #AFK.traitPool do
+                local r = AFK.traitPool[i]
+                if r then r.Visible = false; r.Text = "" end
+            end
+        end
+        if AFK.rankPool then
+            for i = 1, #AFK.rankPool do
+                local r = AFK.rankPool[i]
+                if r then r.Visible = false; r.Text = "" end
+            end
+        end
+        if AFK.beltRows then
+            for i = 1, #AFK.beltRows do
+                local r = AFK.beltRows[i]
+                if r then r.Visible = false end
+            end
+        end
+        if AFK.invRows then
+            for i = 1, #AFK.invRows do
+                local r = AFK.invRows[i]
+                if r then r.Visible = false end
+            end
+        end
+        
+        getgenv().PromptCooldowns = {}
+        getgenv().NotifiedCards = {}
+    end)
+    
+    if Options and Options.AFKModeToggle then
+        pcall(function() Options.AFKModeToggle:SetValue(false) end)
+    end
+    Fluent:Notify({ Title = "โหมด AFK", Content = "ปิดโหมด AFK แล้ว — ล้างประวัติ Log และคืนค่าปกติเรียบร้อย", Duration = 3 })
+end
+
+afkBuild()
+AFK.gui.Enabled = false
+
+if AFK.conns.pump then AFK.conns.pump:Disconnect() end
+AFK.conns.pump = RunService.Heartbeat:Connect(function() pcall(afkPump) end)
+
 ---------------------------------------------------------
 -- 1. MAIN TAB (หลัก)
 ---------------------------------------------------------
+local AFKToggle = Tabs.Main:AddToggle("AFKModeToggle", { Title = "🌙 เปิดโหมด AFK (ไก่ตัน)", Default = false })
+AFKToggle:OnChanged(function(state)
+    if state then
+        afkOpen()
+    else
+        afkClose()
+    end
+end)
+
+Tabs.Main:AddButton({
+    Title = "🚀 เปิดหน้าต่างโหมด AFK ทันที (Full Screen)",
+    Callback = function()
+        if Options and Options.AFKModeToggle then
+            Options.AFKModeToggle:SetValue(true)
+        else
+            afkOpen()
+        end
+    end
+})
+
 Tabs.Main:AddButton({
     Title = "📋 คัดลอกรายการช่องเก็บของ",
     Description = "คัดลอกข้อมูลการ์ดในกระเป๋าลง Clipboard",
@@ -2477,6 +3620,23 @@ local function instantBuyLoop()
                     prompt.MaxActivationDistance = 99999
                     fireproximityprompt(prompt)
                 end)
+
+                -- Update AFK Stats & Log (Only once per card model)
+                if not model:GetAttribute("LoggedBuy") then
+                    model:SetAttribute("LoggedBuy", true)
+                    if getgenv().AFKRuntime and getgenv().AFKRuntime.stats then
+                        getgenv().AFKRuntime.stats.bought = (getgenv().AFKRuntime.stats.bought or 0) + 1
+                        local rLow = rLower
+                        if rLow:find("secret") or rLow:find("divine") or rLow:find("godly") or rLow:find("cosmic") or rLow:find("eternal") or rLow:find("transcendent") then
+                            getgenv().AFKRuntime.stats.secret = (getgenv().AFKRuntime.stats.secret or 0) + 1
+                        end
+                    end
+                    if logLine then
+                        local pName = cardRarity ~= "" and cardRarity or model.Name
+                        logLine("buy", ("ซื้อสำเร็จ: %s [%s]"):format(pName, cardMutation ~= "" and cardMutation or "Normal"))
+                    end
+                end
+
                 if getgenv().DiscordWebhook and getgenv().DiscordWebhook ~= "" then
                     if not getgenv().NotifiedCards then getgenv().NotifiedCards = {} end
                     if not getgenv().NotifiedCards[prompt] then
@@ -2500,6 +3660,7 @@ local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื�
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
 end)
+
 
 local AutoCarryToggle = Tabs.Main:AddToggle("AutoCarry", { Title = "💰 เก็บเงินอัตโนมัติ (Carry)", Default = false })
 AutoCarryToggle:OnChanged(function(state)
@@ -2654,6 +3815,8 @@ local TraitsList = {
     "Rich", "Emperor", "Phoenix", "Almighty", "Sovereign"
 }
 
+local RerollCardsDropdown, RankCardsDropdown
+
 local function GetInventoryCardsForReroll()
     local inventory = {}
     local function scanFolder(folder)
@@ -2722,7 +3885,7 @@ TraitDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRerollCardKey = nil
-local RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
+RerollCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRerollCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Trait",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -2732,11 +3895,53 @@ RerollCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRerollCardKey = Value
 end)
 
+-- Cache matching remotes for Trait Reroll to avoid high ping / CPU spikes
+local CachedTraitRemotesList = nil
+local function getCachedTraitRemotes()
+    if CachedTraitRemotesList then return CachedTraitRemotesList end
+    local list = {}
+    local rs = game:GetService("ReplicatedStorage")
+    for _, obj in ipairs(rs:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            local name = string.lower(obj.Name)
+            if string.find(name, "roll") or string.find(name, "trait") then
+                table.insert(list, obj)
+            end
+        end
+    end
+    CachedTraitRemotesList = list
+    return list
+end
+
+-- Helper logger for Trait & Rank reroll status in AFK dashboard
+local function logTraitRoll(msg)
+    local timestamp = os.date("%H:%M:%S")
+    local logText = string.format("[%s] [TRAIT] %s", timestamp, msg)
+    Runtime.traitLog = Runtime.traitLog or {}
+    table.insert(Runtime.traitLog, 1, logText)
+    if #Runtime.traitLog > 30 then table.remove(Runtime.traitLog, 31) end
+    if afkPushTraitLog then
+        pcall(function() afkPushTraitLog(logText) end)
+    end
+end
+
+local function logRankRoll(msg)
+    local timestamp = os.date("%H:%M:%S")
+    local logText = string.format("[%s] [RANK] %s", timestamp, msg)
+    Runtime.rankLog = Runtime.rankLog or {}
+    table.insert(Runtime.rankLog, 1, logText)
+    if #Runtime.rankLog > 30 then table.remove(Runtime.rankLog, 31) end
+    if afkPushRankLog then
+        pcall(function() afkPushRankLog(logText) end)
+    end
+end
+
 getgenv().AutoReroll = false
 local AutoRerollToggle = Tabs.Reroll:AddToggle("AutoRerollTrait", { Title = "🔥 รีโรล Trait อัตโนมัติ", Default = false })
 AutoRerollToggle:OnChanged(function(state)
     getgenv().AutoReroll = state
     if state then
+        logTraitRoll("เริ่มระบบสุ่ม/รี Trait อัตโนมัติ...")
         task.spawn(function()
             getgenv().NotifiedRerollStart = nil
             while getgenv().AutoReroll do
@@ -2755,6 +3960,7 @@ AutoRerollToggle:OnChanged(function(state)
                 
                 if cardTool and cardTool.Parent then
                     local currentTrait = getCardTrait(cardTool)
+                    local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
                     
                     local hasSelected = false
                     for trait, _ in pairs(getgenv().SelectedTraits) do
@@ -2765,12 +3971,15 @@ AutoRerollToggle:OnChanged(function(state)
                     end
                     
                     if hasSelected then
+                        logTraitRoll(string.format("🎯 สำเร็จ! ได้รับ Trait: %s (%s)", currentTrait, cardName))
                         Fluent:Notify({ Title = "Auto Reroll", Content = "ได้รับ Trait ที่ต้องการแล้ว: " .. currentTrait, Duration = 5 })
                         getgenv().AutoReroll = false
                         if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
                         break
                     end
                     
+                    logTraitRoll(string.format("รี Trait (%s) -> ปัจจุบัน: %s", cardName, currentTrait ~= "" and currentTrait or "None"))
+
                     pcall(function()
                         local char = LocalPlayer.Character
                         if char and char:FindFirstChild("Humanoid") and cardTool.Parent ~= char then
@@ -2826,17 +4035,10 @@ AutoRerollToggle:OnChanged(function(state)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                if string.find(name, "roll") or string.find(name, "trait") then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                        end
-                                    end
-                                end
+                        local remotes = getCachedTraitRemotes()
+                        for _, obj in ipairs(remotes) do
+                            for _, arg in ipairs(argsToTry) do
+                                pcall(function() obj:FireServer(arg) end)
                             end
                         end
                     end
@@ -2862,6 +4064,7 @@ AutoRerollToggle:OnChanged(function(state)
                         end
                     end
                 else
+                    logTraitRoll("❌ ไม่พบการ์ดที่เลือก! กรุณาเลือกใหม่")
                     Fluent:Notify({ Title = "Auto Reroll", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoReroll = false
                     if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
@@ -2869,7 +4072,10 @@ AutoRerollToggle:OnChanged(function(state)
                 
                 task.wait(getgenv().RerollSpeed or 1.5)
             end
+            logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว")
         end)
+    else
+        logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว")
     end
 end)
 
@@ -2900,7 +4106,7 @@ RankDropdown:OnChanged(function(Value)
 end)
 
 getgenv().SelectedRankCardKey = nil
-local RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
+RankCardsDropdown = Tabs.Reroll:AddDropdown("SelectedRankCard", {
     Title = "เลือกการ์ดที่ต้องการรีโรล Rank",
     Values = GetInventoryCardsForReroll(),
     Multi = false,
@@ -2910,11 +4116,42 @@ RankCardsDropdown:OnChanged(function(Value)
     getgenv().SelectedRankCardKey = Value
 end)
 
+-- Cache matching remotes for Rank Reroll to avoid high ping / CPU spikes
+local CachedRankRemotesList = nil
+local function getCachedRankRemotes()
+    if CachedRankRemotesList then return CachedRankRemotesList end
+    local events, funcs = {}, {}
+    local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
+    local rs = game:GetService("ReplicatedStorage")
+    for _, obj in ipairs(rs:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = string.lower(obj.Name)
+            local match = false
+            for _, kw in ipairs(keywords) do
+                if string.find(name, kw) then
+                    match = true
+                    break
+                end
+            end
+            if match then
+                if obj:IsA("RemoteEvent") then
+                    table.insert(events, obj)
+                elseif obj:IsA("RemoteFunction") then
+                    table.insert(funcs, obj)
+                end
+            end
+        end
+    end
+    CachedRankRemotesList = { events = events, funcs = funcs }
+    return CachedRankRemotesList
+end
+
 getgenv().AutoRankReroll = false
 local AutoRankRerollToggle = Tabs.Reroll:AddToggle("AutoRerollRank", { Title = "💥 รีโรล Rank อัตโนมัติ", Default = false })
 AutoRankRerollToggle:OnChanged(function(state)
     getgenv().AutoRankReroll = state
     if state then
+        logRankRoll("เริ่มระบบสุ่ม/รี Rank อัตโนมัติ...")
         task.spawn(function()
             getgenv().NotifiedRankRerollStart = nil
             while getgenv().AutoRankReroll do
@@ -2933,6 +4170,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                 
                 if cardTool and cardTool.Parent then
                     local currentRank = getCardRank(cardTool)
+                    local cardName = cardTool:GetAttribute("CardName") or cardTool:GetAttribute("TemplateName") or cardTool.Name
                     
                     local hasSelected = false
                     for rank, _ in pairs(getgenv().SelectedRanks) do
@@ -2943,12 +4181,15 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end
                     
                     if hasSelected then
+                        logRankRoll(string.format("🎯 สำเร็จ! ได้รับ Rank: %s (%s)", currentRank, cardName))
                         Fluent:Notify({ Title = "Auto Rank", Content = "ได้รับ Rank ที่ต้องการแล้ว: " .. currentRank, Duration = 5 })
                         getgenv().AutoRankReroll = false
                         if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
                         break
                     end
                     
+                    logRankRoll(string.format("รี Rank (%s) -> ปัจจุบัน: %s", cardName, currentRank ~= "" and currentRank or "None"))
+
                     pcall(function()
                         local char = LocalPlayer.Character
                         if char and char:FindFirstChild("Humanoid") and cardTool.Parent ~= char then
@@ -3016,38 +4257,25 @@ AutoRankRerollToggle:OnChanged(function(state)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
-                        local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                local match = false
-                                for _, kw in ipairs(keywords) do
-                                    if string.find(name, kw) then
-                                        match = true
-                                        break
-                                    end
-                                end
-                                if match then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                            pcall(function() obj:FireServer("Roll", arg) end)
-                                            pcall(function() obj:FireServer("Rank", arg) end)
-                                        end
-                                    elseif obj:IsA("RemoteFunction") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                                        end
-                                    end
-                                end
+                        local cached = getCachedRankRemotes()
+                        for _, obj in ipairs(cached.events) do
+                            for _, arg in ipairs(argsToTry) do
+                                pcall(function() obj:FireServer(arg) end)
+                                pcall(function() obj:FireServer("Roll", arg) end)
+                                pcall(function() obj:FireServer("Rank", arg) end)
+                            end
+                        end
+                        for _, obj in ipairs(cached.funcs) do
+                            for _, arg in ipairs(argsToTry) do
+                                task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
+                                task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
+                                task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
                             end
                         end
                     end
                     fireAll(cId)
                 else
+                    logRankRoll("❌ ไม่พบการ์ดที่เลือก! กรุณาเลือกใหม่")
                     Fluent:Notify({ Title = "Auto Rank", Content = "ไม่พบการ์ด! กรุณาเลือกใหม่", Duration = 3 })
                     getgenv().AutoRankReroll = false
                     if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
@@ -3055,7 +4283,10 @@ AutoRankRerollToggle:OnChanged(function(state)
                 
                 task.wait(getgenv().RerollSpeed or 1.5)
             end
+            logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว")
         end)
+    else
+        logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว")
     end
 end)
 
@@ -3267,22 +4498,16 @@ AutoClaimToggle:OnChanged(function(state)
                                 
                                 local name = string.upper(v.Name)
                                 if (btnText:find("CLAIM") or btnText:find("COLLECT") or btnText:find("รับ") or name:find("CLAIM") or name:find("COLLECT")) then
-                                    local isForbidden = false
-                                    local current = v
-                                    while current and (current:IsA("GuiObject") or current:IsA("ScreenGui")) do
-                                        local cName = string.upper(current.Name)
-                                        if cName:find("GUILD") or cName:find("กิลด์") or cName:find("CLAN") 
-                                            or cName:find("ROBUX") or cName:find("PASS") or cName:find("SHOP") 
-                                            or cName:find("REBIRTH") or cName:find("TRADE") or cName:find("GIFT")
-                                        then
-                                            isForbidden = true
-                                            break
+                                    -- กรองปุ่มหลอก หรือปุ่ม Robux หรือ Guild
+                                    if not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") and not name:find("GUILD") and not btnText:find("GUILD") and not btnText:find("กิลด์") then
+                                        local fired = false
+                                        if getconnections then
+                                            for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire(); fired = true end
+                                            for _, conn in pairs(getconnections(v.Activated)) do conn:Fire(); fired = true end
                                         end
-                                        current = current.Parent
-                                    end
-
-                                    if not isForbidden and not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") then
-                                        fireButton(v)
+                                        if not fired then
+                                            fireButton(v)
+                                        end
                                         task.wait(0.2)
                                     end
                                 end
@@ -3304,8 +4529,26 @@ local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
     Multi = false,
     Default = "Rare"
 })
+
 local MinRarityIdx = {}
-for i, v in ipairs(RaritiesList) do MinRarityIdx[v] = i end
+for i, v in ipairs(RaritiesList) do 
+    MinRarityIdx[v] = i 
+    MinRarityIdx[string.lower(v)] = i
+    MinRarityIdx[string.upper(v)] = i
+end
+
+local function getRankIndex(rankStr)
+    if not rankStr or rankStr == "" or rankStr == "None" then return 99 end
+    if MinRarityIdx[rankStr] then return MinRarityIdx[rankStr] end
+    local lowerRank = string.lower(rankStr)
+    if MinRarityIdx[lowerRank] then return MinRarityIdx[lowerRank] end
+    for rName, idx in pairs(MinRarityIdx) do
+        if type(rName) == "string" and string.len(rName) > 2 and string.find(lowerRank, string.lower(rName), 1, true) then
+            return idx
+        end
+    end
+    return 99
+end
 
 InvBalToggle:OnChanged(function(state)
     getgenv().InventoryBalancing = state
@@ -3320,18 +4563,21 @@ InvBalToggle:OnChanged(function(state)
                     if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                     
                     if #items > 0 then
-                        local threshold = MinRarityIdx[MinRarityDrop.Value or "Rare"] or 3
+                        local selectedKeep = MinRarityDrop.Value or "Rare"
+                        local threshold = getRankIndex(selectedKeep)
+                        if threshold == 99 then threshold = 3 end
+                        
                         local trashCards = {}
                         
                         for _, t in ipairs(items) do
                             local isPack = isPackCard(t)
                             local rank = getCardRank(t)
-                            local rankIdx = MinRarityIdx[rank] or 99
+                            local rankIdx = getRankIndex(rank)
                             
                             if isPack and rankIdx == 99 then
                                 local upName = string.upper(t.Name)
                                 for r, idx in pairs(MinRarityIdx) do
-                                    if string.find(upName, string.upper(r)) then
+                                    if type(r) == "string" and string.len(r) > 2 and string.find(upName, string.upper(r), 1, true) then
                                         rankIdx = idx
                                         break
                                     end
@@ -3341,7 +4587,10 @@ InvBalToggle:OnChanged(function(state)
                             if not isPack then
                                 local mut = string.lower(getCardMutation(t))
                                 if mut ~= "normal" and mut ~= "golden" then continue end
-                                if rank:find("SS") or rank:find("UR") or rank:find("LR") then rankIdx = 99 end
+                                local upRank = string.upper(tostring(rank))
+                                if upRank:find("SS") or upRank:find("UR") or upRank:find("LR") or upRank:find("GODLY") or upRank:find("SECRET") or upRank:find("ADMIN") then
+                                    rankIdx = 99
+                                end
                             end
                             
                             local cashScore = 0
@@ -3384,6 +4633,7 @@ InvBalToggle:OnChanged(function(state)
                                     if t and t.Parent then t:Destroy() end
                                 end)
                             end
+                            pcall(function() logLine(string.format("[InvBal] 🗑️ เคลียร์ขยะอัตโนมัติเรียบร้อย (%d ใบ)", #trashCards)) end)
                         end
                     end
                 end)
@@ -5220,6 +6470,17 @@ local function LoadConfig(name)
         end
     end
 end
+
+Tabs.Dashboard:AddButton({
+    Title = "🚀 เปิดหน้าต่างโหมด AFK (ไก่ตัน) [Full Screen]",
+    Callback = function()
+        if Options and Options.AFKModeToggle then
+            Options.AFKModeToggle:SetValue(true)
+        else
+            afkOpen()
+        end
+    end
+})
 
 Tabs.Dashboard:AddButton({
     Title = "💾 บันทึกการตั้งค่า (Save)",
