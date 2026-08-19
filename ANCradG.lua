@@ -400,92 +400,74 @@ local function GetPlayerNames()
     return names
 end
 
-local cachedPlot = nil
-local lastPlotSearch = 0
 local function findPlayerPlot()
-    if cachedPlot and cachedPlot.Parent then return cachedPlot end
-    local now = tick()
-    if now - lastPlotSearch < 3 then return cachedPlot end
-    lastPlotSearch = now
-
     local plotNum = LocalPlayer:FindFirstChild("PlotNumber") and LocalPlayer.PlotNumber.Value or 0
-    local mapPlots = workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")
-    if mapPlots then
-        if plotNum ~= 0 then
-            local targetPlot = mapPlots:FindFirstChild(tostring(plotNum))
-            if targetPlot then cachedPlot = targetPlot return cachedPlot end
-        end
-        for _, plot in ipairs(mapPlots:GetChildren()) do
+    if plotNum ~= 0 then
+        local plotFolder = workspace:FindFirstChild("MAP")
+            and workspace.MAP:FindFirstChild("Plots")
+            and workspace.MAP.Plots:FindFirstChild(tostring(plotNum))
+        if plotFolder then return plotFolder end
+    end
+    local plots = workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")
+    if plots then
+        for _, plot in ipairs(plots:GetChildren()) do
             if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name or plot.Name == tostring(plotNum) then
-                cachedPlot = plot
-                return cachedPlot
+                return plot
             end
         end
     end
-
-    local plotsFolder = workspace:FindFirstChild("Plots") or workspace:FindFirstChild("Plot")
-    if plotsFolder then
-        for _, plot in ipairs(plotsFolder:GetChildren()) do
-            if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name then
-                cachedPlot = plot
-                return cachedPlot
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("Folder") or desc:IsA("Model") then
+            if desc.Name == LocalPlayer.Name or desc:GetAttribute("Owner") == LocalPlayer.Name then
+                local plotsFolder = desc:FindFirstAncestor("Plots")
+                if plotsFolder then return desc end
             end
         end
     end
     return nil
 end
 
-local cachedClickDetector = nil
-local lastCDSearch = 0
 local function getSpawnPackClickDetector()
-    if cachedClickDetector and cachedClickDetector.Parent then return cachedClickDetector end
-    local now = tick()
-    if now - lastCDSearch < 3 then return cachedClickDetector end
-    lastCDSearch = now
-
     local plotFolder = findPlayerPlot()
-    if plotFolder then
-        local plotN0 = plotFolder:FindFirstChild("Plot_N0")
-        if plotN0 then
-            local btnPart = plotN0:FindFirstChild("ButtonPart")
-            if btnPart then
-                local cd = btnPart:FindFirstChildWhichIsA("ClickDetector")
-                if cd then cachedClickDetector = cd return cachedClickDetector end
-            end
-            for _, child in ipairs(plotN0:GetChildren()) do
-                local cd = child:FindFirstChildWhichIsA("ClickDetector", true)
-                if cd then cachedClickDetector = cd return cachedClickDetector end
+    if plotFolder and plotFolder:FindFirstChild("Plot_N0") then
+        for _, v in ipairs(plotFolder.Plot_N0:GetDescendants()) do
+            if v:IsA("ClickDetector") and v.Parent and v.Parent.Name == "ButtonPart" then
+                return v
             end
         end
-        for _, desc in ipairs(plotFolder:GetChildren()) do
-            local cd = desc:FindFirstChildWhichIsA("ClickDetector", true)
-            if cd then cachedClickDetector = cd return cachedClickDetector end
+    end
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ClickDetector") and desc.Parent and desc.Parent.Name == "ButtonPart" and desc.Parent.Parent and desc.Parent.Parent.Name == "Plot_N0" then
+            return desc
+        end
+    end
+    if plotFolder then
+        for _, v in ipairs(plotFolder:GetDescendants()) do
+            if v:IsA("ClickDetector") then return v end
         end
     end
     return nil
 end
 
-local lastCardFolderSearch = 0
 local function findCardFolder()
-    if getgenv().CardFolder and getgenv().CardFolder.Parent then return true end
-    local now = tick()
-    if now - lastCardFolderSearch < 3 then return false end
-    lastCardFolderSearch = now
-
     local plot = findPlayerPlot()
     if plot then
-        for _, desc in ipairs(plot:GetChildren()) do
-            if desc:IsA("Model") or desc:IsA("Folder") then
-                if desc:GetAttribute("IgnoreTutoBeam") ~= nil or isPackCard(desc) then
-                    getgenv().CardFolder = desc.Parent
+        for _, desc in ipairs(plot:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") then
+                local model = desc:FindFirstAncestorOfClass("Model")
+                if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
+                    getgenv().CardFolder = model.Parent
                     return true
                 end
-                for _, sub in ipairs(desc:GetChildren()) do
-                    if sub:IsA("Model") and (sub:GetAttribute("IgnoreTutoBeam") ~= nil or isPackCard(sub)) then
-                        getgenv().CardFolder = sub.Parent
-                        return true
-                    end
-                end
+            end
+        end
+    end
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") then
+            local model = desc:FindFirstAncestorOfClass("Model")
+            if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
+                getgenv().CardFolder = model.Parent
+                return true
             end
         end
     end
