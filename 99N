@@ -1165,6 +1165,658 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 end
 
 -----------------------------------------------------------------------------------------
+-- 🐔 AFK MODE OVERLAY ("ไก่ตัน") ENGINE - PAYOMBOYZ HUB
+-----------------------------------------------------------------------------------------
+local AFK_MAX_LOGS = 40
+local AFK_FPS_CAP  = 10
+
+local AFK_COLOR = {
+    bg        = Color3.fromRGB(0, 0, 0),
+    panel     = Color3.fromRGB(24, 10, 16),
+    raised    = Color3.fromRGB(36, 14, 22),
+    separator = Color3.fromRGB(60, 22, 34),
+    label     = Color3.fromRGB(255, 255, 255),
+    label2    = Color3.fromRGB(242, 218, 228),
+    label3    = Color3.fromRGB(180, 140, 155),
+    primary   = Color3.fromRGB(255, 45, 85),
+    green     = Color3.fromRGB(46, 224, 140),
+    red       = Color3.fromRGB(255, 60, 60),
+    orange    = Color3.fromRGB(255, 185, 70),
+    cyan      = Color3.fromRGB(255, 55, 85),
+}
+
+local AFK = {
+    on           = false,
+    gui          = nil,
+    conns        = {},
+    startAt      = 0,
+    lastSec      = -1,
+    wantShow     = false,
+    wantHide     = false,
+    wantSeed     = false,
+    logDirty     = false,
+    pool         = {},
+    poolHead     = 0,
+    prevFps      = nil,
+    prev3D       = nil,
+    prevQuality  = nil,
+    stat         = {},
+    telemetry    = {},
+    logList      = nil,
+    logsBuffer   = {},
+    latestStatus = "กำลังเริ่มต้นระบบ...",
+}
+
+local function afkCorner(parent, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 12)
+    c.Parent = parent
+    return c
+end
+
+local function afkStroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color or AFK_COLOR.separator
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    return s
+end
+
+local function afkPad(parent, all)
+    local p = Instance.new("UIPadding")
+    p.PaddingTop    = UDim.new(0, all)
+    p.PaddingBottom = UDim.new(0, all)
+    p.PaddingLeft   = UDim.new(0, all)
+    p.PaddingRight  = UDim.new(0, all)
+    p.Parent = parent
+    return p
+end
+
+local function afkText(parent, props)
+    local t = Instance.new("TextLabel")
+    t.BackgroundTransparency = 1
+    t.RichText = false
+    t.Font = props.font or Enum.Font.Gotham
+    t.TextSize = props.size or 13
+    t.TextColor3 = props.color or AFK_COLOR.label
+    t.TextXAlignment = props.align or Enum.TextXAlignment.Left
+    t.TextYAlignment = Enum.TextYAlignment.Center
+    t.Text = props.text or ""
+    t.Size = props.sizeUDim or UDim2.new(1, 0, 1, 0)
+    if props.pos then t.Position = props.pos end
+    if props.truncate then t.TextTruncate = Enum.TextTruncate.AtEnd end
+    t.Parent = parent
+    return t
+end
+
+local function afkCard(parent, props)
+    local f = Instance.new("Frame")
+    f.BackgroundColor3 = props.color or AFK_COLOR.panel
+    f.BorderSizePixel = 0
+    f.Size = props.size or UDim2.new(1, 0, 1, 0)
+    if props.pos then f.Position = props.pos end
+    if props.anchor then f.AnchorPoint = props.anchor end
+    afkCorner(f, props.radius or 14)
+    if props.stroke ~= false then afkStroke(f, AFK_COLOR.separator, 1, 0.35) end
+    f.Parent = parent
+    return f
+end
+
+local function afkClock(sec)
+    sec = math.max(0, math.floor(sec))
+    return ("%02d:%02d:%02d"):format(math.floor(sec / 3600), math.floor(sec % 3600 / 60), sec % 60)
+end
+
+local function afkEnterLowPower()
+    pcall(function()
+        if getfpscap then AFK.prevFps = getfpscap() end
+        if setfpscap then setfpscap(AFK_FPS_CAP) end
+    end)
+    pcall(function()
+        AFK.prevQuality = settings().Rendering.QualityLevel
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    pcall(function()
+        if RunService.Set3dRenderingEnabled then
+            AFK.prev3D = true
+            RunService:Set3dRenderingEnabled(false)
+        end
+    end)
+end
+
+local function afkExitLowPower()
+    pcall(function()
+        if setfpscap then setfpscap((AFK.prevFps and AFK.prevFps > 0) and AFK.prevFps or 240) end
+    end)
+    pcall(function()
+        if AFK.prevQuality then settings().Rendering.QualityLevel = AFK.prevQuality end
+    end)
+    pcall(function()
+        if AFK.prev3D and RunService.Set3dRenderingEnabled then
+            RunService:Set3dRenderingEnabled(true)
+        end
+    end)
+    AFK.prevFps, AFK.prevQuality, AFK.prev3D = nil, nil, nil
+end
+
+local function afkPushLog(text)
+    if not AFK.gui or not AFK.logList or not text then return end
+    AFK.poolHead = (AFK.poolHead % AFK_MAX_LOGS) + 1
+    local row = AFK.pool[AFK.poolHead]
+    if not row then return end
+    local timeStr = os.date("%H:%M:%S")
+    row.Text = string.format("[%s] %s", timeStr, text)
+    row.Visible = true
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r and r.Visible then
+            r.LayoutOrder = (AFK.poolHead - i) % AFK_MAX_LOGS
+        end
+    end
+end
+
+local function afkSeedLogs()
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r then r.Visible = false end
+    end
+    AFK.poolHead = 0
+    for i = 1, #AFK.logsBuffer do
+        afkPushLog(AFK.logsBuffer[i])
+    end
+end
+
+local function addAFKLog(text)
+    if not text or text == "" then return end
+    table.insert(AFK.logsBuffer, text)
+    if #AFK.logsBuffer > AFK_MAX_LOGS then
+        table.remove(AFK.logsBuffer, 1)
+    end
+    AFK.latestStatus = text
+    if AFK.on then
+        AFK.logDirty = true
+    end
+end
+
+local afkClose
+
+local function afkOpen()
+    if AFK.on then return end
+    AFK.on = true
+    AFK.startAt = os.clock()
+    AFK.lastSec = -1
+    AFK.wantShow = true
+    AFK.wantHide = false
+    AFK.wantSeed = true
+    AFK.logDirty = false
+    addAFKLog("เปิดการทำงานโหมด AFK ไก่ตัน (Full-Screen AFK Dashboard)")
+end
+
+afkClose = function(fromButton)
+    if not AFK.on then return end
+    AFK.on = false
+    AFK.wantHide = true
+    AFK.wantShow = false
+
+    if fromButton and ObsidianGlassEngine.Options and ObsidianGlassEngine.Options["AFKDashboard"] then
+        pcall(function()
+            ObsidianGlassEngine.Options["AFKDashboard"]:SetValue(false)
+        end)
+    end
+    ObsidianGlassEngine:Notify({
+        Title = "โหมด AFK ไก่ตัน",
+        Content = "ปิดโหมด AFK เรียบร้อย — คืนค่ากราฟิกและเรนเดอร์ 3D เรียบร้อย",
+        Duration = 3
+    })
+end
+
+local function afkBuild()
+    pcall(function()
+        local old = (gethui and gethui():FindFirstChild("PayomboyZ_AFKDashboard"))
+            or (LocalPlayer and LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("PayomboyZ_AFKDashboard"))
+            or game:GetService("CoreGui"):FindFirstChild("PayomboyZ_AFKDashboard")
+        if old then old:Destroy() end
+    end)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PayomboyZ_AFKDashboard"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 999999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local parented = false
+    pcall(function()
+        gui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
+        parented = gui.Parent ~= nil
+    end)
+    if not parented then
+        pcall(function() if gethui then gui.Parent = gethui() parented = true end end)
+    end
+    if not parented then
+        pcall(function() gui.Parent = game:GetService("CoreGui") end)
+    end
+
+    local root = Instance.new("Frame")
+    root.Name = "Root"
+    root.BackgroundColor3 = AFK_COLOR.bg
+    root.BorderSizePixel = 0
+    root.Size = UDim2.fromScale(1, 1)
+    root.Parent = gui
+
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.BackgroundTransparency = 1
+    body.Size = UDim2.fromScale(1, 1)
+    body.Parent = root
+    afkPad(body, 20)
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.BackgroundTransparency = 1
+    header.Size = UDim2.new(1, 0, 0, 46)
+    header.Parent = body
+
+    afkText(header, {
+        text = "🐔 โหมด AFK ไก่ตัน (PayomboyZ HUB)", font = Enum.Font.GothamBold, size = 24, color = AFK_COLOR.primary,
+        sizeUDim = UDim2.new(1, -220, 0, 28), pos = UDim2.fromOffset(0, 0),
+    })
+    afkText(header, {
+        text = "99 Night • Obsidian Glassmorphic 2 Engine • ปิดเรนเดอร์ 3D ประหยัดพลังงาน", font = Enum.Font.Gotham, size = 12, color = AFK_COLOR.label3,
+        sizeUDim = UDim2.new(1, -220, 0, 16), pos = UDim2.fromOffset(2, 28),
+    })
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "Close"
+    closeBtn.AnchorPoint = Vector2.new(1, 0)
+    closeBtn.Position = UDim2.new(1, 0, 0, 4)
+    closeBtn.Size = UDim2.fromOffset(160, 38)
+    closeBtn.BackgroundColor3 = AFK_COLOR.raised
+    closeBtn.BorderSizePixel = 0
+    closeBtn.AutoButtonColor = true
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.TextColor3 = AFK_COLOR.red
+    closeBtn.Text = "❌ ปิดโหมด AFK"
+    closeBtn.Parent = header
+    afkCorner(closeBtn, 12)
+    afkStroke(closeBtn, AFK_COLOR.red, 1, 0.45)
+    closeBtn.MouseButton1Click:Connect(function() afkClose(true) end)
+
+    -- Stat Cards Row (4 Cards)
+    local stats = Instance.new("Frame")
+    stats.Name = "Stats"
+    stats.BackgroundTransparency = 1
+    stats.Position = UDim2.fromOffset(0, 56)
+    stats.Size = UDim2.new(1, 0, 0, 72)
+    stats.Parent = body
+
+    local statLayout = Instance.new("UIListLayout")
+    statLayout.FillDirection = Enum.FillDirection.Horizontal
+    statLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    statLayout.Padding = UDim.new(0, 10)
+    statLayout.Parent = stats
+
+    local function statCard(order, caption, value, color)
+        local card = afkCard(stats, {
+            size = UDim2.new(0.25, -8, 1, 0), radius = 14,
+        })
+        card.LayoutOrder = order
+        afkText(card, {
+            text = caption, font = Enum.Font.GothamMedium, size = 11, color = AFK_COLOR.label3,
+            sizeUDim = UDim2.new(1, -24, 0, 14), pos = UDim2.fromOffset(12, 12),
+        })
+        local val = afkText(card, {
+            text = value, font = Enum.Font.GothamBold, size = 20, color = color or AFK_COLOR.label,
+            sizeUDim = UDim2.new(1, -24, 0, 30), pos = UDim2.fromOffset(12, 30), truncate = true,
+        })
+        return val
+    end
+
+    AFK.stat.diamonds = statCard(1, "💎 เพชรสะสม (Diamonds)", "...", AFK_COLOR.cyan)
+    AFK.stat.day      = statCard(2, "📅 วันที่ปัจจุบัน (Day)", "วันที่ 1 / 100", AFK_COLOR.green)
+    AFK.stat.status   = statCard(3, "📌 สถานะปัจจุบัน", "กำลังเริ่มต้นระบบ...", AFK_COLOR.label)
+    AFK.stat.time     = statCard(4, "⏱️ เวลา AFK สะสม", "00:00:00", AFK_COLOR.primary)
+
+    -- 3 Columns Layout
+    local columns = Instance.new("Frame")
+    columns.Name = "Columns"
+    columns.BackgroundTransparency = 1
+    columns.Position = UDim2.fromOffset(0, 138)
+    columns.Size = UDim2.new(1, 0, 1, -138)
+    columns.Parent = body
+
+    local function createColumnPanel(order, widthScale, xScale, xOffset, title)
+        local p = afkCard(columns, {
+            size = UDim2.new(widthScale, -8, 1, 0),
+            pos  = UDim2.new(xScale, xOffset, 0, 0),
+            radius = 14,
+        })
+        p.LayoutOrder = order
+
+        afkText(p, {
+            text = title, font = Enum.Font.GothamBold, size = 13, color = AFK_COLOR.primary,
+            sizeUDim = UDim2.new(1, -24, 0, 18), pos = UDim2.fromOffset(12, 10),
+        })
+
+        local line = Instance.new("Frame")
+        line.BackgroundColor3 = AFK_COLOR.separator
+        line.BorderSizePixel = 0
+        line.Position = UDim2.fromOffset(12, 34)
+        line.Size = UDim2.new(1, -24, 0, 1)
+        line.Parent = p
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.Position = UDim2.fromOffset(10, 40)
+        scroll.Size = UDim2.new(1, -20, 1, -48)
+        scroll.ScrollBarThickness = 3
+        scroll.ScrollBarImageColor3 = AFK_COLOR.separator
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.CanvasSize = UDim2.new()
+        scroll.Parent = p
+
+        return p, scroll
+    end
+
+    local _, logScroll = createColumnPanel(1, 0.34, 0, 0, "📜 ประวัติการทำงาน (Activity Log)")
+    local _, userScroll = createColumnPanel(2, 0.33, 0.34, 4, "👤 ข้อมูลผู้ใช้ & ระบบ (User & System)")
+    local _, gameScroll = createColumnPanel(3, 0.33, 0.67, 8, "🎮 สถานะแมพ & ทรัพยากร (Game Status)")
+
+    AFK.logList = logScroll
+
+    -- Log Pool Setup (40 Pre-allocated rows)
+    local logLayout = Instance.new("UIListLayout")
+    logLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    logLayout.Padding = UDim.new(0, 4)
+    logLayout.Parent = logScroll
+
+    for i = 1, AFK_MAX_LOGS do
+        local row = Instance.new("TextLabel")
+        row.Name = "Log" .. i
+        row.BackgroundTransparency = 1
+        row.Size = UDim2.new(1, -4, 0, 16)
+        row.Font = Enum.Font.Code
+        row.TextSize = 11
+        row.TextColor3 = AFK_COLOR.label2
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextTruncate = Enum.TextTruncate.AtEnd
+        row.Visible = false
+        row.Text = ""
+        row.Parent = logScroll
+        AFK.pool[i] = row
+    end
+
+    -- User Column Setup
+    local userLayout = Instance.new("UIListLayout")
+    userLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    userLayout.Padding = UDim.new(0, 10)
+    userLayout.Parent = userScroll
+
+    local avatarCard = afkCard(userScroll, { size = UDim2.new(1, 0, 0, 70), color = AFK_COLOR.raised, radius = 12 })
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Size = UDim2.fromOffset(50, 50)
+    avatarImg.Position = UDim2.fromOffset(10, 10)
+    avatarImg.BackgroundTransparency = 1
+    avatarImg.Image = loadCustomAvatarImage()
+    avatarImg.Parent = avatarCard
+    afkCorner(avatarImg, 25)
+
+    afkText(avatarCard, {
+        text = LocalPlayer.DisplayName, font = Enum.Font.GothamBold, size = 14, color = AFK_COLOR.label,
+        sizeUDim = UDim2.new(1, -75, 0, 20), pos = UDim2.fromOffset(68, 14), truncate = true,
+    })
+    afkText(avatarCard, {
+        text = "@" .. LocalPlayer.Name, font = Enum.Font.Gotham, size = 11, color = AFK_COLOR.label3,
+        sizeUDim = UDim2.new(1, -75, 0, 16), pos = UDim2.fromOffset(68, 36), truncate = true,
+    })
+
+    local function addTelemetryRow(parent, defaultVal, color)
+        local row = afkCard(parent, { size = UDim2.new(1, 0, 0, 38), color = AFK_COLOR.raised, radius = 10 })
+        local lbl = afkText(row, {
+            text = defaultVal, font = Enum.Font.GothamMedium, size = 12, color = color or AFK_COLOR.label2,
+            sizeUDim = UDim2.new(1, -20, 1, 0), pos = UDim2.fromOffset(10, 0),
+        })
+        return lbl
+    end
+
+    local function addVisualResourceCard(parent, title, defaultVal, iconAssetId, color)
+        local card = afkCard(parent, { size = UDim2.new(1, 0, 0, 52), color = AFK_COLOR.raised, radius = 12 })
+        
+        local iconBox = afkCard(card, { size = UDim2.fromOffset(38, 38), pos = UDim2.fromOffset(7, 7), color = AFK_COLOR.panel, radius = 8 })
+        
+        local iconImg = Instance.new("ImageLabel")
+        iconImg.Size = UDim2.fromScale(0.7, 0.7)
+        iconImg.AnchorPoint = Vector2.new(0.5, 0.5)
+        iconImg.Position = UDim2.fromScale(0.5, 0.5)
+        iconImg.BackgroundTransparency = 1
+        iconImg.Image = iconAssetId or "rbxassetid://10729359620"
+        iconImg.ImageColor3 = color or AFK_COLOR.label
+        iconImg.Parent = iconBox
+
+        afkText(card, {
+            text = title, font = Enum.Font.GothamMedium, size = 11, color = AFK_COLOR.label3,
+            sizeUDim = UDim2.new(1, -55, 0, 14), pos = UDim2.fromOffset(52, 8), truncate = true,
+        })
+
+        local valLbl = afkText(card, {
+            text = defaultVal, font = Enum.Font.GothamBold, size = 15, color = color or AFK_COLOR.label,
+            sizeUDim = UDim2.new(1, -55, 0, 20), pos = UDim2.fromOffset(52, 24), truncate = true,
+        })
+
+        return valLbl
+    end
+
+    AFK.telemetry.ping = addTelemetryRow(userScroll, "📡 Ping: -- ms", AFK_COLOR.cyan)
+    AFK.telemetry.fps = addTelemetryRow(userScroll, "⚡ โหมด AFK: จำกัด 10 FPS (ประหยัดพลังงาน)", AFK_COLOR.green)
+    AFK.telemetry.hunger = addTelemetryRow(userScroll, "🍔 ความหิว: สมบูรณ์", AFK_COLOR.label)
+    AFK.telemetry.axe = addTelemetryRow(userScroll, "🪓 ขวานสวมใส่: พร้อมใช้งาน", AFK_COLOR.orange)
+
+    -- Game Column Setup
+    local gameLayout = Instance.new("UIListLayout")
+    gameLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    gameLayout.Padding = UDim.new(0, 10)
+    gameLayout.Parent = gameScroll
+
+    -- 🖼️ Big Visual Showcase Banner Frame
+    local bannerCard = afkCard(gameScroll, { size = UDim2.new(1, 0, 0, 110), color = AFK_COLOR.raised, radius = 12 })
+    
+    local bannerImg = Instance.new("ImageLabel")
+    bannerImg.Name = "GameBanner"
+    bannerImg.Size = UDim2.fromScale(1, 1)
+    bannerImg.Position = UDim2.fromScale(0, 0)
+    bannerImg.BackgroundTransparency = 1
+    bannerImg.ScaleType = Enum.ScaleType.Crop
+    bannerImg.Image = "rbxassetid://13840003021"
+    bannerImg.Parent = bannerCard
+    afkCorner(bannerImg, 12)
+
+    local bannerOverlay = Instance.new("Frame")
+    bannerOverlay.Size = UDim2.fromScale(1, 1)
+    bannerOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    bannerOverlay.BackgroundTransparency = 0.55
+    bannerOverlay.Parent = bannerCard
+    afkCorner(bannerOverlay, 12)
+
+    local bannerBadge = afkCard(bannerOverlay, {
+        size = UDim2.fromOffset(170, 22), pos = UDim2.fromOffset(10, 8), color = Color3.fromRGB(255, 45, 85), radius = 8, stroke = false
+    })
+    afkText(bannerBadge, {
+        text = "🌲 99 Night Active Session", font = Enum.Font.GothamBold, size = 10, color = AFK_COLOR.label,
+        sizeUDim = UDim2.new(1, 0, 1, 0), align = Enum.TextXAlignment.Center,
+    })
+
+    afkText(bannerOverlay, {
+        text = "สถานะแมพ & ทรัพยากรค่าย", font = Enum.Font.GothamBold, size = 15, color = AFK_COLOR.label,
+        sizeUDim = UDim2.new(1, -20, 0, 20), pos = UDim2.fromOffset(12, 58),
+    })
+    afkText(bannerOverlay, {
+        text = "ติดตามกองไฟ, ไม้สะสม, และเวลาป้อมปราการ", font = Enum.Font.Gotham, size = 10, color = AFK_COLOR.label2,
+        sizeUDim = UDim2.new(1, -20, 0, 14), pos = UDim2.fromOffset(12, 80),
+    })
+
+    -- Visual Icon Cards for Resources
+    AFK.telemetry.fire = addVisualResourceCard(gameScroll, "🔥 Level กองไฟ (Campfire)", "Level 1", "rbxassetid://10729359620", AFK_COLOR.orange)
+    AFK.telemetry.wood = addVisualResourceCard(gameScroll, "🪵 ไม้สะสม (Total Wood)", "0 / 50", "rbxassetid://10729359345", AFK_COLOR.green)
+    AFK.telemetry.scrap = addVisualResourceCard(gameScroll, "🔩 เศษเหล็กสะสม (Total Scrap)", "0 / 26", "rbxassetid://10729359128", AFK_COLOR.cyan)
+    AFK.telemetry.stronghold = addVisualResourceCard(gameScroll, "🏰 ป้อมปราการ (Stronghold)", "รอเข้าแมพ...", "rbxassetid://10729359740", AFK_COLOR.primary)
+    AFK.telemetry.cultist = addVisualResourceCard(gameScroll, "⚔️ การต่อสู้ (Cultist Battle)", "รอป้อมเปิด...", "rbxassetid://10729359850", AFK_COLOR.red)
+
+    AFK.gui = gui
+end
+
+local function getGameDay()
+    local day = nil
+
+    -- 1. Check workspace attributes
+    pcall(function()
+        day = workspace:GetAttribute("DailyQuestDay") or workspace:GetAttribute("Day") or workspace:GetAttribute("Night") or workspace:GetAttribute("Days") or workspace:GetAttribute("Nights")
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    -- 2. Check ReplicatedStorage attributes
+    pcall(function()
+        day = ReplicatedStorage:GetAttribute("Day") or ReplicatedStorage:GetAttribute("Night") or ReplicatedStorage:GetAttribute("Days")
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    -- 3. Check workspace.Map attributes
+    pcall(function()
+        local map = workspace:FindFirstChild("Map")
+        if map then
+            day = map:GetAttribute("Day") or map:GetAttribute("Night") or map:GetAttribute("Days") or map:GetAttribute("Nights")
+        end
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    -- 4. Check Lighting attributes
+    pcall(function()
+        local lighting = game:GetService("Lighting")
+        day = lighting:GetAttribute("Day") or lighting:GetAttribute("Night")
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    -- 5. Check LocalPlayer attributes
+    pcall(function()
+        day = LocalPlayer:GetAttribute("Day") or LocalPlayer:GetAttribute("Night") or LocalPlayer:GetAttribute("Days") or LocalPlayer:GetAttribute("Nights")
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    -- 6. Scan PlayerGui TextLabels for Day X or Night X
+    pcall(function()
+        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if pGui then
+            for _, desc in ipairs(pGui:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Visible and desc.Text and desc.Text ~= "" then
+                    local match = desc.Text:match("[Dd]ay%s*(%d+)") or desc.Text:match("[Nn]ight%s*(%d+)") or desc.Text:match("วันที่%s*(%d+)") or desc.Text:match("คืนที่%s*(%d+)")
+                    if match then
+                        local num = tonumber(match)
+                        if num and num > 0 then
+                            day = num
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if day and type(day) == "number" and day > 0 then return math.floor(day) end
+
+    return 1
+end
+
+local function afkPump()
+    if AFK.wantShow then
+        AFK.wantShow = false
+        if AFK.gui then AFK.gui.Enabled = true end
+        afkEnterLowPower()
+    end
+    if AFK.wantHide then
+        AFK.wantHide = false
+        if AFK.gui then AFK.gui.Enabled = false end
+        afkExitLowPower()
+    end
+
+    if not AFK.on then return end
+
+    if AFK.wantSeed then
+        AFK.wantSeed = false
+        afkSeedLogs()
+    end
+
+    if AFK.logDirty then
+        AFK.logDirty = false
+        if #AFK.logsBuffer > 0 then
+            afkPushLog(AFK.logsBuffer[#AFK.logsBuffer])
+        end
+    end
+
+    local sec = math.floor(os.clock() - AFK.startAt)
+    if sec == AFK.lastSec then return end
+    AFK.lastSec = sec
+
+    local diamonds = LocalPlayer:GetAttribute("Diamonds") or 0
+    if AFK.stat.diamonds then AFK.stat.diamonds.Text = formatNumber(diamonds) .. " Gems" end
+    local dayVal = getGameDay()
+    if AFK.stat.day then AFK.stat.day.Text = "วันที่ " .. tostring(dayVal) .. " / 100" end
+    if AFK.stat.status then AFK.stat.status.Text = AFK.latestStatus or "กำลังทำงาน..." end
+    if AFK.stat.time then AFK.stat.time.Text = afkClock(sec) end
+
+    pcall(function()
+        if AFK.telemetry.ping then
+            local pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            AFK.telemetry.ping.Text = "📡 Ping: " .. tostring(pingVal) .. " ms"
+        end
+
+        local hungerVal = LocalPlayer:GetAttribute("Hunger")
+        if not hungerVal and LocalPlayer.Character then
+            hungerVal = LocalPlayer.Character:GetAttribute("Hunger")
+        end
+        if AFK.telemetry.hunger then
+            AFK.telemetry.hunger.Text = hungerVal and string.format("🍔 ความหิว: %d / 200", math.floor(hungerVal)) or "🍔 ความหิว: สมบูรณ์"
+        end
+
+        local toolName = "ไม่มี"
+        if LocalPlayer.Character then
+            local tool = LocalPlayer.Character:FindFirstChildWhichIsA("Tool")
+            if tool then toolName = tool.Name end
+        end
+        if toolName == "ไม่มี" and LocalPlayer:FindFirstChild("Backpack") then
+            local bpTool = LocalPlayer.Backpack:FindFirstChildWhichIsA("Tool")
+            if bpTool then toolName = bpTool.Name .. " (ในเป้)" end
+        end
+        if AFK.telemetry.axe then
+            AFK.telemetry.axe.Text = "🪓 ขวานที่ใช้: " .. toolName
+        end
+
+        local camp = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Campground")
+        local wood = camp and camp:GetAttribute("TotalWood") or 0
+        local maxWood = camp and camp:GetAttribute("MaxWood") or 50
+        if AFK.telemetry.wood then AFK.telemetry.wood.Text = string.format("🪵 ไม้สะสม: %d / %d", wood, maxWood) end
+
+        local scrap = camp and camp:GetAttribute("TotalScrap") or 0
+        local maxScrap = camp and camp:GetAttribute("MaxScrap") or 26
+        if AFK.telemetry.scrap then AFK.telemetry.scrap.Text = string.format("🔩 เศษเหล็ก: %d / %d", scrap, maxScrap) end
+
+        local fireLvl = (typeof(getCurrentLevel) == "function" and getCurrentLevel()) or 1
+        if AFK.telemetry.fire then AFK.telemetry.fire.Text = string.format("🔥 กองไฟ: Level %d", fireLvl) end
+
+        local shTime = (typeof(getStrongholdTimeRemaining) == "function" and getStrongholdTimeRemaining())
+        if AFK.telemetry.stronghold then
+            AFK.telemetry.stronghold.Text = shTime and string.format("🏰 ป้อมปราการ: %02d:%02d", math.floor(shTime/60), shTime%60) or "🏰 ป้อมปราการ: รอป้อมเปิด..."
+        end
+    end)
+end
+
+afkBuild()
+AFK.gui.Enabled = false
+RunService.Heartbeat:Connect(function() pcall(afkPump) end)
+
+-----------------------------------------------------------------------------------------
 -- 🛠️ INITIALIZE OBSIDIAN UI & WIDGETS
 -----------------------------------------------------------------------------------------
 
@@ -1197,11 +1849,11 @@ HomeTab:AddToggle("AFKDashboard", {
     Desc = "หน้าต่าง AFK เต็มจอสำหรับปล่อยข้ามคืน — ติดตามสถานะ Real-time, ปิดเรนเดอร์ 3D, ลดสภาพเหลือ Level01, จำกัด 10 FPS",
     Default = false,
     Callback = function(val)
-        ObsidianGlassEngine:Notify({
-            Title = "โหมด AFK ไก่ตัน",
-            Content = val and "เปิดการทำงานโหมด AFK เรียบร้อย" or "ปิดการทำงานโหมด AFK เรียบร้อย",
-            Duration = 3
-        })
+        if val then
+            afkOpen()
+        else
+            afkClose(false)
+        end
     end
 })
 
@@ -1274,6 +1926,7 @@ local function updateStatus(text)
             descLabel.Text = text
         end
     end)
+    addAFKLog(text)
 end
 
 local function retryUntil(label, fn, interval)
