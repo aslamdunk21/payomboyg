@@ -54,6 +54,55 @@ local function playClickSound()
     end)
 end
 
+-- [ระบบลบไฟล์คีย์ และล้างค่าตัวแปรในระบบสำหรับ Logout]
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        for _, file in ipairs(filesToDelete) do
+            if isfile and isfile(file) then
+                if type(delfile) == "function" then
+                    pcall(function() delfile(file) end)
+                end
+                if type(writefile) == "function" then
+                    pcall(function() writefile(file, "") end)
+                end
+            end
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+        end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+    end)
+end
+
+-- [ฟังก์ชันหยุดการทำงานของสคริปต์ทั้งหมด]
+local function stopAllScriptOperations()
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+
+    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+        for _, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.SetValue then
+                pcall(function() option:SetValue(false) end)
+            end
+        end
+    end
+end
+
 local customAvatarAsset = nil
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
@@ -510,7 +559,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     onlineCorner.Parent = onlineDot
 
     local displayNameLabel = Instance.new("TextLabel")
-    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
+    displayNameLabel.Size = UDim2.new(1, -145, 0, 18)
     displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
     displayNameLabel.BackgroundTransparency = 1
     displayNameLabel.Text = LocalPlayer.DisplayName
@@ -522,7 +571,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     displayNameLabel.Parent = userPanel
 
     local usernameLabel = Instance.new("TextLabel")
-    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
+    usernameLabel.Size = UDim2.new(1, -145, 0, 14)
     usernameLabel.Position = UDim2.new(0, 66, 0, 33)
     usernameLabel.BackgroundTransparency = 1
     usernameLabel.Text = "@" .. LocalPlayer.Name
@@ -532,6 +581,64 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
     usernameLabel.ZIndex = 10
     usernameLabel.Parent = userPanel
+
+    -- 🔴 LOGOUT BUTTON (ข้างชื่อผู้ใช้ใน UserPanel Sidebar)
+    local logoutBtn = Instance.new("TextButton")
+    logoutBtn.Name = "LogoutButton"
+    logoutBtn.Size = UDim2.fromOffset(62, 24)
+    logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+    logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+    logoutBtn.BackgroundTransparency = 0.20
+    logoutBtn.Text = "Log out"
+    logoutBtn.TextColor3 = COLORS.danger
+    logoutBtn.Font = Enum.Font.GothamBold
+    logoutBtn.TextSize = 11
+    logoutBtn.ZIndex = 12
+    logoutBtn.Parent = userPanel
+
+    local loCorner = Instance.new("UICorner")
+    loCorner.CornerRadius = UDim.new(0, 6)
+    loCorner.Parent = logoutBtn
+
+    local loStroke = Instance.new("UIStroke")
+    loStroke.Color = COLORS.danger
+    loStroke.Thickness = 1
+    loStroke.Transparency = 0.4
+    loStroke.Parent = logoutBtn
+
+    logoutBtn.MouseEnter:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.danger,
+            BackgroundTransparency = 0.15
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0
+        }):Play()
+        logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+
+    logoutBtn.MouseLeave:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.surfacePressed,
+            BackgroundTransparency = 0.20
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0.4
+        }):Play()
+        logoutBtn.TextColor3 = COLORS.danger
+    end)
+
+    logoutBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        stopAllScriptOperations()
+        performLogoutKeyClear()
+        if gui then
+            pcall(function() gui:Destroy() end)
+        end
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+        end)
+    end)
 
     -- Compact Session & Ping Metrics Bar
     local metricsBox = Instance.new("Frame")
@@ -1289,8 +1396,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.ZIndex = 999999
                 bgDismissBtn.Parent = modalOverlay
 
+                local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+                local maxModalH = math.clamp(cameraVP.Y * 0.72, 320, 460)
+                local maxModalW = math.min(380, cameraVP.X - 30)
+
                 local modalFrame = Instance.new("Frame")
-                modalFrame.Size = UDim2.fromOffset(380, 440)
+                modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
                 modalFrame.AnchorPoint = Vector2.new(0.5, 0.5)
                 modalFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
                 modalFrame.BackgroundColor3 = COLORS.shell
@@ -1310,8 +1421,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 -- Header
                 local mHeader = Instance.new("TextLabel")
-                mHeader.Size = UDim2.new(1, -50, 0, 24)
-                mHeader.Position = UDim2.new(0, 16, 0, 14)
+                mHeader.Size = UDim2.new(1, -50, 0, 22)
+                mHeader.Position = UDim2.new(0, 16, 0, 12)
                 mHeader.BackgroundTransparency = 1
                 mHeader.Text = "📌 " .. title
                 mHeader.TextColor3 = COLORS.text
@@ -1322,8 +1433,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 mHeader.Parent = modalFrame
 
                 local mSub = Instance.new("TextLabel")
-                mSub.Size = UDim2.new(1, -50, 0, 18)
-                mSub.Position = UDim2.new(0, 16, 0, 38)
+                mSub.Size = UDim2.new(1, -50, 0, 16)
+                mSub.Position = UDim2.new(0, 16, 0, 34)
                 mSub.BackgroundTransparency = 1
                 mSub.Text = isMulti and "คำแนะนำ: คลิกเลือก/ยกเลิกได้หลายรายการ" or "คำแนะนำ: คลิก 1 รายการเพื่อเลือก"
                 mSub.TextColor3 = COLORS.textMuted
@@ -1335,7 +1446,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 local closeModBtn = Instance.new("TextButton")
                 closeModBtn.Size = UDim2.fromOffset(26, 26)
-                closeModBtn.Position = UDim2.new(1, -36, 0, 14)
+                closeModBtn.Position = UDim2.new(1, -36, 0, 12)
                 closeModBtn.BackgroundColor3 = COLORS.glass
                 closeModBtn.Text = "✕"
                 closeModBtn.TextColor3 = COLORS.textMuted
@@ -1357,13 +1468,48 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     modalOverlay:Destroy()
                 end)
 
+                -- 🔍 SEARCH FILTER INPUT BOX
+                local searchFrame = Instance.new("Frame")
+                searchFrame.Size = UDim2.new(1, -28, 0, 32)
+                searchFrame.Position = UDim2.new(0, 14, 0, 56)
+                searchFrame.BackgroundColor3 = COLORS.glassDeep
+                searchFrame.BorderSizePixel = 0
+                searchFrame.ZIndex = 1000001
+                searchFrame.Parent = modalFrame
+
+                local sfCorner = Instance.new("UICorner")
+                sfCorner.CornerRadius = UDim.new(0, 8)
+                sfCorner.Parent = searchFrame
+
+                local sfStroke = Instance.new("UIStroke")
+                sfStroke.Color = COLORS.surfaceRaised
+                sfStroke.Thickness = 1
+                sfStroke.Parent = searchFrame
+
+                local searchBox = Instance.new("TextBox")
+                searchBox.Size = UDim2.new(1, -16, 1, 0)
+                searchBox.Position = UDim2.new(0, 10, 0, 0)
+                searchBox.BackgroundTransparency = 1
+                searchBox.PlaceholderText = "🔍 ค้นหารายการ..."
+                searchBox.PlaceholderColor3 = COLORS.textFaint
+                searchBox.Text = ""
+                searchBox.TextColor3 = COLORS.text
+                searchBox.Font = Enum.Font.Gotham
+                searchBox.TextSize = 12
+                searchBox.TextXAlignment = Enum.TextXAlignment.Left
+                searchBox.ZIndex = 1000002
+                searchBox.Parent = searchFrame
+
                 -- Option list
                 local optScroll = Instance.new("ScrollingFrame")
-                optScroll.Size = UDim2.new(1, -28, 1, -78)
-                optScroll.Position = UDim2.new(0, 14, 0, 64)
+                optScroll.Size = UDim2.new(1, -28, 1, -100)
+                optScroll.Position = UDim2.new(0, 14, 0, 94)
                 optScroll.BackgroundTransparency = 1
-                optScroll.ScrollBarThickness = 4
+                optScroll.Active = true
+                optScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+                optScroll.ScrollBarThickness = 6
                 optScroll.ScrollBarImageColor3 = COLORS.primary
+                optScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
@@ -1390,7 +1536,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 end
 
                 local optionButtons = {}
-                local function renderOptions()
+                local function renderOptions(filterText)
+                    filterText = filterText and string.lower(string.gsub(filterText, "^%s*(.-)%s*$", "%1")) or ""
                     for _, btnObj in ipairs(optionButtons) do btnObj:Destroy() end
                     optionButtons = {}
 
@@ -1398,52 +1545,59 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     if type(currentValues) ~= "table" then currentValues = {} end
 
                     for _, optVal in ipairs(currentValues) do
-                        local isSelected = isMulti and (table.find(currentSelected, optVal) ~= nil) or (currentSelected[1] == optVal)
+                        local valStr = tostring(optVal)
+                        if filterText == "" or string.find(string.lower(valStr), filterText, 1, true) then
+                            local isSelected = isMulti and (table.find(currentSelected, optVal) ~= nil) or (currentSelected[1] == optVal)
 
-                        local itemBtn = Instance.new("TextButton")
-                        itemBtn.Size = UDim2.new(1, -6, 0, 38)
-                        itemBtn.BackgroundColor3 = isSelected and COLORS.primary or COLORS.glassDeep
-                        itemBtn.BackgroundTransparency = isSelected and 0.1 or 0.2
-                        itemBtn.Text = (isSelected and "   ✓  " or "       ") .. tostring(optVal)
-                        itemBtn.TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or COLORS.text
-                        itemBtn.Font = Enum.Font.GothamBold
-                        itemBtn.TextSize = 13
-                        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
-                        itemBtn.ZIndex = 1000002
-                        itemBtn.Parent = optScroll
+                            local itemBtn = Instance.new("TextButton")
+                            itemBtn.Size = UDim2.new(1, -6, 0, 38)
+                            itemBtn.BackgroundColor3 = isSelected and COLORS.primary or COLORS.glassDeep
+                            itemBtn.BackgroundTransparency = isSelected and 0.1 or 0.2
+                            itemBtn.Text = (isSelected and "   ✓  " or "       ") .. valStr
+                            itemBtn.TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or COLORS.text
+                            itemBtn.Font = Enum.Font.GothamBold
+                            itemBtn.TextSize = 13
+                            itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+                            itemBtn.ZIndex = 1000002
+                            itemBtn.Parent = optScroll
 
-                        local ibCorner = Instance.new("UICorner")
-                        ibCorner.CornerRadius = UDim.new(0, 8)
-                        ibCorner.Parent = itemBtn
+                            local ibCorner = Instance.new("UICorner")
+                            ibCorner.CornerRadius = UDim.new(0, 8)
+                            ibCorner.Parent = itemBtn
 
-                        local ibStroke = Instance.new("UIStroke")
-                        ibStroke.Color = isSelected and COLORS.primary or COLORS.surfaceRaised
-                        ibStroke.Thickness = 1
-                        ibStroke.Parent = itemBtn
+                            local ibStroke = Instance.new("UIStroke")
+                            ibStroke.Color = isSelected and COLORS.primary or COLORS.surfaceRaised
+                            ibStroke.Thickness = 1
+                            ibStroke.Parent = itemBtn
 
-                        itemBtn.MouseButton1Click:Connect(function()
-                            playClickSound()
-                            if isMulti then
-                                local foundIdx = table.find(currentSelected, optVal)
-                                if foundIdx then
-                                    table.remove(currentSelected, foundIdx)
+                            itemBtn.MouseButton1Click:Connect(function()
+                                playClickSound()
+                                if isMulti then
+                                    local foundIdx = table.find(currentSelected, optVal)
+                                    if foundIdx then
+                                        table.remove(currentSelected, foundIdx)
+                                    else
+                                        table.insert(currentSelected, optVal)
+                                    end
+                                    updateDropdown(currentSelected)
+                                    renderOptions(searchBox.Text)
                                 else
-                                    table.insert(currentSelected, optVal)
+                                    currentSelected = { optVal }
+                                    updateDropdown(optVal)
+                                    modalOverlay:Destroy()
                                 end
-                                updateDropdown(currentSelected)
-                                renderOptions()
-                            else
-                                currentSelected = { optVal }
-                                updateDropdown(optVal)
-                                modalOverlay:Destroy()
-                            end
-                        end)
+                            end)
 
-                        table.insert(optionButtons, itemBtn)
+                            table.insert(optionButtons, itemBtn)
+                        end
                     end
                 end
 
-                renderOptions()
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                    renderOptions(searchBox.Text)
+                end)
+
+                renderOptions("")
             end)
 
             ObsidianGlassEngine.Options[id] = OptionObj
