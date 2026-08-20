@@ -12,7 +12,9 @@ local LuarmorConfig = {
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
-    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua"
+    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
+    SpecialKey = "PAYOM-VVIP-280342-PBGZ19"
 }
 
 local Players = game:GetService("Players")
@@ -27,11 +29,36 @@ local LocalPlayer = Players.LocalPlayer
 -- ==============================================================================
 -- 🔑 ระบบจัดการ Key (ดึงจากไฟล์ / ดึงจากตัวรัน / บันทึกลงเครื่อง)
 -- ==============================================================================
+local function ClearSavedKeys()
+    pcall(function()
+        if isfile and delfile then
+            if isfile(LuarmorConfig.SavedKeyFile) then delfile(LuarmorConfig.SavedKeyFile) end
+            if isfile("PayomboyZ_LuarmorKey.txt") then delfile("PayomboyZ_LuarmorKey.txt") end
+            if isfile("PayomboyZ_VVIPKey.txt") then delfile("PayomboyZ_VVIPKey.txt") end
+        end
+    end)
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+        end
+        _G.script_key = nil
+        shared.script_key = nil
+        script_key = nil
+    end)
+end
+
 local function LoadSavedKey()
     local saved = ""
     pcall(function()
-        if isfile and isfile(LuarmorConfig.SavedKeyFile) and readfile then
-            saved = readfile(LuarmorConfig.SavedKeyFile)
+        if isfile and readfile then
+            if isfile(LuarmorConfig.SavedKeyFile) then
+                saved = readfile(LuarmorConfig.SavedKeyFile)
+            elseif isfile("PayomboyZ_LuarmorKey.txt") then
+                saved = readfile("PayomboyZ_LuarmorKey.txt")
+            elseif isfile("PayomboyZ_VVIPKey.txt") then
+                saved = readfile("PayomboyZ_VVIPKey.txt")
+            end
         end
     end)
     if type(saved) == "string" then
@@ -71,6 +98,8 @@ local function SaveKey(userKey)
     pcall(function()
         if writefile then
             writefile(LuarmorConfig.SavedKeyFile, userKey)
+            writefile("PayomboyZ_LuarmorKey.txt", userKey)
+            writefile("PayomboyZ_VVIPKey.txt", userKey)
         end
     end)
 end
@@ -242,127 +271,144 @@ local function PassToKeyChecker(userKey)
     
     if getgenv then getgenv().PayomboyZ_InputKey = userKey end
 
-    local ErrorWatcherActive = true
-    local connections = {}
-
-    local function cleanupConnections()
-        ErrorWatcherActive = false
-        for _, conn in ipairs(connections) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table.clear(connections)
-    end
-
-    local function checkDescendant(descendant)
-        if not ErrorWatcherActive then return end
-        pcall(function()
-            local textStr = ""
-            local nameStr = ""
-
-            if descendant:IsA("TextLabel") or descendant:IsA("TextButton") or descendant:IsA("TextBox") then
-                textStr = (descendant.Text or ""):lower()
-            end
-            nameStr = (descendant.Name or ""):lower()
-
-            local function isError(s)
-                return s:find("auth error") 
-                    or s:find("whitelist error") 
-                    or s:find("no key found") 
-                    or s:find("invalid key") 
-                    or s:find("need a script_key")
-                    or s:find("incorrect key")
-                    or s:find("key is invalid")
-            end
-
-            local isKickPrompt = false
-            if descendant:IsA("TextLabel") and (descendant.Name == "ErrorMessage" or descendant.Name == "ErrorTitle") then
-                if textStr:find("kick") or textStr:find("auth") or textStr:find("whitelist") or textStr:find("unexpected") then
-                    isKickPrompt = true
-                end
-            end
-
-            if isError(textStr) or isError(nameStr) or isKickPrompt then
-                cleanupConnections()
-
-                if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
-                    delfile(LuarmorConfig.SavedKeyFile)
-                end
-
-                pcall(function()
-                    if getgenv then
-                        getgenv().script_key = nil
-                        getgenv().PayomboyZ_InputKey = nil
-                    end
-                    _G.script_key = nil
-                    shared.script_key = nil
-                end)
-
-                if not isKickPrompt then
-                    local topGui = descendant
-                    while topGui and not topGui:IsA("ScreenGui") and topGui.Parent do
-                        topGui = topGui.Parent
-                    end
-                    if topGui and topGui:IsA("ScreenGui") then
-                        topGui.Enabled = false
-                        topGui:Destroy()
-                    else
-                        pcall(function() descendant.Parent:Destroy() end)
-                    end
-
-                    if getgenv then 
-                        getgenv().PayomboyZ_ShowUI = true 
-                        getgenv().PayomboyZ_ErrorMsg = "❌ คีย์หมดอายุหรือไม่ถูกต้อง! กรุณาใส่คีย์ใหม่"
-                    end
-
-                    loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
-                end
-            end
-        end)
-    end
-
-    local function watchContainer(container)
-        pcall(function()
-            if not container then return end
-            for _, descendant in ipairs(container:GetDescendants()) do
-                task.spawn(checkDescendant, descendant)
-            end
-            local conn = container.DescendantAdded:Connect(checkDescendant)
-            table.insert(connections, conn)
-        end)
-    end
-
-    local containers = {}
-    if pcall(function() return CoreGui end) then table.insert(containers, CoreGui) end
-    if pcall(function() return LocalPlayer:FindFirstChild("PlayerGui") end) and LocalPlayer.PlayerGui then table.insert(containers, LocalPlayer.PlayerGui) end
-    pcall(function()
-        if gethui then
-            local hui = gethui()
-            if type(hui) == "table" then
-                for _, v in ipairs(hui) do
-                    if typeof(v) == "Instance" then table.insert(containers, v) end
-                end
-            elseif typeof(hui) == "Instance" then
-                table.insert(containers, hui)
-            end
-        end
-    end)
-
-    for _, container in ipairs(containers) do
-        watchContainer(container)
-    end
-
-    -- ส่ง Key เข้าสู่ตัวแปรกองกลาง Luarmor
+    -- ส่ง Key เข้าสู่ตัวแปรกองกลาง
     if getgenv then getgenv().script_key = userKey end
     if getrenv then pcall(function() getrenv().script_key = userKey end) end
     _G.script_key = userKey
     shared.script_key = userKey
     script_key = userKey
 
+    -- 🌟 ถ้าเป็นคีย์พิเศษ PAYOM-VVIP-280342-PBGZ19 ให้ยิงตรงไปที่ Github LoaderURL (ไม่ผ่าน Luarmor & ไม่ติด HWID)
+    if userKey == LuarmorConfig.SpecialKey then
+        local loaderLoaded = false
+        pcall(function()
+            local paths = {
+                "loader.txt",
+                "Loader.txt",
+                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+            }
+            if isfile and readfile then
+                for _, p in ipairs(paths) do
+                    if isfile(p) then
+                        local code = readfile(p)
+                        if code and #code > 0 then
+                            local fn = loadstring(code)
+                            if fn then
+                                loaderLoaded = true
+                                fn()
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        if not loaderLoaded then
+            pcall(function()
+                loadstring(game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
+            end)
+        end
+        return
+    end
+
+    -- 🔒 Luarmor Verification — fast polling + kick hook
+    local watchActive = true
+    local watchStart = tick()
+
+    local function onLuarmorError()
+        if not watchActive then return end
+        watchActive = false
+        ClearSavedKeys()
+        if getgenv then
+            getgenv().PayomboyZ_ShowUI = true
+            getgenv().PayomboyZ_ErrorMsg = "❌ คีย์ผิดหรือหมดอายุ! กรุณากรอกคีย์ใหม่"
+        end
+        task.spawn(function()
+            loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
+        end)
+    end
+
+    -- ── Hook 1: ดัก LocalPlayer:Kick() ผ่าน __namecall (ก่อน kick เกิดขึ้น) ──
+    local kickHooked = false
+    pcall(function()
+        if getrawmetatable and setreadonly and newcclosure then
+            local mt = getrawmetatable(game)
+            local oldNamecall = mt.__namecall
+            setreadonly(mt, false)
+            mt.__namecall = newcclosure(function(self, ...)
+                local method = ""
+                pcall(function() method = getnamecallmethod() end)
+                if method == "Kick" and self == LocalPlayer and watchActive then
+                    onLuarmorError()
+                    return  -- ไม่ kick
+                end
+                return oldNamecall(self, ...)
+            end)
+            setreadonly(mt, true)
+            kickHooked = true
+        end
+    end)
+
+    -- ── Hook 2: Polling 50ms สแกนหา Luarmor error GUI และทำลายก่อนผู้ใช้คลิก Leave ──
+    local function isLuarmorError(s)
+        s = s:lower()
+        return s:find("auth error") or s:find("no key found") or s:find("need a script_key")
+            or s:find("invalid key") or s:find("key is invalid") or s:find("not whitelisted")
+            or s:find("whitelist error") or s:find("incorrect key")
+    end
+
+    task.spawn(function()
+        while watchActive and (tick() - watchStart) < 45 do
+            task.wait(0.05)  -- ตรวจสอบทุก 50ms — เร็วกว่า event-based มาก
+            pcall(function()
+                local toScan = {CoreGui}
+                pcall(function() if LocalPlayer.PlayerGui then table.insert(toScan, LocalPlayer.PlayerGui) end end)
+                pcall(function()
+                    if gethui then
+                        local h = gethui()
+                        if typeof(h) == "Instance" then table.insert(toScan, h)
+                        elseif type(h) == "table" then
+                            for _, v in ipairs(h) do
+                                if typeof(v) == "Instance" then table.insert(toScan, v) end
+                            end
+                        end
+                    end
+                end)
+
+                for _, container in ipairs(toScan) do
+                    for _, sg in ipairs(container:GetChildren()) do
+                        if sg:IsA("ScreenGui") and sg.Name ~= "PayomboyZ_SnowyLoader" and sg.Name ~= "PayomboyZ_Escape" then
+                            local found = false
+                            for _, desc in ipairs(sg:GetDescendants()) do
+                                if (desc:IsA("TextLabel") or desc:IsA("TextButton")) then
+                                    if isLuarmorError(desc.Text or "") or isLuarmorError(desc.Name or "") then
+                                        found = true
+                                        break
+                                    end
+                                end
+                            end
+                            if found then
+                                sg.Enabled = false
+                                pcall(function() sg:Destroy() end)
+                                onLuarmorError()
+                                return
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        watchActive = false
+    end)
+
+    -- ── ยิง Luarmor Loader ──
     pcall(function()
         loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
     end)
 
-    task.delay(60, cleanupConnections)
+    -- หยุด watcher หลัง 45 วิ ถ้ายังไม่ error
+    task.delay(45, function() watchActive = false end)
 end
 
 -- ==============================================================================
@@ -1480,30 +1526,54 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
         busy = true
         setButtonEnabled(redeem, false)
-        setButtonText(redeem, "Checking (1/5)...")
-        setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
 
+        -- 🌟 VVIP Key: bypass Luarmor โดยตรง
+        if key == LuarmorConfig.SpecialKey then
+            task.spawn(function()
+                setButtonText(redeem, "[1/3] Verifying VVIP...")
+                setStatus("👑 [1/3] Verifying VVIP Key...", COLORS.cyan)
+                task.wait(0.3)
+
+                setButtonText(redeem, "[2/3] Connecting...")
+                setStatus("🚀 [2/3] Bypassing Luarmor → Loading Hub...", COLORS.cyan)
+                task.wait(0.3)
+
+                setButtonText(redeem, "[3/3] Launching!")
+                setStatus("✅ [3/3] VVIP Access Granted! Launching now...", COLORS.success)
+                task.wait(0.35)
+
+                if gui and gui.Parent then gui:Destroy() end
+                PassToKeyChecker(key)
+            end)
+            return
+        end
+
+        -- 🔒 Luarmor Key: แสดง 1/5..5/5 แล้วปิด UI → ยิง Luarmor ทันที
+        -- ErrorWatcher ใน PassToKeyChecker จะจัดการถ้าคีย์ผิด/หมดอายุ โดยไม่ kick ผู้ใช้
         task.spawn(function()
-            task.wait(0.35)
-            setButtonText(redeem, "Checking (2/5)...")
-            setStatus("📡 [2/5] Connecting to Luarmor Authentication API...", COLORS.cyan)
-
-            task.wait(0.35)
-            setButtonText(redeem, "Checking (3/5)...")
-            setStatus("🛡️ [3/5] Verifying HWID signature & Whitelist...", COLORS.cyan)
-
-            task.wait(0.35)
-            setButtonText(redeem, "Checking (4/5)...")
-            setStatus("💾 [4/5] Saving valid key to local environment...", COLORS.cyan)
-
-            task.wait(0.35)
-            setButtonText(redeem, "Access Granted!")
-            setStatus("🚀 [5/5] Access Granted! Launching PayomboyZ Hub...", COLORS.success)
-
+            setButtonText(redeem, "[1/5] Checking...")
+            setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
             task.wait(0.4)
-            if gui and gui.Parent then
-                gui:Destroy()
-            end
+
+            setButtonText(redeem, "[2/5] Connecting...")
+            setStatus("📡 [2/5] Connecting to Luarmor API...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[3/5] Verifying...")
+            setStatus("🛡️ [3/5] Verifying HWID & Whitelist...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[4/5] Saving...")
+            setStatus("💾 [4/5] Saving key to device...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[5/5] Launching!")
+            setStatus("🚀 [5/5] Launching PayomboyZ Hub...", COLORS.success)
+            task.wait(0.4)
+
+            -- ปิด UI แล้วยิง Luarmor ทันที — ไม่ kick ผู้ใช้ออกจากเกม
+            -- ErrorWatcher จะสังเกตจากเบื้องหลัง ถ้า Luarmor ขึ้น error
+            if gui and gui.Parent then gui:Destroy() end
             PassToKeyChecker(key)
         end)
     end
