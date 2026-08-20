@@ -1069,7 +1069,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, userPanel)
     round(gamesTabBtn, 8)
     local gamesTabIcon = lucideIcon(gamesTabBtn, "gamepad", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.textFaint, 6)
-    local gamesTabLabel = textLabel(gamesTabBtn, "Games (7)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    local gamesTabLabel = textLabel(gamesTabBtn, "Games (11)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
     gamesTabLabel.ZIndex = 6
 
     create("Frame", {
@@ -1317,10 +1317,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, gamesScroll)
 
     local supportedGamesList = {
+        -- FREE GAMES
         {
             Name = "Attack On Titan Rev.",
             FullName = "Attack On Titan Revolution",
             PlaceId = 13379208636,
+            AltPlaceIds = { 14916516914, 14932214603 },
             IconId = 13379208636,
             Type = "FREE",
             Keywords = "AOTR • Titan Farm",
@@ -1329,6 +1331,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Name = "Anime Card Farm",
             FullName = "Anime Card Farm",
             PlaceId = 125039473548047,
+            AltPlaceIds = {},
             IconId = 125039473548047,
             Type = "FREE",
             Keywords = "Auto Pack • Reroll",
@@ -1337,6 +1340,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Name = "Arena Sniper",
             FullName = "Arena Sniper",
             PlaceId = 122446657157717,
+            AltPlaceIds = { 126042865144779, 119259569670784, 90165746516953 },
             IconId = 122446657157717,
             Type = "FREE",
             Keywords = "Auto Kill • Sniper",
@@ -1345,14 +1349,36 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Name = "Roll Anime To Fight",
             FullName = "Roll Anime To Fight",
             PlaceId = 107653945083776,
+            AltPlaceIds = {},
             IconId = 107653945083776,
             Type = "FREE",
             Keywords = "RATF • Auto Roll",
         },
         {
+            Name = "Gakuran",
+            FullName = "Gakuran",
+            PlaceId = 128736949265057,
+            AltPlaceIds = {},
+            IconId = 128736949265057,
+            Type = "FREE",
+            Keywords = "GKR • Auto Farm",
+        },
+        {
+            Name = "99 Nights",
+            FullName = "99 Night in the forest",
+            PlaceId = 126509999114328,
+            AltPlaceIds = { 79546208627805 },
+            IconId = 126509999114328,
+            Type = "FREE",
+            Keywords = "99Nights • Forest",
+        },
+
+        -- VVIP GAMES
+        {
             Name = "Mine a Mountain",
             FullName = "Mine a Mountain",
             PlaceId = 125927821145949,
+            AltPlaceIds = {},
             IconId = 125927821145949,
             Type = "VVIP",
             Keywords = "MaM • Auto Mine",
@@ -1361,6 +1387,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Name = "Murder Mystery 2",
             FullName = "Murder Mystery 2",
             PlaceId = 142823291,
+            AltPlaceIds = {},
             IconId = 142823291,
             Type = "VVIP",
             Keywords = "MM2 • Coin Farm",
@@ -1369,17 +1396,42 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Name = "Capybara Vs Plant",
             FullName = "Capybara Vs Plant",
             PlaceId = 104973076655377,
+            AltPlaceIds = {},
             IconId = 104973076655377,
             Type = "VVIP",
             Keywords = "CvsP • Auto Plant",
+        },
+        {
+            Name = "Steal An Egg",
+            FullName = "Steal An Egg",
+            PlaceId = 107778070777162,
+            AltPlaceIds = {},
+            IconId = 107778070777162,
+            Type = "VVIP",
+            Keywords = "SaE • Auto Egg",
+        },
+        {
+            Name = "Anime Expedition",
+            FullName = "Anime Expedition",
+            PlaceId = 84515722934860,
+            AltPlaceIds = {},
+            IconId = 84515722934860,
+            Type = "VVIP",
+            Keywords = "AE • Auto Expedition",
         },
     }
 
     local currentPlaceId = game.PlaceId
     for index, gameData in ipairs(supportedGamesList) do
         local isCurrentGame = (currentPlaceId == gameData.PlaceId)
-            or (gameData.Name == "Attack On Titan Rev." and currentPlaceId == 14916516914)
-            or (gameData.Name == "Arena Sniper" and currentPlaceId == 126042865144779)
+        if not isCurrentGame and gameData.AltPlaceIds then
+            for _, altId in ipairs(gameData.AltPlaceIds) do
+                if currentPlaceId == altId then
+                    isCurrentGame = true
+                    break
+                end
+            end
+        end
 
         local gameCard = create("Frame", {
             Name = "GameCard_" .. index,
@@ -1397,7 +1449,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Transparency = isCurrentGame and 0.15 or 0.75,
         }, gameCard)
 
-        -- Roblox Game Icon (rbxthumb)
+        -- Roblox Game Icon (rbxthumb with Lucide Fallback)
         local iconFrame = create("Frame", {
             Position = UDim2.fromOffset(8, 8),
             Size = UDim2.fromOffset(46, 46),
@@ -1406,11 +1458,14 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         }, gameCard)
         round(iconFrame, 8)
 
+        local fallbackGamepad = lucideIcon(iconFrame, "gamepad", UDim2.fromOffset(13, 13), UDim2.fromOffset(20, 20), COLORS.cyan, 1)
+
         local iconImg = create("ImageLabel", {
             Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1,
             Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId) .. "&w=150&h=150",
             ScaleType = Enum.ScaleType.Crop,
+            ZIndex = 2,
         }, iconFrame)
         round(iconImg, 8)
 
