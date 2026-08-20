@@ -2157,15 +2157,22 @@ end
 -- ==============================================================================
 -- 🚀 SMART AUTO-LOGIN FLOW
 -- ==============================================================================
-local passedKey = GetPassedScriptKey()
-local savedKey = LoadSavedKey()
-local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
+if getgenv and getgenv().PayomboyZ_LoggedOut then
+    getgenv().PayomboyZ_LoggedOut = nil
+    ClearSavedKeys()
+    CreateLoaderUI("✅ ออกจากระบบเรียบร้อยแล้ว กรุณากรอกคีย์ใหม่", "")
+    return
+end
 
 if getgenv and getgenv().PayomboyZ_ShowUI then
     CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
     getgenv().PayomboyZ_ShowUI = false
     return
 end
+
+local passedKey = GetPassedScriptKey()
+local savedKey = LoadSavedKey()
+local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
 
 if passedKey ~= "" then
     -- บันทึก Key ที่ผู้ใช้ใส่ในตัวรันสคริปต์ทันที และทำการเข้าใช้งานระบบโดยอัตโนมัติ
