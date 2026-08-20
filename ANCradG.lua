@@ -3508,14 +3508,29 @@ Tabs.Main:AddButton({
     end
 })
 
+getgenv().AutoSpawnSpeed = 0.4
+
 local AutoSpawnToggle = Tabs.Main:AddToggle("AutoSpawnPack", { Title = "🎲 สุ่มแพ็กอัตโนมัติ", Default = false })
 AutoSpawnToggle:OnChanged(function(state)
     getgenv().AutoSpawnPack = state
+    if not state then
+        getgenv().PauseRerollForSpawn = false
+    end
     if state then
         task.spawn(function()
             local cd = nil
             local retryCount = 0
             while getgenv().AutoSpawnPack do
+                local speed = math.clamp(tonumber(getgenv().AutoSpawnSpeed) or 0.4, 0.2, 5.0)
+                local isHighPriority = (speed <= 1.0)
+
+                -- High Priority Queue (0.2s - 1.0s): Pause rerolls while spawning packs to prioritize network bandwidth
+                if isHighPriority then
+                    getgenv().PauseRerollForSpawn = true
+                else
+                    getgenv().PauseRerollForSpawn = false
+                end
+
                 if not cd or not cd.Parent then
                     cd = getSpawnPackClickDetector()
                 end
@@ -3525,6 +3540,7 @@ AutoSpawnToggle:OnChanged(function(state)
                         Fluent:Notify({ Title = "ข้อผิดพลาด", Content = "ไม่พบปุ่มสุ่มแพ็กใน Plot!", Duration = 3 })
                         getgenv().AutoSpawnPack = false
                         AutoSpawnToggle:SetValue(false)
+                        getgenv().PauseRerollForSpawn = false
                         return
                     end
                     task.wait(1)
@@ -3544,22 +3560,35 @@ AutoSpawnToggle:OnChanged(function(state)
                 if getgenv().AutoBuyCards then
                     if activeCards == 0 then
                         pcall(fireclickdetector, cd)
-                        task.wait(0.2)
+                        task.wait(speed)
                     else
-                        task.wait(0.1)
+                        task.wait(math.min(speed, 0.15))
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
-                        task.wait(0.2)
+                        task.wait(math.max(speed, 0.2))
                     else
-                        task.wait(0.08)
+                        task.wait(speed)
                     end
                 end
             end
+            getgenv().PauseRerollForSpawn = false
         end)
     end
 end)
+
+local AutoSpawnSlider = Tabs.Main:AddSlider("AutoSpawnSpeed", {
+    Title = "⚡ ความเร็วในการสุ่มแพ็ก (วินาที)",
+    Description = "ปรับระยะเวลาหน่วงในการสุ่มแพ็ก (0.2s - 5.0s) | ช่วง 0.2s - 1.0s ระบบจะจัดคิวให้มีลำดับความสำคัญสูงสุด (High Priority)",
+    Default = 0.4,
+    Min = 0.2,
+    Max = 5.0,
+    Rounding = 1,
+    Callback = function(Value)
+        getgenv().AutoSpawnSpeed = tonumber(Value) or 0.4
+    end
+})
 
 local RarityDropdown = Tabs.Main:AddDropdown("SelectedRarities", {
     Title = "✨ เลือกความหายากที่ต้องการซื้อ",
@@ -4138,14 +4167,14 @@ AutoRerollToggle:OnChanged(function(state)
 
                 local finishedThisCard = false
                 while getgenv().AutoReroll and not finishedThisCard do
-                    if getgenv().PauseReroll then
+                    if getgenv().PauseReroll or getgenv().PauseRerollForSpawn then
                         pcall(function()
                             local char = LocalPlayer.Character
                             if char and char:FindFirstChild("Humanoid") then
                                 char.Humanoid:UnequipTools()
                             end
                         end)
-                        task.wait(1)
+                        task.wait(0.5)
                         continue
                     end
 
@@ -4359,14 +4388,14 @@ AutoRankRerollToggle:OnChanged(function(state)
 
                 local finishedThisCard = false
                 while getgenv().AutoRankReroll and not finishedThisCard do
-                    if getgenv().PauseReroll then
+                    if getgenv().PauseReroll or getgenv().PauseRerollForSpawn then
                         pcall(function()
                             local char = LocalPlayer.Character
                             if char and char:FindFirstChild("Humanoid") then
                                 char.Humanoid:UnequipTools()
                             end
                         end)
-                        task.wait(1)
+                        task.wait(0.5)
                         continue
                     end
 
@@ -4634,8 +4663,12 @@ local function parseSuffixValue(txt)
     return nOnly or 0
 end
 
-Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing)")
-local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card)", Default = false })
+Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing) ⚠️ **ห้ามเปิดพร้อมรีโรล**")
+local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { 
+    Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card) ⚠️ [ห้ามเปิดพร้อมรีโรล]", 
+    Description = "⚠️ **ห้ามเปิดพร้อมรีโรล** (เพื่อป้องกันการยิงรีโมทขายแพ็กชนกับระบบรีโรล)", 
+    Default = false 
+})
 local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
     Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้",
     Values = RaritiesList,
@@ -4701,6 +4734,9 @@ end
 InvBalToggle:OnChanged(function(state)
     getgenv().InventoryBalancing = state
     if state then
+        if getgenv().AutoReroll or getgenv().AutoRankReroll then
+            Fluent:Notify({ Title = "คำเตือนระบบ", Content = "⚠️ ห้ามเปิดโหมดเคลียร์ขยะพร้อมกับโหมดรีโรล! เพื่อป้องกันปิงสูงและข้อผิดพลาด", Duration = 5 })
+        end
         task.spawn(function()
             while getgenv().InventoryBalancing do
                 pcall(function()
