@@ -4,6 +4,10 @@
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
 local LuarmorConfig = {
     ScriptId = "PayomboyZ_Hub",
     SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
@@ -24,7 +28,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local MarketplaceService = game:GetService("MarketplaceService")
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
 
 -- ==============================================================================
 -- 🔑 ระบบจัดการ Key (ดึงจากไฟล์ / ดึงจากตัวรัน / บันทึกลงเครื่อง)
@@ -265,20 +269,12 @@ end
 local function PassToKeyChecker(userKey)
     if not userKey or userKey == "" then return end
     userKey = userKey:gsub("%s+", "")
-    
-    -- บันทึกคีย์ลงไฟล์ทันที 100%
+
     SaveKey(userKey)
-    
     if getgenv then getgenv().PayomboyZ_InputKey = userKey end
 
-    -- ส่ง Key เข้าสู่ตัวแปรกองกลาง
-    if getgenv then getgenv().script_key = userKey end
-    if getrenv then pcall(function() getrenv().script_key = userKey end) end
-    _G.script_key = userKey
-    shared.script_key = userKey
-    script_key = userKey
-
-    -- 🌟 ถ้าเป็นคีย์พิเศษ PAYOM-VVIP-280342-PBGZ19 ให้ยิงตรงไปที่ Github LoaderURL (ไม่ผ่าน Luarmor & ไม่ติด HWID)
+    -- 🌟 VVIP Key: bypass Luarmor โดยตรง — ห้าม set script_key เป็น VVIP key
+    -- เพราะ VVIP key ไม่มีใน Luarmor database, LoaderURL อาจ Luarmor-protected
     if userKey == LuarmorConfig.SpecialKey then
         local loaderLoaded = false
         pcall(function()
@@ -303,7 +299,6 @@ local function PassToKeyChecker(userKey)
                 end
             end
         end)
-
         if not loaderLoaded then
             pcall(function()
                 loadstring(game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
@@ -311,6 +306,13 @@ local function PassToKeyChecker(userKey)
         end
         return
     end
+
+    -- 🔒 Luarmor Key: set script_key เฉพาะคีย์ที่จะผ่าน Luarmor เท่านั้น
+    if getgenv then getgenv().script_key = userKey end
+    if getrenv then pcall(function() getrenv().script_key = userKey end) end
+    _G.script_key = userKey
+    shared.script_key = userKey
+    script_key = userKey
 
     -- 🔒 Luarmor Verification — fast polling + kick hook
     local watchActive = true
@@ -330,7 +332,6 @@ local function PassToKeyChecker(userKey)
     end
 
     -- ── Hook 1: ดัก LocalPlayer:Kick() ผ่าน __namecall (ก่อน kick เกิดขึ้น) ──
-    local kickHooked = false
     pcall(function()
         if getrawmetatable and setreadonly and newcclosure then
             local mt = getrawmetatable(game)
@@ -346,7 +347,6 @@ local function PassToKeyChecker(userKey)
                 return oldNamecall(self, ...)
             end)
             setreadonly(mt, true)
-            kickHooked = true
         end
     end)
 
@@ -360,7 +360,7 @@ local function PassToKeyChecker(userKey)
 
     task.spawn(function()
         while watchActive and (tick() - watchStart) < 45 do
-            task.wait(0.05)  -- ตรวจสอบทุก 50ms — เร็วกว่า event-based มาก
+            task.wait(0.05)
             pcall(function()
                 local toScan = {CoreGui}
                 pcall(function() if LocalPlayer.PlayerGui then table.insert(toScan, LocalPlayer.PlayerGui) end end)
@@ -407,7 +407,6 @@ local function PassToKeyChecker(userKey)
         loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
     end)
 
-    -- หยุด watcher หลัง 45 วิ ถ้ายังไม่ error
     task.delay(45, function() watchActive = false end)
 end
 
@@ -415,14 +414,22 @@ end
 -- 🎨 SNOWY HUB STYLE MODERN LOADER UI GENERATOR FOR PAYOMBOYZ HUB
 -- ==============================================================================
 local function CreateLoaderUI(initialStatus, defaultKeyText)
-    local parent = CoreGui
+    local parent = nil
     pcall(function()
         if type(gethui) == "function" then parent = gethui() end
     end)
+    if not parent then
+        pcall(function() parent = CoreGui end)
+    end
+    if not parent then
+        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
+    end
 
     pcall(function()
-        local previous = parent:FindFirstChild("PayomboyZ_SnowyLoader")
-        if previous then previous:Destroy() end
+        if parent then
+            local previous = parent:FindFirstChild("PayomboyZ_SnowyLoader")
+            if previous then previous:Destroy() end
+        end
     end)
 
     local gui = Instance.new("ScreenGui")
@@ -1139,7 +1146,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local stats = {
         { "Executor", executorName(), "monitor", COLORS.textMuted },
         { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
-        { "HWID", readableHwid() and "Available" or "Luarmor Managed", "shield", COLORS.textMuted },
+        { "HWID", readableHwid() and "Available" or "Special VVIP Key", "shield", COLORS.textMuted },
         { "Game", detectedGame, "gamepad", COLORS.success },
     }
     for index, item in ipairs(stats) do
@@ -1279,10 +1286,10 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         Transparency = 0.3,
     }, secureBadge)
     lucideIcon(secureBadge, "shield-check", UDim2.fromOffset(12, 9), UDim2.fromOffset(16, 16), COLORS.success, 5)
-    textLabel(secureBadge, "LUARMOR VERIFIED", UDim2.fromOffset(36, 0), UDim2.new(1, -44, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
+    textLabel(secureBadge, "SPECIAL VVIP KEY", UDim2.fromOffset(36, 0), UDim2.new(1, -44, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
 
     textLabel(mainPanel, "SECURE ACCESS", UDim2.fromOffset(22, 174), UDim2.new(1, -44, 0, 16), Enum.Font.GothamBold, 9, COLORS.cyan)
-    textLabel(mainPanel, "Enter your Luarmor key to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
+    textLabel(mainPanel, "Enter key (PAYOM-VVIP-280342-PBGZ19) to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
 
     -- Key Input
     local input = create("TextBox", {
@@ -1294,7 +1301,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         BorderSizePixel = 0,
         ClearTextOnFocus = false,
         Font = Enum.Font.GothamMedium,
-        PlaceholderText = "Paste your Luarmor key",
+        PlaceholderText = "Paste key (PAYOM-VVIP-280342-PBGZ19)",
         PlaceholderColor3 = COLORS.textMuted,
         Text = defaultKeyText or "",
         TextColor3 = COLORS.text,
@@ -1520,7 +1527,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         local rawKey = input.Text or ""
         local key = rawKey:gsub("%s+", "")
         if key == "" then
-            setStatus("กรุณากรอก Luarmor key ก่อนกดปุ่มนี้", COLORS.warning)
+            setStatus("กรุณากรอก Key ก่อนกดปุ่มนี้", COLORS.warning)
             return
         end
 
@@ -1549,7 +1556,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         end
 
         -- 🔒 Luarmor Key: แสดง 1/5..5/5 แล้วปิด UI → ยิง Luarmor ทันที
-        -- ErrorWatcher ใน PassToKeyChecker จะจัดการถ้าคีย์ผิด/หมดอายุ โดยไม่ kick ผู้ใช้
+        -- ErrorWatcher ใน PassToKeyChecker จะจัดการถ้าคีย์ผิด/หมดอายุ
         task.spawn(function()
             setButtonText(redeem, "[1/5] Checking...")
             setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
@@ -1572,7 +1579,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             task.wait(0.4)
 
             -- ปิด UI แล้วยิง Luarmor ทันที — ไม่ kick ผู้ใช้ออกจากเกม
-            -- ErrorWatcher จะสังเกตจากเบื้องหลัง ถ้า Luarmor ขึ้น error
+            -- ถ้า Luarmor ขึ้น error, ErrorWatcher จะลบคีย์ผิด + เปิด UI ใหม่โดยอัตโนมัติ
             if gui and gui.Parent then gui:Destroy() end
             PassToKeyChecker(key)
         end)
@@ -1608,7 +1615,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         if hwid and copyText(hwid) then
             setStatus("คัดลอก HWID เรียบร้อยแล้ว!", COLORS.success)
         else
-            setStatus("Luarmor จะผูก HWID ของคุณโดยอัตโนมัติ", COLORS.warning)
+            setStatus("ระบบเปิดใช้งานด้วย Special Key VVIP", COLORS.success)
         end
     end)
 
@@ -1893,17 +1900,7 @@ elseif savedKey ~= "" then
     end)
 
     EscBtn.MouseButton1Click:Connect(function()
-        if isfile and isfile(LuarmorConfig.SavedKeyFile) and delfile then
-            delfile(LuarmorConfig.SavedKeyFile)
-        end
-        pcall(function()
-            if getgenv then
-                getgenv().script_key = nil
-                getgenv().PayomboyZ_InputKey = nil
-            end
-            _G.script_key = nil
-            shared.script_key = nil
-        end)
+        ClearSavedKeys()
         EscBtn.Text = "✅ ลบคีย์แล้ว! กำลังเปิดหน้าต่างใหม่..."
         EscBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         task.wait(1.2)
