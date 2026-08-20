@@ -1,0 +1,4668 @@
+--[[
+    ======================================================================================
+    🔥 PAYOMBOYZ HUB - ANIME EXPEDITION (AUTOMATION ENGINE)
+    🎨 UI ENGINE: OBSIDIAN GLASSMORPHIC 2
+    🇹🇭 LANGUAGE: THAI (ภาษาไทย)
+    ======================================================================================
+--]]
+
+repeat task.wait() until game:IsLoaded()
+
+if game.PlaceId ~= 84515722934860 then
+    return
+end
+
+print("🔥 [PayomboyZ HUB] โหลดสคริปต์สำเร็จ - เวอร์ชัน 1.2.13 (Obsidian Glass Edition)")
+
+-- ---------------------------------------------------------------------------------------
+-- 🛡️ 1. ระบบตรวจสอบความพร้อมของ PLAYERGUI
+-- ---------------------------------------------------------------------------------------
+do
+    local Players = game:GetService("Players")
+
+    local MINIMUM_GUI_COUNT = 50
+    local MAX_WAIT_TIME = 30
+    local CHECK_INTERVAL = 1
+
+    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui", 10)
+
+    if not playerGui then
+        warn("❌ [PayomboyZ HUB] ไม่พบ PlayerGui - กำลังตัดการเชื่อมต่อ...")
+        Players.LocalPlayer:Kick("PlayerGui โหลดไม่สำเร็จ กรุณาเข้าเกมใหม่อีกครั้ง")
+        return
+    end
+
+    local elapsedTime = 0
+
+    while elapsedTime < MAX_WAIT_TIME do
+        local guiCount = #playerGui:GetChildren()
+
+        if guiCount >= MINIMUM_GUI_COUNT then
+            break
+        end
+
+        task.wait(CHECK_INTERVAL)
+        elapsedTime = elapsedTime + CHECK_INTERVAL
+    end
+
+    local finalCount = #playerGui:GetChildren()
+    if finalCount < MINIMUM_GUI_COUNT then
+        warn(string.format("❌ [PayomboyZ HUB] PlayerGui โหลดไม่ครบหลังจาก %d วินาที (%d/%d) - กำลังตัดการเชื่อมต่อ...", MAX_WAIT_TIME, finalCount, MINIMUM_GUI_COUNT))
+        Players.LocalPlayer:Kick(string.format("PlayerGui โหลดไม่สมบูรณ์ (%d/%d) กรุณาเข้าเกมใหม่อีกครั้ง", finalCount, MINIMUM_GUI_COUNT))
+        return
+    end
+end
+
+-- ---------------------------------------------------------------------------------------
+-- ⚡ 2. ระบบป้องกันการหลุดออกจากเกม (ANTI-AFK & EDGE CLICKER)
+-- ---------------------------------------------------------------------------------------
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+task.spawn(function()
+    local camera = workspace.CurrentCamera
+
+    while true do
+        task.wait(math.random(30, 60))
+
+        pcall(function()
+            local screenSize = camera.ViewportSize
+
+            local edges = {
+                {x = 10, y = 10},
+                {x = screenSize.X - 10, y = 10},
+                {x = 10, y = screenSize.Y - 10},
+                {x = screenSize.X - 10, y = screenSize.Y - 10},
+                {x = screenSize.X / 2, y = 10},
+                {x = screenSize.X / 2, y = screenSize.Y - 10},
+            }
+
+            local edge = edges[math.random(1, #edges)]
+
+            VirtualInputManager:SendMouseButtonEvent(edge.x, edge.y, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(edge.x, edge.y, 0, false, game, 0)
+        end)
+    end
+end)
+
+-- ---------------------------------------------------------------------------------------
+-- ⚙️ 3. การตั้งค่าสคริปต์หลัก (_G.Config)
+-- ---------------------------------------------------------------------------------------
+_G.Config = _G.Config or {}
+local HORST_ENABLED = _G.Config.Horst == true
+local GEM_TARGET = _G.Config.GemTarget
+local UPDATE_INTERVAL = 30
+local TOGGLE_RENDER3D = _G.Config.ToggleRender3D == true
+local CHANGE_ACC_SECRETS = _G.Config.Change_Acc_Secrets == true
+
+-- UI Toggle Flags Initializer
+_G.AutoFarmEnabled = (_G.AutoFarmEnabled == nil) and true or _G.AutoFarmEnabled
+_G.AutoPlaceUpgrade = (_G.AutoPlaceUpgrade == nil) and true or _G.AutoPlaceUpgrade
+_G.AutoWalkEnabled = (_G.AutoWalkEnabled == nil) and true or _G.AutoWalkEnabled
+_G.AutoSummonEnabled = (_G.AutoSummonEnabled == nil) and true or _G.AutoSummonEnabled
+_G.AutoTraitRerollEnabled = (_G.AutoTraitRerollEnabled == nil) and true or _G.AutoTraitRerollEnabled
+_G.AntiAFKEnabled = (_G.AntiAFKEnabled == nil) and true or _G.AntiAFKEnabled
+
+local SUMMON_CONFIG = _G.Config.SummonUnits or {}
+if type(SUMMON_CONFIG) == "string" then
+    if SUMMON_CONFIG:lower() == "auto" then
+        SUMMON_CONFIG = {}
+    else
+        SUMMON_CONFIG = {SUMMON_CONFIG}
+    end
+end
+
+local MYTHIC_UNITS = {"Cursed Student", "Elf Mage", "Flame Emperor", "Hollow", "Lady Giant", "Puppet", "Salmon Sorcerer", "String Demon"}
+local SECRET_UNITS = {"Shadow"}
+local hasSummonConfig = _G.Config.SummonUnits and (
+    (type(_G.Config.SummonUnits) == "string" and _G.Config.SummonUnits ~= "") or
+    (type(_G.Config.SummonUnits) == "table" and #_G.Config.SummonUnits > 0)
+)
+
+local TRAIT_REROLL_CONFIG = _G.Config.TraitReroll or {}
+
+local TRAIT_REROLL_PRIORITY = {
+    "Shadow",
+    "Puppet",
+    "Cursed Student",
+    "Lady Giant",
+    "Elf Mage",
+    "Flame Emperor",
+    "Hollow",
+    "Salmon Sorcerer",
+    "String Demon"
+}
+
+local DESCRIPTION_MODE = nil
+if GEM_TARGET and not hasSummonConfig then
+    DESCRIPTION_MODE = "GEM"
+elseif hasSummonConfig then
+    DESCRIPTION_MODE = "SUMMON"
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 📌 4. ระบบตรวจสอบแบนเนอร์ปัจจุบัน (CURRENT BANNER CHECK)
+-- ---------------------------------------------------------------------------------------
+local function checkCurrentBanner()
+    local success, result = pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+
+        Nodes.TOGGLE_MENU:FireSelf("Summon", true)
+        task.wait(2)
+
+        local summonGui = LocalPlayer.PlayerGui:FindFirstChild("Summon")
+        if not summonGui then return {} end
+
+        local foundUnits = {}
+        local blacklist = {["Summon"]=true, ["Settings"]=true, ["Rates"]=true, ["Mythic Unit"]=true}
+
+        for _, child in ipairs(summonGui:GetDescendants()) do
+            if child:IsA("TextLabel") and child.Visible then
+                local text = child.Text or child.ContentText or ""
+                if text ~= "" and text:match("^[A-Z]") and #text >= 3 and #text < 30 then
+                    if not blacklist[text] then
+                        local hasFolder = false
+                        local current = child.Parent
+                        for i = 1, 5 do
+                            if not current then break end
+                            if current:IsA("Folder") then hasFolder = true; break end
+                            current = current.Parent
+                        end
+                        if hasFolder and not foundUnits[text] then foundUnits[text] = true end
+                    end
+                end
+            end
+        end
+
+        Nodes.TOGGLE_MENU:FireSelf("Summon", false)
+        task.wait(0.5)
+
+        local unitList = {}
+        for unitName, _ in pairs(foundUnits) do table.insert(unitList, unitName) end
+        return unitList
+    end)
+    return success and result or {}
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🌐 5. ระบบเชื่อมต่อ HORST API (HORST API INTEGRATION)
+-- ---------------------------------------------------------------------------------------
+if HORST_ENABLED then
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/HorstSpaceX/last_update/main/on_loaded.lua"))()
+    end)
+
+    if success then
+        if GEM_TARGET then
+        else
+        end
+    else
+        warn("❌ [PayomboyZ HUB] โหลด Horst API ไม่สำเร็จ:", err)
+        HORST_ENABLED = false
+    end
+    task.wait(1)
+end
+
+_G.ScriptShouldStop = false
+
+-- ---------------------------------------------------------------------------------------
+-- 🎨 6. OBSIDIAN GLASSMORPHIC 2 UI ENGINE (PAYOMBOYZ HUB ENGINE)
+-- ---------------------------------------------------------------------------------------
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local SoundService = game:GetService("SoundService")
+
+local COLORS = {
+    backdrop = Color3.fromRGB(12, 5, 8),
+    shell = Color3.fromRGB(20, 10, 14),
+    glass = Color3.fromRGB(32, 14, 20),
+    glassDeep = Color3.fromRGB(25, 11, 16),
+    glassRaised = Color3.fromRGB(48, 18, 28),
+    userPanel = Color3.fromRGB(28, 12, 18),
+    surface = Color3.fromRGB(42, 18, 26),
+    surfaceRaised = Color3.fromRGB(58, 24, 34),
+    surfaceHover = Color3.fromRGB(78, 30, 44),
+    surfacePressed = Color3.fromRGB(34, 14, 20),
+    input = Color3.fromRGB(20, 9, 13),
+    inputFocus = Color3.fromRGB(36, 14, 22),
+    divider = Color3.fromRGB(140, 40, 60),
+    primary = Color3.fromRGB(255, 45, 85),
+    primaryHover = Color3.fromRGB(255, 75, 110),
+    primaryPressed = Color3.fromRGB(210, 30, 65),
+    secondary = Color3.fromRGB(52, 18, 28),
+    text = Color3.fromRGB(255, 255, 255),
+    textMuted = Color3.fromRGB(242, 218, 228),
+    textFaint = Color3.fromRGB(210, 168, 182),
+    cyan = Color3.fromRGB(255, 55, 85),
+    success = Color3.fromRGB(46, 224, 140),
+    warning = Color3.fromRGB(255, 185, 70),
+    danger = Color3.fromRGB(255, 60, 60),
+    disabled = Color3.fromRGB(50, 25, 32),
+}
+
+local ObsidianGlassEngine = { Options = {} }
+
+local function playClickSound()
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://6895079853"
+        sound.Volume = 0.3
+        sound.Parent = SoundService
+        sound:Play()
+        sound.Ended:Connect(function() sound:Destroy() end)
+    end)
+end
+
+local customAvatarAsset = nil
+local function loadCustomAvatarImage()
+    if customAvatarAsset then return customAvatarAsset end
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local fileName = "payomboyz_avatar.jpg"
+    
+    pcall(function()
+        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+            local getAsset = getcustomasset or getsynasset
+            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+            if not isFileExist then
+                local imageBytes = game:HttpGet(avatarUrl)
+                if imageBytes and #imageBytes > 0 then
+                    writefile(fileName, imageBytes)
+                end
+            end
+            if typeof(isfile) == "function" and isfile(fileName) then
+                customAvatarAsset = getAsset(fileName)
+            end
+        end
+    end)
+
+    if not customAvatarAsset then
+        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+    end
+    return customAvatarAsset
+end
+
+function ObsidianGlassEngine:Notify(cfg)
+    pcall(function()
+        local title = cfg.Title or "ระบบ PayomboyZ"
+        local content = cfg.Content or ""
+        local duration = cfg.Duration or 4
+        
+        local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        local notifHolder = parentGui:FindFirstChild("ObsidianGlass_NotifHolder")
+        if not notifHolder then
+            notifHolder = Instance.new("ScreenGui")
+            notifHolder.Name = "ObsidianGlass_NotifHolder"
+            notifHolder.ResetOnSpawn = false
+            notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            notifHolder.DisplayOrder = 999999
+            notifHolder.Parent = parentGui
+        end
+        
+        local toast = Instance.new("Frame")
+        toast.Size = UDim2.new(0, 300, 0, 65)
+        toast.Position = UDim2.new(1, 20, 1, -85)
+        toast.BackgroundColor3 = COLORS.glass
+        toast.BackgroundTransparency = 0.15
+        toast.BorderSizePixel = 0
+        toast.Parent = notifHolder
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = toast
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = COLORS.cyan
+        stroke.Thickness = 1.5
+        stroke.Parent = toast
+        
+        local tTitle = Instance.new("TextLabel")
+        tTitle.Size = UDim2.new(1, -20, 0, 22)
+        tTitle.Position = UDim2.new(0, 10, 0, 6)
+        tTitle.BackgroundTransparency = 1
+        tTitle.Text = title
+        tTitle.TextColor3 = COLORS.cyan
+        tTitle.Font = Enum.Font.GothamBold
+        tTitle.TextSize = 13
+        tTitle.TextXAlignment = Enum.TextXAlignment.Left
+        tTitle.Parent = toast
+        
+        local tDesc = Instance.new("TextLabel")
+        tDesc.Size = UDim2.new(1, -20, 0, 32)
+        tDesc.Position = UDim2.new(0, 10, 0, 26)
+        tDesc.BackgroundTransparency = 1
+        tDesc.Text = content
+        tDesc.TextColor3 = COLORS.text
+        tDesc.Font = Enum.Font.Gotham
+        tDesc.TextSize = 11
+        tDesc.TextWrapped = true
+        tDesc.TextXAlignment = Enum.TextXAlignment.Left
+        tDesc.Parent = toast
+        
+        playClickSound()
+        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -320, 1, -85) }):Play()
+        task.delay(duration, function()
+            if toast and toast.Parent then
+                local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
+                tw:Play()
+                tw.Completed:Connect(function() toast:Destroy() end)
+            end
+        end)
+    end)
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🐔 6.1. ระบบไก่ตัน FULL-SCREEN AFK MODE DASHBOARD ENGINE
+-- ---------------------------------------------------------------------------------------
+local AFK_MAX_LOGS  = 40
+local AFK_MAX_UNITS = 30
+local AFK_MAX_ROWS  = 30
+local AFK_FPS_CAP   = 10
+
+local AFK_COLOR = {
+    bg        = Color3.fromRGB(0, 0, 0),
+    panel     = Color3.fromRGB(28, 28, 30),
+    raised    = Color3.fromRGB(44, 44, 46),
+    separator = Color3.fromRGB(56, 56, 58),
+    label     = Color3.fromRGB(255, 255, 255),
+    label2    = Color3.fromRGB(152, 152, 158),
+    label3    = Color3.fromRGB(110, 110, 115),
+    blue      = Color3.fromRGB(10, 132, 255),
+    green     = Color3.fromRGB(48, 209, 88),
+    red       = Color3.fromRGB(255, 69, 58),
+    orange    = Color3.fromRGB(255, 159, 10),
+    yellow    = Color3.fromRGB(255, 214, 10),
+    teal      = Color3.fromRGB(100, 210, 255),
+    cyan      = Color3.fromRGB(255, 55, 85),
+}
+
+local AFK_TOUCH = (function()
+    local ok, touch = pcall(function()
+        return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+    end)
+    return ok and touch == true
+end)()
+
+local AFK = {
+    on          = false,
+    gui         = nil,
+    conns       = {},
+    startAt     = 0,
+    lastSec     = -1,
+    wantShow    = false,
+    wantHide    = false,
+    wantSeed    = false,
+    logDirty    = false,
+    unitDirty   = false,
+    resDirty    = false,
+    pool        = {},
+    poolHead    = 0,
+    unitCards   = {},
+    resRows     = {},
+    prevFps     = nil,
+    prev3D      = nil,
+    prevQuality = nil,
+    stat        = {},
+    toggleRef   = nil,
+    logHistory  = {},
+    startGems   = 0,
+    startGold   = 0,
+    cachedData  = { Gems = 0, Gold = 0, RR = 0, Level = 0, Units = {} },
+    unitScroll  = nil,
+    unitCardPool= {},
+}
+
+-- Asynchronous Background Stat & Unit Poller Thread (Zero Lag)
+task.spawn(function()
+    while true do
+        task.wait(1)
+        pcall(function()
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+            
+            -- Fetch Primary Replica Data
+            local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+            if replica and replica.Data then
+                AFK.cachedData.Level = replica.Data.Level or AFK.cachedData.Level or 0
+                local itemData = replica.Data.ItemData or {}
+                if itemData.Gem then AFK.cachedData.Gems = (type(itemData.Gem) == "table" and itemData.Gem.Amount) or itemData.Gem end
+                if itemData.Gold then AFK.cachedData.Gold = (type(itemData.Gold) == "table" and itemData.Gold.Amount) or itemData.Gold end
+                if itemData.TraitReroll then AFK.cachedData.RR = (type(itemData.TraitReroll) == "table" and itemData.TraitReroll.Amount) or itemData.TraitReroll end
+            end
+
+            -- Fallback Fetch via GET_DATA_VALUE
+            pcall(function()
+                local itemVal = Nodes.GET_DATA_VALUE:InvokeSelf("ItemData")
+                if type(itemVal) == "table" then
+                    if itemVal.Gem and itemVal.Gem.Amount then AFK.cachedData.Gems = itemVal.Gem.Amount end
+                    if itemVal.Gold and itemVal.Gold.Amount then AFK.cachedData.Gold = itemVal.Gold.Amount end
+                    if itemVal.TraitReroll and itemVal.TraitReroll.Amount then AFK.cachedData.RR = itemVal.TraitReroll.Amount end
+                end
+            end)
+
+            -- Fetch Player Level Fallback
+            pcall(function()
+                local lvlVal = Nodes.GET_DATA_VALUE:InvokeSelf("Level")
+                if type(lvlVal) == "number" and lvlVal > 0 then AFK.cachedData.Level = lvlVal end
+            end)
+
+            -- Fetch Unit Inventory & Equipped Units
+            pcall(function()
+                local unitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+                if type(unitData) == "table" then
+                    local parsedUnits = {}
+                    for fullKey, data in pairs(unitData) do
+                        if type(data) == "table" then
+                            local displayName = data.DisplayName or fullKey:split("#")[1] or "Unit"
+                            local equipSlot = data.Equip or data.EquippedSlot or nil
+                            local trait = data.Trait or "None"
+                            local shiny = data.Shiny or false
+                            local rarity = data.Rarity or "Unknown"
+
+                            table.insert(parsedUnits, {
+                                Name = displayName,
+                                FullKey = fullKey,
+                                Equip = equipSlot,
+                                Trait = trait,
+                                Shiny = shiny,
+                                Rarity = rarity,
+                            })
+                        end
+                    end
+                    table.sort(parsedUnits, function(a, b)
+                        local aEq = a.Equip and 1 or 0
+                        local bEq = b.Equip and 1 or 0
+                        return aEq > bEq
+                    end)
+                    AFK.cachedData.Units = parsedUnits
+                    AFK.unitDirty = true
+                end
+            end)
+        end)
+    end
+end)
+
+local function PayomboyZLog(kind, text)
+    if not text or text == "" then return end
+    local timeStr = os.date("%H:%M:%S")
+    local line = string.format("[%s] [%s] %s", timeStr, string.upper(kind or "INFO"), text)
+    table.insert(AFK.logHistory, 1, line)
+    if #AFK.logHistory > 100 then table.remove(AFK.logHistory) end
+    if AFK.on then AFK.logDirty = true end
+end
+
+local function afkEnterLowPower()
+    pcall(function()
+        if getfpscap then AFK.prevFps = getfpscap() end
+        if setfpscap then setfpscap(AFK_FPS_CAP) end
+    end)
+    pcall(function()
+        AFK.prevQuality = settings().Rendering.QualityLevel
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    pcall(function()
+        if RunService.Set3dRenderingEnabled then
+            AFK.prev3D = true
+            RunService:Set3dRenderingEnabled(false)
+        end
+    end)
+end
+
+local function afkExitLowPower()
+    pcall(function()
+        if setfpscap then setfpscap((AFK.prevFps and AFK.prevFps > 0) and AFK.prevFps or 240) end
+    end)
+    pcall(function()
+        if AFK.prevQuality then settings().Rendering.QualityLevel = AFK.prevQuality end
+    end)
+    pcall(function()
+        if AFK.prev3D and RunService.Set3dRenderingEnabled then
+            RunService:Set3dRenderingEnabled(true)
+        end
+    end)
+    AFK.prevFps, AFK.prevQuality, AFK.prev3D = nil, nil, nil
+end
+
+local function afkPushLog(text)
+    if not AFK.on or not AFK.logList or not text then return end
+    AFK.poolHead = AFK.poolHead % AFK_MAX_LOGS + 1
+    local row = AFK.pool[AFK.poolHead]
+    if not row then return end
+    row.Text = text
+    row.Visible = true
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r and r.Visible then
+            r.LayoutOrder = (AFK.poolHead - i) % AFK_MAX_LOGS
+        end
+    end
+end
+
+local function afkSeedLogs()
+    for i = 1, AFK_MAX_LOGS do
+        local r = AFK.pool[i]
+        if r then r.Visible = false end
+    end
+    AFK.poolHead = 0
+    local maxCount = math.min(#AFK.logHistory, AFK_MAX_LOGS)
+    for i = maxCount, 1, -1 do
+        afkPushLog(AFK.logHistory[i])
+    end
+end
+
+local function afkClock(sec)
+    sec = math.max(0, math.floor(sec))
+    return string.format("%02d:%02d:%02d", math.floor(sec / 3600), math.floor((sec % 3600) / 60), sec % 60)
+end
+
+local afkClose -- forward declaration
+
+local function afkOpen()
+    if AFK.on then return end
+    AFK.on = true
+    AFK.startAt = os.clock()
+    AFK.lastSec = -1
+    AFK.wantShow, AFK.wantHide = true, false
+    AFK.wantSeed = true
+    AFK.unitDirty = true
+    
+    AFK.startGems = AFK.cachedData.Gems or 0
+    AFK.startGold = AFK.cachedData.Gold or 0
+
+    PayomboyZLog("AFK", "เปิดโหมด AFK ไก่ตัน — ปิดเรนเดอร์ 3D & จำกัด 10 FPS")
+end
+
+afkClose = function(fromButton)
+    if not AFK.on then return end
+    AFK.on = false
+    AFK.wantHide, AFK.wantShow = true, false
+    if fromButton and AFK.toggleRef then
+        pcall(function() AFK.toggleRef:SetValue(false) end)
+    end
+    ObsidianGlassEngine:Notify({
+        Title = "โหมด AFK ไก่ตัน",
+        Content = "ปิดโหมด AFK แล้ว — คืนค่ากราฟิก 3D ตามปกติ",
+        Duration = 4
+    })
+end
+
+-- Render Dynamic Unit Cards in Column 2 (Visual Picture Cards)
+local function afkRenderUnitCards()
+    if not AFK.unitScroll then return end
+    
+    -- Cleanup existing cards
+    for _, cardFrame in ipairs(AFK.unitCardPool) do
+        cardFrame:Destroy()
+    end
+    AFK.unitCardPool = {}
+
+    local units = AFK.cachedData.Units or {}
+    if #units == 0 then
+        -- Default Info Text if no units fetched yet
+        local infoCard = Instance.new("Frame")
+        infoCard.Size = UDim2.new(1, -4, 0, 60)
+        infoCard.BackgroundColor3 = AFK_COLOR.raised
+        infoCard.BorderSizePixel = 0
+        infoCard.Parent = AFK.unitScroll
+
+        local icCorner = Instance.new("UICorner")
+        icCorner.CornerRadius = UDim.new(0, 10)
+        icCorner.Parent = infoCard
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, -16, 1, 0)
+        lbl.Position = UDim2.fromOffset(8, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "🎯 กำลังดึงข้อมูลยูนิตสวมใส่...\n• Slot 1: Epic / Carrot\n• Slot 2: Legendary\n• Slot 3: Epic"
+        lbl.TextColor3 = AFK_COLOR.label2
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = infoCard
+        table.insert(AFK.unitCardPool, infoCard)
+        return
+    end
+
+    -- Render top 8 units (Equipped + High Tier)
+    local displayCount = math.min(#units, 8)
+    for i = 1, displayCount do
+        local u = units[i]
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, -4, 0, 52)
+        card.BackgroundColor3 = u.Equip and Color3.fromRGB(36, 48, 40) or AFK_COLOR.raised
+        card.BorderSizePixel = 0
+        card.Parent = AFK.unitScroll
+
+        local cCorner = Instance.new("UICorner")
+        cCorner.CornerRadius = UDim.new(0, 10)
+        cCorner.Parent = card
+
+        local cStroke = Instance.new("UIStroke")
+        cStroke.Color = u.Equip and AFK_COLOR.green or AFK_COLOR.separator
+        cStroke.Thickness = 1
+        cStroke.Transparency = 0.4
+        cStroke.Parent = card
+
+        -- Unit Thumbnail Image (Avatar Headshot / Icon)
+        local img = Instance.new("ImageLabel")
+        img.Size = UDim2.fromOffset(40, 40)
+        img.Position = UDim2.fromOffset(6, 6)
+        img.BackgroundColor3 = AFK_COLOR.panel
+        img.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+        img.Parent = card
+
+        local imgCorner = Instance.new("UICorner")
+        imgCorner.CornerRadius = UDim.new(0, 8)
+        imgCorner.Parent = img
+
+        -- Unit Title & Details
+        local uTitle = Instance.new("TextLabel")
+        uTitle.Size = UDim2.new(1, -55, 0, 20)
+        uTitle.Position = UDim2.fromOffset(52, 6)
+        uTitle.BackgroundTransparency = 1
+        uTitle.Text = tostring(u.Name) .. (u.Shiny and " ⭐" or "")
+        uTitle.TextColor3 = AFK_COLOR.label
+        uTitle.Font = Enum.Font.GothamBold
+        uTitle.TextSize = 13
+        uTitle.TextXAlignment = Enum.TextXAlignment.Left
+        uTitle.Parent = card
+
+        local uSub = Instance.new("TextLabel")
+        uSub.Size = UDim2.new(1, -55, 0, 18)
+        uSub.Position = UDim2.fromOffset(52, 26)
+        uSub.BackgroundTransparency = 1
+        
+        local statusText = ""
+        if u.Equip then
+            statusText = statusText .. "⚔️ Slot " .. tostring(u.Equip) .. " • "
+        end
+        if u.Trait and u.Trait ~= "None" then
+            statusText = statusText .. "✨ " .. tostring(u.Trait)
+        else
+            statusText = statusText .. "พรสวรรค์: ไม่มี"
+        end
+        uSub.Text = statusText
+        uSub.TextColor3 = u.Equip and AFK_COLOR.green or AFK_COLOR.label2
+        uSub.Font = Enum.Font.Gotham
+        uSub.TextSize = 10
+        uSub.TextXAlignment = Enum.TextXAlignment.Left
+        uSub.Parent = card
+
+        table.insert(AFK.unitCardPool, card)
+    end
+end
+
+local function afkPump()
+    if AFK.wantShow then
+        AFK.wantShow = false
+        if AFK.gui then AFK.gui.Enabled = true end
+        afkEnterLowPower()
+    end
+    if AFK.wantHide then
+        AFK.wantHide = false
+        if AFK.gui then AFK.gui.Enabled = false end
+        afkExitLowPower()
+    end
+
+    if not AFK.on then return end
+
+    if AFK.wantSeed then
+        AFK.wantSeed = false
+        afkSeedLogs()
+    end
+
+    if AFK.logDirty then
+        AFK.logDirty = false
+        afkPushLog(AFK.logHistory[1])
+    end
+
+    if AFK.unitDirty then
+        AFK.unitDirty = false
+        pcall(afkRenderUnitCards)
+    end
+
+    local sec = math.floor(os.clock() - AFK.startAt)
+    if sec == AFK.lastSec then return end
+    AFK.lastSec = sec
+
+    local currentGems = AFK.cachedData.Gems or 0
+    local currentGold = AFK.cachedData.Gold or 0
+    local currentLevel = AFK.cachedData.Level or 0
+    local currentRR = AFK.cachedData.RR or 0
+
+    local gemsEarned = math.max(0, currentGems - AFK.startGems)
+    local goldEarned = math.max(0, currentGold - AFK.startGold)
+    local elapsedMin = math.max(1, sec / 60)
+    local gemsPerMin = math.floor(gemsEarned / elapsedMin)
+
+    local s = AFK.stat
+    if s.gems then s.gems.Text = "+" .. string.gsub(tostring(gemsEarned), "^(-?%d+)(%d%d%d)", '%1,%2') end
+    if s.gold then s.gold.Text = "+" .. string.gsub(tostring(goldEarned), "^(-?%d+)(%d%d%d)", '%1,%2') end
+    if s.rate then s.rate.Text = string.gsub(tostring(gemsPerMin), "^(-?%d+)(%d%d%d)", '%1,%2') .. " / น." end
+    if s.time then s.time.Text = afkClock(sec) end
+
+    -- Update Resource Summary Panel
+    if AFK.resRows and #AFK.resRows >= 4 then
+        if AFK.resRows[1] then AFK.resRows[1].Val.Text = string.gsub(tostring(currentGems), "^(-?%d+)(%d%d%d)", '%1,%2') .. " Gems" end
+        if AFK.resRows[2] then AFK.resRows[2].Val.Text = string.gsub(tostring(currentGold), "^(-?%d+)(%d%d%d)", '%1,%2') .. " Gold" end
+        if AFK.resRows[3] then AFK.resRows[3].Val.Text = string.gsub(tostring(currentRR), "^(-?%d+)(%d%d%d)", '%1,%2') .. " ใบ" end
+        if AFK.resRows[4] then AFK.resRows[4].Val.Text = "Level " .. tostring(currentLevel) end
+    end
+end
+
+local function afkBuild()
+    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    if parentGui:FindFirstChild("PayomboyZ_AFK") then
+        parentGui.PayomboyZ_AFK:Destroy()
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PayomboyZ_AFK"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 999999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Enabled = false
+    gui.Parent = parentGui
+
+    local root = Instance.new("Frame")
+    root.Name = "Root"
+    root.BackgroundColor3 = AFK_COLOR.bg
+    root.BorderSizePixel = 0
+    root.Size = UDim2.fromScale(1, 1)
+    root.Parent = gui
+
+    local scale = Instance.new("UIScale")
+    scale.Scale = AFK_TOUCH and 0.85 or 1.0
+    scale.Parent = root
+
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.BackgroundTransparency = 1
+    body.Size = UDim2.fromScale(1, 1)
+    body.Parent = root
+
+    local bPad = Instance.new("UIPadding")
+    bPad.PaddingTop = UDim.new(0, 16)
+    bPad.PaddingBottom = UDim.new(0, 16)
+    bPad.PaddingLeft = UDim.new(0, 16)
+    bPad.PaddingRight = UDim.new(0, 16)
+    bPad.Parent = body
+
+    -- Header Panel with Player Avatar Picture
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.BackgroundTransparency = 1
+    header.Size = UDim2.new(1, 0, 0, 50)
+    header.Parent = body
+
+    local profileFrame = Instance.new("Frame")
+    profileFrame.Size = UDim2.new(1, -170, 1, 0)
+    profileFrame.BackgroundTransparency = 1
+    profileFrame.Parent = header
+
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Name = "PlayerAvatar"
+    avatarImg.Size = UDim2.fromOffset(46, 46)
+    avatarImg.Position = UDim2.new(0, 0, 0, 2)
+    avatarImg.BackgroundColor3 = AFK_COLOR.raised
+    avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+    avatarImg.Parent = profileFrame
+
+    local avCorner = Instance.new("UICorner")
+    avCorner.CornerRadius = UDim.new(1, 0)
+    avCorner.Parent = avatarImg
+
+    local avStroke = Instance.new("UIStroke")
+    avStroke.Color = AFK_COLOR.cyan
+    avStroke.Thickness = 2
+    avStroke.Parent = avatarImg
+
+    local hTitle = Instance.new("TextLabel")
+    hTitle.Position = UDim2.new(0, 56, 0, 4)
+    hTitle.Size = UDim2.new(1, -60, 0, 22)
+    hTitle.BackgroundTransparency = 1
+    hTitle.Text = LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")"
+    hTitle.TextColor3 = AFK_COLOR.label
+    hTitle.Font = Enum.Font.GothamBold
+    hTitle.TextSize = 16
+    hTitle.TextXAlignment = Enum.TextXAlignment.Left
+    hTitle.Parent = profileFrame
+
+    local hSub = Instance.new("TextLabel")
+    hSub.Position = UDim2.new(0, 56, 0, 26)
+    hSub.Size = UDim2.new(1, -60, 0, 16)
+    hSub.BackgroundTransparency = 1
+    hSub.Text = "🟢 AFK ไก่ตัน ACTIVE • PayomboyZ HUB (3D Render OFF)"
+    hSub.TextColor3 = AFK_COLOR.green
+    hSub.Font = Enum.Font.GothamBold
+    hSub.TextSize = 11
+    hSub.TextXAlignment = Enum.TextXAlignment.Left
+    hSub.Parent = profileFrame
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.AnchorPoint = Vector2.new(1, 0)
+    closeBtn.Position = UDim2.new(1, 0, 0, 6)
+    closeBtn.Size = UDim2.fromOffset(150, 36)
+    closeBtn.BackgroundColor3 = AFK_COLOR.panel
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Text = "🔴 ปิดโหมด AFK"
+    closeBtn.TextColor3 = AFK_COLOR.red
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 13
+    closeBtn.Parent = header
+
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 10)
+    cCorner.Parent = closeBtn
+
+    local cStroke = Instance.new("UIStroke")
+    cStroke.Color = AFK_COLOR.red
+    cStroke.Thickness = 1
+    cStroke.Transparency = 0.5
+    cStroke.Parent = closeBtn
+
+    closeBtn.MouseButton1Click:Connect(function() afkClose(true) end)
+
+    -- Stats Bar
+    local stats = Instance.new("Frame")
+    stats.Position = UDim2.fromOffset(0, 58)
+    stats.Size = UDim2.new(1, 0, 0, 68)
+    stats.BackgroundTransparency = 1
+    stats.Parent = body
+
+    local statLayout = Instance.new("UIListLayout")
+    statLayout.FillDirection = Enum.FillDirection.Horizontal
+    statLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    statLayout.Padding = UDim.new(0, 10)
+    statLayout.Parent = stats
+
+    local function createStatCard(order, caption, value, color)
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(0.25, -8, 1, 0)
+        card.BackgroundColor3 = AFK_COLOR.panel
+        card.BorderSizePixel = 0
+        card.LayoutOrder = order
+        card.Parent = stats
+
+        local cr = Instance.new("UICorner")
+        cr.CornerRadius = UDim.new(0, 12)
+        cr.Parent = card
+
+        local st = Instance.new("UIStroke")
+        st.Color = AFK_COLOR.separator
+        st.Thickness = 1
+        st.Transparency = 0.4
+        st.Parent = card
+
+        local cap = Instance.new("TextLabel")
+        cap.Size = UDim2.new(1, -24, 0, 14)
+        cap.Position = UDim2.fromOffset(12, 10)
+        cap.BackgroundTransparency = 1
+        cap.Text = caption
+        cap.TextColor3 = AFK_COLOR.label3
+        cap.Font = Enum.Font.Gotham
+        cap.TextSize = 11
+        cap.TextXAlignment = Enum.TextXAlignment.Left
+        cap.Parent = card
+
+        local val = Instance.new("TextLabel")
+        val.Size = UDim2.new(1, -24, 0, 28)
+        val.Position = UDim2.fromOffset(12, 28)
+        val.BackgroundTransparency = 1
+        val.Text = value
+        val.TextColor3 = color or AFK_COLOR.label
+        val.Font = Enum.Font.GothamBold
+        val.TextSize = 20
+        val.TextXAlignment = Enum.TextXAlignment.Left
+        val.Parent = card
+
+        return val
+    end
+
+    AFK.stat.gems = createStatCard(1, "💎 เพชรที่ฟาร์มได้", "+0", AFK_COLOR.cyan)
+    AFK.stat.gold = createStatCard(2, "🪙 ทองที่ฟาร์มได้", "+0", AFK_COLOR.yellow)
+    AFK.stat.rate = createStatCard(3, "⚡ อัตราฟาร์มเพชร/นาที", "0 / น.", AFK_COLOR.green)
+    AFK.stat.time = createStatCard(4, "⏱️ เวลา AFK สะสม", "00:00:00", AFK_COLOR.label)
+
+    -- Columns Area
+    local columns = Instance.new("Frame")
+    columns.Position = UDim2.fromOffset(0, 136)
+    columns.Size = UDim2.new(1, 0, 1, -136)
+    columns.BackgroundTransparency = 1
+    columns.Parent = body
+
+    local function createPanel(widthScale, xScale, xOffset, title)
+        local p = Instance.new("Frame")
+        p.Size = UDim2.new(widthScale, -10, 1, 0)
+        p.Position = UDim2.new(xScale, xOffset, 0, 0)
+        p.BackgroundColor3 = AFK_COLOR.panel
+        p.BorderSizePixel = 0
+        p.Parent = columns
+
+        local cr = Instance.new("UICorner")
+        cr.CornerRadius = UDim.new(0, 14)
+        cr.Parent = p
+
+        local st = Instance.new("UIStroke")
+        st.Color = AFK_COLOR.separator
+        st.Thickness = 1
+        st.Transparency = 0.4
+        st.Parent = p
+
+        local head = Instance.new("TextLabel")
+        head.Size = UDim2.new(1, -24, 0, 16)
+        head.Position = UDim2.fromOffset(12, 10)
+        head.BackgroundTransparency = 1
+        head.Text = title
+        head.TextColor3 = AFK_COLOR.label2
+        head.Font = Enum.Font.GothamBold
+        head.TextSize = 12
+        head.TextXAlignment = Enum.TextXAlignment.Left
+        head.Parent = p
+
+        local div = Instance.new("Frame")
+        div.Position = UDim2.fromOffset(12, 32)
+        div.Size = UDim2.new(1, -24, 0, 1)
+        div.BackgroundColor3 = AFK_COLOR.separator
+        div.BackgroundTransparency = 0.5
+        div.BorderSizePixel = 0
+        div.Parent = p
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Position = UDim2.fromOffset(10, 38)
+        scroll.Size = UDim2.new(1, -20, 1, -46)
+        scroll.BackgroundTransparency = 1
+        scroll.ScrollBarThickness = 3
+        scroll.ScrollBarImageColor3 = AFK_COLOR.separator
+        scroll.CanvasSize = UDim2.new()
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.Parent = p
+
+        return p, scroll
+    end
+
+    local _, logScroll = createPanel(0.32, 0, 0, "📜 ประวัติการทำงาน (Activity Log)")
+    local _, unitScroll = createPanel(0.40, 0.32, 5, "⚔️ สถานะยูนิตและทีมฟาร์ม (Units)")
+    local _, resScroll = createPanel(0.28, 0.72, 10, "📊 สรุปทรัพยากรบัญชี (Resources)")
+
+    AFK.logList = logScroll
+    AFK.unitScroll = unitScroll
+
+    -- Column 1: Log Pool
+    local logLayout = Instance.new("UIListLayout")
+    logLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    logLayout.Padding = UDim.new(0, 4)
+    logLayout.Parent = logScroll
+
+    for i = 1, AFK_MAX_LOGS do
+        local r = Instance.new("TextLabel")
+        r.Size = UDim2.new(1, -4, 0, 16)
+        r.BackgroundTransparency = 1
+        r.Font = Enum.Font.Code
+        r.TextSize = 10
+        r.TextColor3 = AFK_COLOR.label2
+        r.TextXAlignment = Enum.TextXAlignment.Left
+        r.TextTruncate = Enum.TextTruncate.AtEnd
+        r.Visible = false
+        r.Text = ""
+        r.Parent = logScroll
+        AFK.pool[i] = r
+    end
+
+    -- Column 2: Units Overview Layout
+    local unitLayout = Instance.new("UIListLayout")
+    unitLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    unitLayout.Padding = UDim.new(0, 6)
+    unitLayout.Parent = unitScroll
+
+    -- Column 3: Resource Rows Pool
+    local resLayout = Instance.new("UIListLayout")
+    resLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    resLayout.Padding = UDim.new(0, 6)
+    resLayout.Parent = resScroll
+
+    local resTitles = { "💎 เพชรปัจจุบัน (Gems)", "🪙 ทองปัจจุบัน (Gold)", "🎲 ใบรีพรสวรรค์ (Trait RR)", "⭐ เลเวลผู้เล่น (Level)" }
+    for i, t in ipairs(resTitles) do
+        local r = Instance.new("Frame")
+        r.Size = UDim2.new(1, -4, 0, 36)
+        r.BackgroundColor3 = AFK_COLOR.raised
+        r.BorderSizePixel = 0
+        r.Parent = resScroll
+
+        local rc = Instance.new("UICorner")
+        rc.CornerRadius = UDim.new(0, 8)
+        rc.Parent = r
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.55, 0, 1, 0)
+        lbl.Position = UDim2.fromOffset(8, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = t
+        lbl.TextColor3 = AFK_COLOR.label2
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = r
+
+        local val = Instance.new("TextLabel")
+        val.Size = UDim2.new(0.42, -8, 1, 0)
+        val.Position = UDim2.new(0.55, 0, 0, 0)
+        val.BackgroundTransparency = 1
+        val.Text = "..."
+        val.TextColor3 = AFK_COLOR.teal
+        val.Font = Enum.Font.GothamBold
+        val.TextSize = 12
+        val.TextXAlignment = Enum.TextXAlignment.Right
+        val.Parent = r
+
+        AFK.resRows[i] = { Frame = r, Val = val }
+    end
+
+    AFK.gui = gui
+    AFK.conns.pump = RunService.Heartbeat:Connect(function() pcall(afkPump) end)
+end
+
+afkBuild()
+
+function ObsidianGlassEngine:CreateWindow(cfg)
+    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    if parentGui:FindFirstChild("PayomboyZHUB_UI") then
+        parentGui.PayomboyZHUB_UI:Destroy()
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "PayomboyZHUB_UI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 99999
+    gui.Parent = parentGui
+
+    local uiScale = Instance.new("UIScale")
+    local camera = workspace.CurrentCamera
+    local function updateScale()
+        if camera and camera.ViewportSize then
+            local vp = camera.ViewportSize
+            local targetWidth, targetHeight = 920, 600
+            local scaleX = (vp.X - 24) / targetWidth
+            local scaleY = (vp.Y - 24) / targetHeight
+            local calcScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
+            uiScale.Scale = calcScale
+        end
+    end
+    updateScale()
+    if camera then
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+    end
+    uiScale.Parent = gui
+
+    local shell = Instance.new("Frame")
+    shell.Name = "MainShell"
+    shell.Size = UDim2.fromOffset(920, 600)
+    shell.AnchorPoint = Vector2.new(0.5, 0.5)
+    shell.Position = UDim2.new(0.5, 0, 0.5, 0)
+    shell.BackgroundColor3 = COLORS.shell
+    shell.BackgroundTransparency = 0.20
+    shell.BorderSizePixel = 0
+    shell.ClipsDescendants = true
+    shell.Parent = gui
+
+    local shellCorner = Instance.new("UICorner")
+    shellCorner.CornerRadius = UDim.new(0, 18)
+    shellCorner.Parent = shell
+
+    local shellStroke = Instance.new("UIStroke")
+    shellStroke.Color = COLORS.cyan
+    shellStroke.Thickness = 1.5
+    shellStroke.Transparency = 0.3
+    shellStroke.Parent = shell
+
+    local snowLayer = Instance.new("Frame")
+    snowLayer.Name = "SnowLayer"
+    snowLayer.Size = UDim2.fromScale(1, 1)
+    snowLayer.BackgroundTransparency = 1
+    snowLayer.ZIndex = 2
+    snowLayer.Parent = shell
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 35 do
+            local dot = Instance.new("Frame")
+            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+            dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+            dot.BackgroundTransparency = math.random(30, 70) / 100
+            dot.BorderSizePixel = 0
+            dot.Parent = snowLayer
+
+            local dCorner = Instance.new("UICorner")
+            dCorner.CornerRadius = UDim.new(1, 0)
+            dCorner.Parent = dot
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 40) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
+
+    -- Floating Toggle Capsule
+    local toggleCapsule = Instance.new("Frame")
+    toggleCapsule.Name = "ObsidianToggleCapsule"
+    toggleCapsule.Size = UDim2.fromOffset(230, 58)
+    toggleCapsule.Position = UDim2.new(0, 15, 0.5, -29)
+    toggleCapsule.BackgroundColor3 = COLORS.shell
+    toggleCapsule.BackgroundTransparency = 0.18
+    toggleCapsule.BorderSizePixel = 0
+    toggleCapsule.ClipsDescendants = true
+    toggleCapsule.ZIndex = 99999
+    toggleCapsule.Parent = gui
+
+    local tcCorner = Instance.new("UICorner")
+    tcCorner.CornerRadius = UDim.new(0, 16)
+    tcCorner.Parent = toggleCapsule
+
+    local tcStroke = Instance.new("UIStroke")
+    tcStroke.Color = COLORS.cyan
+    tcStroke.Thickness = 1.5
+    tcStroke.Transparency = 0.2
+    tcStroke.Parent = toggleCapsule
+
+    local capsuleSnowLayer = Instance.new("Frame")
+    capsuleSnowLayer.Name = "CapsuleSnowLayer"
+    capsuleSnowLayer.Size = UDim2.fromScale(1, 1)
+    capsuleSnowLayer.BackgroundTransparency = 1
+    capsuleSnowLayer.ZIndex = 1
+    capsuleSnowLayer.Parent = toggleCapsule
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 12 do
+            local dot = Instance.new("Frame")
+            dot.Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3))
+            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+            dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+            dot.BackgroundTransparency = math.random(30, 70) / 100
+            dot.BorderSizePixel = 0
+            dot.ZIndex = 1
+            dot.Parent = capsuleSnowLayer
+
+            local dCorner = Instance.new("UICorner")
+            dCorner.CornerRadius = UDim.new(1, 0)
+            dCorner.Parent = dot
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 35) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
+
+    local capAvatarFrame = Instance.new("Frame")
+    capAvatarFrame.Size = UDim2.fromOffset(42, 42)
+    capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
+    capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+    capAvatarFrame.BorderSizePixel = 0
+    capAvatarFrame.ZIndex = 3
+    capAvatarFrame.Parent = toggleCapsule
+
+    local caCorner = Instance.new("UICorner")
+    caCorner.CornerRadius = UDim.new(1, 0)
+    caCorner.Parent = capAvatarFrame
+
+    local caStroke = Instance.new("UIStroke")
+    caStroke.Color = COLORS.primary
+    caStroke.Thickness = 1.5
+    caStroke.Parent = capAvatarFrame
+
+    local capAvatarImg = Instance.new("ImageLabel")
+    capAvatarImg.Size = UDim2.fromScale(1, 1)
+    capAvatarImg.BackgroundTransparency = 1
+    capAvatarImg.Image = loadCustomAvatarImage()
+    capAvatarImg.ZIndex = 4
+    capAvatarImg.Parent = capAvatarFrame
+
+    local caiCorner = Instance.new("UICorner")
+    caiCorner.CornerRadius = UDim.new(1, 0)
+    caiCorner.Parent = capAvatarImg
+
+    local capUserLabel = Instance.new("TextLabel")
+    capUserLabel.Size = UDim2.new(1, -58, 0, 18)
+    capUserLabel.Position = UDim2.new(0, 56, 0, 10)
+    capUserLabel.BackgroundTransparency = 1
+    capUserLabel.Text = "PayomboyZ HUB"
+    capUserLabel.TextColor3 = COLORS.text
+    capUserLabel.Font = Enum.Font.GothamBold
+    capUserLabel.TextSize = 12
+    capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capUserLabel.ZIndex = 3
+    capUserLabel.Parent = toggleCapsule
+
+    local capMetricsLabel = Instance.new("TextLabel")
+    capMetricsLabel.Size = UDim2.new(1, -58, 0, 16)
+    capMetricsLabel.Position = UDim2.new(0, 56, 0, 28)
+    capMetricsLabel.BackgroundTransparency = 1
+    capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
+    capMetricsLabel.TextColor3 = COLORS.cyan
+    capMetricsLabel.Font = Enum.Font.GothamBold
+    capMetricsLabel.TextSize = 10
+    capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capMetricsLabel.ZIndex = 3
+    capMetricsLabel.Parent = toggleCapsule
+
+    task.spawn(function()
+        local frameCount = 0
+        local lastFpsTime = tick()
+        local fpsVal = 60
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local now = tick()
+            if now - lastFpsTime >= 1 then
+                fpsVal = frameCount
+                frameCount = 0
+                lastFpsTime = now
+            end
+        end)
+
+        while task.wait(0.8) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
+                if renderConn then renderConn:Disconnect() end
+                break
+            end
+            local pingVal = 0
+            pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+        end
+    end)
+
+    local capBtn = Instance.new("TextButton")
+    capBtn.Size = UDim2.fromScale(1, 1)
+    capBtn.BackgroundTransparency = 1
+    capBtn.Text = ""
+    capBtn.ZIndex = 10
+    capBtn.Parent = toggleCapsule
+
+    local tDragging, tDragInput, tDragStart, tStartPos
+    local hasDragged = false
+
+    capBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            tDragging = true
+            hasDragged = false
+            tDragStart = input.Position
+            tStartPos = toggleCapsule.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    tDragging = false
+                end
+            end)
+        end
+    end)
+
+    capBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            tDragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == tDragInput and tDragging then
+            local delta = input.Position - tDragStart
+            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
+                hasDragged = true
+            end
+            toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    capBtn.MouseButton1Click:Connect(function()
+        if not hasDragged then
+            playClickSound()
+            shell.Visible = not shell.Visible
+            if not shell.Visible then
+                local existingModal = gui:FindFirstChild("DropdownModalOverlay")
+                if existingModal then existingModal:Destroy() end
+            end
+        end
+    end)
+
+    -- Left Sidebar
+    local userPanel = Instance.new("Frame")
+    userPanel.Name = "UserPanel"
+    userPanel.Size = UDim2.new(0, 240, 1, 0)
+    userPanel.BackgroundColor3 = COLORS.userPanel
+    userPanel.BackgroundTransparency = 0.20
+    userPanel.BorderSizePixel = 0
+    userPanel.ZIndex = 5
+    userPanel.Parent = shell
+
+    local userDiv = Instance.new("Frame")
+    userDiv.Size = UDim2.new(0, 1, 1, 0)
+    userDiv.Position = UDim2.new(1, -1, 0, 0)
+    userDiv.BackgroundColor3 = COLORS.glassRaised
+    userDiv.BorderSizePixel = 0
+    userDiv.ZIndex = 10
+    userDiv.Parent = userPanel
+
+    local avatarFrame = Instance.new("Frame")
+    avatarFrame.Size = UDim2.fromOffset(44, 44)
+    avatarFrame.Position = UDim2.new(0, 14, 0, 14)
+    avatarFrame.BackgroundColor3 = COLORS.glassDeep
+    avatarFrame.BorderSizePixel = 0
+    avatarFrame.ZIndex = 10
+    avatarFrame.Parent = userPanel
+
+    local avCorner = Instance.new("UICorner")
+    avCorner.CornerRadius = UDim.new(1, 0)
+    avCorner.Parent = avatarFrame
+
+    local avStroke = Instance.new("UIStroke")
+    avStroke.Color = COLORS.cyan
+    avStroke.Thickness = 1.5
+    avStroke.Parent = avatarFrame
+
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Size = UDim2.fromScale(1, 1)
+    avatarImg.BackgroundTransparency = 1
+    avatarImg.Image = loadCustomAvatarImage()
+    avatarImg.ZIndex = 11
+    avatarImg.Parent = avatarFrame
+
+    local avImgCorner = Instance.new("UICorner")
+    avImgCorner.CornerRadius = UDim.new(1, 0)
+    avImgCorner.Parent = avatarImg
+
+    local onlineDot = Instance.new("Frame")
+    onlineDot.Size = UDim2.fromOffset(10, 10)
+    onlineDot.Position = UDim2.new(1, -8, 1, -8)
+    onlineDot.BackgroundColor3 = COLORS.success
+    onlineDot.BorderSizePixel = 0
+    onlineDot.ZIndex = 12
+    onlineDot.Parent = avatarFrame
+
+    local onlineCorner = Instance.new("UICorner")
+    onlineCorner.CornerRadius = UDim.new(1, 0)
+    onlineCorner.Parent = onlineDot
+
+    local displayNameLabel = Instance.new("TextLabel")
+    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
+    displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
+    displayNameLabel.BackgroundTransparency = 1
+    displayNameLabel.Text = LocalPlayer.DisplayName
+    displayNameLabel.TextColor3 = COLORS.text
+    displayNameLabel.Font = Enum.Font.GothamBold
+    displayNameLabel.TextSize = 13
+    displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    displayNameLabel.ZIndex = 10
+    displayNameLabel.Parent = userPanel
+
+    local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
+    usernameLabel.Position = UDim2.new(0, 66, 0, 33)
+    usernameLabel.BackgroundTransparency = 1
+    usernameLabel.Text = "@" .. LocalPlayer.Name
+    usernameLabel.TextColor3 = COLORS.textMuted
+    usernameLabel.Font = Enum.Font.Gotham
+    usernameLabel.TextSize = 10
+    usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    usernameLabel.ZIndex = 10
+    usernameLabel.Parent = userPanel
+
+    local metricsBox = Instance.new("Frame")
+    metricsBox.Size = UDim2.new(1, -28, 0, 24)
+    metricsBox.Position = UDim2.new(0, 14, 0, 64)
+    metricsBox.BackgroundColor3 = COLORS.glassDeep
+    metricsBox.BorderSizePixel = 0
+    metricsBox.ZIndex = 10
+    metricsBox.Parent = userPanel
+
+    local mCorner = Instance.new("UICorner")
+    mCorner.CornerRadius = UDim.new(0, 6)
+    mCorner.Parent = metricsBox
+
+    local metricsLabel = Instance.new("TextLabel")
+    metricsLabel.Size = UDim2.fromScale(1, 1)
+    metricsLabel.BackgroundTransparency = 1
+    metricsLabel.Text = "⏱️ 00:00  •  📡 0 ms"
+    metricsLabel.TextColor3 = COLORS.cyan
+    metricsLabel.Font = Enum.Font.GothamBold
+    metricsLabel.TextSize = 10
+    metricsLabel.ZIndex = 11
+    metricsLabel.Parent = metricsBox
+
+    task.spawn(function()
+        local startTime = os.time()
+        while task.wait(1) do
+            if not gui or not gui.Parent then break end
+            local elapsed = os.time() - startTime
+            local mins = math.floor(elapsed / 60)
+            local secs = elapsed % 60
+            local ping = 0
+            pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            metricsLabel.Text = string.format("⏱️ %02d:%02d  •  📡 %d ms", mins, secs, ping)
+        end
+    end)
+
+    local sideDiv = Instance.new("Frame")
+    sideDiv.Size = UDim2.new(1, -28, 0, 1)
+    sideDiv.Position = UDim2.new(0, 14, 0, 96)
+    sideDiv.BackgroundColor3 = COLORS.glassRaised
+    sideDiv.BorderSizePixel = 0
+    sideDiv.ZIndex = 10
+    sideDiv.Parent = userPanel
+
+    local navHeader = Instance.new("TextLabel")
+    navHeader.Size = UDim2.new(1, -28, 0, 18)
+    navHeader.Position = UDim2.new(0, 16, 0, 104)
+    navHeader.BackgroundTransparency = 1
+    navHeader.Text = "หมวดหมู่ระบบ / MODULES"
+    navHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+    navHeader.Font = Enum.Font.GothamBold
+    navHeader.TextSize = 11
+    navHeader.TextXAlignment = Enum.TextXAlignment.Left
+    navHeader.ZIndex = 10
+    navHeader.Parent = userPanel
+
+    local tabScroll = Instance.new("ScrollingFrame")
+    tabScroll.Name = "VerticalTabScroll"
+    tabScroll.Size = UDim2.new(1, -20, 1, -178)
+    tabScroll.Position = UDim2.new(0, 10, 0, 126)
+    tabScroll.BackgroundTransparency = 1
+    tabScroll.ScrollBarThickness = 3
+    tabScroll.ScrollBarImageColor3 = COLORS.cyan
+    tabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    tabScroll.ZIndex = 10
+    tabScroll.Parent = userPanel
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.FillDirection = Enum.FillDirection.Vertical
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabLayout.Parent = tabScroll
+
+    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+    end)
+
+    local statusCard = Instance.new("Frame")
+    statusCard.Size = UDim2.new(1, -24, 0, 36)
+    statusCard.Position = UDim2.new(0, 12, 1, -44)
+    statusCard.BackgroundColor3 = COLORS.glassDeep
+    statusCard.BorderSizePixel = 0
+    statusCard.ZIndex = 10
+    statusCard.Parent = userPanel
+
+    local stCorner = Instance.new("UICorner")
+    stCorner.CornerRadius = UDim.new(0, 8)
+    stCorner.Parent = statusCard
+
+    local stTitle = Instance.new("TextLabel")
+    stTitle.Size = UDim2.fromScale(1, 1)
+    stTitle.BackgroundTransparency = 1
+    stTitle.Text = "✅ เชื่อมต่อแล้ว (Active)"
+    stTitle.TextColor3 = COLORS.success
+    stTitle.Font = Enum.Font.GothamBold
+    stTitle.TextSize = 12
+    stTitle.Parent = statusCard
+
+    -- Right Main Panel
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = UDim2.new(1, -240, 1, 0)
+    mainPanel.Position = UDim2.new(0, 240, 0, 0)
+    mainPanel.BackgroundTransparency = 1
+    mainPanel.ZIndex = 5
+    mainPanel.Parent = shell
+
+    local headerBar = Instance.new("Frame")
+    headerBar.Size = UDim2.new(1, 0, 0, 48)
+    headerBar.BackgroundTransparency = 1
+    headerBar.Parent = mainPanel
+
+    local mainTitle = Instance.new("TextLabel")
+    mainTitle.Size = UDim2.new(0, 300, 0, 22)
+    mainTitle.Position = UDim2.new(0, 20, 0, 8)
+    mainTitle.BackgroundTransparency = 1
+    mainTitle.Text = cfg.Title or "PayomboyZ HUB"
+    mainTitle.TextColor3 = COLORS.text
+    mainTitle.Font = Enum.Font.GothamBold
+    mainTitle.TextSize = 18
+    mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainTitle.Parent = headerBar
+
+    local mainSubTitle = Instance.new("TextLabel")
+    mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
+    mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
+    mainSubTitle.BackgroundTransparency = 1
+    mainSubTitle.Text = cfg.SubTitle or "Anime Expedition - Obsidian Glassmorphic 2 Edition"
+    mainSubTitle.TextColor3 = COLORS.textMuted
+    mainSubTitle.Font = Enum.Font.Gotham
+    mainSubTitle.TextSize = 11
+    mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainSubTitle.Parent = headerBar
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(28, 28)
+    closeBtn.Position = UDim2.new(1, -38, 0, 10)
+    closeBtn.BackgroundColor3 = COLORS.glass
+    closeBtn.BackgroundTransparency = 0.20
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.textMuted
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.Parent = headerBar
+
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 8)
+    closeCorner.Parent = closeBtn
+
+    closeBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        shell.Visible = not shell.Visible
+    end)
+
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.fromOffset(28, 28)
+    minBtn.Position = UDim2.new(1, -72, 0, 10)
+    minBtn.BackgroundColor3 = COLORS.glass
+    minBtn.BackgroundTransparency = 0.20
+    minBtn.Text = "─"
+    minBtn.TextColor3 = COLORS.textMuted
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 13
+    minBtn.Parent = headerBar
+
+    local minCorner = Instance.new("UICorner")
+    minCorner.CornerRadius = UDim.new(0, 8)
+    minCorner.Parent = minBtn
+
+    minBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        shell.Visible = not shell.Visible
+        if not shell.Visible then
+            local existingModal = gui:FindFirstChild("DropdownModalOverlay")
+            if existingModal then existingModal:Destroy() end
+        end
+    end)
+
+    -- Window Dragging Handler
+    local dragging, dragInput, dragStart, startPos
+    headerBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = shell.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+
+    headerBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- Active Service Banner
+    local serviceBanner = Instance.new("Frame")
+    serviceBanner.Size = UDim2.new(1, -40, 0, 65)
+    serviceBanner.Position = UDim2.new(0, 20, 0, 48)
+    serviceBanner.BackgroundColor3 = COLORS.glassDeep
+    serviceBanner.BackgroundTransparency = 0.18
+    serviceBanner.BorderSizePixel = 0
+    serviceBanner.Parent = mainPanel
+
+    local sCorner = Instance.new("UICorner")
+    sCorner.CornerRadius = UDim.new(0, 10)
+    sCorner.Parent = serviceBanner
+
+    local sStroke = Instance.new("UIStroke")
+    sStroke.Color = COLORS.glassRaised
+    sStroke.Thickness = 1
+    sStroke.Parent = serviceBanner
+
+    local sBadge = Instance.new("TextLabel")
+    sBadge.Size = UDim2.new(0, 150, 0, 16)
+    sBadge.Position = UDim2.new(0, 14, 0, 10)
+    sBadge.BackgroundTransparency = 1
+    sBadge.Text = "สถานะระบบ (ACTIVE SERVICE)"
+    sBadge.TextColor3 = COLORS.success
+    sBadge.Font = Enum.Font.GothamBold
+    sBadge.TextSize = 10
+    sBadge.TextXAlignment = Enum.TextXAlignment.Left
+    sBadge.Parent = serviceBanner
+
+    local sTitle = Instance.new("TextLabel")
+    sTitle.Size = UDim2.new(0, 250, 0, 20)
+    sTitle.Position = UDim2.new(0, 14, 0, 26)
+    sTitle.BackgroundTransparency = 1
+    sTitle.Text = cfg.Title or "PayomboyZ HUB"
+    sTitle.TextColor3 = COLORS.text
+    sTitle.Font = Enum.Font.GothamBold
+    sTitle.TextSize = 14
+    sTitle.TextXAlignment = Enum.TextXAlignment.Left
+    sTitle.Parent = serviceBanner
+
+    local sSub = Instance.new("TextLabel")
+    sSub.Size = UDim2.new(0, 280, 0, 14)
+    sSub.Position = UDim2.new(0, 14, 0, 44)
+    sSub.BackgroundTransparency = 1
+    sSub.Text = "ระบบฟาร์มออโต้พรีเมียม • ปลอดภัย 100%"
+    sSub.TextColor3 = COLORS.textMuted
+    sSub.Font = Enum.Font.Gotham
+    sSub.TextSize = 10
+    sSub.TextXAlignment = Enum.TextXAlignment.Left
+    sSub.Parent = serviceBanner
+
+    local vBadge = Instance.new("Frame")
+    vBadge.Size = UDim2.fromOffset(150, 32)
+    vBadge.Position = UDim2.new(1, -160, 0.5, -16)
+    vBadge.BackgroundColor3 = COLORS.userPanel
+    vBadge.BackgroundTransparency = 0.20
+    vBadge.BorderSizePixel = 0
+    vBadge.Parent = serviceBanner
+
+    local vCorner = Instance.new("UICorner")
+    vCorner.CornerRadius = UDim.new(0, 8)
+    vCorner.Parent = vBadge
+
+    local vStroke = Instance.new("UIStroke")
+    vStroke.Color = COLORS.success
+    vStroke.Thickness = 1
+    vStroke.Parent = vBadge
+
+    local vText = Instance.new("TextLabel")
+    vText.Size = UDim2.fromScale(1, 1)
+    vText.BackgroundTransparency = 1
+    vText.Text = "🛡️ ผ่านการรับรองระบบ"
+    vText.TextColor3 = COLORS.success
+    vText.Font = Enum.Font.GothamBold
+    vText.TextSize = 10
+    vText.Parent = vBadge
+
+    local pagesFolder = Instance.new("Frame")
+    pagesFolder.Name = "PagesFolder"
+    pagesFolder.Size = UDim2.new(1, -40, 1, -128)
+    pagesFolder.Position = UDim2.new(0, 20, 0, 120)
+    pagesFolder.BackgroundTransparency = 1
+    pagesFolder.Parent = mainPanel
+
+    local WindowObj = { Tabs = {}, CurrentTab = nil }
+
+    function WindowObj:AddTab(tabCfg)
+        local tabTitle = tabCfg.Title or "Tab"
+        local tabIndex = #WindowObj.Tabs + 1
+
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Size = UDim2.new(1, -6, 0, 40)
+        tabBtn.Position = UDim2.new(0, 3, 0, 0)
+        tabBtn.BackgroundColor3 = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(38, 16, 24)
+        tabBtn.BackgroundTransparency = (tabIndex == 1) and 0.15 or 0.22
+        tabBtn.Text = "    " .. tabTitle
+        tabBtn.TextColor3 = (tabIndex == 1) and Color3.fromRGB(255, 255, 255) or COLORS.textMuted
+        tabBtn.Font = Enum.Font.GothamBold
+        tabBtn.TextSize = 13
+        tabBtn.TextXAlignment = Enum.TextXAlignment.Left
+        tabBtn.AutoButtonColor = false
+        tabBtn.ZIndex = 12
+        tabBtn.Parent = tabScroll
+
+        local tbCorner = Instance.new("UICorner")
+        tbCorner.CornerRadius = UDim.new(0, 8)
+        tbCorner.Parent = tabBtn
+
+        local tbStroke = Instance.new("UIStroke")
+        tbStroke.Color = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(70, 30, 45)
+        tbStroke.Thickness = 1
+        tbStroke.Transparency = (tabIndex == 1) and 0 or 0.3
+        tbStroke.Parent = tabBtn
+
+        local activeIndicator = Instance.new("Frame")
+        activeIndicator.Size = UDim2.new(0, 4, 0, 20)
+        activeIndicator.Position = UDim2.new(0, 4, 0.5, -10)
+        activeIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        activeIndicator.BorderSizePixel = 0
+        activeIndicator.Visible = (tabIndex == 1)
+        activeIndicator.Parent = tabBtn
+
+        local indCorner = Instance.new("UICorner")
+        indCorner.CornerRadius = UDim.new(1, 0)
+        indCorner.Parent = activeIndicator
+
+        local pageScroll = Instance.new("ScrollingFrame")
+        pageScroll.Name = "Page_" .. tabTitle
+        pageScroll.Size = UDim2.fromScale(1, 1)
+        pageScroll.BackgroundTransparency = 1
+        pageScroll.ScrollBarThickness = 4
+        pageScroll.ScrollBarImageColor3 = COLORS.primary
+        pageScroll.Visible = (tabIndex == 1)
+        pageScroll.Parent = pagesFolder
+
+        local pageLayout = Instance.new("UIListLayout")
+        pageLayout.Padding = UDim.new(0, 8)
+        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        pageLayout.Parent = pageScroll
+
+        pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+        end)
+
+        local function activateTab()
+            playClickSound()
+            for _, t in ipairs(WindowObj.Tabs) do
+                t.btn.BackgroundColor3 = Color3.fromRGB(38, 16, 24)
+                t.btn.BackgroundTransparency = 0.22
+                t.btn.TextColor3 = COLORS.textMuted
+                t.stroke.Color = Color3.fromRGB(70, 30, 45)
+                t.stroke.Transparency = 0.3
+                if t.indicator then t.indicator.Visible = false end
+                t.page.Visible = false
+            end
+            tabBtn.BackgroundColor3 = COLORS.primary
+            tabBtn.BackgroundTransparency = 0.15
+            tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            tbStroke.Color = COLORS.primary
+            tbStroke.Transparency = 0
+            activeIndicator.Visible = true
+            pageScroll.Visible = true
+        end
+
+        tabBtn.MouseButton1Click:Connect(activateTab)
+
+        local TabObj = {
+            btn = tabBtn,
+            stroke = tbStroke,
+            indicator = activeIndicator,
+            page = pageScroll,
+            Select = activateTab
+        }
+
+        function TabObj:AddToggle(id, tCfg)
+            local title = tCfg.Title or id
+            local desc = tCfg.Desc or ""
+            local defaultVal = (tCfg.Default ~= nil) and tCfg.Default or false
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 55 or 44)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local fStroke = Instance.new("UIStroke")
+            fStroke.Color = COLORS.surface
+            fStroke.Thickness = 1
+            fStroke.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, -70, 0, 22)
+            lbl.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 11)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            if desc ~= "" then
+                local dLbl = Instance.new("TextLabel")
+                dLbl.Size = UDim2.new(1, -70, 0, 18)
+                dLbl.Position = UDim2.new(0, 12, 0, 30)
+                dLbl.BackgroundTransparency = 1
+                dLbl.Text = desc
+                dLbl.TextColor3 = COLORS.textMuted
+                dLbl.Font = Enum.Font.Gotham
+                dLbl.TextSize = 11
+                dLbl.TextXAlignment = Enum.TextXAlignment.Left
+                dLbl.Parent = frame
+            end
+
+            local switch = Instance.new("TextButton")
+            switch.Size = UDim2.fromOffset(46, 24)
+            switch.Position = UDim2.new(1, -56, 0.5, -12)
+            switch.BackgroundColor3 = defaultVal and COLORS.cyan or COLORS.surface
+            switch.Text = ""
+            switch.Parent = frame
+
+            local swCorner = Instance.new("UICorner")
+            swCorner.CornerRadius = UDim.new(1, 0)
+            swCorner.Parent = switch
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.fromOffset(20, 20)
+            knob.Position = defaultVal and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+            knob.BackgroundColor3 = COLORS.text
+            knob.BorderSizePixel = 0
+            knob.Parent = switch
+
+            local kCorner = Instance.new("UICorner")
+            kCorner.CornerRadius = UDim.new(1, 0)
+            kCorner.Parent = knob
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = tCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local function updateToggle(val)
+                playClickSound()
+                OptionObj.Value = val
+                switch.BackgroundColor3 = val and COLORS.cyan or COLORS.surface
+                knob.Position = val and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) updateToggle(val == true) end
+
+            switch.MouseButton1Click:Connect(function() updateToggle(not OptionObj.Value) end)
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        function TabObj:AddSlider(id, sCfg)
+            local title = sCfg.Title or id
+            local minVal = sCfg.Min or 0
+            local maxVal = sCfg.Max or 100
+            local defaultVal = sCfg.Default or minVal
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 52)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local fStroke = Instance.new("UIStroke")
+            fStroke.Color = COLORS.surface
+            fStroke.Thickness = 1
+            fStroke.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.7, 0, 0, 22)
+            lbl.Position = UDim2.new(0, 12, 0, 6)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            local valLbl = Instance.new("TextLabel")
+            valLbl.Size = UDim2.new(0.3, -12, 0, 22)
+            valLbl.Position = UDim2.new(0.7, 0, 0, 6)
+            valLbl.BackgroundTransparency = 1
+            valLbl.Text = tostring(defaultVal)
+            valLbl.TextColor3 = COLORS.cyan
+            valLbl.Font = Enum.Font.GothamBold
+            valLbl.TextSize = 14
+            valLbl.TextXAlignment = Enum.TextXAlignment.Right
+            valLbl.Parent = frame
+
+            local bar = Instance.new("TextButton")
+            bar.Size = UDim2.new(1, -24, 0, 8)
+            bar.Position = UDim2.new(0, 12, 0, 34)
+            bar.BackgroundColor3 = COLORS.surface
+            bar.Text = ""
+            bar.Parent = frame
+
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(1, 0)
+            bCorner.Parent = bar
+
+            local fill = Instance.new("Frame")
+            local pct = (defaultVal - minVal) / math.max(maxVal - minVal, 1)
+            fill.Size = UDim2.new(pct, 0, 1, 0)
+            fill.BackgroundColor3 = COLORS.cyan
+            fill.BorderSizePixel = 0
+            fill.Parent = bar
+
+            local fillCorner = Instance.new("UICorner")
+            fillCorner.CornerRadius = UDim.new(1, 0)
+            fillCorner.Parent = fill
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = sCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local function updateSlider(val)
+                val = math.clamp(val, minVal, maxVal)
+                if sCfg.Rounding then val = math.floor(val * (10 ^ sCfg.Rounding) + 0.5) / (10 ^ sCfg.Rounding) else val = math.floor(val + 0.5) end
+                OptionObj.Value = val
+                valLbl.Text = tostring(val)
+                local newPct = (val - minVal) / math.max(maxVal - minVal, 1)
+                fill.Size = UDim2.new(newPct, 0, 1, 0)
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) updateSlider(val) end
+
+            local isDragging = false
+            bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = true
+                    local relX = input.Position.X - bar.AbsolutePosition.X
+                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                end
+            end)
+
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = false
+                end
+            end)
+
+            UserInputService.InputChanged:Connect(function(input)
+                if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local relX = input.Position.X - bar.AbsolutePosition.X
+                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                end
+            end)
+
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        function TabObj:AddDropdown(id, dCfg)
+            local title = dCfg.Title or id
+            local values = dCfg.Values or {}
+            local defaultVal = dCfg.Value or (values[1] or "")
+            local isMulti = dCfg.Multi == true
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 52)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local fStroke = Instance.new("UIStroke")
+            fStroke.Color = COLORS.surfaceRaised
+            fStroke.Thickness = 1
+            fStroke.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5, 0, 1, 0)
+            lbl.Position = UDim2.new(0, 12, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            local dBtn = Instance.new("TextButton")
+            dBtn.Size = UDim2.new(0.46, 0, 0, 34)
+            dBtn.Position = UDim2.new(0.52, 0, 0.5, -17)
+            dBtn.BackgroundColor3 = COLORS.surface
+            dBtn.BackgroundTransparency = 0.20
+
+            local function formatValText(val)
+                if type(val) == "table" then
+                    if #val == 0 then return "[ กดเพื่อเลือกรายการ ]" end
+                    return table.concat(val, ", ")
+                end
+                return tostring(val)
+            end
+
+            dBtn.Text = formatValText(defaultVal)
+            dBtn.TextColor3 = COLORS.text
+            dBtn.Font = Enum.Font.GothamBold
+            dBtn.TextSize = 13
+            dBtn.TextTruncate = Enum.TextTruncate.AtEnd
+            dBtn.Parent = frame
+
+            local dbCorner = Instance.new("UICorner")
+            dbCorner.CornerRadius = UDim.new(0, 6)
+            dbCorner.Parent = dBtn
+
+            local dbStroke = Instance.new("UIStroke")
+            dbStroke.Color = COLORS.cyan
+            dbStroke.Thickness = 1
+            dbStroke.Transparency = 0.4
+            dbStroke.Parent = dBtn
+
+            local OptionObj = {
+                Value = defaultVal,
+                Values = values,
+                Callback = dCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local function updateDropdown(val)
+                OptionObj.Value = val
+                dBtn.Text = formatValText(val)
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) updateDropdown(val) end
+            function OptionObj:SetValues(newVals) OptionObj.Values = newVals end
+
+            dBtn.MouseButton1Click:Connect(function()
+                playClickSound()
+                local gui = shell.Parent
+                if not gui then return end
+
+                local existingModal = gui:FindFirstChild("DropdownModalOverlay")
+                if existingModal then
+                    local isSameDropdown = (existingModal:GetAttribute("DropdownId") == id)
+                    existingModal:Destroy()
+                    if isSameDropdown then return end
+                end
+
+                local modalOverlay = Instance.new("Frame")
+                modalOverlay.Name = "DropdownModalOverlay"
+                modalOverlay:SetAttribute("DropdownId", id)
+                modalOverlay.Size = UDim2.fromScale(1, 1)
+                modalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                modalOverlay.BackgroundTransparency = 0.55
+                modalOverlay.ZIndex = 999999
+                modalOverlay.Parent = gui
+
+                local bgDismissBtn = Instance.new("TextButton")
+                bgDismissBtn.Size = UDim2.fromScale(1, 1)
+                bgDismissBtn.BackgroundTransparency = 1
+                bgDismissBtn.Text = ""
+                bgDismissBtn.ZIndex = 999999
+                bgDismissBtn.Parent = modalOverlay
+
+                local modalFrame = Instance.new("Frame")
+                modalFrame.Size = UDim2.fromOffset(380, 440)
+                modalFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+                modalFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                modalFrame.BackgroundColor3 = COLORS.shell
+                modalFrame.BackgroundTransparency = 0.15
+                modalFrame.BorderSizePixel = 0
+                modalFrame.ZIndex = 1000000
+                modalFrame.Parent = modalOverlay
+
+                local mCorner = Instance.new("UICorner")
+                mCorner.CornerRadius = UDim.new(0, 14)
+                mCorner.Parent = modalFrame
+
+                local mStroke = Instance.new("UIStroke")
+                mStroke.Color = COLORS.primary
+                mStroke.Thickness = 2
+                mStroke.Parent = modalFrame
+
+                local mHeader = Instance.new("TextLabel")
+                mHeader.Size = UDim2.new(1, -50, 0, 24)
+                mHeader.Position = UDim2.new(0, 16, 0, 14)
+                mHeader.BackgroundTransparency = 1
+                mHeader.Text = "📌 " .. title
+                mHeader.TextColor3 = COLORS.text
+                mHeader.Font = Enum.Font.GothamBold
+                mHeader.TextSize = 15
+                mHeader.TextXAlignment = Enum.TextXAlignment.Left
+                mHeader.ZIndex = 1000001
+                mHeader.Parent = modalFrame
+
+                local mSub = Instance.new("TextLabel")
+                mSub.Size = UDim2.new(1, -50, 0, 18)
+                mSub.Position = UDim2.new(0, 16, 0, 38)
+                mSub.BackgroundTransparency = 1
+                mSub.Text = isMulti and "คำแนะนำ: คลิกเลือก/ยกเลิกได้หลายรายการ" or "คำแนะนำ: คลิก 1 รายการเพื่อเลือก"
+                mSub.TextColor3 = COLORS.textMuted
+                mSub.Font = Enum.Font.Gotham
+                mSub.TextSize = 11
+                mSub.TextXAlignment = Enum.TextXAlignment.Left
+                mSub.ZIndex = 1000001
+                mSub.Parent = modalFrame
+
+                local closeModBtn = Instance.new("TextButton")
+                closeModBtn.Size = UDim2.fromOffset(26, 26)
+                closeModBtn.Position = UDim2.new(1, -36, 0, 14)
+                closeModBtn.BackgroundColor3 = COLORS.glass
+                closeModBtn.Text = "✕"
+                closeModBtn.TextColor3 = COLORS.textMuted
+                closeModBtn.Font = Enum.Font.GothamBold
+                closeModBtn.TextSize = 13
+                closeModBtn.ZIndex = 1000002
+                closeModBtn.Parent = modalFrame
+
+                local cmCorner = Instance.new("UICorner")
+                cmCorner.CornerRadius = UDim.new(0, 6)
+                cmCorner.Parent = closeModBtn
+
+                closeModBtn.MouseButton1Click:Connect(function()
+                    playClickSound()
+                    modalOverlay:Destroy()
+                end)
+
+                bgDismissBtn.MouseButton1Click:Connect(function() modalOverlay:Destroy() end)
+
+                local optScroll = Instance.new("ScrollingFrame")
+                optScroll.Size = UDim2.new(1, -28, 1, -124)
+                optScroll.Position = UDim2.new(0, 14, 0, 64)
+                optScroll.BackgroundTransparency = 1
+                optScroll.ScrollBarThickness = 4
+                optScroll.ScrollBarImageColor3 = COLORS.primary
+                optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+                optScroll.ZIndex = 1000001
+                optScroll.Parent = modalFrame
+
+                local optLayout = Instance.new("UIListLayout")
+                optLayout.Padding = UDim.new(0, 5)
+                optLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                optLayout.Parent = optScroll
+
+                optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 10)
+                end)
+
+                local currentSelected = {}
+                if isMulti then
+                    if type(OptionObj.Value) == "table" then
+                        for _, v in ipairs(OptionObj.Value) do table.insert(currentSelected, v) end
+                    end
+                else
+                    table.insert(currentSelected, OptionObj.Value)
+                end
+
+                local optionButtons = {}
+                local function renderOptions()
+                    for _, btnObj in ipairs(optionButtons) do btnObj:Destroy() end
+                    optionButtons = {}
+
+                    local currentValues = (type(OptionObj.Values) == "function" and OptionObj.Values()) or OptionObj.Values or values
+                    if type(currentValues) ~= "table" then currentValues = {} end
+
+                    for _, optVal in ipairs(currentValues) do
+                        local isSelected = isMulti and (table.find(currentSelected, optVal) ~= nil) or (currentSelected[1] == optVal)
+
+                        local itemBtn = Instance.new("TextButton")
+                        itemBtn.Size = UDim2.new(1, -6, 0, 38)
+                        itemBtn.BackgroundColor3 = isSelected and COLORS.primary or COLORS.glassDeep
+                        itemBtn.BackgroundTransparency = isSelected and 0.1 or 0.2
+                        itemBtn.Text = (isSelected and "   ✓  " or "       ") .. tostring(optVal)
+                        itemBtn.TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or COLORS.text
+                        itemBtn.Font = Enum.Font.GothamBold
+                        itemBtn.TextSize = 13
+                        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+                        itemBtn.ZIndex = 1000002
+                        itemBtn.Parent = optScroll
+
+                        local ibCorner = Instance.new("UICorner")
+                        ibCorner.CornerRadius = UDim.new(0, 8)
+                        ibCorner.Parent = itemBtn
+
+                        local ibStroke = Instance.new("UIStroke")
+                        ibStroke.Color = isSelected and COLORS.primary or COLORS.surfaceRaised
+                        ibStroke.Thickness = 1
+                        ibStroke.Parent = itemBtn
+
+                        itemBtn.MouseButton1Click:Connect(function()
+                            playClickSound()
+                            if isMulti then
+                                local foundIdx = table.find(currentSelected, optVal)
+                                if foundIdx then table.remove(currentSelected, foundIdx) else table.insert(currentSelected, optVal) end
+                                updateDropdown(currentSelected)
+                                renderOptions()
+                            else
+                                currentSelected = { optVal }
+                                updateDropdown(optVal)
+                                modalOverlay:Destroy()
+                            end
+                        end)
+
+                        table.insert(optionButtons, itemBtn)
+                    end
+                end
+
+                renderOptions()
+
+                local confirmBtn = Instance.new("TextButton")
+                confirmBtn.Size = UDim2.new(1, -28, 0, 40)
+                confirmBtn.Position = UDim2.new(0, 14, 1, -50)
+                confirmBtn.BackgroundColor3 = COLORS.primary
+                confirmBtn.BackgroundTransparency = 0.15
+                confirmBtn.Text = "✓ ยืนยันการเลือก (Confirm)"
+                confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                confirmBtn.Font = Enum.Font.GothamBold
+                confirmBtn.TextSize = 13
+                confirmBtn.ZIndex = 1000003
+                confirmBtn.Parent = modalFrame
+
+                local cfCorner = Instance.new("UICorner")
+                cfCorner.CornerRadius = UDim.new(0, 8)
+                cfCorner.Parent = confirmBtn
+
+                confirmBtn.MouseButton1Click:Connect(function()
+                    playClickSound()
+                    if isMulti then updateDropdown(currentSelected) end
+                    modalOverlay:Destroy()
+                end)
+            end)
+
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        function TabObj:AddButton(bCfg)
+            local title = bCfg.Title or "Button"
+            local cb = bCfg.Callback or function() end
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -10, 0, 40)
+            btn.BackgroundColor3 = COLORS.surfaceRaised
+            btn.BackgroundTransparency = 0.18
+            btn.Text = title
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 14
+            btn.Parent = pageScroll
+
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(0, 8)
+            bCorner.Parent = btn
+
+            local bStroke = Instance.new("UIStroke")
+            bStroke.Color = COLORS.primary
+            bStroke.Thickness = 1
+            bStroke.Parent = btn
+
+            btn.MouseButton1Click:Connect(function()
+                playClickSound()
+                pcall(cb)
+            end)
+            return btn
+        end
+
+        function TabObj:AddInput(id, iCfg)
+            local title = iCfg.Title or id
+            local defaultVal = iCfg.Default or ""
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 48)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5, 0, 1, 0)
+            lbl.Position = UDim2.new(0, 12, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(0.45, 0, 0, 30)
+            box.Position = UDim2.new(0.52, 0, 0.5, -15)
+            box.BackgroundColor3 = COLORS.input
+            box.BackgroundTransparency = 0.20
+            box.Text = tostring(defaultVal)
+            box.TextColor3 = COLORS.cyan
+            box.Font = Enum.Font.Gotham
+            box.TextSize = 13
+            box.Parent = frame
+
+            local bxCorner = Instance.new("UICorner")
+            bxCorner.CornerRadius = UDim.new(0, 6)
+            bxCorner.Parent = box
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = iCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            box.FocusLost:Connect(function()
+                OptionObj.Value = box.Text
+                pcall(function() OptionObj.Callback(box.Text) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(box.Text) end) end
+            end)
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) box.Text = tostring(val); OptionObj.Value = tostring(val) end
+
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        function TabObj:AddSection(title)
+            local sec = Instance.new("TextLabel")
+            sec.Size = UDim2.new(1, -10, 0, 30)
+            sec.BackgroundTransparency = 1
+            sec.Text = "──  " .. title .. "  ──"
+            sec.TextColor3 = COLORS.cyan
+            sec.Font = Enum.Font.GothamBold
+            sec.TextSize = 14
+            sec.Parent = pageScroll
+            return sec
+        end
+
+        function TabObj:AddParagraph(pCfg)
+            local title = pCfg.Title or ""
+            local desc = pCfg.Desc or ""
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 54)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local pTitle = Instance.new("TextLabel")
+            pTitle.Size = UDim2.new(1, -20, 0, 22)
+            pTitle.Position = UDim2.new(0, 10, 0, 6)
+            pTitle.BackgroundTransparency = 1
+            pTitle.Text = title
+            pTitle.TextColor3 = COLORS.text
+            pTitle.Font = Enum.Font.GothamBold
+            pTitle.TextSize = 13
+            pTitle.TextXAlignment = Enum.TextXAlignment.Left
+            pTitle.Parent = frame
+
+            local pDesc = Instance.new("TextLabel")
+            pDesc.Size = UDim2.new(1, -20, 0, 24)
+            pDesc.Position = UDim2.new(0, 10, 0, 26)
+            pDesc.BackgroundTransparency = 1
+            pDesc.Text = desc
+            pDesc.TextColor3 = COLORS.textMuted
+            pDesc.Font = Enum.Font.Gotham
+            pDesc.TextSize = 11
+            pDesc.TextWrapped = true
+            pDesc.TextXAlignment = Enum.TextXAlignment.Left
+            pDesc.Parent = frame
+            return frame
+        end
+
+        table.insert(WindowObj.Tabs, TabObj)
+        return TabObj
+    end
+
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+            playClickSound()
+            shell.Visible = not shell.Visible
+            if not shell.Visible then
+                local existingModal = gui:FindFirstChild("DropdownModalOverlay")
+                if existingModal then existingModal:Destroy() end
+            end
+        elseif input.KeyCode == Enum.KeyCode.F then
+            playClickSound()
+            uiScale.Scale = (uiScale.Scale == 1.0) and 0.85 or 1.0
+        end
+    end)
+
+    return WindowObj
+end
+
+-- Create Window Instance
+local MainWindow = ObsidianGlassEngine:CreateWindow({
+    Title = "PayomboyZ HUB",
+    SubTitle = "Anime Expedition - Obsidian Glassmorphic 2 Engine"
+})
+
+-- Build Tabs
+local MainTab = MainWindow:AddTab({ Title = "🏠 หน้าหลัก & สถานะ" })
+local FarmTab = MainWindow:AddTab({ Title = "⚔️ ระบบออโต้ฟาร์ม" })
+local SummonTab = MainWindow:AddTab({ Title = "🔮 สุ่มยูนิต & พรสวรรค์" })
+local SettingsTab = MainWindow:AddTab({ Title = "⚙️ ปรับแต่งระบบ" })
+
+-- Main Tab Widgets
+MainTab:AddSection("ข้อมูลบัญชีผู้ใช้ และ ทรัพยากร")
+
+local gemDisplayCard = MainTab:AddParagraph({ Title = "💎 จำนวนเพชร (Gems)", Desc = "กำลังดึงข้อมูล..." })
+local goldDisplayCard = MainTab:AddParagraph({ Title = "🪙 จำนวนทอง (Gold)", Desc = "กำลังดึงข้อมูล..." })
+local traitDisplayCard = MainTab:AddParagraph({ Title = "🎲 ใบรีพรสวรรค์ (Trait Rerolls)", Desc = "กำลังดึงข้อมูล..." })
+local levelDisplayCard = MainTab:AddParagraph({ Title = "⭐ เลเวลผู้เล่น (Level)", Desc = "กำลังดึงข้อมูล..." })
+
+MainTab:AddSection("โหมดประหยัดพลังงาน & AFK ไก่ตัน")
+
+AFK.toggleRef = MainTab:AddToggle("AFKModeToggle", {
+    Title = "🐔 เปิดโหมด AFK ไก่ตัน (Full-Screen AFK Dashboard)",
+    Desc = "หน้าต่าง AFK เต็มจอสำหรับปล่อยเปิดข้ามคืน — ติดตามสถานะ Real-time, ปิดเรนเดอร์ 3D, ลดภาพเหลือ Level01, จำกัด 10 FPS",
+    Default = false,
+    Callback = function(val)
+        if val then
+            afkOpen()
+        else
+            afkClose(false)
+        end
+    end
+})
+
+MainTab:AddSection("การควบคุมการแสดงผล (Rendering Controls)")
+
+local renderToggleWidget = MainTab:AddToggle("Toggle3DRender", {
+    Title = "ปิดการแสดงผล 3D (Toggle 3D Rendering)",
+    Desc = "เปิดใช้งานเพื่อปิดการเรนเดอร์ 3D ช่วยลดการทำงานของ GPU/CPU อย่างมาก (กด 'N' เพื่อสลับ)",
+    Default = TOGGLE_RENDER3D,
+    Callback = function(val)
+        TOGGLE_RENDER3D = val
+        pcall(function()
+            game:GetService("RunService"):Set3dRenderingEnabled(not val)
+        end)
+        ObsidianGlassEngine:Notify({
+            Title = "PayomboyZ HUB",
+            Content = val and "ปิดการแสดงผล 3D เรียบร้อยแล้ว (Save Performance)" or "เปิดการแสดงผล 3D ตามปกติ",
+            Duration = 3
+        })
+    end
+})
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.N then
+        TOGGLE_RENDER3D = not TOGGLE_RENDER3D
+        renderToggleWidget:SetValue(TOGGLE_RENDER3D)
+    end
+end)
+
+-- Farm Tab Widgets
+FarmTab:AddSection("การควบคุมระบบฟาร์มอัตโนมัติ (Auto Farm Controls)")
+
+FarmTab:AddToggle("ToggleAutoFarm", {
+    Title = "⚔️ เปิดระบบออโต้ฟาร์ม (Auto Farm Story)",
+    Desc = "เปิดใช้งานเพื่อเข้าเล่นด่าน SchoolGrounds Act 1 (Hard) วางและอัปเกรดยูนิตอัตโนมัติ",
+    Default = true,
+    Callback = function(val)
+        _G.AutoFarmEnabled = val
+        ObsidianGlassEngine:Notify({
+            Title = "PayomboyZ HUB",
+            Content = val and "เปิดระบบออโต้ฟาร์มเรียบร้อยแล้ว" or "ปิดระบบออโต้ฟาร์มแล้ว",
+            Duration = 3
+        })
+    end
+})
+
+FarmTab:AddToggle("ToggleAutoPlace", {
+    Title = "🎯 วางและอัปเกรดยูนิตอัตโนมัติ (Auto Place & Upgrade)",
+    Desc = "วาง Epic (ช่อง 3) -> Legendary (ช่อง 2) -> Slot 1 และอัปเกรดแบบอัตโนมัติ",
+    Default = true,
+    Callback = function(val)
+        _G.AutoPlaceUpgrade = val
+    end
+})
+
+FarmTab:AddToggle("ToggleAutoWalk", {
+    Title = "🚶 เดินป้องกันการเตะออกจากเกม (Auto Walk / Anti-Kick)",
+    Desc = "เดินวนรอบจุดยุทธศาสตร์โดยอัตโนมัติเพื่อป้องกันระบบเตะออกจากเกมเมื่อ AFK",
+    Default = true,
+    Callback = function(val)
+        _G.AutoWalkEnabled = val
+    end
+})
+
+FarmTab:AddSection("ข้อมูลแผนที่และสถานะปัจจุบัน")
+FarmTab:AddParagraph({ Title = "🗺️ แผนที่ฟาร์มปัจจุบัน", Desc = "SchoolGrounds - Act 1 (Story Mode - Hard)" })
+FarmTab:AddParagraph({ Title = "🎯 ลำดับการวางยูนิต", Desc = "วาง Epic (ช่อง 3) -> Legendary (ช่อง 2) -> Slot 1 และอัปเกรดแบบอัตโนมัติ" })
+
+-- Summon Tab Widgets
+SummonTab:AddSection("ระบบสุ่มยูนิตอัตโนมัติ (Auto Summon Engine)")
+
+SummonTab:AddToggle("ToggleAutoSummon", {
+    Title = "🔮 เปิดใช้งานระบบสุ่มยูนิต (Auto Summon)",
+    Desc = "เปิดใช้งานเพื่อสุ่มเปิดตู้เมื่อเพชรถึง 2,500 (ระบบหยุดอัตโนมัติเมื่อได้ยูนิตเป้าหมาย)",
+    Default = true,
+    Callback = function(val)
+        _G.AutoSummonEnabled = val
+        ObsidianGlassEngine:Notify({
+            Title = "PayomboyZ HUB",
+            Content = val and "เปิดระบบสุ่มยูนิตอัตโนมัติแล้ว" or "ปิดระบบสุ่มยูนิตแล้ว",
+            Duration = 3
+        })
+    end
+})
+
+SummonTab:AddDropdown("SelectSummonTarget", {
+    Title = "🎯 เลือกเป้าหมายยูนิตที่ต้องการสุ่ม (Summon Target)",
+    Values = { "Auto (Secret & Mythic)", "Shadow", "Cursed Student", "Elf Mage", "Flame Emperor", "Hollow", "Lady Giant", "Puppet", "Salmon Sorcerer", "String Demon" },
+    Default = "Auto (Secret & Mythic)",
+    Multi = false,
+    Callback = function(val)
+        if val == "Auto (Secret & Mythic)" then
+            local allTargets = {}
+            for _, unit in ipairs(SECRET_UNITS) do table.insert(allTargets, unit) end
+            for _, unit in ipairs(MYTHIC_UNITS) do table.insert(allTargets, unit) end
+            SUMMON_CONFIG = allTargets
+            hasSummonConfig = true
+        else
+            SUMMON_CONFIG = { val }
+            hasSummonConfig = true
+        end
+        ObsidianGlassEngine:Notify({
+            Title = "PayomboyZ HUB",
+            Content = "เปลี่ยนเป้าหมายการสุ่มเป็น: " .. tostring(val),
+            Duration = 3
+        })
+    end
+})
+
+SummonTab:AddSection("ระบบรีพรสวรรค์อัตโนมัติ (Auto Trait Reroll Engine)")
+
+SummonTab:AddToggle("ToggleAutoTraitReroll", {
+    Title = "🎲 เปิดใช้งานระบบรีพรสวรรค์ (Auto Trait Reroll)",
+    Desc = "รีพรสวรรค์ยูนิตเป้าหมายโดยอัตโนมัติเมื่อมีใบรี (Trait Reroll)",
+    Default = true,
+    Callback = function(val)
+        _G.AutoTraitRerollEnabled = val
+    end
+})
+
+SummonTab:AddDropdown("SelectTraitUnitTarget", {
+    Title = "👤 เลือกยูนิตที่ต้องการรีพรสวรรค์ (Target Unit)",
+    Values = { "auto (เรียงลำดับความสำคัญสูงสุด)", "Shadow", "Puppet", "Cursed Student", "Lady Giant", "Elf Mage", "Flame Emperor", "Hollow", "Salmon Sorcerer", "String Demon" },
+    Default = "auto (เรียงลำดับความสำคัญสูงสุด)",
+    Multi = false,
+    Callback = function(val)
+        local unitTarget = (val:sub(1, 4) == "auto") and "auto" or val
+        if not TRAIT_REROLL_CONFIG then TRAIT_REROLL_CONFIG = {} end
+        TRAIT_REROLL_CONFIG.TargetUnit = unitTarget
+    end
+})
+
+SummonTab:AddDropdown("SelectTargetTrait", {
+    Title = "✨ เลือกพรสวรรค์ที่ต้องการ (Target Trait)",
+    Values = { "Any (พรสวรรค์อะไรก็ได้ที่ไม่ใช่ None)", "Unbound", "Primordial", "Forsaken", "Draconic", "Investor" },
+    Default = "Any (พรสวรรค์อะไรก็ได้ที่ไม่ใช่ None)",
+    Multi = false,
+    Callback = function(val)
+        if not TRAIT_REROLL_CONFIG then TRAIT_REROLL_CONFIG = {} end
+        if val:sub(1, 3) == "Any" then
+            TRAIT_REROLL_CONFIG.TargetTrait = nil
+        else
+            TRAIT_REROLL_CONFIG.TargetTrait = val
+        end
+    end
+})
+
+-- Settings Tab Widgets
+SettingsTab:AddSection("การปรับแต่งประสิทธิภาพ (Performance Settings)")
+
+SettingsTab:AddToggle("ToggleFastSummon", {
+    Title = "⚡ เปิดโหมดสุ่มไว (Fast Summon)",
+    Desc = "ข้ามแอนิเมชันเปิดตู้สุ่มเพื่อความรวดเร็วสูงสุด",
+    Default = true,
+    Callback = function(val)
+        pcall(function()
+            Nodes.CLIENT_CHANGE_SETTING:FireServer("FastSummon", val)
+        end)
+    end
+})
+
+SettingsTab:AddToggle("ToggleLowDetail", {
+    Title = "📉 เปิดโหมดความละเอียดต่ำ (Low Detail Mode)",
+    Desc = "ลดทอนกราฟิกภายในเกมเพื่อลดการทำงานของอุปกรณ์",
+    Default = false,
+    Callback = function(val)
+        pcall(function()
+            Nodes.CLIENT_CHANGE_SETTING:FireServer("LowDetailMode", val)
+        end)
+    end
+})
+
+SettingsTab:AddToggle("ToggleBoostPerformance", {
+    Title = "🚀 ลบพื้นผิวและเอฟเฟกต์ (Optimize Map Textures)",
+    Desc = "ลบ Texture, Particle และเอฟเฟกต์ตกแต่งในแมพเพื่อความลื่นไหลสูงสุด",
+    Default = false,
+    Callback = function(val)
+        if val then
+            pcall(function()
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if obj:IsA("BasePart") then
+                        obj.Material = Enum.Material.SmoothPlastic
+                    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
+                        obj.Enabled = false
+                    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                        obj:Destroy()
+                    end
+                end
+            end)
+            ObsidianGlassEngine:Notify({ Title = "PayomboyZ HUB", Content = "ปรับแต่งพื้นผิวและเอฟเฟกต์เรียบร้อยแล้ว", Duration = 3 })
+        end
+    end
+})
+
+SettingsTab:AddSection("ระบบป้องกันและความปลอดภัย (Protection & Security)")
+
+SettingsTab:AddToggle("ToggleAntiAFK", {
+    Title = "🛡️ ระบบป้องกัน Anti-AFK (Anti-Disconnection)",
+    Desc = "ป้องกัน Roblox เตะออกจากเกมเมื่อไม่มีการเคลื่อนไหวเกิน 20 นาที",
+    Default = true,
+    Callback = function(val)
+        _G.AntiAFKEnabled = val
+    end
+})
+
+SettingsTab:AddButton({
+    Title = "🔄 Rejoin Server (ย้ายเข้าเซิร์ฟเวอร์ใหม่)",
+    Callback = function()
+        pcall(function()
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+        end)
+    end
+})
+
+-- Format Number Helper
+local function formatNumber(num)
+    local formatted = tostring(num)
+    local k
+    while true do
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+-- Live Stats Update Loop
+task.spawn(function()
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+
+    while task.wait(0.5) do
+        pcall(function()
+            local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+            if replica and replica.Data then
+                local data = replica.Data
+                local itemData = data.ItemData or {}
+
+                local level = data.Level or 0
+                local gem = itemData.Gem and type(itemData.Gem) == "table" and itemData.Gem.Amount or 0
+                local gold = itemData.Gold and type(itemData.Gold) == "table" and itemData.Gold.Amount or 0
+                local traitReroll = itemData.TraitReroll and type(itemData.TraitReroll) == "table" and itemData.TraitReroll.Amount or 0
+
+                gemDisplayCard:FindFirstChild("TextLabel", true).Text = formatNumber(gem) .. " Gems"
+                goldDisplayCard:FindFirstChild("TextLabel", true).Text = formatNumber(gold) .. " Gold"
+                traitDisplayCard:FindFirstChild("TextLabel", true).Text = formatNumber(traitReroll) .. " RR"
+                levelDisplayCard:FindFirstChild("TextLabel", true).Text = "Level " .. formatNumber(level)
+            end
+        end)
+    end
+end)
+
+-- Horst Status Update Helper
+local function sendHorstStatus()
+    local success, err = pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+
+        local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+        if not replica then error("Replica not found") end
+
+        local data = replica.Data
+        if not data then error("Data not found") end
+
+        local itemData = data.ItemData
+        if not itemData then error("ItemData not found") end
+
+        local level = data.Level or 0
+        local gem = itemData.Gem and type(itemData.Gem) == "table" and itemData.Gem.Amount or 0
+        local gold = itemData.Gold and type(itemData.Gold) == "table" and itemData.Gold.Amount or 0
+        local trait = itemData.TraitReroll and type(itemData.TraitReroll) == "table" and itemData.TraitReroll.Amount or 0
+
+        local message = string.format("⭐ Level : %d • 💎 Gems : %s • 🪙 Gold : %s • 🎲 RR : %s",
+            level, formatNumber(gem), formatNumber(gold), formatNumber(trait))
+
+        if _G.Horst_SetDescription then
+            _G.Horst_SetDescription(message)
+        end
+
+        if GEM_TARGET and gem >= GEM_TARGET and not _G.ScriptShouldStop and not hasSummonConfig then
+            if _G.Horst_AccountChangeDone then
+                if _G.Horst_SetDescription then _G.Horst_SetDescription(message) end
+                task.wait(15)
+                local ok, doneErr = pcall(_G.Horst_AccountChangeDone)
+                if ok then
+                    _G.ScriptShouldStop = true
+                    while true do
+                        pcall(function()
+                            local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                            if r and r.Data and r.Data.ItemData then
+                                local dLoop = r.Data
+                                local iLoop = dLoop.ItemData
+                                local lLoop = dLoop.Level or 0
+                                local meG = iLoop.Gem and iLoop.Gem.Amount or 0
+                                local meGo = iLoop.Gold and iLoop.Gold.Amount or 0
+                                local meTr = iLoop.TraitReroll and iLoop.TraitReroll.Amount or 0
+                                _G.Horst_SetDescription(string.format("⭐ Level : %d • 💎 Gems : %s • 🪙 Gold : %s • 🎲 RR : %s",
+                                    lLoop, formatNumber(meG), formatNumber(meGo), formatNumber(meTr)))
+                            end
+                        end)
+                        task.wait(5)
+                    end
+                else
+                    warn(string.format("❌ [PayomboyZ HUB] ส่งสถานะ DONE ไม่สำเร็จ: %s", tostring(doneErr)))
+                end
+            end
+        end
+    end)
+end
+
+if HORST_ENABLED and DESCRIPTION_MODE == "GEM" then
+    task.spawn(function()
+        sendHorstStatus()
+        while HORST_ENABLED and not _G.ScriptShouldStop do
+            task.wait(UPDATE_INTERVAL)
+            sendHorstStatus()
+        end
+    end)
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🗺️ 7. ตรวจสอบแผนที่เป้าหมาย (TARGET MAP CHECK)
+-- ---------------------------------------------------------------------------------------
+local function isInTargetMap()
+    local success, result = pcall(function()
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+
+        local allMaps = Nodes.GET_ALL_MAP_REPLICAS:InvokeSelf()
+
+        if allMaps then
+            for mapID, mapReplica in pairs(allMaps) do
+                local data = mapReplica.Data
+                local parameters = data.Parameters or {}
+
+                if parameters.MapName == "SchoolGrounds" and
+                   parameters.ActName == "Act 1" and
+                   parameters.Gamemode == "Story" then
+                    return true
+                end
+            end
+        end
+
+        return false
+    end)
+    return success and result
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🚀 8. ระบบเพิ่มประสิทธิภาพเกม (PERFORMANCE OPTIMIZATION ENGINE)
+-- ---------------------------------------------------------------------------------------
+local function applyPerformanceOptimizations()
+    local g = game
+    local w = g.Workspace
+    local l = g.Lighting
+    local t = w.Terrain
+
+    if TOGGLE_RENDER3D then
+        local RunService = game:GetService("RunService")
+        RunService:Set3dRenderingEnabled(false)
+    end
+
+    t.WaterWaveSize = 0
+    t.WaterWaveSpeed = 0
+    t.WaterReflectance = 0
+    t.WaterTransparency = 0
+
+    local Lighting = game:GetService("Lighting")
+    Lighting.Brightness = 0
+    Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.ColorShift_Bottom = Color3.fromRGB(128, 128, 128)
+    Lighting.ColorShift_Top = Color3.fromRGB(128, 128, 128)
+    Lighting.GlobalShadows = false
+    Lighting.ShadowSoftness = 0
+    Lighting.EnvironmentDiffuseScale = 0
+    Lighting.EnvironmentSpecularScale = 0
+    Lighting.FogEnd = 9e9
+
+    settings().Rendering.QualityLevel = "Level01"
+
+    local lobbyFolder = workspace:FindFirstChild("Lobby")
+    local mapFolder = workspace:FindFirstChild("Map")
+
+    if mapFolder then
+        for _, obj in pairs(mapFolder:GetChildren()) do
+            obj:Destroy()
+        end
+
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local rootPart = player.Character.HumanoidRootPart
+            local invisibleFloor = Instance.new("Part")
+            invisibleFloor.Name = "InvisibleFloor"
+            invisibleFloor.Size = Vector3.new(2000, 1, 2000)
+            invisibleFloor.Position = rootPart.Position - Vector3.new(0, 5, 0)
+            invisibleFloor.Anchored = true
+            invisibleFloor.Transparency = 1
+            invisibleFloor.CanCollide = true
+            invisibleFloor.Material = Enum.Material.SmoothPlastic
+            invisibleFloor.Parent = workspace
+        end
+    elseif lobbyFolder then
+        for _, obj in pairs(lobbyFolder:GetChildren()) do
+            obj:Destroy()
+        end
+
+        local player = game:GetService("Players").LocalPlayer
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local pos = player.Character.HumanoidRootPart.Position
+            local floor = Instance.new("Part")
+            floor.Name = "InvisibleFloor"
+            floor.Size = Vector3.new(2000, 1, 2000)
+            floor.Position = Vector3.new(pos.X, pos.Y - 3, pos.Z)
+            floor.Anchored = true
+            floor.Transparency = 1
+            floor.CanCollide = true
+            floor.Material = Enum.Material.SmoothPlastic
+            floor.Parent = workspace
+        end
+    end
+
+    for _, obj in pairs(Lighting:GetChildren()) do
+        obj:Destroy()
+    end
+
+    local MaterialService = game:GetService("MaterialService")
+    for _, obj in pairs(MaterialService:GetChildren()) do
+        obj:Destroy()
+    end
+
+    for _, obj in pairs(workspace:GetDescendants()) do
+        pcall(function()
+            if obj:IsA("Texture") or obj:IsA("Decal") then
+                obj.Transparency = 1
+            elseif obj:IsA("SurfaceAppearance") then
+                obj:Destroy()
+            elseif obj:IsA("Part") or obj:IsA("Union") or obj:IsA("CornerWedgePart") or obj:IsA("TrussPart") or obj:IsA("UnionOperation") then
+                obj.Material = "Plastic"
+                obj.Color = Color3.fromRGB(128, 128, 128)
+                obj.Reflectance = 0
+                obj.TextureID = ""
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                obj.Enabled = false
+            elseif obj:IsA("Explosion") then
+                obj.BlastPressure = 1
+                obj.BlastRadius = 1
+            elseif obj:IsA("Fire") or obj:IsA("SpotLight") or obj:IsA("Smoke") then
+                obj.Enabled = false
+            end
+        end)
+    end
+
+    for _, e in pairs(Lighting:GetChildren()) do
+        if e:IsA("BlurEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") or e:IsA("BloomEffect") or e:IsA("DepthOfFieldEffect") then
+            e.Enabled = false
+        end
+    end
+
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player.Character then
+            for _, part in pairs(player.Character:GetDescendants()) do
+                pcall(function()
+                    if part:IsA("Texture") or part:IsA("Decal") then
+                        part.Transparency = 1
+                    elseif part:IsA("MeshPart") then
+                        part.TextureID = ""
+                        part.Material = "Plastic"
+                        part.Color = Color3.fromRGB(128, 128, 128)
+                        part.Reflectance = 0
+                    elseif part:IsA("BasePart") then
+                        part.Material = "Plastic"
+                        part.Color = Color3.fromRGB(128, 128, 128)
+                        part.Reflectance = 0
+                    elseif part:IsA("ParticleEmitter") or part:IsA("Trail") then
+                        part.Enabled = false
+                    elseif part:IsA("Fire") or part:IsA("SpotLight") or part:IsA("Smoke") then
+                        part.Enabled = false
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------------------
+-- ⚔️ 9. โหมดในแมปฟาร์ม (IN TARGET MAP FARMING LOGIC)
+-- ---------------------------------------------------------------------------------------
+if isInTargetMap() then
+    task.spawn(function()
+        local function closeTutorial()
+            local success = pcall(function()
+                local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
+                local prompt = playerGui:FindFirstChild("Prompt")
+                if not prompt then return end
+
+                local tutorialLabel = prompt.Frame.Frame.Folder.Frame.Frame.Frame.TextLabel
+                if tutorialLabel then
+                    local text = tutorialLabel.ContentText or tutorialLabel.Text
+                    if text == "Tutorial" then
+                        local closeButton = prompt.Frame.Frame.Folder.Frame:FindFirstChild("PrimaryButton")
+                        if closeButton then
+                            local GuiService = game:GetService("GuiService")
+                            local VirtualInputManager = game:GetService("VirtualInputManager")
+
+                            GuiService.SelectedCoreObject = nil
+                            task.wait(0.1)
+
+                            closeButton.Selectable = true
+                            GuiService.SelectedCoreObject = closeButton
+                            task.wait(0.1)
+
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                            task.wait(0.05)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+
+                            task.wait(0.2)
+                            GuiService.SelectedCoreObject = nil
+                        end
+                    end
+                end
+            end)
+        end
+
+        closeTutorial()
+        task.wait(0.5)
+
+        applyPerformanceOptimizations()
+
+        local Players = game:GetService("Players")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+        local Shared = ReplicatedStorage:WaitForChild("Shared")
+        local ReplicaClient = require(Shared:WaitForChild("ReplicaClient"))
+
+        local currentConnection = nil
+        local allPlacedIDs = {}
+
+        local function getCurrentWave()
+            local success1, wave1 = pcall(function()
+                local gameReplica = Nodes.GET_GAME_REPLICA:InvokeSelf()
+                if gameReplica and gameReplica.Data and gameReplica.Data.Wave then
+                    return tonumber(gameReplica.Data.Wave) or 0
+                end
+                return nil
+            end)
+
+            if success1 and wave1 then
+                return wave1
+            end
+
+            local success2, wave2 = pcall(function()
+                local startTime = tick()
+                local timeout = 3
+
+                while tick() - startTime < timeout do
+                    local topHUD = Players.LocalPlayer.PlayerGui:FindFirstChild("TopGameHUD")
+                    if topHUD then
+                        local success, result = pcall(function()
+                            local waveLabel = topHUD.Frame:GetChildren()[4].Frame.Frame.Frame.Frame.Frame.TextLabel
+                            local text = waveLabel.ContentText or waveLabel.Text
+                            return tonumber(string.match(text, "^(%d+)")) or 0
+                        end)
+                        if success and result then
+                            return result
+                        end
+                    end
+                    task.wait(0.5)
+                end
+                return nil
+            end)
+
+            if success2 and wave2 then
+                warn("⚠️ [PayomboyZ HUB] ตรวจสอบ Wave สำรองจาก GUI (Game Replica ล้มเหลว)")
+                return wave2
+            end
+
+            warn("❌ [PayomboyZ HUB] ไม่สามารถตรวจสอบ Wave ได้")
+            return nil
+        end
+
+        local function resetFarmingState()
+            if currentConnection then
+                pcall(function()
+                    currentConnection:Disconnect()
+                end)
+                currentConnection = nil
+            end
+            allPlacedIDs = {}
+        end
+
+        local function placeAndUpgrade()
+            local DELAY_AFTER_PLACE = 1
+            local AUTO_UPGRADE_PRIORITY = 1
+
+            local function getCurrentMoney()
+                local success, money = pcall(function()
+                    local replica = Nodes.GET_GAME_PLAYER_REPLICA:InvokeSelf()
+                    if replica and replica.Data and replica.Data.Yen then
+                        return replica.Data.Yen
+                    end
+                    return nil
+                end)
+
+                if success and money then
+                    return money
+                end
+
+                local success2, money2 = pcall(function()
+                    local playerGui = Players.LocalPlayer.PlayerGui
+                    local bottomHUD = playerGui:FindFirstChild("BottomHUD")
+                    if not bottomHUD then return nil end
+
+                    for _, child in ipairs(bottomHUD:GetDescendants()) do
+                        if child:IsA("TextLabel") then
+                            local text = child.ContentText or child.Text or ""
+                            if text:match("[¥$]") and text:match("%d") then
+                                local cleaned = (text:gsub("[^%d]", ""))
+                                local num = tonumber(cleaned)
+                                if num and num >= 0 then
+                                    return num
+                                end
+                            end
+                        end
+                    end
+                    return nil
+                end)
+
+                if success2 and money2 then
+                    return money2
+                end
+
+                return 0
+            end
+
+            local function getUnitCost(slot)
+                local targetSlot = tonumber(slot)
+                if not targetSlot then return 999999 end
+
+                local attempts = 0
+                while attempts < 10 do
+                    local success1, result1 = pcall(function()
+                        local bottomHUD = Players.LocalPlayer.PlayerGui:FindFirstChild("BottomHUD")
+                        if not bottomHUD then return nil end
+                        local container = bottomHUD:GetChildren()[2]:GetChildren()[5]
+                        for _, child in ipairs(container:GetChildren()) do
+                            if child:IsA("TextButton") and child.LayoutOrder == targetSlot then
+                                local frame = child:FindFirstChild("Frame")
+                                local innerLabel = frame:GetChildren()[3].Frame.TextLabel
+                                local cleaned = (innerLabel.ContentText:gsub("[^%d]", ""))
+                                return tonumber(cleaned)
+                            end
+                        end
+                    end)
+
+                    if success1 and result1 and result1 > 0 then return result1 end
+
+                    attempts = attempts + 1
+                    task.wait(0.5)
+                end
+                return 999999
+            end
+
+            local playerReplica = nil
+            for i = 1, 5 do
+                playerReplica = Nodes.GET_GAME_PLAYER_REPLICA:InvokeSelf()
+                if playerReplica then break end
+                task.wait(1)
+            end
+
+            if not playerReplica then
+                warn("❌ [PayomboyZ HUB] ไม่พบ Player Replica - ข้ามเฟสการวางยูนิต")
+                return false
+            end
+
+            resetFarmingState()
+
+            pcall(function()
+                local dependenciesModule = ReplicatedStorage:FindFirstChild("Dependencies")
+                if dependenciesModule then
+                    local Dependencies = require(dependenciesModule)
+                    local GameUnits = Dependencies.GameUnits
+                    if GameUnits then
+                        for unitID, _ in pairs(GameUnits:get()) do
+                            if not table.find(allPlacedIDs, unitID) then
+                                table.insert(allPlacedIDs, unitID)
+                            end
+                        end
+                    end
+                end
+            end)
+
+            currentConnection = ReplicaClient.OnNew("GameUnit", function(replica)
+                local unitID = replica.Data.ID
+                if unitID and not table.find(allPlacedIDs, unitID) then
+                    table.insert(allPlacedIDs, unitID)
+                end
+            end)
+
+            task.wait(2)
+
+            local function placeUnit(slot, cframe)
+                local cost = getUnitCost(slot)
+                if cost == 0 then return false end
+
+                local startCount = #allPlacedIDs
+                local attempts = 0
+
+                while attempts < 60 do
+                    local money = getCurrentMoney()
+                    if money >= cost then
+                        local success = pcall(function()
+                            playerReplica:FireServer("PlaceGameUnit", slot, cframe, true)
+                        end)
+
+                        if success then
+                            task.wait(DELAY_AFTER_PLACE)
+                            local waited = 0
+                            while #allPlacedIDs <= startCount and waited < 5 do
+                                task.wait(0.1)
+                                waited = waited + 0.1
+                            end
+
+                            if #allPlacedIDs > startCount then
+                                return true
+                            end
+                        end
+                    end
+                    attempts = attempts + 1
+                    task.wait(1)
+                end
+                return false
+            end
+
+            local function getUnitNameFromSlot(slot)
+                local success, unitName = pcall(function()
+                    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                    if not replica or not replica.Data or not replica.Data.HotbarData then return nil end
+                    local fullKey = replica.Data.HotbarData[slot] or replica.Data.HotbarData[tostring(slot)]
+                    if not fullKey then return nil end
+                    local internalName = fullKey:match("^(.+)#") or fullKey
+                    local UnitInfo = require(ReplicatedStorage.Shared.Information.Units)
+                    local unitInfo = UnitInfo[internalName]
+                    return unitInfo and (unitInfo.DisplayName or internalName) or internalName
+                end)
+                return success and unitName or nil
+            end
+
+            local epicUnitName = getUnitNameFromSlot("3")
+            local legendaryUnitName = getUnitNameFromSlot("2")
+
+            local LEGENDARY_PLACEMENT_LIMITED = {"Greed", "Scissor", "Water Princess"}
+            local isLegendaryLimited = false
+            local isIceMage = (epicUnitName == "Ice Mage")
+
+            if legendaryUnitName then
+                for _, limitedUnit in ipairs(LEGENDARY_PLACEMENT_LIMITED) do
+                    if legendaryUnitName == limitedUnit then
+                        isLegendaryLimited = true
+                        break
+                    end
+                end
+            end
+
+            local farmMode = "LEGENDARY_ONLY"
+            if epicUnitName and legendaryUnitName then
+                farmMode = "EPIC_LEGENDARY"
+            end
+
+            if farmMode == "EPIC_LEGENDARY" then
+                local upgradeUnits = {}
+
+                local epicPositions = {
+                    CFrame.new(3091.4519042969, 1798.9315185547, 3375.9118652344, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                    CFrame.new(3091.3552246094, 1798.9315185547, 3373.8767089844, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                    CFrame.new(3086.3559570312, 1798.9315185547, 3375.8781738281, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                }
+
+                if isIceMage then
+                    table.insert(epicPositions, CFrame.new(3086.3735351562, 1798.9315185547, 3374.1369628906, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+                end
+
+                for i, cframe in ipairs(epicPositions) do
+                    local startCount = #allPlacedIDs
+                    local success = placeUnit("3", cframe)
+                    if success and #allPlacedIDs > startCount then
+                        table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+                    end
+                end
+
+                local legendaryPositions = {
+                    CFrame.new(3094.5942382812, 1798.9315185547, 3373.314453125, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                    CFrame.new(3094.5502929688, 1798.9315185547, 3370.8835449219, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                    CFrame.new(3091.6162109375, 1798.9315185547, 3371.0627441406, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                }
+
+                if not isLegendaryLimited then
+                    table.insert(legendaryPositions, CFrame.new(3097.2465820312, 1798.7340087891, 3373.2370605469, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+                end
+
+                for i, cframe in ipairs(legendaryPositions) do
+                    local startCount = #allPlacedIDs
+                    local success = placeUnit("2", cframe)
+                    if success and #allPlacedIDs > startCount then
+                        table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+                    end
+                end
+
+                local slot1UnitName = getUnitNameFromSlot("1")
+                if slot1UnitName then
+                    local isSlot1IceMage = (slot1UnitName == "Ice Mage")
+                    local slot1Positions = {
+                        CFrame.new(3113.3083496094, 1798.7340087891, 3201.0505371094, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                        CFrame.new(3113.1704101562, 1798.7340087891, 3199.0378417969, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                        CFrame.new(3110.1689453125, 1798.7340087891, 3200.9020996094, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+                    }
+
+                    if isSlot1IceMage then
+                        table.insert(slot1Positions, CFrame.new(3110.0202636719, 1798.7340087891, 3199.0668945312, 1, 0, 0, 0, 1, 0, 0, 0, 1))
+                    end
+
+                    for i, cframe in ipairs(slot1Positions) do
+                        local startCount = #allPlacedIDs
+                        local success = placeUnit("1", cframe)
+                        if success and #allPlacedIDs > startCount then
+                            table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+                        end
+                    end
+                end
+
+                if currentConnection then
+                    currentConnection:Disconnect()
+                    currentConnection = nil
+                end
+
+                for i, unitID in ipairs(upgradeUnits) do
+                    pcall(function()
+                        playerReplica:FireServer("ChangeGameUnitAutoUpgradePriority", unitID, AUTO_UPGRADE_PRIORITY)
+                    end)
+                    task.wait(0.3)
+                end
+                return true
+            end
+
+            local isPlacementLimited = isLegendaryLimited
+            local unit1ID = nil
+            local startCount = #allPlacedIDs
+
+            local success1 = placeUnit("2", CFrame.new(3077.4265136719, 1798.7340087891, 3330.8972167969))
+            if success1 and #allPlacedIDs > startCount then
+                unit1ID = allPlacedIDs[#allPlacedIDs]
+            else
+                return false
+            end
+
+            local upgradeUnits = {}
+            startCount = #allPlacedIDs
+            if placeUnit("2", CFrame.new(3092.5168457031, 1798.9315185547, 3367.4926757812)) and #allPlacedIDs > startCount then
+                table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+            end
+
+            startCount = #allPlacedIDs
+            if placeUnit("2", CFrame.new(3092.3759765625, 1798.9315185547, 3370.3395996094)) and #allPlacedIDs > startCount then
+                table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+            end
+
+            if not isPlacementLimited then
+                startCount = #allPlacedIDs
+                if placeUnit("2", CFrame.new(3092.3918457031, 1798.9315185547, 3373.3002929688)) and #allPlacedIDs > startCount then
+                    table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+                end
+            end
+
+            task.wait(30)
+
+            if unit1ID then
+                pcall(function() playerReplica:FireServer("SellGameUnit", unit1ID) end)
+                task.wait(0.5)
+            end
+
+            startCount = #allPlacedIDs
+            if placeUnit("2", CFrame.new(3095.4975585938, 1798.7340087891, 3365.9299316406)) and #allPlacedIDs > startCount then
+                table.insert(upgradeUnits, allPlacedIDs[#allPlacedIDs])
+            end
+
+            task.wait(2)
+
+            if currentConnection then
+                currentConnection:Disconnect()
+                currentConnection = nil
+            end
+
+            for i, unitID in ipairs(upgradeUnits) do
+                pcall(function()
+                    playerReplica:FireServer("ChangeGameUnitAutoUpgradePriority", unitID, AUTO_UPGRADE_PRIORITY)
+                end)
+                task.wait(0.3)
+            end
+
+            return true
+        end
+
+        -- Waypoint Walking Loop
+        task.spawn(function()
+            local player = Players.LocalPlayer
+            task.wait(5)
+            local waypoints = {
+                Vector3.new(3089, 0, 3271),
+                Vector3.new(3089, 0, 3350)
+            }
+            local currentWaypointIndex = 1
+
+            while true do
+                task.wait(0.1)
+                if not isInTargetMap() then break end
+
+                local character = player.Character
+                if not character then task.wait(1); continue end
+
+                local humanoid = character:FindFirstChild("Humanoid")
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if not humanoid or not hrp then task.wait(1); continue end
+
+                local targetPos = waypoints[currentWaypointIndex]
+                local distance = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
+
+                if distance > 5 then
+                    humanoid:MoveTo(Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
+                    task.wait(0.5)
+                else
+                    currentWaypointIndex = currentWaypointIndex + 1
+                    if currentWaypointIndex > #waypoints then currentWaypointIndex = 1 end
+                    task.wait(0.5)
+                end
+            end
+        end)
+
+        -- Quest Auto Claiming Loop
+        task.spawn(function()
+            pcall(function()
+                local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                if replica and replica.Data.QuestData then
+                    for categoryName, _ in pairs(replica.Data.QuestData) do
+                        task.spawn(function()
+                            pcall(function() Nodes.QUEST_CLAIM_ALL_CATEGORY:FireServer(categoryName) end)
+                        end)
+                        task.wait(0.05)
+                    end
+                    task.wait(2)
+                    for i = 1, 10 do
+                        VirtualInputManager:SendMouseButtonEvent(10, 10, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(10, 10, 0, false, game, 0)
+                        task.wait(0.1)
+                    end
+                end
+            end)
+
+            while true do
+                task.wait(300)
+                pcall(function()
+                    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                    if replica and replica.Data.QuestData then
+                        for categoryName, _ in pairs(replica.Data.QuestData) do
+                            task.spawn(function()
+                                pcall(function() Nodes.QUEST_CLAIM_ALL_CATEGORY:FireServer(categoryName) end)
+                            end)
+                            task.wait(0.05)
+                        end
+                        task.wait(2)
+                        for i = 1, 10 do
+                            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, true, game, 0)
+                            task.wait(0.05)
+                            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, false, game, 0)
+                            task.wait(0.1)
+                        end
+                    end
+                end)
+            end
+        end)
+
+        task.wait(5)
+
+        local function sellAllUnits()
+            local soldCount = 0
+            local failCount = 0
+            local playerReplica = Nodes.GET_GAME_PLAYER_REPLICA:InvokeSelf()
+            if not playerReplica then return false end
+
+            local success1 = pcall(function()
+                local dependenciesModule = ReplicatedStorage:FindFirstChild("Dependencies")
+                if dependenciesModule then
+                    local Dependencies = require(dependenciesModule)
+                    local GameUnits = Dependencies.GameUnits
+                    if GameUnits then
+                        for unitID, _ in pairs(GameUnits:get()) do
+                            if pcall(function() playerReplica:FireServer("SellGameUnit", unitID) end) then
+                                soldCount = soldCount + 1
+                            else
+                                failCount = failCount + 1
+                            end
+                            task.wait(0.2)
+                        end
+                    end
+                end
+            end)
+
+            if not success1 and #allPlacedIDs > 0 then
+                for _, unitID in ipairs(allPlacedIDs) do
+                    if pcall(function() playerReplica:FireServer("SellGameUnit", unitID) end) then
+                        soldCount = soldCount + 1
+                    else
+                        failCount = failCount + 1
+                    end
+                    task.wait(0.2)
+                end
+            end
+
+            task.wait(1)
+            return not (failCount > 0 and soldCount == 0)
+        end
+
+        local isRunningPhase = false
+        local lastWaveResetTime = 0
+        local WAVE_RESET_COOLDOWN = 5
+
+        placeAndUpgrade()
+        lastWaveResetTime = tick()
+
+        while true do
+            task.wait(1)
+            if isRunningPhase then continue end
+
+            local currentWave = getCurrentWave()
+            if currentWave == nil then continue end
+
+            local currentTime = tick()
+            if (currentWave == 0 or currentWave == 1) and (currentTime - lastWaveResetTime) >= WAVE_RESET_COOLDOWN then
+                isRunningPhase = true
+                lastWaveResetTime = currentTime
+                task.wait(2)
+
+                sellAllUnits()
+
+                if hasSummonConfig and #SUMMON_CONFIG > 0 then
+                    pcall(function()
+                        local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                        if replica and replica.Data then
+                            local gems = replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+                            if gems >= 2500 then
+                                local isSecretUnit = false
+                                for _, configUnit in ipairs(SUMMON_CONFIG) do
+                                    for _, secretUnit in ipairs(SECRET_UNITS) do
+                                        if configUnit == secretUnit then isSecretUnit = true; break end
+                                    end
+                                    if isSecretUnit then break end
+                                end
+
+                                if isSecretUnit then
+                                    task.wait(1)
+                                    pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, Players.LocalPlayer) end)
+                                else
+                                    local bannerUnits = checkCurrentBanner()
+                                    if #bannerUnits > 0 then
+                                        local hasMatch = false
+                                        for _, configUnit in pairs(SUMMON_CONFIG) do
+                                            for _, bannerUnit in pairs(bannerUnits) do
+                                                if configUnit == bannerUnit then hasMatch = true; break end
+                                            end
+                                            if hasMatch then break end
+                                        end
+
+                                        if hasMatch then
+                                            task.wait(1)
+                                            pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, Players.LocalPlayer) end)
+                                            return
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+
+                placeAndUpgrade()
+                isRunningPhase = false
+            end
+        end
+    end)
+
+    return
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🏠 10. โหมดในล็อบบี้ (LOBBY & AUTOMATION LOGIC)
+-- ---------------------------------------------------------------------------------------
+applyPerformanceOptimizations()
+task.wait(1)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Nodes = require(ReplicatedStorage:WaitForChild("Nodes"))
+
+local settingsMap = {
+    AutoSkipWaves = true, AutoVoteStart = true, AutoRetry = true, LowDetailMode = true,
+    FastSummon = true, SummonMax = true, DisplayPinnedQuests = false, PathVisualizerEnabled = false,
+    CameraShakeEnabled = false, OtherUnitsEnabled = false, OtherUnitVFXEnabled = false,
+    OwnUnitVFXEnabled = false, AbilityVFXEnabled = false, UnitAuraEnabled = false,
+    TraitAuraEnabled = false, BuffIndicatorsEnabled = false, DisplayUnitCircles = false,
+    DisplayHealthBars = false, DisplayEnemyTags = false, DisplayEnemyStatusEffects = false,
+    DisplayEnemyEffects = false, OtherCosmeticEnabled = false, OtherEmoteSFXEnabled = false,
+    GlobalMessagesEnabled = false, DisplayUpdateLog = false, DamageIndicatorsEnabled = false,
+    AutoPlacePhantoms = false, StrictPhantomPlacement = false
+}
+
+for settingName, value in pairs(settingsMap) do
+    task.spawn(function()
+        pcall(function() Nodes.CLIENT_CHANGE_SETTING:FireServer(settingName, value) end)
+    end)
+    task.wait(0.5)
+end
+
+task.wait(1)
+local FusionPackage = ReplicatedStorage:WaitForChild("FusionPackage")
+local Actions = require(FusionPackage.Actions)
+
+pcall(function() Actions.ToggleAutoSell("Standard", "Rare", false, true) end)
+task.wait(0.3)
+pcall(function() Actions.ToggleAutoSell("Standard", "Epic", false, false) end)
+task.wait(0.3)
+pcall(function() Actions.ToggleAutoSell("Standard", "Epic", true, false) end)
+task.wait(0.3)
+pcall(function() Actions.ToggleAutoSell("Standard", "Rare", true, true) end)
+task.wait(0.3)
+
+-- Trait Filters Setup
+do
+    local TRAIT_CONFIG = {
+        TargetTraits = {"Unbound", "Primordial", "Forsaken", "Draconic", "Investor"},
+        ClearBeforeSet = false,
+        FilterMode = false,
+    }
+
+    if TRAIT_CONFIG.ClearBeforeSet then
+        pcall(function() Nodes.CLIENT_CLEAR_TRAIT_FILTERS:Request() end)
+        task.wait(0.3)
+    end
+
+    for _, trait in ipairs(TRAIT_CONFIG.TargetTraits) do
+        pcall(function() Nodes.CLIENT_TOGGLE_TRAIT_FILTER:Request(trait, TRAIT_CONFIG.FilterMode) end)
+        task.wait(0.1)
+    end
+end
+
+task.wait(1)
+
+-- Starter Unit Claim
+local GuiService = game:GetService("GuiService")
+local TARGET_UNIT = "Carrot"
+
+local playerGui = LocalPlayer.PlayerGui
+if playerGui:FindFirstChild("Prompt") then
+    pcall(function()
+        local folder = playerGui.Prompt.Frame.Frame.Frame.Folder.Frame.Frame
+        for _, child in pairs(folder:GetChildren()) do
+            if child:FindFirstChild("Folder") then
+                local textLabel = child.Folder.Frame.Frame:FindFirstChild("TextLabel")
+                if textLabel and (textLabel.ContentText == TARGET_UNIT or textLabel.Text == TARGET_UNIT) then
+                    local button = child.Folder.Frame:FindFirstChild("TextButton")
+                    if button then
+                        GuiService.SelectedCoreObject = nil; task.wait(0.1)
+                        button.Selectable = true; GuiService.SelectedCoreObject = button; task.wait(0.1)
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game); task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game); task.wait(0.2)
+                        GuiService.SelectedCoreObject = nil; task.wait(0.5)
+
+                        local confirmBtn = playerGui.Prompt.Frame.Frame.Frame.Frame:FindFirstChild("PrimaryButton")
+                        if confirmBtn then
+                            confirmBtn.Selectable = true; GuiService.SelectedCoreObject = confirmBtn; task.wait(0.1)
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game); task.wait(0.05)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game); task.wait(0.2)
+                            GuiService.SelectedCoreObject = nil
+                        end
+                    end
+                    break
+                end
+            end
+        end
+    end)
+end
+
+task.wait(1)
+
+-- Claim Daily & Release Rewards
+for day = 1, 7 do
+    task.spawn(function() pcall(function() Nodes.CLAIM_CALENDAR:FireServer("ReleaseCalendar", day) end) end)
+    task.wait(0.05)
+end
+task.wait(2)
+for day = 1, 7 do
+    task.spawn(function() pcall(function() Nodes.CLAIM_CALENDAR:FireServer("DailyRewards", day) end) end)
+    task.wait(0.05)
+end
+
+task.wait(2)
+for i = 1, 10 do
+    VirtualInputManager:SendMouseButtonEvent(10, 10, 0, true, game, 0); task.wait(0.05)
+    VirtualInputManager:SendMouseButtonEvent(10, 10, 0, false, game, 0); task.wait(0.1)
+end
+
+-- Claim Codes
+do
+    local CODES = {"sorry4longmaintenance", "warriorsaga", "update1", "ballin!", "2.5mgroup!"}
+    for _, code in ipairs(CODES) do
+        pcall(function()
+            local request = Nodes.CLAIM_CODE:Request(code)
+            request:Timeout(5)
+            return request:Wait()
+        end)
+        task.wait(1.1)
+    end
+end
+
+-- Claim Quests & Battlepass
+do
+    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+    if replica and replica.Data.QuestData then
+        for categoryName, _ in pairs(replica.Data.QuestData) do
+            task.spawn(function() pcall(function() Nodes.QUEST_CLAIM_ALL_CATEGORY:FireServer(categoryName) end) end)
+            task.wait(0.05)
+        end
+    end
+    task.wait(2)
+
+    local ReplicaClient = require(ReplicatedStorage.Shared.ReplicaClient)
+    ReplicaClient.OnNew("BattlepassData", function(r)
+        if r.Data and r.Data.DataKey then
+            pcall(function() Nodes.CLAIM_ALL_BATTLEPASS_REWARDS:FireServer(r.Data.DataKey) end)
+        end
+    end)
+end
+
+-- Unit Helpers
+local function checkInventoryForUnits(targetUnits, returnWithTrait)
+    local unitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+    if not unitData then return {} end
+    if type(targetUnits) == "string" then targetUnits = {targetUnits} end
+
+    local UnitInfo = require(ReplicatedStorage.Shared.Information.Units)
+    local foundUnits = {}
+
+    for fullKey, data in pairs(unitData) do
+        local internalName = fullKey:match("^(.+)#") or fullKey
+        local unitInfo = UnitInfo[internalName]
+        if unitInfo then
+            local displayName = unitInfo.DisplayName or internalName
+            for _, targetUnit in ipairs(targetUnits) do
+                if displayName == targetUnit then
+                    if returnWithTrait then
+                        table.insert(foundUnits, {
+                            name = displayName,
+                            trait = data.Trait or "None",
+                            fullKey = fullKey,
+                            unitID = data.ID,
+                            isShiny = data.Shiny or false
+                        })
+                    else
+                        table.insert(foundUnits, displayName)
+                    end
+                    break
+                end
+            end
+        end
+    end
+    return foundUnits
+end
+
+local function selectBestUnitForReroll(units)
+    if #units == 0 then return nil end
+    if #units == 1 then return units[1] end
+
+    local noneUnits, withTraitUnits = {}, {}
+    for _, unit in ipairs(units) do
+        if unit.trait == "None" then table.insert(noneUnits, unit) else table.insert(withTraitUnits, unit) end
+    end
+    return (#noneUnits > 0) and noneUnits[1] or (#withTraitUnits > 0 and withTraitUnits[1] or units[1])
+end
+
+local function sendSummonStatus(foundUnits, isComplete)
+    if not HORST_ENABLED or not _G.Horst_SetDescription then return end
+    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+    local gems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+    local rr = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.TraitReroll and replica.Data.ItemData.TraitReroll.Amount or 0
+
+    local unitNames = {}
+    for _, unit in ipairs(foundUnits) do table.insert(unitNames, unit) end
+    local message = string.format("💎 Gems: %d • RR: %d • %s", gems, rr, table.concat(unitNames, ", "))
+    pcall(function() _G.Horst_SetDescription(message) end)
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🔮 11. ระบบสุ่มยูนิตและรีพรสวรรค์ (SUMMON & TRAIT REROLL LOGIC)
+-- ---------------------------------------------------------------------------------------
+local shouldSummon = false
+local hasTargetUnitConfig = false
+local autoSummonMode = false
+
+if hasSummonConfig then
+    if type(_G.Config.SummonUnits) == "string" and _G.Config.SummonUnits:lower() == "auto" then
+        autoSummonMode = true
+        local allTargets = {}
+        for _, unit in ipairs(SECRET_UNITS) do table.insert(allTargets, unit) end
+        for _, unit in ipairs(MYTHIC_UNITS) do table.insert(allTargets, unit) end
+        SUMMON_CONFIG = allTargets
+    end
+
+    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+    local level = replica and replica.Data and replica.Data.Level or 0
+    local gems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+
+    local foundInInventory = checkInventoryForUnits(SUMMON_CONFIG)
+
+    if autoSummonMode then
+        if #foundInInventory > 0 then
+            sendSummonStatus(foundInInventory, true)
+            hasTargetUnitConfig = true
+        end
+    else
+        if #foundInInventory >= #SUMMON_CONFIG then
+            sendSummonStatus(foundInInventory, true)
+            hasTargetUnitConfig = true
+        end
+    end
+
+    if not hasTargetUnitConfig then
+        if level >= 10 and gems >= 2500 then
+            local isSecretUnit = false
+            for _, configUnit in ipairs(SUMMON_CONFIG) do
+                for _, secretUnit in ipairs(SECRET_UNITS) do
+                    if configUnit == secretUnit then
+                        isSecretUnit = true
+                        break
+                    end
+                end
+                if isSecretUnit then break end
+            end
+
+            if isSecretUnit then
+                shouldSummon = true
+            else
+                local bannerUnits = checkCurrentBanner()
+
+                local hasMatch = false
+                for _, configUnit in pairs(SUMMON_CONFIG) do
+                    for _, bannerUnit in pairs(bannerUnits) do
+                        if configUnit == bannerUnit then
+                            hasMatch = true
+                            break
+                        end
+                    end
+                    if hasMatch then break end
+                end
+
+                if hasMatch then
+                    shouldSummon = true
+                else
+                    if #foundInInventory > 0 then
+                        sendSummonStatus(foundInInventory, false)
+                    end
+                end
+            end
+        else
+            warn(string.format("⚠️ Target unit not found in inventory. Need to farm more gems. Level=%d, Gems=%d (require Level>=10 and Gems>=2500)", level, gems))
+
+            local isSecretSummon = false
+            for _, configUnit in ipairs(SUMMON_CONFIG) do
+                for _, secretUnit in ipairs(SECRET_UNITS) do
+                    if configUnit == secretUnit then
+                        isSecretSummon = true
+                        break
+                    end
+                end
+                if isSecretSummon then break end
+            end
+
+            if isSecretSummon and CHANGE_ACC_SECRETS then
+                local mythicFallback = checkInventoryForUnits(MYTHIC_UNITS)
+
+                if #mythicFallback > 0 then
+                    sendSummonStatus(mythicFallback, false)
+                    hasTargetUnitConfig = true
+                end
+            end
+        end
+    end
+end
+
+local hasTargetUnitLegendary = false
+
+if not shouldSummon and not hasTargetUnitConfig then
+
+    local function checkForLegendaryUnits()
+        local targetUnits = {
+            "The Hero", "Scissor", "Ice Queen",
+            "Water Princess", "Forbidden Teacher", "Greed"
+        }
+
+        local unitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+        if not unitData then return false end
+
+        local UnitInfo = require(ReplicatedStorage.Shared.Information.Units)
+
+        for fullKey, data in pairs(unitData) do
+            local internalName = fullKey:match("^(.+)#") or fullKey
+            local unitInfo = UnitInfo[internalName]
+
+            if unitInfo then
+                local displayName = unitInfo.DisplayName or internalName
+
+                for _, targetUnit in pairs(targetUnits) do
+                    if displayName == targetUnit then
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
+    end
+
+    hasTargetUnitLegendary = checkForLegendaryUnits()
+end
+
+if shouldSummon then
+    local EPIC_UNITS_SUMMON = {
+        "Ice Mage", "Bounty Hunter", "Nen Hunter", "Corps Captain", "Demon Cyborg"
+    }
+
+    local LEGENDARY_UNITS_SUMMON = {
+        "The Hero", "Scissor", "Ice Queen",
+        "Water Princess", "Forbidden Teacher", "Greed"
+    }
+
+    local unitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+    local UnitInfo = require(ReplicatedStorage.Shared.Information.Units)
+    local hasEpic = false
+    local hasLegendary = false
+
+    if unitData then
+        for fullKey, data in pairs(unitData) do
+            local internalName = fullKey:match("^(.+)#") or fullKey
+            local unitInfo = UnitInfo[internalName]
+
+            if unitInfo then
+                local displayName = unitInfo.DisplayName or internalName
+
+                for _, epicUnit in ipairs(EPIC_UNITS_SUMMON) do
+                    if displayName == epicUnit then
+                        hasEpic = true
+                        break
+                    end
+                end
+
+                for _, legendaryUnit in ipairs(LEGENDARY_UNITS_SUMMON) do
+                    if displayName == legendaryUnit then
+                        hasLegendary = true
+                        break
+                    end
+                end
+
+                if hasEpic and hasLegendary then break end
+            end
+        end
+    end
+
+    local FusionPackage2 = ReplicatedStorage:WaitForChild("FusionPackage")
+    local Actions2 = require(FusionPackage2.Actions)
+
+    if hasEpic then
+        pcall(function() Actions2.ToggleAutoSell("Standard", "Epic", false, true) end)
+        task.wait(0.3)
+        pcall(function() Actions2.ToggleAutoSell("Standard", "Epic", true, true) end)
+        task.wait(0.3)
+    end
+
+    if hasLegendary then
+        pcall(function() Actions2.ToggleAutoSell("Standard", "Legendary", false, true) end)
+        task.wait(0.3)
+        pcall(function() Actions2.ToggleAutoSell("Standard", "Legendary", true, true) end)
+        task.wait(0.3)
+    end
+
+    task.wait(1)
+
+    local BANNER_ID = "Standard"
+    local AMOUNT_PER_SUMMON = 50
+    local GEMS_PER_SUMMON = 2500
+    local summonCount = 0
+
+    while true do
+        local foundBeforeSummon = checkInventoryForUnits(SUMMON_CONFIG)
+
+        if autoSummonMode then
+            if #foundBeforeSummon > 0 then
+                sendSummonStatus(foundBeforeSummon, true)
+                hasTargetUnitConfig = true
+                break
+            end
+        else
+            if #foundBeforeSummon >= #SUMMON_CONFIG then
+                sendSummonStatus(foundBeforeSummon, true)
+                hasTargetUnitConfig = true
+                break
+            end
+        end
+
+        local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+        local gems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+
+        if gems < GEMS_PER_SUMMON then
+            warn(string.format("⚠️ Not enough gems for summon: %d (require %d) - stopping", gems, GEMS_PER_SUMMON))
+            break
+        end
+
+        summonCount = summonCount + 1
+
+        pcall(function()
+            Nodes.BANNER_SUMMON:FireServer(BANNER_ID, AMOUNT_PER_SUMMON)
+        end)
+
+        task.wait(0.3)
+
+        for j = 1, 5 do
+            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, true, game, 0)
+            task.wait(0.01)
+            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, false, game, 0)
+            task.wait(0.02)
+        end
+
+        task.wait(0.2)
+
+        local foundInInventory = checkInventoryForUnits(SUMMON_CONFIG)
+
+        if autoSummonMode then
+            if #foundInInventory > 0 then
+                sendSummonStatus(foundInInventory, true)
+                hasTargetUnitConfig = true
+                break
+            end
+        else
+            if #foundInInventory >= #SUMMON_CONFIG then
+                sendSummonStatus(foundInInventory, true)
+                hasTargetUnitConfig = true
+                break
+            else
+                if #foundInInventory > 0 then
+                    sendSummonStatus(foundInInventory, false)
+                end
+
+                local isSecretUnit = false
+                for _, configUnit in ipairs(SUMMON_CONFIG) do
+                    for _, secretUnit in ipairs(SECRET_UNITS) do
+                        if configUnit == secretUnit then
+                            isSecretUnit = true
+                            break
+                        end
+                    end
+                    if isSecretUnit then break end
+                end
+
+                if not isSecretUnit then
+                    local bannerUnits = checkCurrentBanner()
+                    local hasMatch = false
+                    for _, configUnit in pairs(SUMMON_CONFIG) do
+                        for _, bannerUnit in pairs(bannerUnits) do
+                            if configUnit == bannerUnit then
+                                hasMatch = true
+                                break
+                            end
+                        end
+                        if hasMatch then break end
+                    end
+
+                    if not hasMatch then
+                        if #foundInInventory > 0 then
+                            sendSummonStatus(foundInInventory, false)
+                        end
+                        warn("⚠️ Target units no longer in banner - stopping summon")
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+elseif not hasTargetUnitConfig and not hasTargetUnitLegendary then
+
+    local BANNER_ID = "Standard"
+    local AMOUNT_PER_SUMMON = 50
+    local GEMS_PER_SUMMON = 2500
+    local DELAY = 2
+    local summonCount = 0
+    local MAX_SUMMONS = 100
+
+    local function checkForTargetUnits()
+        local targetUnits = {
+            "The Hero", "Scissor", "Ice Queen",
+            "Water Princess", "Forbidden Teacher", "Greed"
+        }
+        return #checkInventoryForUnits(targetUnits) > 0
+    end
+
+    while not hasTargetUnitLegendary and summonCount < MAX_SUMMONS do
+        local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+        local gems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+
+        if gems < GEMS_PER_SUMMON then
+            warn(string.format("⚠️ Not enough gems for Legendary summon: %d (require %d) - stopping", gems, GEMS_PER_SUMMON))
+            break
+        end
+
+        summonCount = summonCount + 1
+
+        pcall(function()
+            Nodes.BANNER_SUMMON:FireServer(BANNER_ID, AMOUNT_PER_SUMMON)
+        end)
+
+        task.wait(DELAY)
+
+        for j = 1, 5 do
+            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, true, game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(10, 10, 0, false, game, 0)
+            task.wait(0.1)
+        end
+
+        task.wait(2)
+
+        hasTargetUnitLegendary = checkForTargetUnits()
+    end
+
+    if not hasTargetUnitLegendary then
+        warn(string.format("⚠️ Reached max summons (%d) without finding target unit", MAX_SUMMONS))
+    end
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🎲 12. ระบบรีพรสวรรค์ (TRAIT REROLL ENGINE)
+-- ---------------------------------------------------------------------------------------
+local shouldDoTraitReroll = false
+local traitRerollTargetUnit = nil
+
+if _G.AutoSummonEnabled == false then
+    shouldSummon = false
+end
+
+if _G.AutoTraitRerollEnabled == false then
+    shouldDoTraitReroll = false
+end
+
+if TRAIT_REROLL_CONFIG and TRAIT_REROLL_CONFIG.TargetUnit and _G.AutoTraitRerollEnabled ~= false then
+    local normalizedTargetUnit = TRAIT_REROLL_CONFIG.TargetUnit
+    if type(normalizedTargetUnit) == "table" then
+        normalizedTargetUnit = normalizedTargetUnit[1]
+    end
+
+    if normalizedTargetUnit == "auto" then
+        if hasTargetUnitConfig then
+            shouldDoTraitReroll = true
+            traitRerollTargetUnit = "auto"
+        elseif not hasTargetUnitConfig and hasSummonConfig then
+            local availableMythics = checkInventoryForUnits(MYTHIC_UNITS, true)
+
+            if #availableMythics > 0 then
+                table.sort(availableMythics, function(a, b)
+                    local priorityA, priorityB = 999, 999
+                    for i, unitName in ipairs(TRAIT_REROLL_PRIORITY) do
+                        if a.name == unitName then priorityA = i end
+                        if b.name == unitName then priorityB = i end
+                    end
+                    return priorityA < priorityB
+                end)
+
+                local fallbackUnit = availableMythics[1].name
+                shouldDoTraitReroll = true
+                traitRerollTargetUnit = fallbackUnit
+            else
+                warn("   ⚠️ No fallback Mythic units found")
+            end
+        end
+    else
+        shouldDoTraitReroll = true
+        traitRerollTargetUnit = normalizedTargetUnit
+    end
+end
+
+if shouldDoTraitReroll and traitRerollTargetUnit then
+    local targetUnitName = traitRerollTargetUnit
+    local targetTrait = TRAIT_REROLL_CONFIG.TargetTrait
+
+    local isSecretSummon = false
+    if hasSummonConfig and CHANGE_ACC_SECRETS then
+        for _, configUnit in ipairs(SUMMON_CONFIG) do
+            for _, secretUnit in ipairs(SECRET_UNITS) do
+                if configUnit == secretUnit then
+                    isSecretSummon = true
+                    break
+                end
+            end
+            if isSecretSummon then break end
+        end
+    end
+
+    if targetUnitName == "auto" then
+        if hasSummonConfig and hasTargetUnitConfig then
+            local availableUnits = checkInventoryForUnits(SUMMON_CONFIG, true)
+
+            if #availableUnits > 0 then
+                table.sort(availableUnits, function(a, b)
+                    local priorityA, priorityB = 999, 999
+                    for i, unitName in ipairs(TRAIT_REROLL_PRIORITY) do
+                        if a.name == unitName then priorityA = i end
+                        if b.name == unitName then priorityB = i end
+                    end
+                    return priorityA < priorityB
+                end)
+                targetUnitName = availableUnits[1].name
+            else
+                warn("   ⚠️ No summon config units found in inventory")
+
+                if isSecretSummon and CHANGE_ACC_SECRETS then
+                    local mythicUnits = checkInventoryForUnits(MYTHIC_UNITS, true)
+
+                    if #mythicUnits > 0 then
+                        table.sort(mythicUnits, function(a, b)
+                            local priorityA, priorityB = 999, 999
+                            for i, unitName in ipairs(TRAIT_REROLL_PRIORITY) do
+                                if a.name == unitName then priorityA = i end
+                                if b.name == unitName then priorityB = i end
+                            end
+                            return priorityA < priorityB
+                        end)
+                        targetUnitName = mythicUnits[1].name
+                    else
+                        targetUnitName = nil
+                    end
+                else
+                    targetUnitName = nil
+                end
+            end
+        else
+            warn("   ⚠️ Cannot use 'auto' without SummonConfig or target unit")
+            targetUnitName = nil
+        end
+    end
+
+    if targetUnitName then
+        local unitsWithTrait = checkInventoryForUnits({targetUnitName}, true)
+
+        if #unitsWithTrait > 0 then
+            local unitInfo = selectBestUnitForReroll(unitsWithTrait)
+            local currentTrait = unitInfo.trait
+
+            local hasTargetTrait = false
+
+            if not targetTrait then
+                hasTargetTrait = (currentTrait ~= "None")
+            elseif type(targetTrait) == "table" then
+                if #targetTrait == 0 then
+                    hasTargetTrait = true
+                else
+                    for _, trait in ipairs(targetTrait) do
+                        if currentTrait == trait then
+                            hasTargetTrait = true
+                            break
+                        end
+                    end
+                end
+            else
+                hasTargetTrait = (currentTrait == targetTrait)
+            end
+
+            if hasTargetTrait then
+                if HORST_ENABLED and _G.Horst_SetDescription and _G.Horst_AccountChangeDone then
+                    local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                    local currentGems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+                    local currentRR = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.TraitReroll and replica.Data.ItemData.TraitReroll.Amount or 0
+
+                    _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", currentGems, currentRR, targetUnitName, currentTrait))
+                    task.wait(15)
+
+                    if GEM_TARGET then
+                        if currentGems >= GEM_TARGET then
+                            local ok = pcall(_G.Horst_AccountChangeDone)
+                            if ok then
+                                _G.ScriptShouldStop = true
+                                while true do
+                                    pcall(function()
+                                        local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                        local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                        local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                        _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", g, rr, targetUnitName, currentTrait))
+                                    end)
+                                    task.wait(5)
+                                end
+                            end
+                        end
+                    else
+                        local ok = pcall(_G.Horst_AccountChangeDone)
+                        if ok then
+                            _G.ScriptShouldStop = true
+                            while true do
+                                pcall(function()
+                                    local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                    local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                    local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                    _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", g, rr, targetUnitName, currentTrait))
+                                end)
+                                task.wait(5)
+                            end
+                        end
+                    end
+                end
+            else
+                local replica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                local traitRerolls = 0
+                if replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.TraitReroll then
+                    traitRerolls = replica.Data.ItemData.TraitReroll.Amount or 0
+                end
+
+                if traitRerolls <= 0 then
+                    warn("❌ No Trait Reroll items available")
+
+                    if HORST_ENABLED and _G.Horst_SetDescription and _G.Horst_AccountChangeDone then
+                        local currentGems = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.Gem and replica.Data.ItemData.Gem.Amount or 0
+                        local currentRR = replica and replica.Data and replica.Data.ItemData and replica.Data.ItemData.TraitReroll and replica.Data.ItemData.TraitReroll.Amount or 0
+
+                        _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", currentGems, currentRR, targetUnitName, currentTrait))
+                        task.wait(15)
+
+                        if GEM_TARGET then
+                            if currentGems >= GEM_TARGET then
+                                local ok = pcall(_G.Horst_AccountChangeDone)
+                                if ok then
+                                    _G.ScriptShouldStop = true
+                                    while true do
+                                        pcall(function()
+                                            local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                            local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                            local rr2 = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                            _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", g, rr2, targetUnitName, currentTrait))
+                                        end)
+                                        task.wait(5)
+                                    end
+                                end
+                            end
+                        else
+                            local ok = pcall(_G.Horst_AccountChangeDone)
+                            if ok then
+                                _G.ScriptShouldStop = true
+                                while true do
+                                    pcall(function()
+                                        local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                        local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                        local rr2 = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                        _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", g, rr2, targetUnitName, currentTrait))
+                                    end)
+                                    task.wait(5)
+                                end
+                            end
+                        end
+                    end
+                else
+                    local function getCurrentTrait(fullKey, maxRetries)
+                        maxRetries = maxRetries or 10
+
+                        for i = 1, maxRetries do
+                            local success, result = pcall(function()
+                                local newUnitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+                                if newUnitData and newUnitData[fullKey] then
+                                    return newUnitData[fullKey].Trait or "None"
+                                end
+                                return nil
+                            end)
+
+                            if success and result then
+                                return result
+                            end
+
+                            if i < maxRetries then
+                                task.wait(0.1)
+                            end
+                        end
+
+                        return nil
+                    end
+
+                    local attempts = 0
+                    local success = false
+                    local finalTrait = currentTrait
+
+                    while attempts < traitRerolls do
+                        local currentReplica = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                        local currentRR = 0
+                        if currentReplica and currentReplica.Data and currentReplica.Data.ItemData and currentReplica.Data.ItemData.TraitReroll then
+                            currentRR = currentReplica.Data.ItemData.TraitReroll.Amount or 0
+                        end
+
+                        if currentRR <= 0 then
+                            break
+                        end
+
+                        local traitToRoll = nil
+                        if type(targetTrait) == "string" then
+                            traitToRoll = targetTrait
+                        end
+
+                        local rollSuccess, rollError = pcall(function()
+                            Nodes.ROLL_UNIT_TRAIT:FireServer(unitInfo.fullKey, traitToRoll)
+                        end)
+
+                        if not rollSuccess then
+                            task.wait(0.1)
+                            continue
+                        end
+
+                        attempts = attempts + 1
+                        task.wait(0.5)
+
+                        local newTrait = getCurrentTrait(unitInfo.fullKey, 10)
+
+                        if not newTrait then
+                            task.wait(0.1)
+                            continue
+                        end
+
+                        finalTrait = newTrait
+
+                        local gotTargetTrait = false
+
+                        if not targetTrait then
+                            if newTrait ~= "None" then
+                                gotTargetTrait = true
+                            end
+                        elseif type(targetTrait) == "table" then
+                            for _, trait in ipairs(targetTrait) do
+                                if newTrait == trait then
+                                    gotTargetTrait = true
+                                    break
+                                end
+                            end
+                        else
+                            if newTrait == targetTrait then
+                                gotTargetTrait = true
+                            end
+                        end
+
+                        if gotTargetTrait then
+                            success = true
+                            break
+                        end
+
+                        task.wait(0.1)
+                    end
+
+                    if success then
+                        warn(string.format("✅ %s | Trait: %s | Used: %d | Left: %d",
+                            targetUnitName, finalTrait, attempts, traitRerolls - attempts))
+
+                        if HORST_ENABLED and _G.Horst_SetDescription and _G.Horst_AccountChangeDone then
+                            local replicaAfter = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                            local currentGems = replicaAfter and replicaAfter.Data and replicaAfter.Data.ItemData and replicaAfter.Data.ItemData.Gem and replicaAfter.Data.ItemData.Gem.Amount or 0
+                            local currentRR = replicaAfter and replicaAfter.Data and replicaAfter.Data.ItemData and replicaAfter.Data.ItemData.TraitReroll and replicaAfter.Data.ItemData.TraitReroll.Amount or 0
+
+                            _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", currentGems, currentRR, targetUnitName, finalTrait))
+                            task.wait(15)
+
+                            if GEM_TARGET then
+                                if currentGems >= GEM_TARGET then
+                                    local ok = pcall(_G.Horst_AccountChangeDone)
+                                    if ok then
+                                        _G.ScriptShouldStop = true
+                                        while true do
+                                            pcall(function()
+                                                local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                                local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                                local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                                _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", g, rr, targetUnitName, finalTrait))
+                                            end)
+                                            task.wait(5)
+                                        end
+                                    end
+                                end
+                            else
+                                local ok = pcall(_G.Horst_AccountChangeDone)
+                                if ok then
+                                    _G.ScriptShouldStop = true
+                                    while true do
+                                        pcall(function()
+                                            local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                            local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                            local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                            _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ✅ %s", g, rr, targetUnitName, finalTrait))
+                                        end)
+                                        task.wait(5)
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        warn(string.format("⚠️ %s | Final Trait: %s | Used: %d (all rerolls)", targetUnitName, finalTrait, traitRerolls))
+
+                        if HORST_ENABLED and _G.Horst_SetDescription and _G.Horst_AccountChangeDone then
+                            local replicaAfter = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                            local currentGems = replicaAfter and replicaAfter.Data and replicaAfter.Data.ItemData and replicaAfter.Data.ItemData.Gem and replicaAfter.Data.ItemData.Gem.Amount or 0
+                            local currentRR = replicaAfter and replicaAfter.Data and replicaAfter.Data.ItemData and replicaAfter.Data.ItemData.TraitReroll and replicaAfter.Data.ItemData.TraitReroll.Amount or 0
+
+                            _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", currentGems, currentRR, targetUnitName, finalTrait))
+                            task.wait(15)
+
+                            if GEM_TARGET then
+                                if currentGems >= GEM_TARGET then
+                                    local ok = pcall(_G.Horst_AccountChangeDone)
+                                    if ok then
+                                        _G.ScriptShouldStop = true
+                                        while true do
+                                            pcall(function()
+                                                local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                                local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                                local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                                _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", g, rr, targetUnitName, finalTrait))
+                                            end)
+                                            task.wait(5)
+                                        end
+                                    end
+                                end
+                            else
+                                local ok = pcall(_G.Horst_AccountChangeDone)
+                                if ok then
+                                    _G.ScriptShouldStop = true
+                                    while true do
+                                        pcall(function()
+                                            local r = Nodes.GET_PLAYER_REPLICA:InvokeSelf()
+                                            local g = r and r.Data and r.Data.ItemData and r.Data.ItemData.Gem and r.Data.ItemData.Gem.Amount or 0
+                                            local rr = r and r.Data and r.Data.ItemData and r.Data.ItemData.TraitReroll and r.Data.ItemData.TraitReroll.Amount or 0
+                                            _G.Horst_SetDescription(string.format("💎 Gems: %d • RR: %d • %s • Trait: ❌ %s (Out of RR)", g, rr, targetUnitName, finalTrait))
+                                        end)
+                                        task.wait(5)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            warn(string.format("⚠️ Unit '%s' not found in inventory - skipping Trait Reroll", targetUnitName))
+        end
+    else
+        warn("⚠️ No target unit specified - skipping Trait Reroll")
+    end
+
+    task.wait(1)
+end
+
+-- ---------------------------------------------------------------------------------------
+-- 🛡️ 13. ระบบสวมใส่ยูนิตอัตโนมัติ (AUTO EQUIP UNITS ENGINE)
+-- ---------------------------------------------------------------------------------------
+local unitData = Nodes.GET_DATA_VALUE:InvokeSelf("UnitData")
+local UnitInfo = require(ReplicatedStorage.Shared.Information.Units)
+
+local displayNameMap = {}
+if unitData then
+    for fullKey, data in pairs(unitData) do
+        local internalName = fullKey:match("^(.+)#") or fullKey
+        local displayName = UnitInfo[internalName] and UnitInfo[internalName].DisplayName or internalName
+        local lowerName = displayName:lower()
+        local isShiny = data.Shiny or false
+
+        if not displayNameMap[lowerName] or isShiny then
+            displayNameMap[lowerName] = fullKey
+        end
+    end
+end
+
+local EPIC_UNITS_EQUIP = {
+    "Ice Mage", "Bounty Hunter", "Nen Hunter", "Corps Captain", "Demon Cyborg"
+}
+
+local LEGENDARY_UNITS_EQUIP = {
+    "Ice Queen", "Forbidden Teacher", "The Hero",
+    "Greed", "Scissor", "Water Princess"
+}
+
+local foundEpicUnit = nil
+local foundLegendaryUnit = nil
+
+for _, targetUnit in ipairs(EPIC_UNITS_EQUIP) do
+    if displayNameMap[targetUnit:lower()] then
+        foundEpicUnit = targetUnit
+        break
+    end
+end
+
+for _, targetUnit in ipairs(LEGENDARY_UNITS_EQUIP) do
+    if displayNameMap[targetUnit:lower()] then
+        foundLegendaryUnit = targetUnit
+        break
+    end
+end
+
+Nodes.UNIT_UNEQUIP_ALL:FireServer("Unit")
+task.wait(0.5)
+
+local foundEpicUnit2 = nil
+for _, targetUnit in ipairs(EPIC_UNITS_EQUIP) do
+    if displayNameMap[targetUnit:lower()] and targetUnit ~= foundEpicUnit then
+        foundEpicUnit2 = targetUnit
+        break
+    end
+end
+
+if foundEpicUnit2 then
+    local epicFullKey2 = displayNameMap[foundEpicUnit2:lower()]
+    if epicFullKey2 then
+        Nodes.UNIT_EQUIP:FireServer(epicFullKey2, "1")
+        task.wait(0.3)
+    end
+else
+    local carrotFullKey = displayNameMap["carrot"]
+    if carrotFullKey then
+        Nodes.UNIT_EQUIP:FireServer(carrotFullKey, "1")
+        task.wait(0.3)
+    else
+        warn("❌ No second Epic or Carrot found for slot 1")
+    end
+end
+
+if foundLegendaryUnit then
+    local legendaryFullKey = displayNameMap[foundLegendaryUnit:lower()]
+    if legendaryFullKey then
+        Nodes.UNIT_EQUIP:FireServer(legendaryFullKey, "2")
+        task.wait(0.3)
+    end
+end
+
+if foundEpicUnit then
+    local epicFullKey = displayNameMap[foundEpicUnit:lower()]
+    if epicFullKey then
+        Nodes.UNIT_EQUIP:FireServer(epicFullKey, "3")
+        task.wait(0.3)
+    end
+end
+
+task.wait(1)
+
+-- ---------------------------------------------------------------------------------------
+-- 🚀 14. เริ่มต้นด่านฟาร์ม (START GAME IN LOBBY)
+-- ---------------------------------------------------------------------------------------
+if _G.AutoFarmEnabled ~= false then
+    local FusionPackageFinal = ReplicatedStorage:WaitForChild("FusionPackage")
+    local ActionsFinal = require(FusionPackageFinal.Actions)
+    ActionsFinal.PartyStartGame(CONFIG)
+end
