@@ -148,7 +148,7 @@ local NormalRouter = {
     -- 5. Gakuran (GKR)
     [128736949265057] = { Name = "Gakuran", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
 
-     -- 6. 99 Night in the forrest (99Nights)
+    -- 6. 99 Night in the forrest (99Nights)
     [126509999114328] = { Name = "99 Nights", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/99N", Keywords = {"99Nights"} },
     [79546208627805] = { Name = "99 Nights", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/99N", Keywords = {"99Nights"} },
 }
@@ -167,7 +167,7 @@ local VVIPRouter = {
     -- 4. Steal An Egg (SaE)
     [107778070777162] = { Name = "Steal An Egg", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG"} },
 
-     -- 4. Anime Expedition (AE)
+    -- 5. Anime Expedition (AE)
     [84515722934860] = { Name = "Anime Expedition", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AEae", Keywords = {"AE"} },
 }
 
