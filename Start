@@ -35,10 +35,23 @@ local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("Loc
 -- ==============================================================================
 local function ClearSavedKeys()
     pcall(function()
-        if isfile and delfile then
-            if isfile(LuarmorConfig.SavedKeyFile) then delfile(LuarmorConfig.SavedKeyFile) end
-            if isfile("PayomboyZ_LuarmorKey.txt") then delfile("PayomboyZ_LuarmorKey.txt") end
-            if isfile("PayomboyZ_VVIPKey.txt") then delfile("PayomboyZ_VVIPKey.txt") end
+        local filesToDelete = {
+            LuarmorConfig.SavedKeyFile,
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
         end
     end)
     pcall(function()
@@ -46,8 +59,10 @@ local function ClearSavedKeys()
             getgenv().script_key = nil
             getgenv().PayomboyZ_InputKey = nil
         end
-        _G.script_key = nil
-        shared.script_key = nil
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
         script_key = nil
     end)
 end
