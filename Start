@@ -12,9 +12,7 @@ local LuarmorConfig = {
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
-    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
-    SpecialKey = "PAYOM-VVIP-280342-PBGZ19"
+    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua"
 }
 
 local Players = game:GetService("Players")
@@ -244,48 +242,6 @@ local function PassToKeyChecker(userKey)
     
     if getgenv then getgenv().PayomboyZ_InputKey = userKey end
 
-    -- ส่ง Key เข้าสู่ตัวแปรกองกลาง
-    if getgenv then getgenv().script_key = userKey end
-    if getrenv then pcall(function() getrenv().script_key = userKey end) end
-    _G.script_key = userKey
-    shared.script_key = userKey
-    script_key = userKey
-
-    -- 🌟 ถ้าเป็นคีย์พิเศษ PAYOM-VVIP-280342-PBGZ19 ให้ยิงตรงไปที่ Github LoaderURL (ไม่ผ่าน Luarmor & ไม่ติด HWID)
-    if userKey == LuarmorConfig.SpecialKey then
-        local loaderLoaded = false
-        pcall(function()
-            local paths = {
-                "loader.txt",
-                "Loader.txt",
-                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
-            }
-            if isfile and readfile then
-                for _, p in ipairs(paths) do
-                    if isfile(p) then
-                        local code = readfile(p)
-                        if code and #code > 0 then
-                            local fn = loadstring(code)
-                            if fn then
-                                loaderLoaded = true
-                                fn()
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-
-        if not loaderLoaded then
-            pcall(function()
-                loadstring(game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
-            end)
-        end
-        return
-    end
-
-    -- 🔒 ถ้าเป็นคีย์ทั่วไป ให้ยิงไปเช็คที่ Luarmor Online Verification (LuarmorLoaderURL)
     local ErrorWatcherActive = true
     local connections = {}
 
@@ -394,6 +350,13 @@ local function PassToKeyChecker(userKey)
     for _, container in ipairs(containers) do
         watchContainer(container)
     end
+
+    -- ส่ง Key เข้าสู่ตัวแปรกองกลาง Luarmor
+    if getgenv then getgenv().script_key = userKey end
+    if getrenv then pcall(function() getrenv().script_key = userKey end) end
+    _G.script_key = userKey
+    shared.script_key = userKey
+    script_key = userKey
 
     pcall(function()
         loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
@@ -1517,30 +1480,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
         busy = true
         setButtonEnabled(redeem, false)
-
-        if key == LuarmorConfig.SpecialKey then
-            task.spawn(function()
-                task.wait(0.2)
-                setButtonText(redeem, "Checking (1/3)...")
-                setStatus("👑 [1/3] Verifying PAYOM-VVIP Special Key...", COLORS.cyan)
-
-                task.wait(0.3)
-                setButtonText(redeem, "Connecting (2/3)...")
-                setStatus("🚀 [2/3] Bypassing Luarmor -> Directing to GitHub Loader...", COLORS.cyan)
-
-                task.wait(0.3)
-                setButtonText(redeem, "Access Granted!")
-                setStatus("🚀 [3/3] Access Granted! Launching PayomboyZ Hub...", COLORS.success)
-
-                task.wait(0.4)
-                if gui and gui.Parent then
-                    gui:Destroy()
-                end
-                PassToKeyChecker(key)
-            end)
-            return
-        end
-
         setButtonText(redeem, "Checking (1/5)...")
         setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
 
