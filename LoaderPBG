@@ -214,7 +214,39 @@ if not scriptTarget and not vvipScriptTarget then
     end)
 end
 
--- 7. สรุปผลและดำเนินการรันสคริปต์
+-- 7. ฟังก์ชันโหลด Waiting Hub / WaitKey
+local function LoadWaitingHub()
+    task.wait(0.5)
+    local loaded = false
+    pcall(function()
+        local paths = {
+            "Waiting.txt",
+            "c:/Users/Dream/Desktop/Roblox Script/Login/Waiting.txt"
+        }
+        if isfile and readfile then
+            for _, p in ipairs(paths) do
+                if isfile(p) then
+                    local code = readfile(p)
+                    if code and #code > 0 then
+                        local fn = loadstring(code)
+                        if fn then
+                            loaded = true
+                            fn()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if not loaded then
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey?t=" .. tostring(tick())))()
+        end)
+    end
+end
+
+-- 8. สรุปผลและดำเนินการรันสคริปต์
 if vvipScriptTarget then
     if isVVIP then
         Notify("👑 PayomboyZ VVIP", "พบสิทธิ์ VVIP! กำลังโหลด " .. vvipScriptTarget.Name .. "...", false)
@@ -227,7 +259,8 @@ if vvipScriptTarget then
             warn("[PayomboyZ Loader Error]: " .. tostring(err))
         end
     else
-        Notify("❌ สิทธิ์ไม่เพียงพอ", "แมพ '" .. vvipScriptTarget.Name .. "' ต้องใช้คีย์ระดับ VVIP เท่านั้น!", true)
+        Notify("❌ สิทธิ์ไม่เพียงพอ", "แมพ '" .. vvipScriptTarget.Name .. "' ต้องใช้คีย์ระดับ VVIP เท่านั้น! กำลังเปิดหน้า Waiting Hub...", true)
+        LoadWaitingHub()
     end
 elseif scriptTarget then
     Notify("🚀 PayomboyZ Hub", "กำลังโหลดสคริปต์: " .. scriptTarget.Name .. "...", false)
@@ -240,5 +273,6 @@ elseif scriptTarget then
         warn("[PayomboyZ Loader Error]: " .. tostring(err))
     end
 else
-    Notify("⚠️ ไม่พบสคริปต์", "ยังไม่มีสคริปต์รองรับ PlaceId: " .. tostring(placeId), true)
+    Notify("⚠️ ไม่พบสคริปต์", "ยังไม่มีสคริปต์รองรับ PlaceId: " .. tostring(placeId) .. " กำลังเปิดหน้า Waiting Hub...", true)
+    LoadWaitingHub()
 end
