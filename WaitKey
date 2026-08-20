@@ -238,11 +238,17 @@ local function performLogoutKeyClear()
             table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
         end
 
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
         for _, file in ipairs(filesToDelete) do
-            if isfile and isfile(file) then
-                if type(delfile) == "function" then pcall(function() delfile(file) end) end
-                if type(writefile) == "function" then pcall(function() writefile(file, "") end) end
-            end
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
         end
     end)
 
@@ -251,8 +257,11 @@ local function performLogoutKeyClear()
             getgenv().script_key = nil
             getgenv().PayomboyZ_InputKey = nil
         end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
         if _G then _G.script_key = nil end
         if shared then shared.script_key = nil end
+        script_key = nil
     end)
 end
 
