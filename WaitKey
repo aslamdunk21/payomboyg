@@ -1,1 +1,1405 @@
+-- ==============================================================================
+-- PayomboyZ Hub - Stage 4: Modern Waiting & Game Selection Hub (Waiting.txt)
+-- Raw URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey
+-- Engine Architecture: Obsidian Glassmorphic 2 UI Engine + Logout System
+-- ==============================================================================
 
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local LuarmorConfig = {
+    ScriptId = "PayomboyZ_Hub",
+    SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
+    GetKeyURL = "https://ads.luarmor.net/get_key?for=PBG-fVUxHRHebIHz",
+    DiscordURL = "https://discord.gg/GBKDAe23C",
+    LogoPath = "PayomboyZ_Logo.jpg",
+    LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
+    StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
+    WaitKeyURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey",
+}
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local MarketplaceService = game:GetService("MarketplaceService")
+local SoundService = game:GetService("SoundService")
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
+
+-- ==============================================================================
+-- 🎨 COLOR PALETTE SPECIFICATION (OBSIDIAN GLASSMORPHIC 2 ENGINE)
+-- ==============================================================================
+local COLORS = {
+    backdrop = Color3.fromRGB(12, 5, 8),
+    shell = Color3.fromRGB(20, 10, 14),
+    glass = Color3.fromRGB(32, 14, 20),
+    glassDeep = Color3.fromRGB(25, 11, 16),
+    glassRaised = Color3.fromRGB(48, 18, 28),
+    userPanel = Color3.fromRGB(28, 12, 18),
+    surface = Color3.fromRGB(42, 18, 26),
+    surfaceRaised = Color3.fromRGB(58, 24, 34),
+    surfaceHover = Color3.fromRGB(78, 30, 44),
+    surfacePressed = Color3.fromRGB(34, 14, 20),
+    input = Color3.fromRGB(20, 9, 13),
+    inputFocus = Color3.fromRGB(36, 14, 22),
+    divider = Color3.fromRGB(140, 40, 60),
+    primary = Color3.fromRGB(255, 45, 85),
+    primaryHover = Color3.fromRGB(255, 75, 110),
+    primaryPressed = Color3.fromRGB(210, 30, 65),
+    secondary = Color3.fromRGB(52, 18, 28),
+    text = Color3.fromRGB(255, 255, 255),
+    textMuted = Color3.fromRGB(242, 218, 228),
+    textFaint = Color3.fromRGB(210, 168, 182),
+    cyan = Color3.fromRGB(255, 55, 85),
+    success = Color3.fromRGB(46, 224, 140),
+    warning = Color3.fromRGB(255, 185, 70),
+    danger = Color3.fromRGB(255, 60, 60),
+    disabled = Color3.fromRGB(50, 25, 32),
+    vvipGold = Color3.fromRGB(255, 200, 60),
+}
+
+-- ==============================================================================
+-- 🔊 UI AUDIO & UTILITIES
+-- ==============================================================================
+local function playClickSound()
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://6895079853"
+        sound.Volume = 0.35
+        sound.Parent = SoundService
+        sound:Play()
+        sound.Ended:Connect(function() sound:Destroy() end)
+    end)
+end
+
+local function copyText(value)
+    local copier = setclipboard or toclipboard
+    if type(copier) == "function" then
+        return pcall(copier, tostring(value))
+    end
+    return false
+end
+
+local customAvatarAsset = nil
+local function loadCustomAvatarImage()
+    if customAvatarAsset then return customAvatarAsset end
+    local avatarUrl = LuarmorConfig.LogoURL
+    local fileName = "payomboyz_avatar.jpg"
+    pcall(function()
+        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+            local getAsset = getcustomasset or getsynasset
+            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+            if not isFileExist then
+                local imageBytes = game:HttpGet(avatarUrl)
+                if imageBytes and #imageBytes > 0 then writefile(fileName, imageBytes) end
+            end
+            if typeof(isfile) == "function" and isfile(fileName) then
+                customAvatarAsset = getAsset(fileName)
+            end
+        end
+    end)
+    if not customAvatarAsset then
+        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+    end
+    return customAvatarAsset
+end
+
+-- ==============================================================================
+-- 🖼️ MULTI-TIER SMART MAP THUMBNAIL ENGINE (แก้ไขปัญหารูปภาพแมพไม่แสดง)
+-- ==============================================================================
+-- สาเหตุที่ภาพแมพไม่ค่อยดึงมาแสดง:
+-- 1. การดึงผ่าน URL HTTP ภายนอกมักโดน Roblox Executor หรือ CORS บล็อก
+-- 2. การใช้ rbxthumb://type=Asset กับ PlaceId โดยตรงจะไม่แสดงผลเพราะ PlaceId ไม่ใช่ AssetId
+-- 3. rbxthumb://type=GameIcon&id={placeId} ต้องระบุประเภท GameIcon ให้ถูกต้อง
+-- แก้ไข: ใช้ rbxthumb://type=GameIcon เป็นด่านแรก + ดึง IconImageAssetId จาก MarketplaceService ใน background
+local function applyMapThumbnail(imageLabel, placeId)
+    if not placeId or placeId == 0 then
+        imageLabel.Image = "rbxassetid://68072539"
+        return
+    end
+
+    -- Tier 1: Roblox Engine Native C++ rbxthumb GameIcon (รวดเร็วและตรงที่สุด)
+    imageLabel.Image = string.format("rbxthumb://type=GameIcon&id=%s&w=150&h=150", tostring(placeId))
+
+    -- Tier 2: Dynamic Async Inspection ผ่าน MarketplaceService (กรณี rbxthumb บนบาง executor ติดขัด)
+    task.spawn(function()
+        pcall(function()
+            local info = MarketplaceService:GetProductInfo(placeId)
+            if info and info.IconImageAssetId and info.IconImageAssetId > 0 then
+                if imageLabel and imageLabel.Parent then
+                    imageLabel.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
+                end
+            end
+        end)
+    end)
+end
+
+-- ==============================================================================
+-- 📢 TOAST NOTIFICATION SYSTEM
+-- ==============================================================================
+local function ShowToast(title, message, isError)
+    pcall(function()
+        local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        local notifHolder = parentGui:FindFirstChild("PayomboyZ_ToastHolder")
+        if not notifHolder then
+            notifHolder = Instance.new("ScreenGui")
+            notifHolder.Name = "PayomboyZ_ToastHolder"
+            notifHolder.ResetOnSpawn = false
+            notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            notifHolder.Parent = parentGui
+        end
+        
+        local toast = Instance.new("Frame")
+        toast.Size = UDim2.new(0, 310, 0, 62)
+        toast.Position = UDim2.new(1, 20, 1, -85)
+        toast.BackgroundColor3 = COLORS.glass
+        toast.BackgroundTransparency = 0.15
+        toast.BorderSizePixel = 0
+        toast.Parent = notifHolder
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = toast
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = isError and COLORS.danger or COLORS.cyan
+        stroke.Thickness = 1.5
+        stroke.Parent = toast
+        
+        local tTitle = Instance.new("TextLabel")
+        tTitle.Size = UDim2.new(1, -20, 0, 20)
+        tTitle.Position = UDim2.new(0, 10, 0, 6)
+        tTitle.BackgroundTransparency = 1
+        tTitle.Text = title
+        tTitle.TextColor3 = isError and COLORS.danger or COLORS.cyan
+        tTitle.Font = Enum.Font.GothamBold
+        tTitle.TextSize = 13
+        tTitle.TextXAlignment = Enum.TextXAlignment.Left
+        tTitle.Parent = toast
+        
+        local tDesc = Instance.new("TextLabel")
+        tDesc.Size = UDim2.new(1, -20, 0, 30)
+        tDesc.Position = UDim2.new(0, 10, 0, 26)
+        tDesc.BackgroundTransparency = 1
+        tDesc.Text = message
+        tDesc.TextColor3 = COLORS.text
+        tDesc.Font = Enum.Font.Gotham
+        tDesc.TextSize = 11
+        tDesc.TextWrapped = true
+        tDesc.TextXAlignment = Enum.TextXAlignment.Left
+        tDesc.Parent = toast
+        
+        playClickSound()
+        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -330, 1, -85) }):Play()
+        task.delay(4, function()
+            if toast and toast.Parent then
+                local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
+                tw:Play()
+                tw.Completed:Connect(function() toast:Destroy() end)
+            end
+        end)
+    end)
+end
+
+-- ==============================================================================
+-- 🎮 DATABASE OF ALL SUPPORTED GAMES IN PAYOMBOYZ HUB
+-- ==============================================================================
+local GAME_DATABASE = {
+    -- Normal VIP Games
+    { Name = "Attack On Titan Revolution", Category = "VIP", PlaceId = 13379208636, Description = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible", IconPlaceId = 13379208636 },
+    { Name = "Anime Card Farm", Category = "VIP", PlaceId = 125039473548047, Description = "Auto Card Roll, Pack Opener, Card Fusion & Farm", IconPlaceId = 125039473548047 },
+    { Name = "Arena Sniper", Category = "VIP", PlaceId = 122446657157717, Description = "Silent Aim, Hitbox Expander, Auto Shoot & Kill", IconPlaceId = 122446657157717 },
+    { Name = "Roll Anime To Fight", Category = "VIP", PlaceId = 107653945083776, Description = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units", IconPlaceId = 107653945083776 },
+    { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed", IconPlaceId = 128736949265057 },
+    { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard", IconPlaceId = 126509999114328 },
+
+    -- VVIP Exclusive Games
+    { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan", IconPlaceId = 125927821145949 },
+    { Name = "Murder Mystery 2", Category = "VVIP", PlaceId = 142823291, Description = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun", IconPlaceId = 142823291 },
+    { Name = "Capybara Vs Plant", Category = "VVIP", PlaceId = 104973076655377, Description = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle", IconPlaceId = 104973076655377 },
+    { Name = "Steal An Egg", Category = "VVIP", PlaceId = 107778070777162, Description = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch", IconPlaceId = 107778070777162 },
+    { Name = "Anime Expedition", Category = "VVIP", PlaceId = 84515722934860, Description = "Auto Expedition, Dungeon Clear, Card Reroll & AFK", IconPlaceId = 84515722934860 },
+}
+
+-- ==============================================================================
+-- 🔑 LOGOUT SYSTEM IMPLEMENTATION (ข้อกำหนดตาม logout.txt)
+-- ==============================================================================
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        for _, file in ipairs(filesToDelete) do
+            if isfile and isfile(file) then
+                if type(delfile) == "function" then pcall(function() delfile(file) end) end
+                if type(writefile) == "function" then pcall(function() writefile(file, "") end) end
+            end
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+        end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+    end)
+end
+
+local function stopAllScriptOperations()
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+end
+
+-- ==============================================================================
+-- 🚀 MAIN GUI INITIALIZATION (OBSIDIAN GLASSMORPHIC 2 UI ENGINE)
+-- ==============================================================================
+local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+if parentGui:FindFirstChild("ObsidianGlass2_WaitingUI") then
+    parentGui.ObsidianGlass2_WaitingUI:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "ObsidianGlass2_WaitingUI"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 99999
+gui.Parent = parentGui
+
+-- 📱 AUTOMATIC MOBILE RESPONSIVE SCALING ENGINE
+local uiScale = Instance.new("UIScale")
+local camera = workspace.CurrentCamera
+local function updateScale()
+    if camera and camera.ViewportSize then
+        local vp = camera.ViewportSize
+        local targetWidth, targetHeight = 780, 520
+        local scaleX = (vp.X - 20) / targetWidth
+        local scaleY = (vp.Y - 20) / targetHeight
+        local calcScale = math.clamp(math.min(scaleX, scaleY), 0.48, 1.0)
+        uiScale.Scale = calcScale
+    end
+end
+updateScale()
+if camera then camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end
+uiScale.Parent = gui
+
+-- 💎 MAIN SHELL FRAME (COMPACT SIZE: 780 x 520)
+local shell = Instance.new("Frame")
+shell.Name = "MainShell"
+shell.Size = UDim2.fromOffset(780, 520)
+shell.AnchorPoint = Vector2.new(0.5, 0.5)
+shell.Position = UDim2.new(0.5, 0, 0.5, 0)
+shell.BackgroundColor3 = COLORS.shell
+shell.BackgroundTransparency = 0.20
+shell.BorderSizePixel = 0
+shell.ClipsDescendants = true
+shell.Parent = gui
+
+local shellCorner = Instance.new("UICorner")
+shellCorner.CornerRadius = UDim.new(0, 18)
+shellCorner.Parent = shell
+
+local shellStroke = Instance.new("UIStroke")
+shellStroke.Color = COLORS.cyan
+shellStroke.Thickness = 1.5
+shellStroke.Transparency = 0.3
+shellStroke.Parent = shell
+
+-- ❄️ PARTICLES ANIMATION LAYER
+local snowLayer = Instance.new("Frame")
+snowLayer.Name = "SnowLayer"
+snowLayer.Size = UDim2.fromScale(1, 1)
+snowLayer.BackgroundTransparency = 1
+snowLayer.ZIndex = 2
+snowLayer.Parent = shell
+
+task.spawn(function()
+    local dots = {}
+    for i = 1, 28 do
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+        dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+        dot.BackgroundTransparency = math.random(30, 70) / 100
+        dot.BorderSizePixel = 0
+        dot.Parent = snowLayer
+
+        local dCorner = Instance.new("UICorner")
+        dCorner.CornerRadius = UDim.new(1, 0)
+        dCorner.Parent = dot
+
+        dots[#dots + 1] = {
+            frame = dot,
+            speed = math.random(15, 38) / 10000,
+            drift = math.random(-10, 10) / 10000,
+            pos = dot.Position.Y.Scale
+        }
+    end
+
+    while task.wait(0.03) do
+        if not gui or not gui.Parent then break end
+        for _, data in ipairs(dots) do
+            data.pos = data.pos + data.speed
+            if data.pos > 1.05 then data.pos = -0.05 end
+            local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+            data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+        end
+    end
+end)
+
+-- 💎 UNIVERSAL DRAGGABLE TOGGLE CAPSULE WITH AVATAR, FPS & PING
+local toggleCapsule = Instance.new("Frame")
+toggleCapsule.Name = "ObsidianToggleCapsule"
+toggleCapsule.Size = UDim2.fromOffset(230, 58)
+toggleCapsule.Position = UDim2.new(0, 15, 0.5, -29)
+toggleCapsule.BackgroundColor3 = COLORS.shell
+toggleCapsule.BackgroundTransparency = 0.18
+toggleCapsule.BorderSizePixel = 0
+toggleCapsule.ClipsDescendants = true
+toggleCapsule.ZIndex = 99999
+toggleCapsule.Parent = gui
+
+local tcCorner = Instance.new("UICorner")
+tcCorner.CornerRadius = UDim.new(0, 16)
+tcCorner.Parent = toggleCapsule
+
+local tcStroke = Instance.new("UIStroke")
+tcStroke.Color = COLORS.cyan
+tcStroke.Thickness = 1.5
+tcStroke.Transparency = 0.2
+tcStroke.Parent = toggleCapsule
+
+local capAvatarFrame = Instance.new("Frame")
+capAvatarFrame.Size = UDim2.fromOffset(42, 42)
+capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
+capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+capAvatarFrame.BorderSizePixel = 0
+capAvatarFrame.ZIndex = 3
+capAvatarFrame.Parent = toggleCapsule
+
+local caCorner = Instance.new("UICorner")
+caCorner.CornerRadius = UDim.new(1, 0)
+caCorner.Parent = capAvatarFrame
+
+local caStroke = Instance.new("UIStroke")
+caStroke.Color = COLORS.primary
+caStroke.Thickness = 1.5
+caStroke.Parent = capAvatarFrame
+
+local capAvatarImg = Instance.new("ImageLabel")
+capAvatarImg.Size = UDim2.fromScale(1, 1)
+capAvatarImg.BackgroundTransparency = 1
+capAvatarImg.Image = loadCustomAvatarImage()
+capAvatarImg.ZIndex = 4
+capAvatarImg.Parent = capAvatarFrame
+
+local caiCorner = Instance.new("UICorner")
+caiCorner.CornerRadius = UDim.new(1, 0)
+caiCorner.Parent = capAvatarImg
+
+local capUserLabel = Instance.new("TextLabel")
+capUserLabel.Size = UDim2.new(1, -58, 0, 18)
+capUserLabel.Position = UDim2.new(0, 56, 0, 10)
+capUserLabel.BackgroundTransparency = 1
+capUserLabel.Text = "@" .. LocalPlayer.Name
+capUserLabel.TextColor3 = COLORS.text
+capUserLabel.Font = Enum.Font.GothamBold
+capUserLabel.TextSize = 12
+capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+capUserLabel.ZIndex = 3
+capUserLabel.Parent = toggleCapsule
+
+local capMetricsLabel = Instance.new("TextLabel")
+capMetricsLabel.Size = UDim2.new(1, -58, 0, 16)
+capMetricsLabel.Position = UDim2.new(0, 56, 0, 28)
+capMetricsLabel.BackgroundTransparency = 1
+capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
+capMetricsLabel.TextColor3 = COLORS.cyan
+capMetricsLabel.Font = Enum.Font.GothamBold
+capMetricsLabel.TextSize = 10
+capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+capMetricsLabel.ZIndex = 3
+capMetricsLabel.Parent = toggleCapsule
+
+task.spawn(function()
+    local frameCount = 0
+    local lastFpsTime = tick()
+    local fpsVal = 60
+    local renderConn
+    renderConn = RunService.RenderStepped:Connect(function()
+        frameCount = frameCount + 1
+        local now = tick()
+        if now - lastFpsTime >= 1 then
+            fpsVal = frameCount
+            frameCount = 0
+            lastFpsTime = now
+        end
+    end)
+    while task.wait(0.8) do
+        if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
+            if renderConn then renderConn:Disconnect() end
+            break
+        end
+        local pingVal = 0
+        pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+        capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+    end
+end)
+
+local capBtn = Instance.new("TextButton")
+capBtn.Size = UDim2.fromScale(1, 1)
+capBtn.BackgroundTransparency = 1
+capBtn.Text = ""
+capBtn.ZIndex = 10
+capBtn.Parent = toggleCapsule
+
+local tDragging, tDragInput, tDragStart, tStartPos
+local hasDragged = false
+
+capBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        tDragging = true
+        hasDragged = false
+        tDragStart = input.Position
+        tStartPos = toggleCapsule.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then tDragging = false end
+        end)
+    end
+end)
+
+capBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        tDragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == tDragInput and tDragging then
+        local delta = input.Position - tDragStart
+        if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then hasDragged = true end
+        toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+capBtn.MouseButton1Click:Connect(function()
+    if not hasDragged then
+        playClickSound()
+        shell.Visible = not shell.Visible
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+        shell.Visible = not shell.Visible
+    end
+end)
+
+-- ==============================================================================
+-- 👤 LEFT SIDEBAR (USER PROFILE, LOGOUT BUTTON & TABS)
+-- ==============================================================================
+local userPanel = Instance.new("Frame")
+userPanel.Name = "UserPanel"
+userPanel.Size = UDim2.new(0, 220, 1, 0)
+userPanel.BackgroundColor3 = COLORS.userPanel
+userPanel.BackgroundTransparency = 0.20
+userPanel.BorderSizePixel = 0
+userPanel.ZIndex = 5
+userPanel.Parent = shell
+
+local userDiv = Instance.new("Frame")
+userDiv.Size = UDim2.new(0, 1, 1, 0)
+userDiv.Position = UDim2.new(1, -1, 0, 0)
+userDiv.BackgroundColor3 = COLORS.glassRaised
+userDiv.BorderSizePixel = 0
+userDiv.ZIndex = 10
+userDiv.Parent = userPanel
+
+-- Profile Header
+local avatarFrame = Instance.new("Frame")
+avatarFrame.Size = UDim2.fromOffset(40, 40)
+avatarFrame.Position = UDim2.new(0, 12, 0, 12)
+avatarFrame.BackgroundColor3 = COLORS.glassDeep
+avatarFrame.BorderSizePixel = 0
+avatarFrame.ZIndex = 10
+avatarFrame.Parent = userPanel
+
+local avCorner = Instance.new("UICorner")
+avCorner.CornerRadius = UDim.new(1, 0)
+avCorner.Parent = avatarFrame
+
+local avStroke = Instance.new("UIStroke")
+avStroke.Color = COLORS.cyan
+avStroke.Thickness = 1.5
+avStroke.Parent = avatarFrame
+
+local avatarImg = Instance.new("ImageLabel")
+avatarImg.Size = UDim2.fromScale(1, 1)
+avatarImg.BackgroundTransparency = 1
+avatarImg.Image = loadCustomAvatarImage()
+avatarImg.ZIndex = 11
+avatarImg.Parent = avatarFrame
+
+local avImgCorner = Instance.new("UICorner")
+avImgCorner.CornerRadius = UDim.new(1, 0)
+avImgCorner.Parent = avatarImg
+
+local displayNameLabel = Instance.new("TextLabel")
+displayNameLabel.Size = UDim2.new(1, -135, 0, 16)
+displayNameLabel.Position = UDim2.new(0, 58, 0, 14)
+displayNameLabel.BackgroundTransparency = 1
+displayNameLabel.Text = LocalPlayer.DisplayName
+displayNameLabel.TextColor3 = COLORS.text
+displayNameLabel.Font = Enum.Font.GothamBold
+displayNameLabel.TextSize = 12
+displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+displayNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+displayNameLabel.ZIndex = 10
+displayNameLabel.Parent = userPanel
+
+local usernameLabel = Instance.new("TextLabel")
+usernameLabel.Size = UDim2.new(1, -135, 0, 14)
+usernameLabel.Position = UDim2.new(0, 58, 0, 30)
+usernameLabel.BackgroundTransparency = 1
+usernameLabel.Text = "@" .. LocalPlayer.Name
+usernameLabel.TextColor3 = COLORS.textMuted
+usernameLabel.Font = Enum.Font.Gotham
+usernameLabel.TextSize = 10
+usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+usernameLabel.ZIndex = 10
+usernameLabel.Parent = userPanel
+
+-- 🔴 LOGOUT BUTTON (ตรงตามข้อกำหนดใน logout.txt)
+local logoutBtn = Instance.new("TextButton")
+logoutBtn.Name = "LogoutButton"
+logoutBtn.Size = UDim2.fromOffset(62, 24)
+logoutBtn.Position = UDim2.new(1, -70, 0, 20)
+logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+logoutBtn.BackgroundTransparency = 0.20
+logoutBtn.Text = "Log out"
+logoutBtn.TextColor3 = COLORS.danger
+logoutBtn.Font = Enum.Font.GothamBold
+logoutBtn.TextSize = 11
+logoutBtn.ZIndex = 12
+logoutBtn.Parent = userPanel
+
+local loCorner = Instance.new("UICorner")
+loCorner.CornerRadius = UDim.new(0, 6)
+loCorner.Parent = logoutBtn
+
+local loStroke = Instance.new("UIStroke")
+loStroke.Color = COLORS.danger
+loStroke.Thickness = 1
+loStroke.Transparency = 0.4
+loStroke.Parent = logoutBtn
+
+logoutBtn.MouseEnter:Connect(function()
+    TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+        BackgroundColor3 = COLORS.danger,
+        BackgroundTransparency = 0.15
+    }):Play()
+    TweenService:Create(loStroke, TweenInfo.new(0.2), { Transparency = 0 }):Play()
+    logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+end)
+
+logoutBtn.MouseLeave:Connect(function()
+    TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+        BackgroundColor3 = COLORS.surfacePressed,
+        BackgroundTransparency = 0.20
+    }):Play()
+    TweenService:Create(loStroke, TweenInfo.new(0.2), { Transparency = 0.4 }):Play()
+    logoutBtn.TextColor3 = COLORS.danger
+end)
+
+logoutBtn.MouseButton1Click:Connect(function()
+    playClickSound()
+    stopAllScriptOperations()
+    performLogoutKeyClear()
+    if gui then pcall(function() gui:Destroy() end) end
+    pcall(function()
+        loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
+    end)
+end)
+
+-- Session Time & Ping Metrics
+local metricsBox = Instance.new("Frame")
+metricsBox.Size = UDim2.new(1, -24, 0, 22)
+metricsBox.Position = UDim2.new(0, 12, 0, 60)
+metricsBox.BackgroundColor3 = COLORS.glassDeep
+metricsBox.BorderSizePixel = 0
+metricsBox.ZIndex = 10
+metricsBox.Parent = userPanel
+
+local mCorner = Instance.new("UICorner")
+mCorner.CornerRadius = UDim.new(0, 6)
+mCorner.Parent = metricsBox
+
+local metricsLabel = Instance.new("TextLabel")
+metricsLabel.Size = UDim2.fromScale(1, 1)
+metricsLabel.BackgroundTransparency = 1
+metricsLabel.Text = "⏱️ 00:00  •  📡 0 ms"
+metricsLabel.TextColor3 = COLORS.cyan
+metricsLabel.Font = Enum.Font.GothamBold
+metricsLabel.TextSize = 10
+metricsLabel.ZIndex = 11
+metricsLabel.Parent = metricsBox
+
+task.spawn(function()
+    local startTime = os.time()
+    while task.wait(1) do
+        if not gui or not gui.Parent then break end
+        local elapsed = os.time() - startTime
+        local mins = math.floor(elapsed / 60)
+        local secs = elapsed % 60
+        local ping = 0
+        pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+        metricsLabel.Text = string.format("⏱️ %02d:%02d  •  📡 %d ms", mins, secs, ping)
+    end
+end)
+
+-- Divider & Navigation Tabs
+local sideDiv = Instance.new("Frame")
+sideDiv.Size = UDim2.new(1, -24, 0, 1)
+sideDiv.Position = UDim2.new(0, 12, 0, 90)
+sideDiv.BackgroundColor3 = COLORS.glassRaised
+sideDiv.BorderSizePixel = 0
+sideDiv.ZIndex = 10
+sideDiv.Parent = userPanel
+
+local navHeader = Instance.new("TextLabel")
+navHeader.Size = UDim2.new(1, -24, 0, 18)
+navHeader.Position = UDim2.new(0, 14, 0, 98)
+navHeader.BackgroundTransparency = 1
+navHeader.Text = "NAVIGATION MENU"
+navHeader.TextColor3 = COLORS.textMuted
+navHeader.Font = Enum.Font.GothamBold
+navHeader.TextSize = 10
+navHeader.TextXAlignment = Enum.TextXAlignment.Left
+navHeader.ZIndex = 10
+navHeader.Parent = userPanel
+
+local tabButtonsFrame = Instance.new("Frame")
+tabButtonsFrame.Size = UDim2.new(1, -20, 0, 150)
+tabButtonsFrame.Position = UDim2.new(0, 10, 0, 122)
+tabButtonsFrame.BackgroundTransparency = 1
+tabButtonsFrame.ZIndex = 10
+tabButtonsFrame.Parent = userPanel
+
+local tabListLayout = Instance.new("UIListLayout")
+tabListLayout.FillDirection = Enum.FillDirection.Vertical
+tabListLayout.Padding = UDim.new(0, 6)
+tabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabListLayout.Parent = tabButtonsFrame
+
+-- Status Verified Footer Badge
+local statusCard = Instance.new("Frame")
+statusCard.Size = UDim2.new(1, -20, 0, 36)
+statusCard.Position = UDim2.new(0, 10, 1, -44)
+statusCard.BackgroundColor3 = COLORS.glassDeep
+statusCard.BorderSizePixel = 0
+statusCard.ZIndex = 10
+statusCard.Parent = userPanel
+
+local stCorner = Instance.new("UICorner")
+stCorner.CornerRadius = UDim.new(0, 8)
+stCorner.Parent = statusCard
+
+local stTitle = Instance.new("TextLabel")
+stTitle.Size = UDim2.fromScale(1, 1)
+stTitle.BackgroundTransparency = 1
+stTitle.Text = "⏳ Waiting for Game"
+stTitle.TextColor3 = COLORS.warning
+stTitle.Font = Enum.Font.GothamBold
+stTitle.TextSize = 11
+stTitle.Parent = statusCard
+
+-- ==============================================================================
+-- 🖥️ RIGHT MAIN PANEL (HEADER & TAB CONTAINERS)
+-- ==============================================================================
+local mainPanel = Instance.new("Frame")
+mainPanel.Name = "MainPanel"
+mainPanel.Size = UDim2.new(1, -220, 1, 0)
+mainPanel.Position = UDim2.new(0, 220, 0, 0)
+mainPanel.BackgroundTransparency = 1
+mainPanel.ZIndex = 5
+mainPanel.Parent = shell
+
+local headerBar = Instance.new("Frame")
+headerBar.Size = UDim2.new(1, 0, 0, 46)
+headerBar.BackgroundTransparency = 1
+headerBar.Parent = mainPanel
+
+local mainTitle = Instance.new("TextLabel")
+mainTitle.Size = UDim2.new(0, 320, 0, 20)
+mainTitle.Position = UDim2.new(0, 18, 0, 8)
+mainTitle.BackgroundTransparency = 1
+mainTitle.Text = "PayomboyZ Hub - Waiting Menu"
+mainTitle.TextColor3 = COLORS.text
+mainTitle.Font = Enum.Font.GothamBold
+mainTitle.TextSize = 16
+mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+mainTitle.Parent = headerBar
+
+local mainSubTitle = Instance.new("TextLabel")
+mainSubTitle.Size = UDim2.new(0, 380, 0, 14)
+mainSubTitle.Position = UDim2.new(0, 18, 0, 26)
+mainSubTitle.BackgroundTransparency = 1
+mainSubTitle.Text = "ตรวจสอบแมพที่รองรับ / สั่งซื้อคีย์ VVIP เพื่อเข้าใช้งานแมพพิเศษ"
+mainSubTitle.TextColor3 = COLORS.textMuted
+mainSubTitle.Font = Enum.Font.Gotham
+mainSubTitle.TextSize = 10
+mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
+mainSubTitle.Parent = headerBar
+
+-- Close & Minimize Buttons
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.fromOffset(26, 26)
+closeBtn.Position = UDim2.new(1, -34, 0, 10)
+closeBtn.BackgroundColor3 = COLORS.glass
+closeBtn.BackgroundTransparency = 0.20
+closeBtn.Text = "X"
+closeBtn.TextColor3 = COLORS.textMuted
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 13
+closeBtn.Parent = headerBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+closeBtn.MouseButton1Click:Connect(function()
+    playClickSound()
+    shell.Visible = not shell.Visible
+end)
+
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.fromOffset(26, 26)
+minBtn.Position = UDim2.new(1, -66, 0, 10)
+minBtn.BackgroundColor3 = COLORS.glass
+minBtn.BackgroundTransparency = 0.20
+minBtn.Text = "─"
+minBtn.TextColor3 = COLORS.textMuted
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 12
+minBtn.Parent = headerBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minBtn
+
+minBtn.MouseButton1Click:Connect(function()
+    playClickSound()
+    shell.Visible = not shell.Visible
+end)
+
+-- Window Dragging Handler
+local dragging, dragInput, dragStart, startPos
+headerBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = shell.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+headerBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ⚠️ MAP STATUS NOTICE BANNER (แจ้งเตือนสาเหตุที่เข้ามาหน้า Waiting)
+local noticeBanner = Instance.new("Frame")
+noticeBanner.Size = UDim2.new(1, -36, 0, 38)
+noticeBanner.Position = UDim2.new(0, 18, 0, 48)
+noticeBanner.BackgroundColor3 = COLORS.glassDeep
+noticeBanner.BorderSizePixel = 0
+noticeBanner.ZIndex = 6
+noticeBanner.Parent = mainPanel
+
+local nbCorner = Instance.new("UICorner")
+nbCorner.CornerRadius = UDim.new(0, 8)
+nbCorner.Parent = noticeBanner
+
+local nbStroke = Instance.new("UIStroke")
+nbStroke.Color = COLORS.warning
+nbStroke.Thickness = 1
+nbStroke.Transparency = 0.3
+nbStroke.Parent = noticeBanner
+
+local nbText = Instance.new("TextLabel")
+nbText.Size = UDim2.new(1, -20, 1, 0)
+nbText.Position = UDim2.new(0, 10, 0, 0)
+nbText.BackgroundTransparency = 1
+nbText.Font = Enum.Font.GothamBold
+nbText.TextSize = 11
+nbText.TextColor3 = COLORS.warning
+nbText.TextXAlignment = Enum.TextXAlignment.Left
+nbText.Parent = noticeBanner
+
+-- ตรวจสอบว่าแมพปัจจุบันคืออะไรเพื่อแสดงข้อความแจ้งเตือนที่ตรงจุด
+local currentPlaceId = game.PlaceId
+local isVVIPRequiredMap = (currentPlaceId == 125927821145949 or currentPlaceId == 142823291 or currentPlaceId == 104973076655377 or currentPlaceId == 107778070777162 or currentPlaceId == 84515722934860)
+
+if isVVIPRequiredMap then
+    nbText.Text = "👑 แมพนี้ต้องการคีย์ระดับ VVIP! ท่านสามารถสั่งซื้อคีย์ VVIP เพื่อปลดล็อกได้ในเมนู Discord"
+    nbStroke.Color = COLORS.vvipGold
+    nbText.TextColor3 = COLORS.vvipGold
+else
+    nbText.Text = string.format("⚠️ ไม่พบสคริปสำหรับแมพนี้ (PlaceId: %d) — เลือกแมพที่รองรับด้านล่างเพื่อย้ายแมพไปเล่น", currentPlaceId)
+    nbStroke.Color = COLORS.warning
+    nbText.TextColor3 = COLORS.warning
+end
+
+-- ==============================================================================
+-- 📂 TAB MANAGEMENT ENGINE
+-- ==============================================================================
+local tabContainers = {}
+local tabButtons = {}
+
+local function createTab(tabId, icon, labelText)
+    local btn = Instance.new("TextButton")
+    btn.Name = "TabBtn_" .. tabId
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = COLORS.glassDeep
+    btn.BackgroundTransparency = 0.40
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.Parent = tabButtonsFrame
+
+    local bCorner = Instance.new("UICorner")
+    bCorner.CornerRadius = UDim.new(0, 8)
+    bCorner.Parent = btn
+
+    local bStroke = Instance.new("UIStroke")
+    bStroke.Color = COLORS.cyan
+    bStroke.Thickness = 1
+    bStroke.Transparency = 1
+    bStroke.Parent = btn
+
+    local bLabel = Instance.new("TextLabel")
+    bLabel.Size = UDim2.new(1, -16, 1, 0)
+    bLabel.Position = UDim2.new(0, 12, 0, 0)
+    bLabel.BackgroundTransparency = 1
+    bLabel.Text = icon .. "  " .. labelText
+    bLabel.TextColor3 = COLORS.textMuted
+    bLabel.Font = Enum.Font.GothamBold
+    bLabel.TextSize = 12
+    bLabel.TextXAlignment = Enum.TextXAlignment.Left
+    bLabel.Parent = btn
+
+    local container = Instance.new("Frame")
+    container.Name = "TabContainer_" .. tabId
+    container.Size = UDim2.new(1, -36, 1, -100)
+    container.Position = UDim2.new(0, 18, 0, 92)
+    container.BackgroundTransparency = 1
+    container.Visible = false
+    container.ZIndex = 6
+    container.Parent = mainPanel
+
+    tabContainers[tabId] = container
+    tabButtons[tabId] = { button = btn, stroke = bStroke, label = bLabel }
+
+    btn.MouseButton1Click:Connect(function()
+        playClickSound()
+        for id, tab in pairs(tabContainers) do
+            tab.Visible = (id == tabId)
+        end
+        for id, data in pairs(tabButtons) do
+            if id == tabId then
+                data.button.BackgroundColor3 = COLORS.surfaceRaised
+                data.button.BackgroundTransparency = 0.18
+                data.stroke.Transparency = 0.3
+                data.label.TextColor3 = COLORS.text
+            else
+                data.button.BackgroundColor3 = COLORS.glassDeep
+                data.button.BackgroundTransparency = 0.40
+                data.stroke.Transparency = 1
+                data.label.TextColor3 = COLORS.textMuted
+            end
+        end
+    end)
+
+    return container
+end
+
+local gamesTabContainer = createTab("Games", "🎮", "แมพทั้งหมดที่รองรับ")
+local vvipTabContainer = createTab("VVIP", "👑", "สั่งซื้อคีย์ VVIP & Discord")
+local infoTabContainer = createTab("Info", "ℹ️", "สถานะระบบ & เครื่อง")
+
+-- Default Select First Tab
+tabContainers["Games"].Visible = true
+tabButtons["Games"].button.BackgroundColor3 = COLORS.surfaceRaised
+tabButtons["Games"].button.BackgroundTransparency = 0.18
+tabButtons["Games"].stroke.Transparency = 0.3
+tabButtons["Games"].label.TextColor3 = COLORS.text
+
+-- ==============================================================================
+-- 🎮 TAB 1: ALL SUPPORTED GAMES SHOWCASE (หน้าแสดงแมพที่สคริปมี)
+-- ==============================================================================
+local searchBoxFrame = Instance.new("Frame")
+searchBoxFrame.Size = UDim2.new(1, 0, 0, 32)
+searchBoxFrame.BackgroundColor3 = COLORS.input
+searchBoxFrame.BorderSizePixel = 0
+searchBoxFrame.Parent = gamesTabContainer
+
+local sbCorner = Instance.new("UICorner")
+sbCorner.CornerRadius = UDim.new(0, 8)
+sbCorner.Parent = searchBoxFrame
+
+local sbStroke = Instance.new("UIStroke")
+sbStroke.Color = COLORS.cyan
+sbStroke.Thickness = 1
+sbStroke.Transparency = 0.4
+sbStroke.Parent = searchBoxFrame
+
+local searchInput = Instance.new("TextBox")
+searchInput.Size = UDim2.new(1, -20, 1, 0)
+searchInput.Position = UDim2.new(0, 10, 0, 0)
+searchInput.BackgroundTransparency = 1
+searchInput.PlaceholderText = "🔍 ค้นหาชื่อแมพ หรือ Place ID..."
+searchInput.PlaceholderColor3 = COLORS.textFaint
+searchInput.Text = ""
+searchInput.TextColor3 = COLORS.text
+searchInput.Font = Enum.Font.Gotham
+searchInput.TextSize = 11
+searchInput.TextXAlignment = Enum.TextXAlignment.Left
+searchInput.Parent = searchBoxFrame
+
+local gamesScroll = Instance.new("ScrollingFrame")
+gamesScroll.Size = UDim2.new(1, 0, 1, -40)
+gamesScroll.Position = UDim2.new(0, 0, 0, 40)
+gamesScroll.BackgroundTransparency = 1
+gamesScroll.ScrollBarThickness = 4
+gamesScroll.ScrollBarImageColor3 = COLORS.cyan
+gamesScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+gamesScroll.Parent = gamesTabContainer
+
+local gamesGrid = Instance.new("UIGridLayout")
+gamesGrid.CellSize = UDim2.fromOffset(256, 110)
+gamesGrid.CellPadding = UDim2.fromOffset(10, 10)
+gamesGrid.SortOrder = Enum.SortOrder.LayoutOrder
+gamesGrid.Parent = gamesScroll
+
+gamesGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    gamesScroll.CanvasSize = UDim2.new(0, 0, 0, gamesGrid.AbsoluteContentSize.Y + 20)
+end)
+
+local cardElements = {}
+
+for index, gameData in ipairs(GAME_DATABASE) do
+    local card = Instance.new("Frame")
+    card.Name = "GameCard_" .. gameData.Name
+    card.BackgroundColor3 = COLORS.glassDeep
+    card.BorderSizePixel = 0
+    card.Parent = gamesScroll
+
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(0, 10)
+    cCorner.Parent = card
+
+    local cStroke = Instance.new("UIStroke")
+    cStroke.Color = (gameData.Category == "VVIP") and COLORS.vvipGold or COLORS.cyan
+    cStroke.Thickness = 1
+    cStroke.Transparency = 0.4
+    cStroke.Parent = card
+
+    -- Map Icon Thumbnail Box
+    local imgFrame = Instance.new("Frame")
+    imgFrame.Size = UDim2.fromOffset(56, 56)
+    imgFrame.Position = UDim2.new(0, 8, 0, 8)
+    imgFrame.BackgroundColor3 = COLORS.glass
+    imgFrame.BorderSizePixel = 0
+    imgFrame.Parent = card
+
+    local imgCorner = Instance.new("UICorner")
+    imgCorner.CornerRadius = UDim.new(0, 8)
+    imgCorner.Parent = imgFrame
+
+    local thumbImg = Instance.new("ImageLabel")
+    thumbImg.Size = UDim2.fromScale(1, 1)
+    thumbImg.BackgroundTransparency = 1
+    thumbImg.ScaleType = Enum.ScaleType.Crop
+    thumbImg.Parent = imgFrame
+
+    local tCorner = Instance.new("UICorner")
+    tCorner.CornerRadius = UDim.new(0, 8)
+    tCorner.Parent = thumbImg
+
+    -- 🖼️ เรียกใช้ระบบ Smart Map Thumbnail Engine ดึงภาพแมพ
+    applyMapThumbnail(thumbImg, gameData.IconPlaceId or gameData.PlaceId)
+
+    -- Access Badge Tag (🟢 VIP / 👑 VVIP)
+    local badge = Instance.new("TextLabel")
+    badge.Size = UDim2.new(0, 52, 0, 16)
+    badge.Position = UDim2.new(1, -58, 0, 8)
+    badge.BackgroundColor3 = (gameData.Category == "VVIP") and COLORS.vvipGold or COLORS.success
+    badge.BackgroundTransparency = 0.20
+    badge.Text = (gameData.Category == "VVIP") and "👑 VVIP" or "🟢 VIP"
+    badge.TextColor3 = Color3.fromRGB(15, 10, 12)
+    badge.Font = Enum.Font.GothamBold
+    badge.TextSize = 9
+    badge.Parent = card
+
+    local bCorner = Instance.new("UICorner")
+    bCorner.CornerRadius = UDim.new(0, 4)
+    bCorner.Parent = badge
+
+    -- Game Name Title
+    local gTitle = Instance.new("TextLabel")
+    gTitle.Size = UDim2.new(1, -125, 0, 18)
+    gTitle.Position = UDim2.new(0, 70, 0, 8)
+    gTitle.BackgroundTransparency = 1
+    gTitle.Text = gameData.Name
+    gTitle.TextColor3 = COLORS.text
+    gTitle.Font = Enum.Font.GothamBold
+    gTitle.TextSize = 11
+    gTitle.TextXAlignment = Enum.TextXAlignment.Left
+    gTitle.TextTruncate = Enum.TextTruncate.AtEnd
+    gTitle.Parent = card
+
+    -- Description
+    local gDesc = Instance.new("TextLabel")
+    gDesc.Size = UDim2.new(1, -78, 0, 26)
+    gDesc.Position = UDim2.new(0, 70, 0, 26)
+    gDesc.BackgroundTransparency = 1
+    gDesc.Text = gameData.Description
+    gDesc.TextColor3 = COLORS.textMuted
+    gDesc.Font = Enum.Font.Gotham
+    gDesc.TextSize = 9
+    gDesc.TextWrapped = true
+    gDesc.TextXAlignment = Enum.TextXAlignment.Left
+    gDesc.TextYAlignment = Enum.TextYAlignment.Top
+    gDesc.Parent = card
+
+    -- PlaceId Label
+    local pIdLabel = Instance.new("TextLabel")
+    pIdLabel.Size = UDim2.new(0, 130, 0, 16)
+    pIdLabel.Position = UDim2.new(0, 8, 0, 86)
+    pIdLabel.BackgroundTransparency = 1
+    pIdLabel.Text = "ID: " .. tostring(gameData.PlaceId)
+    pIdLabel.TextColor3 = COLORS.textFaint
+    pIdLabel.Font = Enum.Font.GothamBold
+    pIdLabel.TextSize = 9
+    pIdLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pIdLabel.Parent = card
+
+    -- Copy PlaceId Button
+    local copyIdBtn = Instance.new("TextButton")
+    copyIdBtn.Size = UDim2.new(0, 72, 0, 20)
+    copyIdBtn.Position = UDim2.new(1, -78, 0, 82)
+    copyIdBtn.BackgroundColor3 = COLORS.surface
+    copyIdBtn.Text = "📋 Copy ID"
+    copyIdBtn.TextColor3 = COLORS.cyan
+    copyIdBtn.Font = Enum.Font.GothamBold
+    copyIdBtn.TextSize = 9
+    copyIdBtn.Parent = card
+
+    local cBtnCorner = Instance.new("UICorner")
+    cBtnCorner.CornerRadius = UDim.new(0, 4)
+    cBtnCorner.Parent = copyIdBtn
+
+    copyIdBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        copyText(gameData.PlaceId)
+        ShowToast("📋 คัดลอกสำเร็จ", "คัดลอก PlaceID: " .. tostring(gameData.PlaceId) .. " เรียบร้อยแล้ว!", false)
+    end)
+
+    table.insert(cardElements, { frame = card, name = gameData.Name:lower(), placeId = tostring(gameData.PlaceId) })
+end
+
+-- Filter & Search logic
+searchInput:GetPropertyChangedSignal("Text"):Connect(function()
+    local query = searchInput.Text:lower()
+    for _, item in ipairs(cardElements) do
+        if query == "" or item.name:find(query) or item.placeId:find(query) then
+            item.frame.Visible = true
+        else
+            item.frame.Visible = false
+        end
+    end
+end)
+
+-- ==============================================================================
+-- 👑 TAB 2: VVIP UPGRADE & DISCORD HUB (หน้า Discord และสั่งซื้อคีย์ VVIP)
+-- ==============================================================================
+local vvipFrame = Instance.new("Frame")
+vvipFrame.Size = UDim2.fromScale(1, 1)
+vvipFrame.BackgroundColor3 = COLORS.glassDeep
+vvipFrame.BorderSizePixel = 0
+vvipFrame.Parent = vvipTabContainer
+
+local vfCorner = Instance.new("UICorner")
+vfCorner.CornerRadius = UDim.new(0, 12)
+vfCorner.Parent = vvipFrame
+
+local vfStroke = Instance.new("UIStroke")
+vfStroke.Color = COLORS.vvipGold
+vfStroke.Thickness = 1.5
+vfStroke.Transparency = 0.3
+vfStroke.Parent = vvipFrame
+
+local vTitle = Instance.new("TextLabel")
+vTitle.Size = UDim2.new(1, -24, 0, 24)
+vTitle.Position = UDim2.new(0, 14, 0, 12)
+vTitle.BackgroundTransparency = 1
+vTitle.Text = "👑 อัปเกรดเป็นคีย์ VVIP - PayomboyZ Hub Exclusive"
+vTitle.TextColor3 = COLORS.vvipGold
+vTitle.Font = Enum.Font.GothamBold
+vTitle.TextSize = 14
+vTitle.TextXAlignment = Enum.TextXAlignment.Left
+vTitle.Parent = vvipFrame
+
+local vDesc = Instance.new("TextLabel")
+vDesc.Size = UDim2.new(1, -24, 0, 32)
+vDesc.Position = UDim2.new(0, 14, 0, 36)
+vDesc.BackgroundTransparency = 1
+vDesc.Text = "คีย์ระดับ VVIP ปลดล็อกการเข้าถึงแมพเอ็กซ์คลูซีฟทั้งหมด ระบบฟาร์มอัตโนมัติขั้นสูง และการอัปเดตสคริปต์ก่อนใคร!"
+vDesc.TextColor3 = COLORS.textMuted
+vDesc.Font = Enum.Font.Gotham
+vDesc.TextSize = 10
+vDesc.TextWrapped = true
+vDesc.TextXAlignment = Enum.TextXAlignment.Left
+vDesc.Parent = vvipFrame
+
+-- Discord Action Frame
+local discordBox = Instance.new("Frame")
+discordBox.Size = UDim2.new(1, -28, 0, 56)
+discordBox.Position = UDim2.new(0, 14, 0, 72)
+discordBox.BackgroundColor3 = COLORS.glass
+discordBox.BorderSizePixel = 0
+discordBox.Parent = vvipFrame
+
+local dBoxCorner = Instance.new("UICorner")
+dBoxCorner.CornerRadius = UDim.new(0, 8)
+dBoxCorner.Parent = discordBox
+
+local dBoxStroke = Instance.new("UIStroke")
+dBoxStroke.Color = Color3.fromRGB(88, 101, 242) -- Discord Blue
+dBoxStroke.Thickness = 1.5
+dBoxStroke.Parent = discordBox
+
+local dIcon = Instance.new("TextLabel")
+dIcon.Size = UDim2.fromOffset(40, 40)
+dIcon.Position = UDim2.new(0, 8, 0.5, -20)
+dIcon.BackgroundTransparency = 1
+dIcon.Text = "💬"
+dIcon.TextSize = 24
+dIcon.Parent = discordBox
+
+local dLabel = Instance.new("TextLabel")
+dLabel.Size = UDim2.new(0, 260, 0, 18)
+dLabel.Position = UDim2.new(0, 52, 0, 10)
+dLabel.BackgroundTransparency = 1
+dLabel.Text = "Official Discord Community"
+dLabel.TextColor3 = COLORS.text
+dLabel.Font = Enum.Font.GothamBold
+dLabel.TextSize = 12
+dLabel.TextXAlignment = Enum.TextXAlignment.Left
+dLabel.Parent = discordBox
+
+local dUrlLabel = Instance.new("TextLabel")
+dUrlLabel.Size = UDim2.new(0, 260, 0, 16)
+dUrlLabel.Position = UDim2.new(0, 52, 0, 28)
+dUrlLabel.BackgroundTransparency = 1
+dUrlLabel.Text = LuarmorConfig.DiscordURL
+dUrlLabel.TextColor3 = Color3.fromRGB(114, 137, 218)
+dUrlLabel.Font = Enum.Font.Gotham
+dUrlLabel.TextSize = 10
+dUrlLabel.TextXAlignment = Enum.TextXAlignment.Left
+dUrlLabel.Parent = discordBox
+
+local copyDiscordBtn = Instance.new("TextButton")
+copyDiscordBtn.Size = UDim2.new(0, 140, 0, 32)
+copyDiscordBtn.Position = UDim2.new(1, -150, 0.5, -16)
+copyDiscordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+copyDiscordBtn.Text = "🔗 คัดลอกลิ้งค์ Discord"
+copyDiscordBtn.TextColor3 = COLORS.text
+copyDiscordBtn.Font = Enum.Font.GothamBold
+copyDiscordBtn.TextSize = 10
+copyDiscordBtn.Parent = discordBox
+
+local cdCorner = Instance.new("UICorner")
+cdCorner.CornerRadius = UDim.new(0, 6)
+cdCorner.Parent = copyDiscordBtn
+
+copyDiscordBtn.MouseButton1Click:Connect(function()
+    playClickSound()
+    copyText(LuarmorConfig.DiscordURL)
+    ShowToast("💬 คัดลอกสำเร็จ", "คัดลอกลิ้งค์ Discord เรียบร้อยแล้ว! นำไปวางในเบราว์เซอร์ได้เลย", false)
+end)
+
+-- VVIP Features List
+local perksHeader = Instance.new("TextLabel")
+perksHeader.Size = UDim2.new(1, -28, 0, 20)
+perksHeader.Position = UDim2.new(0, 14, 0, 136)
+perksHeader.BackgroundTransparency = 1
+perksHeader.Text = "⭐ สิทธิพิเศษสำหรับสมาชิกคีย์ VVIP:"
+perksHeader.TextColor3 = COLORS.vvipGold
+perksHeader.Font = Enum.Font.GothamBold
+perksHeader.TextSize = 11
+perksHeader.TextXAlignment = Enum.TextXAlignment.Left
+perksHeader.Parent = vvipFrame
+
+local perksListScroll = Instance.new("ScrollingFrame")
+perksListScroll.Size = UDim2.new(1, -28, 0, 190)
+perksListScroll.Position = UDim2.new(0, 14, 0, 158)
+perksListScroll.BackgroundTransparency = 1
+perksListScroll.ScrollBarThickness = 3
+perksListScroll.ScrollBarImageColor3 = COLORS.vvipGold
+perksListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+perksListScroll.Parent = vvipFrame
+
+local perksLayout = Instance.new("UIListLayout")
+perksLayout.FillDirection = Enum.FillDirection.Vertical
+perksLayout.Padding = UDim.new(0, 6)
+perksLayout.SortOrder = Enum.SortOrder.LayoutOrder
+perksLayout.Parent = perksListScroll
+
+perksLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    perksListScroll.CanvasSize = UDim2.new(0, 0, 0, perksLayout.AbsoluteContentSize.Y + 10)
+end)
+
+local VVIP_PERKS = {
+    "⛏️ Mine a Mountain - สแกนแร่ คริสตัลหายากแบบอัตโนมัติ (Recursive ESP)",
+    "🗡️ Murder Mystery 2 - ปลดล็อก Coin Farm, Sheriff ESP & Auto Grab Gun",
+    "🦙 Capybara Vs Plant - ระบบ Auto Place Egg & Sync Dropdown อัตโนมัติ",
+    "🥚 Steal An Egg - ระบบเดินขโมยไข่ปลอดภัย ป้องกันการตรวจจับ BAC Anti-Cheat",
+    "⚔️ Anime Expedition - ออโต้ลงดันเจี้ยน, Auto Reroll & AFK Card Farm",
+    "⚡ Priority VIP Access - ได้รับการอัปเดตสคริปต์ก่อนใคร และการซัพพอร์ตระดับพรีเมียม",
+}
+
+for _, perkText in ipairs(VVIP_PERKS) do
+    local pCard = Instance.new("Frame")
+    pCard.Size = UDim2.new(1, -10, 0, 28)
+    pCard.BackgroundColor3 = COLORS.surfacePressed
+    pCard.BorderSizePixel = 0
+    pCard.Parent = perksListScroll
+
+    local pcCorner = Instance.new("UICorner")
+    pcCorner.CornerRadius = UDim.new(0, 6)
+    pcCorner.Parent = pCard
+
+    local pLabel = Instance.new("TextLabel")
+    pLabel.Size = UDim2.new(1, -16, 1, 0)
+    pLabel.Position = UDim2.new(0, 10, 0, 0)
+    pLabel.BackgroundTransparency = 1
+    pLabel.Text = perkText
+    pLabel.TextColor3 = COLORS.text
+    pLabel.Font = Enum.Font.Gotham
+    pLabel.TextSize = 10
+    pLabel.TextXAlignment = Enum.TextXAlignment.Left
+    pLabel.Parent = pCard
+end
+
+-- ==============================================================================
+-- ℹ️ TAB 3: SYSTEM STATUS & INFO (หน้าแสดงข้อมูลระบบ)
+-- ==============================================================================
+local infoFrame = Instance.new("Frame")
+infoFrame.Size = UDim2.fromScale(1, 1)
+infoFrame.BackgroundColor3 = COLORS.glassDeep
+infoFrame.BackgroundTransparency = 0.15
+infoFrame.BorderSizePixel = 0
+infoFrame.Parent = infoTabContainer
+
+local ifCorner = Instance.new("UICorner")
+ifCorner.CornerRadius = UDim.new(0, 14)
+ifCorner.Parent = infoFrame
+
+local ifStroke = Instance.new("UIStroke")
+ifStroke.Color = COLORS.cyan
+ifStroke.Thickness = 1.5
+ifStroke.Transparency = 0.3
+ifStroke.Parent = infoFrame
+
+-- UIPadding ปรับระยะห่างขอบให้สมมาตร ไม่เบี้ยว ไม่ชิดขอบ
+local infoPadding = Instance.new("UIPadding")
+infoPadding.PaddingTop = UDim.new(0, 14)
+infoPadding.PaddingBottom = UDim.new(0, 14)
+infoPadding.PaddingLeft = UDim.new(0, 14)
+infoPadding.PaddingRight = UDim.new(0, 14)
+infoPadding.Parent = infoFrame
+
+local infoLayout = Instance.new("UIListLayout")
+infoLayout.FillDirection = Enum.FillDirection.Vertical
+infoLayout.Padding = UDim.new(0, 10)
+infoLayout.SortOrder = Enum.SortOrder.LayoutOrder
+infoLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+infoLayout.Parent = infoFrame
+
+local function makeInfoRow(label, value, customValueColor)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.BackgroundColor3 = COLORS.surfacePressed
+    row.BackgroundTransparency = 0.10
+    row.BorderSizePixel = 0
+    row.Parent = infoFrame
+
+    local rCorner = Instance.new("UICorner")
+    rCorner.CornerRadius = UDim.new(0, 8)
+    rCorner.Parent = row
+
+    local rStroke = Instance.new("UIStroke")
+    rStroke.Color = COLORS.glassRaised
+    rStroke.Thickness = 1
+    rStroke.Transparency = 0.4
+    rStroke.Parent = row
+
+    -- ตัวหนังสือฝั่งซ้าย: สีขาวบริสุทธิ์ ตัวหนา
+    local rLabel = Instance.new("TextLabel")
+    rLabel.Size = UDim2.new(0, 200, 1, 0)
+    rLabel.Position = UDim2.new(0, 14, 0, 0)
+    rLabel.BackgroundTransparency = 1
+    rLabel.Text = label
+    rLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    rLabel.Font = Enum.Font.GothamBold
+    rLabel.TextSize = 12
+    rLabel.TextXAlignment = Enum.TextXAlignment.Left
+    rLabel.Parent = row
+
+    -- ตัวหนังสือฝั่งขวา: สีขาวบริสุทธิ์ (หรือสีไฮไลต์) ตัวหนา มองเห็นชัดเจน 100%
+    local rVal = Instance.new("TextLabel")
+    rVal.Size = UDim2.new(1, -228, 1, 0)
+    rVal.Position = UDim2.new(0, 214, 0, 0)
+    rVal.BackgroundTransparency = 1
+    rVal.Text = tostring(value)
+    rVal.TextColor3 = customValueColor or Color3.fromRGB(255, 255, 255)
+    rVal.Font = Enum.Font.GothamBold
+    rVal.TextSize = 12
+    rVal.TextXAlignment = Enum.TextXAlignment.Right
+    rVal.TextTruncate = Enum.TextTruncate.AtEnd
+    rVal.Parent = row
+end
+
+makeInfoRow("🎮 Current Place ID", game.PlaceId, Color3.fromRGB(255, 255, 255))
+makeInfoRow("👤 Roblox Username", LocalPlayer.Name, Color3.fromRGB(255, 255, 255))
+makeInfoRow("💻 Executor Type", (type(identifyexecutor) == "function" and identifyexecutor()) or "Unknown", Color3.fromRGB(255, 255, 255))
+makeInfoRow("📱 Device Category", (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) and "Mobile" or "PC", Color3.fromRGB(255, 255, 255))
+makeInfoRow("🔑 Access Tier", isVVIPRequiredMap and "VIP (VVIP Required)" or "VIP Standard", isVVIPRequiredMap and COLORS.vvipGold or Color3.fromRGB(255, 255, 255))
+makeInfoRow("🌐 Network Status", "Connected to PayomboyZ Cloud", Color3.fromRGB(46, 224, 140))
+
+-- End of Waiting.txt UI Script
