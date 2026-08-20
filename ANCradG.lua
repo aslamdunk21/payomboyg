@@ -1359,7 +1359,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 -- Option list
                 local optScroll = Instance.new("ScrollingFrame")
-                optScroll.Size = UDim2.new(1, -28, 1, -124)
+                optScroll.Size = UDim2.new(1, -28, 1, -78)
                 optScroll.Position = UDim2.new(0, 14, 0, 64)
                 optScroll.BackgroundTransparency = 1
                 optScroll.ScrollBarThickness = 4
@@ -1444,31 +1444,6 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 end
 
                 renderOptions()
-
-                -- Confirm / Done Button
-                local confirmBtn = Instance.new("TextButton")
-                confirmBtn.Size = UDim2.new(1, -28, 0, 40)
-                confirmBtn.Position = UDim2.new(0, 14, 1, -50)
-                confirmBtn.BackgroundColor3 = COLORS.primary
-                confirmBtn.BackgroundTransparency = 0.15
-                confirmBtn.Text = "✓ ตกลง / ยืนยันการเลือก (Confirm)"
-                confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                confirmBtn.Font = Enum.Font.GothamBold
-                confirmBtn.TextSize = 13
-                confirmBtn.ZIndex = 1000001
-                confirmBtn.Parent = modalFrame
-
-                local cfCorner = Instance.new("UICorner")
-                cfCorner.CornerRadius = UDim.new(0, 8)
-                cfCorner.Parent = confirmBtn
-
-                confirmBtn.MouseButton1Click:Connect(function()
-                    playClickSound()
-                    if isMulti then
-                        updateDropdown(currentSelected)
-                    end
-                    modalOverlay:Destroy()
-                end)
             end)
 
             ObsidianGlassEngine.Options[id] = OptionObj
@@ -3569,16 +3544,16 @@ AutoSpawnToggle:OnChanged(function(state)
                 if getgenv().AutoBuyCards then
                     if activeCards == 0 then
                         pcall(fireclickdetector, cd)
-                        task.wait(0.3)
+                        task.wait(0.2)
                     else
-                        task.wait(0.05)
+                        task.wait(0.1)
                     end
                 else
                     pcall(fireclickdetector, cd)
                     if activeCards >= 3 then
                         task.wait(0.2)
                     else
-                        task.wait(0.01)
+                        task.wait(0.08)
                     end
                 end
             end
@@ -3690,8 +3665,12 @@ local function getCardModelRarityAndMutation(model)
 end
 
 -- Heartbeat Instant Buy Loop
+local lastBuyLoopTick = 0
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
+    local now = tick()
+    if now - lastBuyLoopTick < 0.035 then return end
+    lastBuyLoopTick = now
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
@@ -3981,18 +3960,18 @@ local function GetInventoryCardsForReroll()
     return list
 end
 
-getgenv().RerollSpeed = 1.5
+getgenv().RerollSpeed = 0.4
 Tabs.Reroll:AddSection("🔄 ตั้งค่าความเร็วการรีโรล")
 
 local RerollSpeedSlider = Tabs.Reroll:AddSlider("RerollSpeed", {
     Title = "⏱️ หน่วงเวลาในการรีโรล (วินาที)",
     Description = "ปรับระยะเวลารอระหว่างการยิงรีโมทในแต่ละรอบ เพื่อป้องกันปิงสูงและข้อความซ้ำ",
-    Default = 1.5,
-    Min = 0.5,
+    Default = 0.4,
+    Min = 0.2,
     Max = 5.0,
     Rounding = 1,
     Callback = function(Value)
-        getgenv().RerollSpeed = tonumber(Value) or 1.5
+        getgenv().RerollSpeed = tonumber(Value) or 0.4
     end
 })
 
@@ -4054,7 +4033,7 @@ RerollCardsDropdown:OnChanged(function(Value)
     end
 end)
 
--- Cache matching remotes for Trait Reroll to avoid high ping / CPU spikes
+-- Cache matching remotes for Trait & Rank Reroll to avoid high ping / CPU spikes
 local CachedTraitRemotesList = nil
 local function getCachedTraitRemotes()
     if CachedTraitRemotesList then return CachedTraitRemotesList end
@@ -4069,6 +4048,27 @@ local function getCachedTraitRemotes()
         end
     end
     CachedTraitRemotesList = list
+    return list
+end
+
+local CachedRankRemotesList = nil
+local function getCachedRankRemotes()
+    if CachedRankRemotesList then return CachedRankRemotesList end
+    local list = {}
+    local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard", "grade"}
+    local rs = game:GetService("ReplicatedStorage")
+    for _, obj in ipairs(rs:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = string.lower(obj.Name)
+            for _, kw in ipairs(keywords) do
+                if string.find(name, kw) then
+                    table.insert(list, obj)
+                    break
+                end
+            end
+        end
+    end
+    CachedRankRemotesList = list
     return list
 end
 
@@ -4229,16 +4229,11 @@ AutoRerollToggle:OnChanged(function(state)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                if string.find(name, "roll") or string.find(name, "trait") then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                        end
-                                    end
+                        local traitRemotes = getCachedTraitRemotes()
+                        for _, obj in ipairs(traitRemotes) do
+                            if obj:IsA("RemoteEvent") then
+                                for _, arg in ipairs(argsToTry) do
+                                    pcall(function() obj:FireServer(arg) end)
                                 end
                             end
                         end
@@ -4265,7 +4260,7 @@ AutoRerollToggle:OnChanged(function(state)
                         end
                     end
 
-                    task.wait(math.max(0.5, tonumber(getgenv().RerollSpeed) or 1.5))
+                    task.wait(math.max(0.2, tonumber(getgenv().RerollSpeed) or 0.4))
                 end
             end
 
@@ -4467,39 +4462,26 @@ AutoRankRerollToggle:OnChanged(function(state)
                         local argsToTry = {
                             id, cardTool, { Card = id }, { UUID = id }, { Tool = cardTool }
                         }
-                        local keywords = {"rank", "ranking", "upgrade", "stat", "boost", "cashboost", "cardroll", "rollcard", "rerollcard"}
-                        local rs = game:GetService("ReplicatedStorage")
-                        for _, obj in ipairs(rs:GetDescendants()) do
-                            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                                local name = string.lower(obj.Name)
-                                local match = false
-                                for _, kw in ipairs(keywords) do
-                                    if string.find(name, kw) then
-                                        match = true
-                                        break
-                                    end
+                        local rankRemotes = getCachedRankRemotes()
+                        for _, obj in ipairs(rankRemotes) do
+                            if obj:IsA("RemoteEvent") then
+                                for _, arg in ipairs(argsToTry) do
+                                    pcall(function() obj:FireServer(arg) end)
+                                    pcall(function() obj:FireServer("Roll", arg) end)
+                                    pcall(function() obj:FireServer("Rank", arg) end)
                                 end
-                                if match then
-                                    if obj:IsA("RemoteEvent") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            pcall(function() obj:FireServer(arg) end)
-                                            pcall(function() obj:FireServer("Roll", arg) end)
-                                            pcall(function() obj:FireServer("Rank", arg) end)
-                                        end
-                                    elseif obj:IsA("RemoteFunction") then
-                                        for _, arg in ipairs(argsToTry) do
-                                            task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
-                                            task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
-                                        end
-                                    end
+                            elseif obj:IsA("RemoteFunction") then
+                                for _, arg in ipairs(argsToTry) do
+                                    task.spawn(function() pcall(function() obj:InvokeServer(arg) end) end)
+                                    task.spawn(function() pcall(function() obj:InvokeServer("Roll", arg) end) end)
+                                    task.spawn(function() pcall(function() obj:InvokeServer("Rank", arg) end) end)
                                 end
                             end
                         end
                     end
                     fireAllRank(cId)
 
-                    task.wait(math.max(0.5, tonumber(getgenv().RerollSpeed) or 1.5))
+                    task.wait(math.max(0.2, tonumber(getgenv().RerollSpeed) or 0.4))
                 end
             end
 
@@ -4517,14 +4499,14 @@ AutoRankRerollToggle:OnChanged(function(state)
     end
 end)
 
-local RerollSpeedSlider = Tabs.Reroll:AddSlider("RerollSpeed", {
+local RerollSpeedSlider2 = Tabs.Reroll:AddSlider("RerollSpeed2", {
     Title = "⚡ ความเร็วในการรีโรล (วินาที)",
-    Default = 1.5,
+    Default = 0.4,
     Min = 0.1,
     Max = 3.0,
     Rounding = 1
 })
-RerollSpeedSlider:OnChanged(function(val)
+RerollSpeedSlider2:OnChanged(function(val)
     getgenv().RerollSpeed = val
 end)
 
@@ -5262,15 +5244,61 @@ end)
 -- 4. RAID & TOWER TAB (เรด & ทาวเวอร์)
 ---------------------------------------------------------
 local RarityTiers = {
-    ["admin"] = 100000, ["แอดมิน"] = 100000,
-    ["godly"] = 50000, ["ก๊อดลี่"] = 50000, ["กอดลี่"] = 50000,
-    ["secret"] = 10000, ["ซีเคร็ท"] = 10000, ["ซีเครท"] = 10000,
-    ["mythical"] = 9000, ["มิทิคอล"] = 9000,
-    ["legendary"] = 8000, ["เลเจนดารี่"] = 8000,
-    ["epic"] = 7000, ["เอพิก"] = 7000,
-    ["rare"] = 6000, ["แรร์"] = 6000,
-    ["uncommon"] = 5000, ["อันคอมมอน"] = 5000,
-    ["common"] = 4000, ["คอมมอน"] = 4000,
+    ["admin"] = 1000000, ["แอดมิน"] = 1000000,
+    ["divine"] = 900000, ["ดิไวน์"] = 900000,
+    ["transcendent"] = 850000, ["ทรานเซนเดนท์"] = 850000,
+    ["shadow"] = 800000, ["แชโดว์"] = 800000,
+    ["emperor"] = 750000, ["เอมเพอเรอร์"] = 750000, ["จักรพรรดิ"] = 750000,
+    ["demon"] = 700000, ["เดมอน"] = 700000, ["ปีศาจ"] = 700000,
+    ["manga"] = 650000, ["มังงะ"] = 650000,
+    ["celestial"] = 600000, ["เซเลสเชียล"] = 600000,
+    ["heavenly"] = 550000, ["เฮฟเวนลี่"] = 550000,
+    ["corrupted"] = 500000, ["คอร์รัปเต็ด"] = 500000,
+    ["striker"] = 480000, ["สไตรเกอร์"] = 480000,
+    ["sacred"] = 450000, ["เซเคอร์ด"] = 450000,
+    ["paradox"] = 420000, ["พาราด็อกซ์"] = 420000,
+    ["founder"] = 400000, ["ฟาวน์เดอร์"] = 400000,
+    ["evolved"] = 380000, ["อีวอลฟ์"] = 380000,
+    ["magic"] = 350000, ["เมจิก"] = 350000,
+    ["oni"] = 320000, ["โอนิ"] = 320000,
+    ["chaos"] = 300000, ["เคออส"] = 300000,
+    ["ruin"] = 280000, ["รูอิน"] = 280000,
+    ["reborn"] = 260000, ["รีบอร์น"] = 260000,
+    ["beast"] = 240000, ["บีสต์"] = 240000,
+    ["nordic"] = 220000, ["นอร์ดิค"] = 220000,
+    ["hunter"] = 200000, ["ฮันเตอร์"] = 200000,
+    ["soul"] = 180000, ["โซล"] = 180000,
+    ["swordsman"] = 170000, ["สวอร์ดสแมน"] = 170000,
+    ["gamer"] = 160000, ["เกมเมอร์"] = 160000,
+    ["revenge"] = 150000, ["รีเวนจ์"] = 150000,
+    ["chainsaw"] = 140000, ["เชนซอว์"] = 140000,
+    ["eternity"] = 130000, ["อีเทอร์นิตี้"] = 130000,
+    ["academy"] = 120000, ["อคาเดมี่"] = 120000,
+    ["dynasty"] = 110000, ["ไดนาสตี้"] = 110000,
+    ["grail"] = 105000, ["เกรล"] = 105000,
+    ["conquest"] = 100000, ["คอนเควสต์"] = 100000,
+    ["blaze"] = 95000, ["เบลซ"] = 95000,
+    ["devour"] = 90000, ["ดีเวาร์"] = 90000,
+    ["raven"] = 85000, ["เรเวน"] = 85000,
+    ["arcane"] = 80000, ["อาเคน"] = 80000,
+    ["nightfall"] = 75000, ["ไนท์ฟอล"] = 75000,
+    ["smash"] = 70000, ["สแมช"] = 70000,
+    ["emblem"] = 65000, ["เอมเบลม"] = 65000,
+    ["chrono"] = 60000, ["โครโน"] = 60000,
+    ["godly"] = 55000, ["ก๊อดลี่"] = 55000, ["กอดลี่"] = 55000,
+    ["secret"] = 50000, ["ซีเคร็ท"] = 50000, ["ซีเครท"] = 50000,
+    ["mythic"] = 30000, ["mythical"] = 30000, ["มิทิคอล"] = 30000, ["มิทิค"] = 30000,
+    ["legendary"] = 15000, ["เลเจนดารี่"] = 15000,
+    ["epic"] = 8000, ["เอพิก"] = 8000,
+    ["rare"] = 4000, ["แรร์"] = 4000,
+    ["uncommon"] = 2000, ["อันคอมมอน"] = 2000,
+    ["common"] = 1000, ["คอมมอน"] = 1000,
+}
+
+local MutationScores = {
+    ["unknow"] = 13000, ["unknown"] = 13000, ["admin"] = 12000, ["starfallen"] = 11000, ["glitch"] = 10000,
+    ["radioactive"] = 9000, ["blessed"] = 8000, ["candy"] = 7000, ["sakura"] = 6000,
+    ["rainbow"] = 5000, ["venomous"] = 4000, ["diamond"] = 3000, ["golden"] = 2000,
 }
 
 local function parseSuffixValue(txt)
@@ -5298,11 +5326,56 @@ end
 
 local function getRarityScore(rarityText)
     if not rarityText then return 0 end
-    local clean = string.lower(string.gsub(rarityText, "<[^>]+>", ""))
+    local clean = string.lower(string.gsub(tostring(rarityText), "<[^>]+>", ""))
     for k, score in pairs(RarityTiers) do
         if string.find(clean, k) then return score end
     end
     return 0
+end
+
+-- Helper to check if a model/prompt is a Raid Card, Boss Card, Pack, Ticket, or non-unit object
+local function isSpecialNonUnitItem(model, promptText)
+    if not model then return true end
+
+    if model:GetAttribute("BoxValue") ~= nil 
+        or model:GetAttribute("IsPack") == true 
+        or model:GetAttribute("PackName") ~= nil
+        or model:GetAttribute("IsBossCard") == true
+        or model:GetAttribute("IsRaidCard") == true
+        or model:GetAttribute("IsTitanCard") == true
+    then
+        return true
+    end
+
+    local modelName = string.upper(model.Name or "")
+    local cardNameAttr = string.upper(tostring(model:GetAttribute("CardName") or model:GetAttribute("TemplateName") or model:GetAttribute("Name") or ""))
+    local promptUpper = string.upper(promptText or "")
+
+    local nonUnitKeywords = {
+        "RAID", "BOSS", "TITAN", "EVENT", "PASS", "TICKET", "KEY",
+        "PACK", "BOX", "CHEST", "BAG", "SELL", "BUY", "SPAWN",
+        "UPGRADE", "CLAIM", "REBIRTH", "JOIN", "ENTER", "CONVEYOR",
+        "เรด", "บอส", "ไททัน", "แพ็ค", "แพ็ก", "กล่อง", "ตั๋ว", "บัตร", "กุญแจ", "ถุง", "อีเวนต์", "กิจกรรม"
+    }
+
+    for _, kw in ipairs(nonUnitKeywords) do
+        if string.find(modelName, kw) or string.find(cardNameAttr, kw) or string.find(promptUpper, kw) then
+            return true
+        end
+    end
+
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local txtUpper = string.upper(desc.Text or "")
+            for _, kw in ipairs(nonUnitKeywords) do
+                if string.find(txtUpper, kw) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
 end
 
 local function collect4BestBaseCards(cardSource)
@@ -5320,11 +5393,13 @@ local function collect4BestBaseCards(cardSource)
         if not plotFolder then return end
 
         local cardList = {}
+        local processedModels = {}
+
         for _, desc in ipairs(plotFolder:GetDescendants()) do
             if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
                 local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
                 
-                local isIgnoredPrompt = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
+                local isIgnoredAction = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
                     or string.find(pText, "SPAWN") or string.find(pText, "สุ่ม")
                     or string.find(pText, "OPEN") or string.find(pText, "เปิด")
                     or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์")
@@ -5334,56 +5409,68 @@ local function collect4BestBaseCards(cardSource)
                     or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
                     or string.find(pText, "JOIN") or string.find(pText, "ENTER")
                 
-                if not isIgnoredPrompt then
+                if not isIgnoredAction then
                     local model = desc:FindFirstAncestorOfClass("Model")
-                    if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
-                        local isPack = isPackCard(model)
-                        if not isPack then
-                            for _, txtObj in ipairs(model:GetDescendants()) do
-                                if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-                                    local txtUpper = string.upper(txtObj.Text or "")
-                                    if string.find(txtUpper, "PACK") or string.find(txtUpper, "แพ็ค") or string.find(txtUpper, "BOX") or string.find(txtUpper, "กล่อง") then
-                                        isPack = true
-                                        break
-                                    end
+                    if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") and not processedModels[model] then
+                        if isSpecialNonUnitItem(model, pText) or isPackCard(model) then
+                            continue
+                        end
+                        
+                        processedModels[model] = true
+                        
+                        local cashScore, rarityScore, mutationScore, levelScore = 0, 0, 0, 0
+                        
+                        local attrRarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
+                        if attrRarity then
+                            local s = getRarityScore(attrRarity)
+                            if s > rarityScore then rarityScore = s end
+                        end
+                        
+                        local attrMut = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
+                        if attrMut then
+                            local cleanMut = string.lower(tostring(attrMut))
+                            for mName, mScore in pairs(MutationScores) do
+                                if string.find(cleanMut, mName) and mScore > mutationScore then
+                                    mutationScore = mScore
                                 end
                             end
                         end
-                        if isPack then continue end
+
+                        local attrLvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel")
+                        if attrLvl and tonumber(attrLvl) then
+                            levelScore = tonumber(attrLvl)
+                        end
+
+                        local attrMult = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier") or model:GetAttribute("Damage") or model:GetAttribute("Power")
+                        if attrMult and tonumber(attrMult) then
+                            cashScore = tonumber(attrMult)
+                        end
                         
-                        local cashScore, rarityScore, mutationScore = 0, 0, 0
                         for _, txtObj in ipairs(model:GetDescendants()) do
                             if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
-                                local val = parseSuffixValue(txtObj.Text)
+                                local txt = txtObj.Text or ""
+                                local val = parseSuffixValue(txt)
                                 if val > cashScore then cashScore = val end
-                                local s = getRarityScore(txtObj.Text)
+                                
+                                local s = getRarityScore(txt)
                                 if s > rarityScore then rarityScore = s end
                                 
-                                local cleanMut = string.lower(string.gsub(txtObj.Text or "", "<[^>]+>", ""))
+                                local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
                                 cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
-                                local MutationScores = {
-                                    ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
-                                    ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
-                                    ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
-                                }
                                 for mName, mScore in pairs(MutationScores) do
                                     if string.find(cleanMut, mName) and mScore > mutationScore then
                                         mutationScore = mScore
                                     end
                                 end
+
+                                if levelScore == 0 then
+                                    local lvlNum = string.match(txt, "[L|l][V|v][L|l]%s*:%s*(%d+)") or string.match(txt, "[L|l][V|v]%s*:%s*(%d+)")
+                                    if lvlNum then levelScore = tonumber(lvlNum) or 0 end
+                                end
                             end
                         end
                         
-                        if cashScore == 0 and rarityScore == 0 then
-                            local lvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel") or 0
-                            if tonumber(lvl) then cashScore = tonumber(lvl) end
-                            if cashScore == 0 then
-                                local val = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier")
-                                if tonumber(val) then cashScore = tonumber(val) end
-                            end
-                        end
-
-                        local totalScore = cashScore + (rarityScore * 1000) + (mutationScore * 100)
+                        local totalScore = (rarityScore * 10000000) + (mutationScore * 100000) + (levelScore * 1000) + math.min(cashScore, 999)
                         if totalScore > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
                             table.insert(cardList, { interact = desc, score = totalScore, model = model })
                         end
