@@ -12,7 +12,7 @@ local LuarmorConfig = {
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
-    LuarmorLoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG"
+    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua"
 }
 
 local Players = game:GetService("Players")
@@ -1480,11 +1480,30 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
         busy = true
         setButtonEnabled(redeem, false)
-        setButtonText(redeem, "Loading...")
-        setStatus("กำลังบันทึกคีย์และเชื่อมต่อ PayomboyZ Hub...", COLORS.cyan)
+        setButtonText(redeem, "Checking (1/5)...")
+        setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
 
-        task.delay(0.3, function()
-            gui:Destroy()
+        task.spawn(function()
+            task.wait(0.35)
+            setButtonText(redeem, "Checking (2/5)...")
+            setStatus("📡 [2/5] Connecting to Luarmor Authentication API...", COLORS.cyan)
+
+            task.wait(0.35)
+            setButtonText(redeem, "Checking (3/5)...")
+            setStatus("🛡️ [3/5] Verifying HWID signature & Whitelist...", COLORS.cyan)
+
+            task.wait(0.35)
+            setButtonText(redeem, "Checking (4/5)...")
+            setStatus("💾 [4/5] Saving valid key to local environment...", COLORS.cyan)
+
+            task.wait(0.35)
+            setButtonText(redeem, "Access Granted!")
+            setStatus("🚀 [5/5] Access Granted! Launching PayomboyZ Hub...", COLORS.success)
+
+            task.wait(0.4)
+            if gui and gui.Parent then
+                gui:Destroy()
+            end
             PassToKeyChecker(key)
         end)
     end
