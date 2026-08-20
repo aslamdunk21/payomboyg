@@ -54,7 +54,7 @@ local function playClickSound()
     end)
 end
 
--- [ระบบลบไฟล์คีย์ และล้างค่าตัวแปรในระบบสำหรับ Logout]
+-- [ระบบลบไฟล์คีย์ และล้างค่าตัวแปรในระบบ]
 local function performLogoutKeyClear()
     pcall(function()
         local filesToDelete = {
@@ -66,15 +66,17 @@ local function performLogoutKeyClear()
             table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
         end
 
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
         for _, file in ipairs(filesToDelete) do
-            if isfile and isfile(file) then
-                if type(delfile) == "function" then
-                    pcall(function() delfile(file) end)
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
                 end
-                if type(writefile) == "function" then
-                    pcall(function() writefile(file, "") end)
-                end
-            end
+            end)
         end
     end)
 
@@ -82,18 +84,24 @@ local function performLogoutKeyClear()
         if getgenv then
             getgenv().script_key = nil
             getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
         end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
         if _G then _G.script_key = nil end
         if shared then shared.script_key = nil end
+        script_key = nil
     end)
 end
 
--- [ฟังก์ชันหยุดการทำงานของสคริปต์ทั้งหมด]
+-- [ฟังก์ชันหยุดการทำงานของสคริปต์ทั้งหมด (Stop All Active Script Threads & Connections)]
 local function stopAllScriptOperations()
+    -- 1. เรียกใช้ฟังก์ชัน Cleanup หลักของสคริปต์ (ถ้านิยามไว้)
     if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
     if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
     if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
 
+    -- 2. ปิดสวิตช์ฟังก์ชันทั้งหมดใน Options (ถ้ามี)
     if ObsidianGlassEngine and ObsidianGlassEngine.Options then
         for _, option in pairs(ObsidianGlassEngine.Options) do
             if type(option) == "table" and option.SetValue then
@@ -606,6 +614,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     loStroke.Transparency = 0.4
     loStroke.Parent = logoutBtn
 
+    -- Hover Animation Effects
     logoutBtn.MouseEnter:Connect(function()
         TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
             BackgroundColor3 = COLORS.danger,
@@ -628,13 +637,22 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         logoutBtn.TextColor3 = COLORS.danger
     end)
 
+    -- Click Handler (เมื่อกดปุ่ม Logout)
     logoutBtn.MouseButton1Click:Connect(function()
         playClickSound()
+
+        -- 1. สั่งหยุดการทำงานของสคริปต์ทั้งหมด (Terminate all script threads & loops)
         stopAllScriptOperations()
+
+        -- 2. ลบคีย์ในเครื่องและล้างค่าตัวแปรในระบบ (พร้อมตั้งค่า Flag getgenv().PayomboyZ_LoggedOut = true)
         performLogoutKeyClear()
+
+        -- 3. ทำลายหน้าจอ UI ปัจจุบัน
         if gui then
             pcall(function() gui:Destroy() end)
         end
+
+        -- 4. โหลดสคริปต์กลับสู่หน้าเมนูหลัก (Start UI Redirection)
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
         end)
