@@ -1040,9 +1040,38 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         ZIndex = 3,
     }, shellChrome)
 
-    -- Left Panel Content
-    lucideIcon(userPanel, "user", UDim2.fromOffset(20, 19), UDim2.fromOffset(15, 15), COLORS.cyan, 5)
-    textLabel(userPanel, "User Info", UDim2.fromOffset(43, 14), UDim2.new(1, -62, 0, 26), Enum.Font.GothamBold, 11, COLORS.cyan)
+    -- Left Panel Content with Dual-Tab Navigation (User Info | Game Support)
+    local userTabBtn = create("TextButton", {
+        Name = "TabUserInfo",
+        Position = UDim2.fromOffset(14, 10),
+        Size = UDim2.fromOffset(120, 32),
+        BackgroundColor3 = COLORS.surfaceRaised,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 5,
+    }, userPanel)
+    round(userTabBtn, 8)
+    local userTabIcon = lucideIcon(userTabBtn, "user", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.cyan, 6)
+    local userTabLabel = textLabel(userTabBtn, "User Info", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamBold, 10, COLORS.cyan)
+    userTabLabel.ZIndex = 6
+
+    local gamesTabBtn = create("TextButton", {
+        Name = "TabGameSupport",
+        Position = UDim2.fromOffset(142, 10),
+        Size = UDim2.fromOffset(122, 32),
+        BackgroundColor3 = COLORS.glassDeep,
+        BackgroundTransparency = 0.4,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 5,
+    }, userPanel)
+    round(gamesTabBtn, 8)
+    local gamesTabIcon = lucideIcon(gamesTabBtn, "gamepad", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.textFaint, 6)
+    local gamesTabLabel = textLabel(gamesTabBtn, "Games (7)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    gamesTabLabel.ZIndex = 6
+
     create("Frame", {
         Position = UDim2.fromOffset(18, 48),
         Size = UDim2.new(1, -36, 0, 1),
@@ -1051,13 +1080,62 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         BorderSizePixel = 0,
     }, userPanel)
 
+    local userInfoContainer = create("Frame", {
+        Name = "UserInfoContainer",
+        Position = UDim2.fromOffset(0, 50),
+        Size = UDim2.new(1, 0, 1, -50),
+        BackgroundTransparency = 1,
+        ZIndex = 4,
+    }, userPanel)
+
+    local gameSupportContainer = create("Frame", {
+        Name = "GameSupportContainer",
+        Position = UDim2.fromOffset(0, 50),
+        Size = UDim2.new(1, 0, 1, -50),
+        BackgroundTransparency = 1,
+        Visible = false,
+        ZIndex = 4,
+    }, userPanel)
+
+    local function switchLeftTab(tabName)
+        playClickSound()
+        if tabName == "user" then
+            userInfoContainer.Visible = true
+            gameSupportContainer.Visible = false
+            playTween(userTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.surfaceRaised, BackgroundTransparency = 0 })
+            playTween(userTabLabel, MOTION.quick, { TextColor3 = COLORS.cyan })
+            userTabLabel.Font = Enum.Font.GothamBold
+            userTabIcon.ImageColor3 = COLORS.cyan
+
+            playTween(gamesTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.glassDeep, BackgroundTransparency = 0.4 })
+            playTween(gamesTabLabel, MOTION.quick, { TextColor3 = COLORS.textFaint })
+            gamesTabLabel.Font = Enum.Font.GothamMedium
+            gamesTabIcon.ImageColor3 = COLORS.textFaint
+        else
+            userInfoContainer.Visible = false
+            gameSupportContainer.Visible = true
+            playTween(gamesTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.surfaceRaised, BackgroundTransparency = 0 })
+            playTween(gamesTabLabel, MOTION.quick, { TextColor3 = COLORS.cyan })
+            gamesTabLabel.Font = Enum.Font.GothamBold
+            gamesTabIcon.ImageColor3 = COLORS.cyan
+
+            playTween(userTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.glassDeep, BackgroundTransparency = 0.4 })
+            playTween(userTabLabel, MOTION.quick, { TextColor3 = COLORS.textFaint })
+            userTabLabel.Font = Enum.Font.GothamMedium
+            userTabIcon.ImageColor3 = COLORS.textFaint
+        end
+    end
+
+    userTabBtn.MouseButton1Click:Connect(function() switchLeftTab("user") end)
+    gamesTabBtn.MouseButton1Click:Connect(function() switchLeftTab("games") end)
+
     local avatarHalo = create("Frame", {
         Name = "AvatarHalo",
-        Position = UDim2.new(0.5, -50, 0, 58),
+        Position = UDim2.new(0.5, -50, 0, 8),
         Size = UDim2.fromOffset(100, 100),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-    }, userPanel)
+    }, userInfoContainer)
     round(avatarHalo, 50)
     local avatarRing = create("Frame", {
         Name = "AvatarGradientRing",
@@ -1132,17 +1210,17 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
     local displayName = LocalPlayer and (LocalPlayer.DisplayName or LocalPlayer.Name) or "PayomboyZ User"
     local userName = LocalPlayer and LocalPlayer.Name or "unknown"
-    textLabel(userPanel, displayName, UDim2.fromOffset(18, 164), UDim2.new(1, -36, 0, 22), Enum.Font.GothamBold, 14, COLORS.text, Enum.TextXAlignment.Center)
-    textLabel(userPanel, "@" .. userName, UDim2.fromOffset(18, 185), UDim2.new(1, -36, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
+    textLabel(userInfoContainer, displayName, UDim2.fromOffset(18, 114), UDim2.new(1, -36, 0, 22), Enum.Font.GothamBold, 14, COLORS.text, Enum.TextXAlignment.Center)
+    textLabel(userInfoContainer, "@" .. userName, UDim2.fromOffset(18, 135), UDim2.new(1, -36, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
 
     local detectedGame = resolveGameName()
     local infoGroup = create("Frame", {
         Name = "ProfileDetails",
-        Position = UDim2.fromOffset(18, 214),
+        Position = UDim2.fromOffset(18, 164),
         Size = UDim2.new(1, -36, 0, 166),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-    }, userPanel)
+    }, userInfoContainer)
     local stats = {
         { "Executor", executorName(), "monitor", COLORS.textMuted },
         { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
@@ -1167,11 +1245,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
     local metricsStrip = create("Frame", {
         Name = "Metrics",
-        Position = UDim2.fromOffset(18, 392),
+        Position = UDim2.fromOffset(18, 342),
         Size = UDim2.new(1, -36, 0, 66),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-    }, userPanel)
+    }, userInfoContainer)
     create("Frame", {
         Position = UDim2.new(0.5, 0, 0, 12),
         Size = UDim2.new(0, 1, 1, -24),
@@ -1198,14 +1276,163 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local pingText = textLabel(pingCard, "-- ms", UDim2.fromOffset(38, 27), UDim2.new(1, -48, 0, 22), Enum.Font.GothamBold, 12, COLORS.success)
 
     local connectionCard = create("Frame", {
-        Position = UDim2.fromOffset(18, 502),
+        Position = UDim2.fromOffset(18, 452),
         Size = UDim2.new(1, -36, 0, 68),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-    }, userPanel)
+    }, userInfoContainer)
     lucideIcon(connectionCard, "check-circle", UDim2.fromOffset(14, 24), UDim2.fromOffset(20, 20), COLORS.success, 5)
     textLabel(connectionCard, "Connected to PayomboyZ Hub", UDim2.fromOffset(44, 11), UDim2.new(1, -56, 0, 24), Enum.Font.GothamBold, 12, COLORS.success)
     textLabel(connectionCard, "PayomboyZ Hub is ready", UDim2.fromOffset(44, 35), UDim2.new(1, -56, 0, 18), Enum.Font.Gotham, 9, COLORS.textMuted)
+
+    -- 🎮 GAME SUPPORT PANEL CONTENT
+    local gameSupportHeader = create("Frame", {
+        Position = UDim2.fromOffset(14, 6),
+        Size = UDim2.new(1, -28, 0, 36),
+        BackgroundTransparency = 1,
+    }, gameSupportContainer)
+
+    lucideIcon(gameSupportHeader, "gamepad", UDim2.fromOffset(4, 8), UDim2.fromOffset(18, 18), COLORS.cyan, 5)
+    textLabel(gameSupportHeader, "GAME SUPPORT", UDim2.fromOffset(28, 4), UDim2.new(1, -30, 0, 16), Enum.Font.GothamBold, 11, COLORS.cyan)
+    textLabel(gameSupportHeader, "Official Supported Game Loaders", UDim2.fromOffset(28, 20), UDim2.new(1, -30, 0, 14), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+
+    local gamesScroll = create("ScrollingFrame", {
+        Name = "GamesScrollList",
+        Position = UDim2.fromOffset(14, 46),
+        Size = UDim2.new(1, -28, 1, -54),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = COLORS.cyan,
+        ScrollBarImageTransparency = 0.4,
+        ClipsDescendants = true,
+    }, gameSupportContainer)
+
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Vertical,
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, gamesScroll)
+
+    local supportedGamesList = {
+        {
+            Name = "Attack On Titan Rev.",
+            FullName = "Attack On Titan Revolution",
+            PlaceId = 13379208636,
+            IconId = 13379208636,
+            Type = "FREE",
+            Keywords = "AOTR • Titan Farm",
+        },
+        {
+            Name = "Anime Card Farm",
+            FullName = "Anime Card Farm",
+            PlaceId = 125039473548047,
+            IconId = 125039473548047,
+            Type = "FREE",
+            Keywords = "Auto Pack • Reroll",
+        },
+        {
+            Name = "Arena Sniper",
+            FullName = "Arena Sniper",
+            PlaceId = 122446657157717,
+            IconId = 122446657157717,
+            Type = "FREE",
+            Keywords = "Auto Kill • Sniper",
+        },
+        {
+            Name = "Roll Anime To Fight",
+            FullName = "Roll Anime To Fight",
+            PlaceId = 107653945083776,
+            IconId = 107653945083776,
+            Type = "FREE",
+            Keywords = "RATF • Auto Roll",
+        },
+        {
+            Name = "Mine a Mountain",
+            FullName = "Mine a Mountain",
+            PlaceId = 125927821145949,
+            IconId = 125927821145949,
+            Type = "VVIP",
+            Keywords = "MaM • Auto Mine",
+        },
+        {
+            Name = "Murder Mystery 2",
+            FullName = "Murder Mystery 2",
+            PlaceId = 142823291,
+            IconId = 142823291,
+            Type = "VVIP",
+            Keywords = "MM2 • Coin Farm",
+        },
+        {
+            Name = "Capybara Vs Plant",
+            FullName = "Capybara Vs Plant",
+            PlaceId = 104973076655377,
+            IconId = 104973076655377,
+            Type = "VVIP",
+            Keywords = "CvsP • Auto Plant",
+        },
+    }
+
+    local currentPlaceId = game.PlaceId
+    for index, gameData in ipairs(supportedGamesList) do
+        local isCurrentGame = (currentPlaceId == gameData.PlaceId)
+            or (gameData.Name == "Attack On Titan Rev." and currentPlaceId == 14916516914)
+            or (gameData.Name == "Arena Sniper" and currentPlaceId == 126042865144779)
+
+        local gameCard = create("Frame", {
+            Name = "GameCard_" .. index,
+            Size = UDim2.new(1, 0, 0, 62),
+            BackgroundColor3 = isCurrentGame and COLORS.surfaceRaised or COLORS.glassDeep,
+            BackgroundTransparency = 0.25,
+            BorderSizePixel = 0,
+            LayoutOrder = index,
+        }, gamesScroll)
+        round(gameCard, 10)
+
+        create("UIStroke", {
+            Color = isCurrentGame and COLORS.cyan or COLORS.divider,
+            Thickness = isCurrentGame and 1.5 or 1,
+            Transparency = isCurrentGame and 0.15 or 0.75,
+        }, gameCard)
+
+        -- Roblox Game Icon (rbxthumb)
+        local iconFrame = create("Frame", {
+            Position = UDim2.fromOffset(8, 8),
+            Size = UDim2.fromOffset(46, 46),
+            BackgroundColor3 = COLORS.surface,
+            BorderSizePixel = 0,
+        }, gameCard)
+        round(iconFrame, 8)
+
+        local iconImg = create("ImageLabel", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId) .. "&w=150&h=150",
+            ScaleType = Enum.ScaleType.Crop,
+        }, iconFrame)
+        round(iconImg, 8)
+
+        -- Game Details
+        textLabel(gameCard, gameData.Name, UDim2.fromOffset(62, 8), UDim2.new(1, -120, 0, 18), Enum.Font.GothamBold, 11, COLORS.text)
+        textLabel(gameCard, gameData.Keywords, UDim2.fromOffset(62, 26), UDim2.new(1, -120, 0, 14), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+
+        if isCurrentGame then
+            textLabel(gameCard, "🟢 ACTIVE NOW", UDim2.fromOffset(62, 42), UDim2.new(1, -120, 0, 12), Enum.Font.GothamBold, 8, COLORS.success)
+        end
+
+        -- Type Badge (FREE / VVIP)
+        local badge = create("Frame", {
+            Position = UDim2.new(1, -50, 0, 8),
+            Size = UDim2.fromOffset(42, 18),
+            BackgroundColor3 = gameData.Type == "VVIP" and COLORS.primary or COLORS.surfaceRaised,
+            BorderSizePixel = 0,
+        }, gameCard)
+        round(badge, 6)
+
+        textLabel(badge, gameData.Type, UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), Enum.Font.GothamBold, 8, gameData.Type == "VVIP" and COLORS.text or COLORS.success, Enum.TextXAlignment.Center)
+    end
 
     -- Right Panel Header
     local header = create("Frame", {
@@ -1289,7 +1516,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     textLabel(secureBadge, "SPECIAL VVIP KEY", UDim2.fromOffset(36, 0), UDim2.new(1, -44, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
 
     textLabel(mainPanel, "SECURE ACCESS", UDim2.fromOffset(22, 174), UDim2.new(1, -44, 0, 16), Enum.Font.GothamBold, 9, COLORS.cyan)
-    textLabel(mainPanel, "Enter key (PAYOM-VVIP-280342-PBGZ19) to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
+    textLabel(mainPanel, "Enter your key to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
 
     -- Key Input
     local input = create("TextBox", {
@@ -1301,7 +1528,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         BorderSizePixel = 0,
         ClearTextOnFocus = false,
         Font = Enum.Font.GothamMedium,
-        PlaceholderText = "Paste key (PAYOM-VVIP-280342-PBGZ19)",
+        PlaceholderText = "Paste your key here...",
         PlaceholderColor3 = COLORS.textMuted,
         Text = defaultKeyText or "",
         TextColor3 = COLORS.text,
@@ -1850,7 +2077,7 @@ local savedKey = LoadSavedKey()
 local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
 
 if getgenv and getgenv().PayomboyZ_ShowUI then
-    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", activeKey)
+    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
     getgenv().PayomboyZ_ShowUI = false
     return
 end
@@ -1926,6 +2153,6 @@ elseif savedKey ~= "" then
     ShowToast("🔑 PayomboyZ Hub", "พบ Key เดิม! กำลังเชื่อมต่ออัตโนมัติ...", false)
     PassToKeyChecker(savedKey)
 else
-    -- ถ้าไม่มีคีย์ ให้สร้าง UI พร้อมนำ activeKey มา pre-fill ในช่องใส่ Key ให้อัตโนมัติ
-    CreateLoaderUI(nil, activeKey)
+    -- ถ้าไม่มีคีย์ ให้สร้าง UI โดยปล่อยช่องกรอก Key เป็นว่างไว้
+    CreateLoaderUI(nil, "")
 end
