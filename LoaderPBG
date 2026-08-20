@@ -160,6 +160,9 @@ local VVIPRouter = {
 
     -- 4. Steal An Egg (SaE)
     [107778070777162] = { Name = "Steal An Egg", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG"} },
+
+     -- 4. Anime Expedition (AE)
+    [84515722934860] = { Name = "Anime Expedition", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AEae", Keywords = {"AE"} },
 }
 
 -- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
