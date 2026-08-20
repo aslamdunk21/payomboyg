@@ -1224,7 +1224,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local stats = {
         { "Executor", executorName(), "monitor", COLORS.textMuted },
         { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
-        { "HWID", readableHwid() and "Available" or "Special VVIP Key", "shield", COLORS.textMuted },
+        { "HWID", readableHwid() and "Available" or "Security By Luarmor", "shield", COLORS.textMuted },
         { "Game", detectedGame, "gamepad", COLORS.success },
     }
     for index, item in ipairs(stats) do
@@ -1449,7 +1449,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Transparency = isCurrentGame and 0.15 or 0.75,
         }, gameCard)
 
-        -- Roblox Game Icon (rbxthumb with Lucide Fallback)
+        -- Roblox Game Icon (rbxthumb with MarketplaceService Fallback)
         local iconFrame = create("Frame", {
             Position = UDim2.fromOffset(8, 8),
             Size = UDim2.fromOffset(46, 46),
@@ -1468,6 +1468,21 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             ZIndex = 2,
         }, iconFrame)
         round(iconImg, 8)
+
+        -- Multi-tier thumbnail fetcher fallback
+        task.spawn(function()
+            pcall(function()
+                local placeId = gameData.PlaceId or gameData.IconId
+                if placeId and placeId > 0 then
+                    local info = MarketplaceService:GetProductInfo(placeId)
+                    if info and info.IconImageAssetId and info.IconImageAssetId > 0 then
+                        if iconImg and iconImg.Parent then
+                            iconImg.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
+                        end
+                    end
+                end
+            end)
+        end)
 
         -- Game Details
         textLabel(gameCard, gameData.Name, UDim2.fromOffset(62, 8), UDim2.new(1, -120, 0, 18), Enum.Font.GothamBold, 11, COLORS.text)
@@ -1555,8 +1570,8 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     textLabel(serviceCard, "PayomboyZ Studios", UDim2.fromOffset(128, 29), UDim2.new(1, -318, 0, 24), Enum.Font.GothamBold, 15, COLORS.text)
     textLabel(serviceCard, "Verified client delivery", UDim2.fromOffset(128, 54), UDim2.new(1, -318, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint)
     local secureBadge = create("Frame", {
-        Position = UDim2.new(1, -172, 0.5, -17),
-        Size = UDim2.fromOffset(154, 34),
+        Position = UDim2.new(1, -180, 0.5, -17),
+        Size = UDim2.fromOffset(168, 34),
         BackgroundColor3 = COLORS.glassDeep,
         BackgroundTransparency = 0.18,
         BorderSizePixel = 0,
@@ -1567,8 +1582,8 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         Thickness = 1,
         Transparency = 0.3,
     }, secureBadge)
-    lucideIcon(secureBadge, "shield-check", UDim2.fromOffset(12, 9), UDim2.fromOffset(16, 16), COLORS.success, 5)
-    textLabel(secureBadge, "SPECIAL VVIP KEY", UDim2.fromOffset(36, 0), UDim2.new(1, -44, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
+    lucideIcon(secureBadge, "shield-check", UDim2.fromOffset(10, 9), UDim2.fromOffset(16, 16), COLORS.success, 5)
+    textLabel(secureBadge, "Security By Luarmour", UDim2.fromOffset(32, 0), UDim2.new(1, -36, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
 
     textLabel(mainPanel, "SECURE ACCESS", UDim2.fromOffset(22, 174), UDim2.new(1, -44, 0, 16), Enum.Font.GothamBold, 9, COLORS.cyan)
     textLabel(mainPanel, "Enter your key to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
