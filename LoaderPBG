@@ -147,8 +147,8 @@ local NormalRouter = {
     [128736949265057] = { Name = "Gakuran", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
 
      -- 6. 99 Night in the forrest (99Nights)
-    [126509999114328] = { Name = "Gakuran", URL = "https://github.com/aslamdunk7/paypmboygang/blob/main/99N", Keywords = {"99Nights"} },
-    [79546208627805] = { Name = "Gakuran", URL = "https://github.com/aslamdunk7/paypmboygang/blob/main/99N", Keywords = {"99Nights"} },
+    [126509999114328] = { Name = "99 Nights", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/99N", Keywords = {"99Nights"} },
+    [79546208627805] = { Name = "99 Nights", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/99N", Keywords = {"99Nights"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
