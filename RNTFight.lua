@@ -14,6 +14,36 @@ while not player do task.wait(0.1); player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui", 10) or player.PlayerGui
 
 -- ======================================================================================
+-- [[ INSTANT ANTI-AFK ENGINE (AUTOMATICALLY ACTIVE ON SCRIPT RUN) ]]
+-- ======================================================================================
+task.spawn(function()
+    pcall(function()
+        local gc = (typeof(getconnections) == "function" and getconnections)
+                or (typeof(get_connections) == "function" and get_connections)
+        if gc then
+            for _, conn in pairs(gc(player.Idled)) do
+                if conn.Disable then conn:Disable() end
+                if conn.Disconnect then conn:Disconnect() end
+            end
+        end
+    end)
+
+    player.Idled:Connect(function()
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end)
+
+    while task.wait(120) do
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+    end
+end)
+
+-- ======================================================================================
 -- [[ OBSIDIAN GLASSMORPHIC 2 UI ENGINE - MASTER SPECIFICATION & INTEGRATION ]]
 -- ======================================================================================
 
@@ -1778,23 +1808,134 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     return WindowObj
 end
 
--- Fallback Mocks for legacy Fluent SaveManager / InterfaceManager calls
-local SaveManager = {
-    SetLibrary = function() end,
-    IgnoreThemeSettings = function() end,
-    SetIgnoreIndexes = function() end,
-    SetFolder = function() end,
-    BuildConfigSection = function() end,
-    LoadAutoloadConfig = function() end,
-    Save = function() end,
-    Load = function() end,
-}
+-- SaveManager & Discord Webhook Engine
+local DEFAULT_CONFIG_NAME = "PayomboyZ_RollAnime_Config"
+
+local SaveManager = {}
+
+function SaveManager.Save(configName)
+    configName = configName or DEFAULT_CONFIG_NAME
+    local data = {}
+    
+    pcall(function()
+        for id, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.Value ~= nil then
+                data[id] = option.Value
+            end
+        end
+        
+        local jsonStr = HttpService:JSONEncode(data)
+        if typeof(writefile) == "function" then
+            writefile(configName .. ".json", jsonStr)
+            ObsidianGlassEngine:Notify({
+                Title = "Save Config 💾",
+                Content = "บันทึกการตั้งค่าลงไฟล์ " .. configName .. ".json เรียบร้อยแล้ว!",
+                Duration = 4
+            })
+        end
+    end)
+end
+
+function SaveManager.Load(configName)
+    configName = configName or DEFAULT_CONFIG_NAME
+    local fileName = configName .. ".json"
+    
+    pcall(function()
+        if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile(fileName) then
+            local jsonStr = readfile(fileName)
+            if jsonStr and jsonStr ~= "" then
+                local dataObj = HttpService:JSONDecode(jsonStr)
+                if type(dataObj) == "table" then
+                    for id, val in pairs(dataObj) do
+                        local option = ObsidianGlassEngine.Options[id]
+                        if option and type(option) == "table" and option.SetValue then
+                            pcall(function() option:SetValue(val) end)
+                        end
+                    end
+                    if typeof(rebuildTargetLookup) == "function" then
+                        pcall(rebuildTargetLookup)
+                    end
+                    ObsidianGlassEngine:Notify({
+                        Title = "Load Config 📂",
+                        Content = "โหลดการตั้งค่าจากไฟล์ " .. fileName .. " เรียบร้อยแล้ว!",
+                        Duration = 4
+                    })
+                end
+            end
+        end
+    end)
+end
+
+function SaveManager.Delete(configName)
+    configName = configName or DEFAULT_CONFIG_NAME
+    local fileName = configName .. ".json"
+    pcall(function()
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        if typeof(isfile) == "function" and isfile(fileName) then
+            if del then
+                del(fileName)
+            elseif typeof(writefile) == "function" then
+                writefile(fileName, "")
+            end
+        end
+    end)
+end
+
+function SaveManager.LoadAutoloadConfig()
+    pcall(function()
+        if typeof(isfile) == "function" and isfile(DEFAULT_CONFIG_NAME .. ".json") then
+            SaveManager.Load(DEFAULT_CONFIG_NAME)
+        end
+    end)
+end
 
 local InterfaceManager = {
     SetLibrary = function() end,
     SetFolder = function() end,
     BuildInterfaceSection = function() end,
 }
+
+-- Discord Webhook Engine
+local function sendDiscordWebhook(title, description, color, fields)
+    pcall(function()
+        local Options = ObsidianGlassEngine.Options
+        local url = Options.DiscordWebhookUrl and Options.DiscordWebhookUrl.Value
+        local enabled = Options.EnableDiscordWebhook and Options.EnableDiscordWebhook.Value
+        if not enabled or not url or url == "" or not url:find("http") then return end
+
+        task.spawn(function()
+            pcall(function()
+                local reqFunc = (typeof(request) == "function" and request)
+                             or (typeof(http_request) == "function" and http_request)
+                             or (typeof(syn) == "table" and typeof(syn.request) == "function" and syn.request)
+                             or (http and typeof(http.request) == "function" and http.request)
+
+                local embed = {
+                    title = title or "Roll Anime to Fight Notification ⚔️",
+                    description = description or "",
+                    color = color or 65535,
+                    fields = fields or {},
+                    footer = { text = "PayomboyZ HUB • " .. os.date("%X") },
+                    thumbnail = { url = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg" }
+                }
+
+                local payload = HttpService:JSONEncode({
+                    username = "PayomboyZ HUB",
+                    embeds = { embed }
+                })
+
+                if reqFunc then
+                    reqFunc({
+                        Url = url,
+                        Method = "POST",
+                        Headers = { ["Content-Type"] = "application/json" },
+                        Body = payload
+                    })
+                end
+            end)
+        end)
+    end)
+end
 
 -- Logout & Credential functions defined in upper scope above CreateWindow
 
@@ -3456,6 +3597,89 @@ Tabs.Trait:AddButton({
     end
 })
 
+Tabs.Settings:AddSection("💾 การจัดการ Config (Config Manager)")
+
+local AutoLoadConfig = Tabs.Settings:AddToggle("AutoLoadConfig", {
+    Title = "Auto Load Config",
+    Description = "โหลดการตั้งค่าที่เก็บบันทึกไว้อัตโนมัติเมื่อรันสคริปต์",
+    Default = false,
+})
+
+Tabs.Settings:AddButton({
+    Title = "💾 บันทึกการตั้งค่า (Save Config)",
+    Description = "บันทึกค่าในเมนูทั้งหมดลงไฟล์ PayomboyZ_RollAnime_Config.json",
+    Callback = function()
+        SaveManager.Save("PayomboyZ_RollAnime_Config")
+    end,
+})
+
+Tabs.Settings:AddButton({
+    Title = "📂 โหลดการตั้งค่า (Load Config)",
+    Description = "โหลดค่าที่เก็บบันทึกไว้จากไฟล์ PayomboyZ_RollAnime_Config.json",
+    Callback = function()
+        SaveManager.Load("PayomboyZ_RollAnime_Config")
+    end,
+})
+
+Tabs.Settings:AddButton({
+    Title = "🔄 รีเซ็ตการตั้งค่า (Reset Default Config)",
+    Description = "ลบไฟล์บันทึกการตั้งค่าและคืนค่าเป็นเริ่มต้น",
+    Callback = function()
+        SaveManager.Delete("PayomboyZ_RollAnime_Config")
+        ObsidianGlassEngine:Notify({
+            Title = "Save Config",
+            Content = "รีเซ็ตไฟล์ตั้งค่าเรียบร้อยแล้ว!",
+            Duration = 4
+        })
+    end,
+})
+
+Tabs.Settings:AddSection("🔔 การแจ้งเตือน Discord Webhook (Notification)")
+
+local EnableDiscordWebhook = Tabs.Settings:AddToggle("EnableDiscordWebhook", {
+    Title = "เปิดการแจ้งเตือน Discord Webhook",
+    Description = "ส่งแจ้งเตือนเมื่อได้ยูนิตตรงตามตัวกรอง หรือสุ่ม Trait ได้ตามเป้าหมาย",
+    Default = false,
+})
+
+local DiscordWebhookUrl = Tabs.Settings:AddInput("DiscordWebhookUrl", {
+    Title = "Discord Webhook URL",
+    Description = "วาง Webhook URL จาก Discord ที่ต้องการให้ส่งแจ้งเตือน",
+    Default = "",
+    Placeholder = "https://discord.com/api/webhooks/...",
+})
+
+local WebhookNotifyRarity = Tabs.Settings:AddDropdown("WebhookNotifyRarity", {
+    Title = "ระดับยูนิตที่ให้แจ้งเตือน (Notify Rarities)",
+    Description = "เลือกระดับยูนิตที่ต้องการส่งแจ้งเตือนลง Discord",
+    Values = {"Secret", "God", "Mythic", "Legendary", "Epic"},
+    Multi = true,
+    Default = { Secret = true, God = true, Mythic = true },
+})
+
+local WebhookNotifyTrait = Tabs.Settings:AddToggle("WebhookNotifyTrait", {
+    Title = "แจ้งเตือนเมื่อได้ Trait เป้าหมาย",
+    Description = "ส่งแจ้งเตือนลง Discord เมื่อสุ่ม Trait ได้ตรงตามที่ล็อคไว้",
+    Default = true,
+})
+
+Tabs.Settings:AddButton({
+    Title = "🧪 ทดสอบส่งการแจ้งเตือน (Test Webhook)",
+    Description = "ส่งข้อความทดสอบไปยัง Discord Webhook URL",
+    Callback = function()
+        sendDiscordWebhook("🧪 Test Webhook Notification", "การเชื่อมต่อ Discord Webhook สำเร็จเรียบร้อยแล้ว! 🎉", 65535, {
+            { name = "👤 ผู้เล่น", value = player.Name, inline = true },
+            { name = "🆔 User ID", value = tostring(player.UserId), inline = true },
+            { name = "⚔️ สถานะสคริปต์", value = "ทำงานปกติ (Online)", inline = true },
+        })
+        ObsidianGlassEngine:Notify({
+            Title = "Discord Webhook",
+            Content = "ส่งข้อความทดสอบไปยัง Webhook เรียบร้อยแล้ว!",
+            Duration = 4
+        })
+    end,
+})
+
 Tabs.Settings:AddSection("การควบคุม & ปุ่มคีย์ลัด (Controls & Hotkeys)")
 
 Tabs.Settings:AddParagraph({
@@ -3489,7 +3713,7 @@ Tabs.Settings:AddButton({
         pcall(function()
             TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
         end)
-    end
+    end,
 })
 
 Tabs.Settings:AddButton({
@@ -3508,7 +3732,7 @@ Tabs.Settings:AddButton({
                 end
             end
         end)
-    end
+    end,
 })
 
 Tabs.Settings:AddSection("ระบบ Anti-AFK & ความปลอดภัย (Security)")
@@ -3530,6 +3754,11 @@ rebuildTargetLookup()
 
 task.delay(0.5, function()
     isUiInitialized = true
+    pcall(function()
+        if Options.AutoLoadConfig and Options.AutoLoadConfig.Value then
+            SaveManager.LoadAutoloadConfig()
+        end
+    end)
 end)
 
 Fluent:Notify({
@@ -4039,11 +4268,18 @@ task.spawn(function()
                 -- Target Trait matched! Stop auto roll & notify user
                 pcall(function()
                     AutoRollTrait:SetValue(false)
-                    Fluent:Notify({
+                    ObsidianGlassEngine:Notify({
                         Title = "Trait Machine Success! 🎉",
                         Content = "ได้รับ Trait ล็อคเป้าหมาย: " .. tostring(currentTrait) .. " ให้กับ " .. tostring(selectedDisplayName) .. " เรียบร้อยแล้ว!",
                         Duration = 8
                     })
+                    if Options.WebhookNotifyTrait and Options.WebhookNotifyTrait.Value then
+                        sendDiscordWebhook("✨ สุ่ม Trait สำเร็จ! (Auto Trait)", "ได้รับ Trait ล็อคเป้าหมายเรียบร้อยแล้ว!", 16766720, {
+                            { name = "👤 ผู้เล่น", value = player.Name, inline = true },
+                            { name = "⚔️ ยูนิต", value = tostring(selectedDisplayName), inline = true },
+                            { name = "✨ Trait ที่ได้", value = tostring(currentTrait), inline = true },
+                        })
+                    end
                 end)
                 continue
             end
