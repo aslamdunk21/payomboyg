@@ -65,6 +65,64 @@ local function playClickSound()
     end)
 end
 
+-- [ระบบลบไฟล์คีย์ และล้างค่าตัวแปรในระบบ]
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
+    end)
+end
+
+-- [ฟังก์ชันหยุดการทำงานของสคริปต์ทั้งหมด (Stop All Active Script Threads & Connections)]
+local function stopAllScriptOperations()
+    -- 1. เรียกใช้ฟังก์ชัน Cleanup หลักของสคริปต์ (ถ้านิยามไว้)
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+    if _G.MM2Cleanup then pcall(_G.MM2Cleanup) end
+
+    -- 2. ปิดสวิตช์ฟังก์ชันทั้งหมดใน Options (ถ้ามี)
+    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+        for _, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.SetValue then
+                pcall(function() option:SetValue(false) end)
+            end
+        end
+    end
+end
+
 local customAvatarAsset = nil
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
@@ -510,28 +568,90 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     onlineCorner.Parent = onlineDot
 
     local displayNameLabel = Instance.new("TextLabel")
-    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
+    displayNameLabel.Size = UDim2.new(1, -145, 0, 18)
     displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
     displayNameLabel.BackgroundTransparency = 1
     displayNameLabel.Text = LocalPlayer.DisplayName
     displayNameLabel.TextColor3 = COLORS.text
     displayNameLabel.Font = Enum.Font.GothamBold
     displayNameLabel.TextSize = 13
+    displayNameLabel.TextTruncate = Enum.TextTruncate.AtEnd
     displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
     displayNameLabel.ZIndex = 10
     displayNameLabel.Parent = userPanel
 
     local usernameLabel = Instance.new("TextLabel")
-    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
+    usernameLabel.Size = UDim2.new(1, -145, 0, 14)
     usernameLabel.Position = UDim2.new(0, 66, 0, 33)
     usernameLabel.BackgroundTransparency = 1
     usernameLabel.Text = "@" .. LocalPlayer.Name
     usernameLabel.TextColor3 = COLORS.textMuted
     usernameLabel.Font = Enum.Font.Gotham
     usernameLabel.TextSize = 10
+    usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
     usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
     usernameLabel.ZIndex = 10
     usernameLabel.Parent = userPanel
+
+    local logoutBtn = Instance.new("TextButton")
+    logoutBtn.Name = "LogoutButton"
+    logoutBtn.Size = UDim2.fromOffset(62, 24)
+    logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+    logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+    logoutBtn.BackgroundTransparency = 0.20
+    logoutBtn.Text = "Log out"
+    logoutBtn.TextColor3 = COLORS.danger
+    logoutBtn.Font = Enum.Font.GothamBold
+    logoutBtn.TextSize = 11
+    logoutBtn.ZIndex = 12
+    logoutBtn.Parent = userPanel
+
+    local loCorner = Instance.new("UICorner")
+    loCorner.CornerRadius = UDim.new(0, 6)
+    loCorner.Parent = logoutBtn
+
+    local loStroke = Instance.new("UIStroke")
+    loStroke.Color = COLORS.danger
+    loStroke.Thickness = 1
+    loStroke.Transparency = 0.4
+    loStroke.Parent = logoutBtn
+
+    logoutBtn.MouseEnter:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.danger,
+            BackgroundTransparency = 0.15
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0
+        }):Play()
+        logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+
+    logoutBtn.MouseLeave:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.surfacePressed,
+            BackgroundTransparency = 0.20
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0.4
+        }):Play()
+        logoutBtn.TextColor3 = COLORS.danger
+    end)
+
+    logoutBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+
+        stopAllScriptOperations()
+        performLogoutKeyClear()
+
+        if gui then
+            pcall(function() gui:Destroy() end)
+        end
+
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+        end)
+    end)
 
     local metricsBox = Instance.new("Frame")
     metricsBox.Size = UDim2.new(1, -28, 0, 24)
