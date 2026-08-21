@@ -6156,8 +6156,10 @@ local function startRaidTowerManagerLoop()
                             end
 
                             local bossPrompt, portalPrompt
-                            for _, p in ipairs(workspace:GetDescendants()) do
-                                if p:IsA("ProximityPrompt") then
+                            local searchFolder = workspace:FindFirstChild("MAP") or workspace
+                            for _, child in ipairs(searchFolder:GetChildren()) do
+                                local p = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                if p then
                                     local pText = string.upper(p.ActionText .. " " .. p.ObjectText .. " " .. (p.Parent and p.Parent.Name or ""))
                                     if string.find(pText, "BOSS RAID") and string.find(pText, "TELEPORT") then
                                         portalPrompt = p
@@ -6291,8 +6293,10 @@ local function startRaidTowerManagerLoop()
                     end
 
                     local openPrompt
-                    for _, p in ipairs(workspace:GetDescendants()) do
-                        if p:IsA("ProximityPrompt") then
+                    local searchFolder = workspace:FindFirstChild("MAP") or workspace
+                    for _, child in ipairs(searchFolder:GetChildren()) do
+                        local p = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        if p then
                             local pText = string.upper(p.ActionText .. " " .. p.ObjectText)
                             if string.find(pText, "OPEN INFINITY TOWER") or string.find(pText, "INFINITY TOWER") then
                                 openPrompt = p
@@ -6562,22 +6566,30 @@ AutoGiftToggle:OnChanged(function(state)
                                     end
                                 end
                                 -- ค้นบน character
-                                for _, desc in ipairs(targetPlayer.Character:GetDescendants()) do
-                                    checkPrompt(desc)
+                                for _, child in ipairs(targetPlayer.Character:GetChildren()) do
+                                    if child:IsA("ProximityPrompt") then
+                                        checkPrompt(child)
+                                    elseif child:IsA("Model") or child:IsA("BasePart") or child:IsA("Accessory") then
+                                        local prompt = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                        if prompt then checkPrompt(prompt) end
+                                    end
                                 end
-                                -- ค้น workspace ในรัศมี 20 studs
-                                for _, desc in ipairs(workspace:GetDescendants()) do
-                                    if desc:IsA("ProximityPrompt") then
-                                        local pPos
-                                        pcall(function()
-                                            if desc.Parent:IsA("BasePart") then pPos = desc.Parent.Position
-                                            elseif desc.Parent:IsA("Attachment") then pPos = desc.Parent.WorldPosition
-                                            elseif desc.Parent and desc.Parent.Parent and desc.Parent.Parent:IsA("Model") and desc.Parent.Parent.PrimaryPart then
-                                                pPos = desc.Parent.Parent.PrimaryPart.Position
+                                -- ค้น workspace รอบๆ ตัวผู้เล่น
+                                for _, child in ipairs(workspace:GetChildren()) do
+                                    if child:IsA("Model") or child:IsA("BasePart") then
+                                        local prompt = child:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                        if prompt then
+                                            local pPos
+                                            pcall(function()
+                                                if prompt.Parent:IsA("BasePart") then pPos = prompt.Parent.Position
+                                                elseif prompt.Parent:IsA("Attachment") then pPos = prompt.Parent.WorldPosition
+                                                elseif prompt.Parent:IsA("Model") and prompt.Parent.PrimaryPart then
+                                                    pPos = prompt.Parent.PrimaryPart.Position
+                                                end
+                                            end)
+                                            if pPos and (pPos - targetPos).Magnitude <= 20 then
+                                                checkPrompt(prompt)
                                             end
-                                        end)
-                                        if pPos and (pPos - targetPos).Magnitude <= 20 then
-                                            checkPrompt(desc)
                                         end
                                     end
                                 end
