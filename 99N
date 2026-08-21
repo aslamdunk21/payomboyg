@@ -11,6 +11,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 
 _G.Config = _G.Config or {}
@@ -88,6 +89,59 @@ local function playClickSound()
         sound:Play()
         sound.Ended:Connect(function() sound:Destroy() end)
     end)
+end
+
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
+    end)
+end
+
+local function stopAllScriptOperations()
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+
+    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+        for _, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.SetValue then
+                pcall(function() option:SetValue(false) end)
+            end
+        end
+    end
 end
 
 local customAvatarAsset = nil
@@ -494,6 +548,63 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
     usernameLabel.ZIndex = 10
     usernameLabel.Parent = userPanel
+
+    local logoutBtn = Instance.new("TextButton")
+    logoutBtn.Name = "LogoutButton"
+    logoutBtn.Size = UDim2.fromOffset(62, 24)
+    logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+    logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+    logoutBtn.BackgroundTransparency = 0.20
+    logoutBtn.Text = "Log out"
+    logoutBtn.TextColor3 = COLORS.danger
+    logoutBtn.Font = Enum.Font.GothamBold
+    logoutBtn.TextSize = 11
+    logoutBtn.ZIndex = 12
+    logoutBtn.Parent = userPanel
+
+    local loCorner = Instance.new("UICorner")
+    loCorner.CornerRadius = UDim.new(0, 6)
+    loCorner.Parent = logoutBtn
+
+    local loStroke = Instance.new("UIStroke")
+    loStroke.Color = COLORS.danger
+    loStroke.Thickness = 1
+    loStroke.Transparency = 0.4
+    loStroke.Parent = logoutBtn
+
+    logoutBtn.MouseEnter:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.danger,
+            BackgroundTransparency = 0.15
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0
+        }):Play()
+        logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+
+    logoutBtn.MouseLeave:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = COLORS.surfacePressed,
+            BackgroundTransparency = 0.20
+        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), {
+            Transparency = 0.4
+        }):Play()
+        logoutBtn.TextColor3 = COLORS.danger
+    end)
+
+    logoutBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        stopAllScriptOperations()
+        performLogoutKeyClear()
+        if gui then
+            pcall(function() gui:Destroy() end)
+        end
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+        end)
+    end)
 
     local metricsBox = Instance.new("Frame")
     metricsBox.Size = UDim2.new(1, -28, 0, 24)
@@ -1301,6 +1412,9 @@ local function afkExitLowPower()
     AFK.prevFps, AFK.prevQuality, AFK.prev3D = nil, nil, nil
 end
 
+local lastLogText = ""
+local lastLogTime = 0
+
 local function afkPushLog(text)
     if not AFK.gui or not AFK.logList or not text then return end
     AFK.poolHead = (AFK.poolHead % AFK_MAX_LOGS) + 1
@@ -1330,7 +1444,46 @@ end
 
 local function addAFKLog(text)
     if not text or text == "" then return end
-    table.insert(AFK.logsBuffer, text)
+
+    -- Smart deduplication: ignore identical logs within 3 seconds
+    local now = os.clock()
+    if text == lastLogText and (now - lastLogTime) < 3 then
+        return
+    end
+
+    -- Filter out generic retry counter strings like "กำลังค้นหา... (2)"
+    if text:match("%.%.%s*%(-%d%+%-%)") then
+        return
+    end
+
+    lastLogText = text
+    lastLogTime = now
+
+    -- Auto-categorize generic messages if not already category-tagged
+    local formattedText = text
+    if not text:find("%[") then
+        if text:find("เควส") or text:find("เหรียญตรา") or text:find("รางวัล") then
+            formattedText = "📜 [เควส] " .. text
+        elseif text:find("ขวาน") or text:find("สวมใส่") or text:find("กระเป๋า") then
+            formattedText = "🪓 [อุปกรณ์] " .. text
+        elseif text:find("ต้นไม้") or text:find("ไม้") or text:find("ไอเทม") or text:find("เศษเหล็ก") then
+            formattedText = "🪵 [ทรัพยากร] " .. text
+        elseif text:find("กองไฟ") then
+            formattedText = "🔥 [กองไฟ] " .. text
+        elseif text:find("เด็กหลง") then
+            formattedText = "👦 [เด็กหลงทาง] " .. text
+        elseif text:find("ป้อม") or text:find("Stronghold") then
+            formattedText = "🏰 [ป้อมปราการ] " .. text
+        elseif text:find("ลัทธิ") or text:find("Cultist") or text:find("ต่อสู้") or text:find("ตาย") then
+            formattedText = "⚔️ [การต่อสู้] " .. text
+        elseif text:find("โหมด") or text:find("เปิด") or text:find("ปิด") or text:find("ระบบ") or text:find("แผนที่") or text:find("แมพ") or text:find("โซโล่") then
+            formattedText = "⚙️ [ระบบ] " .. text
+        else
+            formattedText = "📌 [สถานะ] " .. text
+        end
+    end
+
+    table.insert(AFK.logsBuffer, formattedText)
     if #AFK.logsBuffer > AFK_MAX_LOGS then
         table.remove(AFK.logsBuffer, 1)
     end
@@ -1936,12 +2089,21 @@ local function retryUntil(label, fn, interval)
         attempt = attempt + 1
         local ok, result = pcall(fn)
         if ok and result then
+            if attempt > 1 then
+                addAFKLog(string.format("✅ %s สำเร็จ (ใช้เวลา %d ครั้ง)", label, attempt))
+            end
             return result
         end
         if not ok then
             warn(("  [WARN] %s เกิดข้อผิดพลาดในครั้งที่ %d: %s"):format(label, attempt, tostring(result)))
         end
-        pcall(updateStatus, ("%s... (%d)"):format(label, attempt))
+        pcall(function()
+            local descLabel = statusParagraph:FindFirstChild("TextLabel", true)
+            if descLabel then descLabel.Text = ("%s... (%d)"):format(label, attempt) end
+        end)
+        if attempt == 1 then
+            addAFKLog(string.format("🔄 %s...", label))
+        end
         task.wait(interval)
     end
 end
