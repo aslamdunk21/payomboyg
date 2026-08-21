@@ -1405,7 +1405,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 OptionObj.Values = newVals
             end
 
-            -- POPUP OVERLAY MODAL FOR SELECTION (MOBILE TOUCH OPTIMIZED & SCROLLABLE TO END)
+            -- POPUP OVERLAY MODAL FOR SELECTION (MOBILE TOUCH OPTIMIZED & FULLY SCROLLABLE TO END)
             dBtn.MouseButton1Click:Connect(function()
                 playClickSound()
                 local gui = shell.Parent
@@ -1437,8 +1437,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.Parent = modalOverlay
 
                 local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-                local maxModalH = math.clamp(cameraVP.Y * 0.78, 300, 440)
-                local maxModalW = math.min(380, cameraVP.X - 24)
+                local maxModalH = math.clamp(cameraVP.Y * 0.85, 260, 480)
+                local maxModalW = math.min(420, cameraVP.X - 24)
 
                 local modalFrame = Instance.new("Frame")
                 modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
@@ -1540,33 +1540,10 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 searchBox.ZIndex = 1000002
                 searchBox.Parent = searchFrame
 
-                -- 🔘 CONFIRM BUTTON AT BOTTOM
-                local confirmBtn = Instance.new("TextButton")
-                confirmBtn.Size = UDim2.new(1, -28, 0, 38)
-                confirmBtn.Position = UDim2.new(0, 14, 1, -46)
-                confirmBtn.BackgroundColor3 = COLORS.primary
-                confirmBtn.BackgroundTransparency = 0.15
-                confirmBtn.Text = "✓ ตกลง / ยืนยันการเลือก (Confirm)"
-                confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                confirmBtn.Font = Enum.Font.GothamBold
-                confirmBtn.TextSize = 13
-                confirmBtn.ZIndex = 1000003
-                confirmBtn.Parent = modalFrame
-
-                local cfCorner = Instance.new("UICorner")
-                cfCorner.CornerRadius = UDim.new(0, 8)
-                cfCorner.Parent = confirmBtn
-
-                confirmBtn.MouseButton1Click:Connect(function()
-                    playClickSound()
-                    if isMulti then updateDropdown(currentSelected) end
-                    modalOverlay:Destroy()
-                end)
-
-                -- 📜 OPTION SCROLL CONTAINER (CALCULATED HEIGHT & BOTTOM PADDING)
+                -- 📜 OPTION SCROLL CONTAINER (MAXIMIZED HEIGHT & GENEROUS BOTTOM PADDING)
                 local optScroll = Instance.new("ScrollingFrame")
-                optScroll.Size = UDim2.new(1, -28, 1, -144)
-                optScroll.Position = UDim2.new(0, 14, 0, 90)
+                optScroll.Size = UDim2.new(1, -28, 1, -94)
+                optScroll.Position = UDim2.new(0, 14, 0, 88)
                 optScroll.BackgroundTransparency = 1
                 optScroll.Active = true
                 optScroll.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -1574,9 +1551,17 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optScroll.ScrollBarImageColor3 = COLORS.primary
                 optScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
                 optScroll.ElasticBehavior = Enum.ElasticBehavior.Always
+                optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
+
+                local optPadding = Instance.new("UIPadding")
+                optPadding.PaddingBottom = UDim.new(0, 35)
+                optPadding.PaddingTop = UDim.new(0, 2)
+                optPadding.PaddingLeft = UDim.new(0, 2)
+                optPadding.PaddingRight = UDim.new(0, 4)
+                optPadding.Parent = optScroll
 
                 local optLayout = Instance.new("UIListLayout")
                 optLayout.Padding = UDim.new(0, 5)
@@ -1584,7 +1569,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optLayout.Parent = optScroll
 
                 optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 60)
+                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 45)
                 end)
 
                 local currentSelected = {}
@@ -1658,6 +1643,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 end
 
                 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                    optScroll.CanvasPosition = Vector2.new(0, 0)
                     renderOptions(searchBox.Text)
                 end)
 
