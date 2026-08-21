@@ -27,6 +27,7 @@ local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local MarketplaceService = game:GetService("MarketplaceService")
 local SoundService = game:GetService("SoundService")
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
 
 -- ==============================================================================
@@ -256,6 +257,7 @@ local function performLogoutKeyClear()
         if getgenv then
             getgenv().script_key = nil
             getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
         end
         if getrenv then pcall(function() getrenv().script_key = nil end) end
         if getfenv then pcall(function() getfenv().script_key = nil end) end
@@ -269,6 +271,391 @@ local function stopAllScriptOperations()
     if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
     if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
     if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+end
+
+-- ==============================================================================
+-- 🚀 HOP SERVER CONFIRM POPUP (Obsidian Glass style + Snow)
+-- ==============================================================================
+local function ShowHopConfirmPopup(gameData)
+    -- ลบ popup เก่าถ้ามี
+    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    local existing = parentGui:FindFirstChild("PayomboyZ_HopPopup")
+    if existing then existing:Destroy() end
+
+    local popGui = Instance.new("ScreenGui")
+    popGui.Name = "PayomboyZ_HopPopup"
+    popGui.ResetOnSpawn = false
+    popGui.IgnoreGuiInset = true
+    popGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    popGui.DisplayOrder = 999999
+    popGui.Parent = parentGui
+
+    -- Backdrop overlay (dimmed)
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.fromScale(1, 1)
+    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    overlay.BackgroundTransparency = 0.55
+    overlay.BorderSizePixel = 0
+    overlay.ZIndex = 1
+    overlay.Parent = popGui
+
+    -- Main popup card
+    local card = Instance.new("Frame")
+    card.Name = "HopCard"
+    card.Size = UDim2.fromOffset(420, 260)
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.new(0.5, 0, 0.5, 0)
+    card.BackgroundColor3 = COLORS.shell
+    card.BackgroundTransparency = 0.08
+    card.BorderSizePixel = 0
+    card.ClipsDescendants = true
+    card.ZIndex = 2
+    card.Parent = popGui
+
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0, 18)
+    cardCorner.Parent = card
+
+    local cardStroke = Instance.new("UIStroke")
+    cardStroke.Color = COLORS.cyan
+    cardStroke.Thickness = 1.5
+    cardStroke.Transparency = 0.2
+    cardStroke.Parent = card
+
+    -- ❄️ Snow layer inside popup
+    local snowLayer = Instance.new("Frame")
+    snowLayer.Size = UDim2.fromScale(1, 1)
+    snowLayer.BackgroundTransparency = 1
+    snowLayer.ZIndex = 3
+    snowLayer.Parent = card
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 22 do
+            local dot = Instance.new("Frame")
+            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+            dot.BackgroundColor3 = Color3.fromRGB(210, 235, 255)
+            dot.BackgroundTransparency = math.random(25, 65) / 100
+            dot.BorderSizePixel = 0
+            dot.ZIndex = 3
+            dot.Parent = snowLayer
+            local dC = Instance.new("UICorner")
+            dC.CornerRadius = UDim.new(1, 0)
+            dC.Parent = dot
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(12, 32) / 10000,
+                drift = math.random(-8, 8) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+        while task.wait(0.03) do
+            if not popGui or not popGui.Parent then break end
+            for _, d in ipairs(dots) do
+                d.pos = d.pos + d.speed
+                if d.pos > 1.05 then d.pos = -0.05 end
+                local newX = (d.frame.Position.X.Scale + d.drift) % 1.0
+                d.frame.Position = UDim2.new(newX, 0, d.pos, 0)
+            end
+        end
+    end)
+
+    -- Game icon thumbnail (ซ้ายบน)
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size = UDim2.fromOffset(64, 64)
+    iconFrame.Position = UDim2.new(0, 22, 0, 22)
+    iconFrame.BackgroundColor3 = COLORS.glassDeep
+    iconFrame.BorderSizePixel = 0
+    iconFrame.ZIndex = 5
+    iconFrame.Parent = card
+
+    local iconCorner = Instance.new("UICorner")
+    iconCorner.CornerRadius = UDim.new(0, 10)
+    iconCorner.Parent = iconFrame
+
+    local iconStroke = Instance.new("UIStroke")
+    iconStroke.Color = (gameData.Category == "VVIP") and COLORS.vvipGold or COLORS.cyan
+    iconStroke.Thickness = 1.5
+    iconStroke.Parent = iconFrame
+
+    local iconImg = Instance.new("ImageLabel")
+    iconImg.Size = UDim2.fromScale(1, 1)
+    iconImg.BackgroundTransparency = 1
+    iconImg.ScaleType = Enum.ScaleType.Crop
+    iconImg.ZIndex = 6
+    iconImg.Parent = iconFrame
+    local iconImgC = Instance.new("UICorner")
+    iconImgC.CornerRadius = UDim.new(0, 10)
+    iconImgC.Parent = iconImg
+    applyMapThumbnail(iconImg, gameData.IconPlaceId or gameData.PlaceId)
+
+    -- Category badge
+    local catBadge = Instance.new("TextLabel")
+    catBadge.Size = UDim2.fromOffset(60, 18)
+    catBadge.Position = UDim2.new(0, 22, 0, 92)
+    catBadge.BackgroundColor3 = (gameData.Category == "VVIP") and COLORS.vvipGold or COLORS.success
+    catBadge.BackgroundTransparency = 0.15
+    catBadge.Text = (gameData.Category == "VVIP") and "👑 VVIP" or "🟢 VIP"
+    catBadge.TextColor3 = Color3.fromRGB(15, 10, 12)
+    catBadge.Font = Enum.Font.GothamBold
+    catBadge.TextSize = 10
+    catBadge.ZIndex = 5
+    catBadge.Parent = card
+    local cbC = Instance.new("UICorner")
+    cbC.CornerRadius = UDim.new(0, 5)
+    cbC.Parent = catBadge
+
+    -- Title
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -108, 0, 22)
+    titleLabel.Position = UDim2.new(0, 100, 0, 22)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = gameData.Name
+    titleLabel.TextColor3 = COLORS.text
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 16
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    titleLabel.ZIndex = 5
+    titleLabel.Parent = card
+
+    -- Question text
+    local questionLabel = Instance.new("TextLabel")
+    questionLabel.Size = UDim2.new(1, -108, 0, 36)
+    questionLabel.Position = UDim2.new(0, 100, 0, 44)
+    questionLabel.BackgroundTransparency = 1
+    questionLabel.Text = "คุณต้องการเข้าเล่นแมพนี้หรือไม่?"
+    questionLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    questionLabel.Font = Enum.Font.Gotham
+    questionLabel.TextSize = 11
+    questionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    questionLabel.TextWrapped = true
+    questionLabel.ZIndex = 5
+    questionLabel.Parent = card
+
+    -- Divider
+    local divLine = Instance.new("Frame")
+    divLine.Size = UDim2.new(1, -40, 0, 1)
+    divLine.Position = UDim2.new(0, 20, 0, 122)
+    divLine.BackgroundColor3 = COLORS.glassRaised
+    divLine.BorderSizePixel = 0
+    divLine.ZIndex = 5
+    divLine.Parent = card
+
+    -- Description box
+    local descBox = Instance.new("Frame")
+    descBox.Size = UDim2.new(1, -40, 0, 48)
+    descBox.Position = UDim2.new(0, 20, 0, 132)
+    descBox.BackgroundColor3 = COLORS.glassDeep
+    descBox.BackgroundTransparency = 0.15
+    descBox.BorderSizePixel = 0
+    descBox.ZIndex = 5
+    descBox.Parent = card
+    local descBoxC = Instance.new("UICorner")
+    descBoxC.CornerRadius = UDim.new(0, 8)
+    descBoxC.Parent = descBox
+
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Size = UDim2.new(1, -20, 1, 0)
+    descLabel.Position = UDim2.new(0, 10, 0, 0)
+    descLabel.BackgroundTransparency = 1
+    descLabel.Text = "🎮 " .. gameData.Description
+    descLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextSize = 10
+    descLabel.TextWrapped = true
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.ZIndex = 6
+    descLabel.Parent = descBox
+
+    -- PlaceId mini label
+    local placeIdLabel = Instance.new("TextLabel")
+    placeIdLabel.Size = UDim2.new(1, -40, 0, 14)
+    placeIdLabel.Position = UDim2.new(0, 20, 0, 184)
+    placeIdLabel.BackgroundTransparency = 1
+    placeIdLabel.Text = "📌 PlaceId: " .. tostring(gameData.PlaceId)
+    placeIdLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    placeIdLabel.Font = Enum.Font.GothamBold
+    placeIdLabel.TextSize = 9
+    placeIdLabel.TextXAlignment = Enum.TextXAlignment.Left
+    placeIdLabel.ZIndex = 5
+    placeIdLabel.Parent = card
+
+    -- Cancel button
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.fromOffset(156, 38)
+    cancelBtn.Position = UDim2.new(0, 20, 1, -54)
+    cancelBtn.BackgroundColor3 = COLORS.surfaceRaised
+    cancelBtn.BackgroundTransparency = 0.18
+    cancelBtn.Text = "❌  ยกเลิก"
+    cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    cancelBtn.Font = Enum.Font.GothamBold
+    cancelBtn.TextSize = 12
+    cancelBtn.BorderSizePixel = 0
+    cancelBtn.ZIndex = 5
+    cancelBtn.Parent = card
+    local canC = Instance.new("UICorner")
+    canC.CornerRadius = UDim.new(0, 10)
+    canC.Parent = cancelBtn
+    local canS = Instance.new("UIStroke")
+    canS.Color = COLORS.glassRaised
+    canS.Thickness = 1
+    canS.Transparency = 0.4
+    canS.Parent = cancelBtn
+
+    cancelBtn.MouseEnter:Connect(function()
+        TweenService:Create(cancelBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.surfaceHover, BackgroundTransparency = 0.10 }):Play()
+    end)
+    cancelBtn.MouseLeave:Connect(function()
+        TweenService:Create(cancelBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.surfaceRaised, BackgroundTransparency = 0.18 }):Play()
+    end)
+    cancelBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        TweenService:Create(card, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, 0.6, 0),
+            Size = UDim2.fromOffset(400, 245)
+        }):Play()
+        TweenService:Create(overlay, TweenInfo.new(0.22), { BackgroundTransparency = 1 }):Play()
+        task.delay(0.25, function()
+            if popGui and popGui.Parent then popGui:Destroy() end
+        end)
+    end)
+
+    -- Confirm / Hop button
+    local hopBtn = Instance.new("TextButton")
+    hopBtn.Size = UDim2.fromOffset(218, 38)
+    hopBtn.Position = UDim2.new(1, -238, 1, -54)
+    hopBtn.BackgroundColor3 = COLORS.primary
+    hopBtn.Text = "🚀  เข้าเล่นแมพนี้เลย!"
+    hopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hopBtn.Font = Enum.Font.GothamBold
+    hopBtn.TextSize = 12
+    hopBtn.BorderSizePixel = 0
+    hopBtn.ZIndex = 5
+    hopBtn.Parent = card
+    local hopC = Instance.new("UICorner")
+    hopC.CornerRadius = UDim.new(0, 10)
+    hopC.Parent = hopBtn
+    local hopGrad = Instance.new("UIGradient")
+    hopGrad.Color = ColorSequence.new(COLORS.primaryHover, COLORS.primary)
+    hopGrad.Rotation = 90
+    hopGrad.Parent = hopBtn
+
+    hopBtn.MouseEnter:Connect(function()
+        TweenService:Create(hopBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.primaryHover }):Play()
+    end)
+    hopBtn.MouseLeave:Connect(function()
+        TweenService:Create(hopBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.primary }):Play()
+    end)
+    hopBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        hopBtn.Active = false
+
+        task.spawn(function()
+            local placeId = gameData.PlaceId
+
+            -- ============================================================
+            -- MULTI-TIER TELEPORT SYSTEM (ตาม Logic: Snapshot → Try → Rollback)
+            -- ============================================================
+
+            -- 📸 Snapshot: บันทึก state ปัจจุบันก่อนทำการ Teleport
+            local snapshot = {
+                placeId = game.PlaceId,
+                jobId = game.JobId,
+                time = tick(),
+                name = gameData.Name,
+            }
+
+            -- 🔄 Step 1/3: วิธีมาตรฐาน (ไม่ส่ง LocalPlayer ซึ่งเป็น Server-only API)
+            hopBtn.Text = "🔄 [1/3] กำลัง Teleport..."
+            TweenService:Create(hopBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primaryPressed }):Play()
+            local teleportOk = false
+
+            pcall(function()
+                TeleportService:Teleport(placeId)
+                teleportOk = true
+            end)
+            if teleportOk then return end
+
+            task.wait(0.35)
+
+            -- 🔄 Step 2/3: TeleportAsync + TeleportOptions (วิธีใหม่กว่า)
+            hopBtn.Text = "🔄 [2/3] TeleportAsync..."
+            pcall(function()
+                local options = Instance.new("TeleportOptions")
+                options.ShouldReserveServer = false
+                local result = TeleportService:TeleportAsync(placeId, {LocalPlayer}, options)
+                if result then teleportOk = true end
+            end)
+            if teleportOk then return end
+
+            task.wait(0.35)
+
+            -- 🔄 Step 3/3: Reserve Private Server แล้วเข้า (สำหรับเกมที่ restrict Teleport)
+            hopBtn.Text = "🔄 [3/3] Reserve & Join..."
+            pcall(function()
+                local code = TeleportService:ReserveServer(placeId)
+                if code and code ~= "" then
+                    TeleportService:TeleportToPrivateServer(placeId, code, {LocalPlayer})
+                    teleportOk = true
+                end
+            end)
+            if teleportOk then return end
+
+            -- ❌ Rollback: ทุกวิธีล้มเหลว — คืน state กลับ พร้อมแจ้งเตือน
+            hopBtn.Text = "❌ Teleport ล้มเหลว"
+            TweenService:Create(hopBtn, TweenInfo.new(0.2), { BackgroundColor3 = COLORS.danger }):Play()
+            ShowToast(
+                "❌ เข้าแมพไม่ได้",
+                "\"" .. snapshot.name .. "\" ไม่อนุญาต Teleport (Error 773)\nลองเปิดเกมตรงผ่าน Roblox แทน",
+                true
+            )
+
+            -- Rollback ปุ่มกลับมา state เดิมหลัง 3 วินาที
+            task.delay(3, function()
+                if hopBtn and hopBtn.Parent then
+                    hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
+                    hopBtn.Active = true
+                    TweenService:Create(hopBtn, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        BackgroundColor3 = COLORS.primary
+                    }):Play()
+                end
+            end)
+        end)
+    end)
+
+    -- Entrance animation (Roll Back style)
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.new(0.5, 0, 0.38, 0)
+    card.Size = UDim2.fromOffset(380, 230)
+    card.Rotation = -10
+    overlay.BackgroundTransparency = 1
+    TweenService:Create(overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.55 }):Play()
+    TweenService:Create(card, TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.fromOffset(420, 260),
+        Rotation = 0
+    }):Play()
+
+    local function closePopup()
+        TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, 0.62, 0),
+            Size = UDim2.fromOffset(380, 230),
+            Rotation = 8
+        }):Play()
+        TweenService:Create(overlay, TweenInfo.new(0.22), { BackgroundTransparency = 1 }):Play()
+        task.delay(0.28, function()
+            if popGui and popGui.Parent then popGui:Destroy() end
+        end)
+    end
+
+    -- ปิด popup ถ้าคลิก overlay
+    overlay.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            closePopup()
+        end
+    end)
 end
 
 -- ==============================================================================
@@ -1136,6 +1523,40 @@ for index, gameData in ipairs(GAME_DATABASE) do
         playClickSound()
         copyText(gameData.PlaceId)
         ShowToast("📋 คัดลอกสำเร็จ", "คัดลอก PlaceID: " .. tostring(gameData.PlaceId) .. " เรียบร้อยแล้ว!", false)
+    end)
+
+    -- 🎮 เล่น BUTTON
+    local hopServerBtn = Instance.new("TextButton")
+    hopServerBtn.Size = UDim2.new(0, 72, 0, 22)
+    hopServerBtn.Position = UDim2.new(1, -152, 0, 81)
+    hopServerBtn.BackgroundColor3 = COLORS.primary
+    hopServerBtn.Text = "🎮 เล่น"
+    hopServerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hopServerBtn.TextStrokeTransparency = 0.6
+    hopServerBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    hopServerBtn.Font = Enum.Font.GothamBold
+    hopServerBtn.TextSize = 10
+    hopServerBtn.BorderSizePixel = 0
+    hopServerBtn.Parent = card
+
+    local hBtnCorner = Instance.new("UICorner")
+    hBtnCorner.CornerRadius = UDim.new(0, 4)
+    hBtnCorner.Parent = hopServerBtn
+
+    local hBtnGrad = Instance.new("UIGradient")
+    hBtnGrad.Color = ColorSequence.new(COLORS.primaryHover, COLORS.primary)
+    hBtnGrad.Rotation = 90
+    hBtnGrad.Parent = hopServerBtn
+
+    hopServerBtn.MouseEnter:Connect(function()
+        TweenService:Create(hopServerBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primaryHover }):Play()
+    end)
+    hopServerBtn.MouseLeave:Connect(function()
+        TweenService:Create(hopServerBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primary }):Play()
+    end)
+    hopServerBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        ShowHopConfirmPopup(gameData)
     end)
 
     table.insert(cardElements, { frame = card, name = gameData.Name:lower(), placeId = tostring(gameData.PlaceId) })
