@@ -99,6 +99,8 @@ local function stopAllScriptOperations()
     if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
     if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
     if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+    if deactivateAntiAfk then pcall(deactivateAntiAfk) end
+    getgenv().AntiAfkState = false
 
     if ObsidianGlassEngine and ObsidianGlassEngine.Options then
         for _, option in pairs(ObsidianGlassEngine.Options) do
@@ -2472,6 +2474,83 @@ local function SendRerollWebhook(rerollType, cardName, resultValue)
 end
 
 ----------------------------------------------------------------
+-- 🛡️ ADVANCED FAILSAFE ANTI-AFK ENGINE
+----------------------------------------------------------------
+getgenv().AntiAfkState = getgenv().AntiAfkState or false
+getgenv().AntiAfkActive = getgenv().AntiAfkActive or false
+
+local antiAfkConn = nil
+local antiAfkThreadActive = false
+
+local function activateAntiAfk()
+    getgenv().AntiAfkActive = true
+
+    -- 1. Event listener hook on LocalPlayer.Idled
+    if not antiAfkConn then
+        pcall(function()
+            antiAfkConn = LocalPlayer.Idled:Connect(function()
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(0, 0))
+                    VirtualUser:Button2Down(Vector2.new(0, 0))
+                    task.wait(0.1)
+                    VirtualUser:Button2Up(Vector2.new(0, 0))
+                end)
+            end)
+        end)
+    end
+
+    -- 2. Periodic Active Keep-Alive Loop (Runs every 45s to prevent 20-min Roblox disconnect)
+    if not antiAfkThreadActive then
+        antiAfkThreadActive = true
+        task.spawn(function()
+            while getgenv().AntiAfkActive or getgenv().AntiAfkState or (getgenv().AFK_Obj and getgenv().AFK_Obj.on) do
+                task.wait(45)
+                if not (getgenv().AntiAfkActive or getgenv().AntiAfkState or (getgenv().AFK_Obj and getgenv().AFK_Obj.on)) then break end
+
+                -- Method A: VirtualUser input simulation
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(100, 100))
+                    VirtualUser:Button2Down(Vector2.new(100, 100))
+                    task.wait(0.05)
+                    VirtualUser:Button2Up(Vector2.new(100, 100))
+                end)
+
+                -- Method B: VirtualInputManager keypress simulation
+                pcall(function()
+                    local vim = game:GetService("VirtualInputManager")
+                    if vim then
+                        vim:SendKeyEvent(true, Enum.KeyCode.Unknown, false, game)
+                        task.wait(0.05)
+                        vim:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
+                    end
+                end)
+
+                -- Method C: Camera micro-nudge
+                pcall(function()
+                    local cam = workspace.CurrentCamera
+                    if cam then
+                        cam.CFrame = cam.CFrame * CFrame.Angles(0, math.rad(0.01), 0)
+                        task.wait(0.05)
+                        cam.CFrame = cam.CFrame * CFrame.Angles(0, math.rad(-0.01), 0)
+                    end
+                end)
+            end
+            antiAfkThreadActive = false
+        end)
+    end
+end
+
+local function deactivateAntiAfk()
+    getgenv().AntiAfkActive = false
+    if antiAfkConn then
+        pcall(function() antiAfkConn:Disconnect() end)
+        antiAfkConn = nil
+    end
+end
+
+----------------------------------------------------------------
 -- AFK Mode Overlay ("ไก่ตัน") System Engine
 ----------------------------------------------------------------
 getgenv().AFKRuntime = getgenv().AFKRuntime or {
@@ -3583,7 +3662,15 @@ local function afkOpen()
     if AFK.gui then AFK.gui.Enabled = true end
     afkEnterLowPower()
     afkSeedLogs()
+    
+    -- 🛡️ Automatically activate Anti-AFK Engine when entering AFK Mode
+    activateAntiAfk()
+    if Options and Options.AntiAfkState then
+        pcall(function() Options.AntiAfkState:SetValue(true) end)
+    end
+
     logLine("afk", "เปิดใช้งานโหมด AFK (ไก่ตัน) เรียบร้อย")
+    logLine("afk", "🛡️ เปิดใช้งานระบบป้องกันหลุด (Anti-AFK) อัตโนมัติ")
 end
 
 afkClose = function()
@@ -3591,6 +3678,10 @@ afkClose = function()
     AFK.wantHide = true
     if AFK.gui then AFK.gui.Enabled = false end
     afkExitLowPower()
+    
+    if not getgenv().AntiAfkState then
+        deactivateAntiAfk()
+    end
     
     -- ล้างประวัติ Log และเคลียร์ Memory ใน UI Pool เพื่อไม่ให้หนักเครื่อง
     pcall(function()
@@ -3909,12 +4000,12 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop
+-- Heartbeat Instant Buy Loop (Throttled for network stability & low remote spam)
 local lastBuyLoopTick = 0
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     local now = tick()
-    if now - lastBuyLoopTick < 0.035 then return end
+    if now - lastBuyLoopTick < 0.2 then return end
     lastBuyLoopTick = now
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
@@ -3940,7 +4031,7 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
+        if buyAttempts >= 15 or (tick() - firstSeen > 15) then
             model:SetAttribute("Rejected", true)
             continue
         end
@@ -3960,7 +4051,7 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.25 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
@@ -4139,19 +4230,14 @@ AutoSellBoxToggle:OnChanged(function(state)
     end
 end)
 
-local antiAfkConnection
 local AntiAfkToggle = Tabs.Main:AddToggle("AntiAfkState", { Title = "🛡️ ป้องกันหลุด (Anti AFK)", Default = false })
 AntiAfkToggle:OnChanged(function(state)
     getgenv().AntiAfkState = state
     if state then
-        antiAfkConnection = LocalPlayer.Idled:Connect(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
+        activateAntiAfk()
     else
-        if antiAfkConnection then
-            antiAfkConnection:Disconnect()
-            antiAfkConnection = nil
+        if not (getgenv().AFK_Obj and getgenv().AFK_Obj.on) then
+            deactivateAntiAfk()
         end
     end
 end)
