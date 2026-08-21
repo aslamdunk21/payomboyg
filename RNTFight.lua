@@ -1937,25 +1937,64 @@ end
 
 local function getBestPlot()
     if cachedPlot and cachedPlot.Parent then return cachedPlot end
-    local plotsFolder = workspace:FindFirstChild("Plots")
+    local plotsFolder = workspace:FindFirstChild("Plots") or workspace:FindFirstChild("PlotsFolder")
     if not plotsFolder then return nil end
-    local char = player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    local myUserId = player.UserId
+    local myName = player.Name:lower()
 
     for _, plot in ipairs(plotsFolder:GetChildren()) do
-        local owner = getPlotOwner(plot)
-        if owner == player.UserId or owner == player.Name then
-            cachedPlot = plot
-            return plot
+        local ownerAttr = getPlotOwner(plot)
+        if ownerAttr then
+            local strOwner = tostring(ownerAttr):lower()
+            if strOwner == tostring(myUserId) or strOwner == myName then
+                cachedPlot = plot
+                return plot
+            end
         end
 
-        local ok, pivot = pcall(function() return plot:GetPivot() end)
-        local dist = (ok and hrp) and (hrp.Position - pivot.Position).Magnitude or math.huge
-        if dist < 50 then
-            cachedPlot = plot
-            return plot
+        local ownerObj = plot:FindFirstChild("Owner") or plot:FindFirstChild("Player") or plot:FindFirstChild("OwnerUserId")
+        if ownerObj then
+            if ownerObj:IsA("ObjectValue") and ownerObj.Value == player then
+                cachedPlot = plot
+                return plot
+            elseif ownerObj:IsA("StringValue") or ownerObj:IsA("IntValue") then
+                local strVal = tostring(ownerObj.Value):lower()
+                if strVal == tostring(myUserId) or strVal == myName then
+                    cachedPlot = plot
+                    return plot
+                end
+            end
         end
     end
+
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        local minDist = math.huge
+        local closestPlot = nil
+        for _, plot in ipairs(plotsFolder:GetChildren()) do
+            local ok, pivot = pcall(function() return plot:GetPivot() end)
+            if ok and pivot then
+                local dist = (hrp.Position - pivot.Position).Magnitude
+                if dist < minDist then
+                    minDist = dist
+                    closestPlot = plot
+                end
+            end
+        end
+        if closestPlot and minDist < 300 then
+            cachedPlot = closestPlot
+            return closestPlot
+        end
+    end
+
+    local allPlots = plotsFolder:GetChildren()
+    if #allPlots == 1 then
+        cachedPlot = allPlots[1]
+        return allPlots[1]
+    end
+
     return cachedPlot
 end
 
@@ -3813,9 +3852,73 @@ end)
 
 
 
--- Throttled Auto Clone Machine Thread
+-- Helper to check if Clone Machine is currently busy cloning a unit
+local function isCloneMachineBusy()
+    local busy = false
+    -- 1. Check DataService client "Cloning" state
+    pcall(function()
+        local dsModule = safeFindPath(ReplicatedStorage, "Data", "DataService")
+        local ds = dsModule and require(dsModule)
+        if ds and ds.client then
+            local cloning = ds.client:get("Cloning")
+            if type(cloning) == "table" and (cloning.UUID or cloning.Id or cloning.CharacterId or cloning.Time) then
+                busy = true
+            end
+        end
+    end)
+    if busy then return true end
+
+    -- 2. Check workspace Machine attributes & TextLabels
+    pcall(function()
+        local cloneMachine = safeFindPath(workspace, "Machines", "Clone")
+                          or safeFindPath(workspace, "Machines", "Cloning")
+                          or workspace:FindFirstChild("Clone", true)
+        if cloneMachine then
+            if cloneMachine:GetAttribute("Cloning") == true 
+            or cloneMachine:GetAttribute("IsCloning") == true 
+            or cloneMachine:GetAttribute("Busy") == true then
+                busy = true
+                return
+            end
+
+            for _, desc in ipairs(cloneMachine:GetDescendants()) do
+                if desc:IsA("TextLabel") and desc.Text then
+                    local txt = desc.Text:lower()
+                    if txt:find(":") or txt:find("cloning") or txt:find("remaining") then
+                        if txt:match("%d+:%d+") or txt:match("%d+s") then
+                            busy = true
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if busy then return true end
+
+    -- 3. Check UI TextLabels
+    pcall(function()
+        local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone")
+        if cloneFrame then
+            local timeLabel = safeFindPath(cloneFrame, "Frame", "Main", "Timer")
+                           or safeFindPath(cloneFrame, "Frame", "Main", "Time")
+                           or cloneFrame:FindFirstChild("Timer", true)
+            if timeLabel and timeLabel:IsA("TextLabel") and timeLabel.Text then
+                if timeLabel.Text:match("%d+:%d+") or timeLabel.Text:lower():find("cloning") then
+                    busy = true
+                    return
+                end
+            end
+        end
+    end)
+
+    return busy
+end
+
+-- Direct Remote Auto Clone Machine Thread (No Walking / Teleport Required)
 task.spawn(function()
     local lastCloneAttempt = 0
+
     while task.wait(3.0) do
         local doClone = Options.AutoClone and Options.AutoClone.Value
         local doHalfTime = Options.AutoCloneHalfTime and Options.AutoCloneHalfTime.Value
@@ -3823,101 +3926,86 @@ task.spawn(function()
 
         if not (doClone or doHalfTime) then continue end
 
-        local cloneMachine = safeFindPath(workspace, "Machines", "Clone")
-                          or workspace:FindFirstChild("Clone", true)
-        local prompt = cloneMachine and (safeFindPath(cloneMachine, "PP", "ProximityPrompt") or cloneMachine:FindFirstChildWhichIsA("ProximityPrompt", true))
+        local cloneRemote = safeFindPath(ReplicatedStorage, "Remotes", "CloneRemotes", "Request")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Clone", "Request")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Clone", "Start")
 
-        if prompt then
-            pcall(function() firePrompt(prompt) end)
-            task.wait(0.3)
-        end
-
-        if selectedUnitName then
-            equipAndSelectCloneUnit(selectedUnitName)
-        end
-
-        local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone", "Frame", "Main")
-        if cloneFrame then
-            if doHalfTime then
+        -- Check HalfTime reduction if active
+        if doHalfTime then
+            if cloneRemote then
+                safeFireRemote(cloneRemote, "HalfTime")
+                safeFireRemote(cloneRemote, "TimerHalf")
+            end
+            local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone", "Frame", "Main")
+            if cloneFrame then
                 local halfBtn = safeFindPath(cloneFrame, "Buttons", "TimerHalf", "Button")
+                             or safeFindPath(cloneFrame, "Buttons", "TimerHalf")
                 if halfBtn then
                     pcall(function()
                         if firesignal then firesignal(halfBtn.MouseButton1Click)
                         elseif firebutton then firebutton(halfBtn) end
                     end)
-                    task.wait(0.3)
+                end
+            end
+        end
+
+        -- Check if clone machine is already busy/running
+        if isCloneMachineBusy() then
+            continue
+        end
+
+        -- Clone Machine is idle! Fire clone start remote ONCE
+        if doClone and selectedUnitName and (tick() - lastCloneAttempt > 5) then
+            local targetUUID = nil
+            local allObjects = getOwnInventoryUnitObjects()
+            for _, uObj in ipairs(allObjects) do
+                if uObj.DisplayName == selectedUnitName or uObj.Name == selectedUnitName then
+                    targetUUID = uObj.UUID
+                    break
                 end
             end
 
-            if doClone and (tick() - lastCloneAttempt > 10) then
-                local cloneBtn = safeFindPath(cloneFrame, "Buttons", "Clone", "Button")
-                if cloneBtn then
-                    pcall(function()
-                        if firesignal then firesignal(cloneBtn.MouseButton1Click)
-                        elseif firebutton then firebutton(cloneBtn) end
-                    end)
+            if targetUUID then
+                lastCloneAttempt = tick()
+                if cloneRemote then
+                    safeFireRemote(cloneRemote, "Start", {
+                        UUID = targetUUID,
+                        CharacterId = targetUUID
+                    })
+                    safeFireRemote(cloneRemote, "Start", targetUUID)
                 end
 
-                -- Direct Remote Fire fallback (Exact payload format: "Start", { UUID = ..., CharacterId = ... })
-                local cloneRemote = safeFindPath(ReplicatedStorage, "Remotes", "CloneRemotes", "Request")
-                                 or safeFindPath(ReplicatedStorage, "Remotes", "Clone", "Request")
-                if cloneRemote and selectedUnitName then
-                    local allObjects = getOwnInventoryUnitObjects()
-                    for _, uObj in ipairs(allObjects) do
-                        if uObj.DisplayName == selectedUnitName or uObj.Name == selectedUnitName then
-                            safeFireRemote(cloneRemote, "Start", {
-                                UUID = uObj.UUID,
-                                CharacterId = uObj.UUID
-                            })
-                            break
-                        end
+                -- Also click UI button if open
+                local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone", "Frame", "Main")
+                if cloneFrame then
+                    local cloneBtn = safeFindPath(cloneFrame, "Buttons", "Clone", "Button")
+                                  or safeFindPath(cloneFrame, "Buttons", "Clone")
+                    if cloneBtn then
+                        pcall(function()
+                            if firesignal then firesignal(cloneBtn.MouseButton1Click)
+                            elseif firebutton then firebutton(cloneBtn) end
+                        end)
                     end
                 end
-
-                lastCloneAttempt = tick()
-                task.wait(0.5)
             end
         end
     end
 end)
 
--- Throttled Auto Trait Machine Thread
+-- Direct Remote Auto Trait Machine Thread (No Walking / Teleport Required)
 task.spawn(function()
-    local lastPromptTime = 0
-
     while task.wait(0.4) do
         local doRoll = Options.AutoRollTrait and Options.AutoRollTrait.Value
         if not doRoll then continue end
 
-        local selectedUnitName = Options.SelectTraitUnit and Options.SelectTraitUnit.Value
-        local delayVal = (Options.TraitRollDelay and Options.TraitRollDelay.Value) or 0.5
-
-        local traitsFrame = safeFindPath(playerGui, "MainUI", "Frames", "Traits")
-        local isUiVisible = traitsFrame and (traitsFrame.Visible or (traitsFrame:IsA("CanvasGroup") and traitsFrame.GroupTransparency < 0.9))
-
-        -- Step 1: Only trigger ProximityPrompt if UI is NOT open yet (avoid pressing E repeatedly!)
-        if not isUiVisible and (tick() - lastPromptTime > 4) then
-            lastPromptTime = tick()
-            local traitMachine = safeFindPath(workspace, "Machines", "Trait")
-                              or safeFindPath(workspace, "Machines", "Traits")
-                              or workspace:FindFirstChild("Trait", true)
-                              or workspace:FindFirstChild("Traits", true)
-            local prompt = traitMachine and (safeFindPath(traitMachine, "PP", "ProximityPrompt") or traitMachine:FindFirstChildWhichIsA("ProximityPrompt", true))
-
-            if prompt then
-                pcall(function() firePrompt(prompt) end)
-                task.wait(0.8)
-            end
-        end
-
-        -- Step 2: Find target unit object & UUID and equip it
-        local targetUnitObj = nil
-        local targetUUID = nil
         local selectedDisplayName = Options.SelectTraitUnit and Options.SelectTraitUnit.Value
         local delayVal = (Options.TraitRollDelay and Options.TraitRollDelay.Value) or 0.5
 
+        -- Find target unit object & UUID from inventory directly
+        local targetUnitObj = nil
+        local targetUUID = nil
+
         if selectedDisplayName then
-            equipAndSelectTraitUnit(selectedDisplayName)
             local allObjects = getOwnInventoryUnitObjects()
             for _, uObj in ipairs(allObjects) do
                 if uObj.DisplayName == selectedDisplayName or uObj.Name == selectedDisplayName then
@@ -3928,7 +4016,7 @@ task.spawn(function()
             end
         end
 
-        -- Step 3: Check current trait of unit to see if target lock is reached
+        -- Check current trait of unit to see if target lock is reached
         local targetLocks = (Options.TargetTraitLocks and Options.TargetTraitLocks.Value) or {}
         if targetUnitObj then
             local currentTrait = targetUnitObj.Trait
@@ -3961,12 +4049,14 @@ task.spawn(function()
             end
         end
 
-        -- Step 4: Execute Roll via RemoteEvent (Format: FireServer("Roll", { UUID = targetUUID }))
+        -- Direct Remote Fire (No physical interaction needed)
         local traitRemote = safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Request")
                          or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Roll")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "TraitRemotes", "Request")
         if traitRemote then
             if targetUUID then
-                safeFireRemote(traitRemote, "Roll", { UUID = targetUUID })
+                safeFireRemote(traitRemote, "Roll", { UUID = targetUUID, CharacterId = targetUUID })
+                safeFireRemote(traitRemote, "Roll", targetUUID)
             elseif targetUnitObj and targetUnitObj.ToolInstance then
                 safeFireRemote(traitRemote, "Roll", targetUnitObj.ToolInstance)
             else
@@ -3974,7 +4064,7 @@ task.spawn(function()
             end
         end
 
-        -- Step 5: Also click ROLL button in UI
+        -- Also click ROLL button in UI if open
         pcall(function()
             local mainUi = safeFindPath(playerGui, "MainUI")
             local rollBtn = safeFindPath(playerGui, "MainUI", "Frames", "Traits", "Frame", "Main", "Buttons", "Roll", "Button")
@@ -4238,8 +4328,15 @@ task.spawn(function()
         if not prompt then return false end
         return pcall(function()
             if prompt:IsA("ProximityPrompt") then
-                if not prompt.Enabled then prompt.Enabled = true end
+                pcall(function()
+                    prompt.HoldDuration = 0
+                    prompt.RequiresLineOfSight = false
+                    prompt.MaxActivationDistance = 9999999
+                    if prompt.Enabled == false then prompt.Enabled = true end
+                end)
                 if fireproximityprompt then
+                    fireproximityprompt(prompt, 0)
+                    fireproximityprompt(prompt, 1)
                     fireproximityprompt(prompt)
                 end
                 pcall(function()
