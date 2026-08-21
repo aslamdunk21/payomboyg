@@ -1,6 +1,6 @@
--- [[ PayomboyZ - Anime Card Farm Script (Obsidian Glassmorphic 2 Engine Edition) ]]
+-- [[ PayomboyZ - Anime Card Farm Script (Obsidian Glassmorphic 2 Engine Master Edition) ]]
 -- Theme: Obsidian Glassmorphic 2 (FlowAuth Aesthetics with Left User Profile Panel)
--- Controls: [K] Toggle UI Visibility | [F] Toggle UI Scale | Mobile Floating Capsule Button
+-- Controls: [K] Toggle UI Visibility | [RightControl] Toggle UI | Mobile Floating Capsule Button
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -96,12 +96,10 @@ end
 
 -- [ฟังก์ชันหยุดการทำงานของสคริปต์ทั้งหมด (Stop All Active Script Threads & Connections)]
 local function stopAllScriptOperations()
-    -- 1. เรียกใช้ฟังก์ชัน Cleanup หลักของสคริปต์ (ถ้านิยามไว้)
     if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
     if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
     if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
 
-    -- 2. ปิดสวิตช์ฟังก์ชันทั้งหมดใน Options (ถ้ามี)
     if ObsidianGlassEngine and ObsidianGlassEngine.Options then
         for _, option in pairs(ObsidianGlassEngine.Options) do
             if type(option) == "table" and option.SetValue then
@@ -111,34 +109,54 @@ local function stopAllScriptOperations()
     end
 end
 
+-- 🖼️ NON-BLOCKING ASYNC AVATAR IMAGE LOADER (ป้องกัน UI ค้างบนมือถือ/UGPhone)
 local customAvatarAsset = nil
-local function loadCustomAvatarImage()
-    if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
-    local fileName = "payomboyz_avatar.jpg"
-    
-    pcall(function()
-        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-            local getAsset = getcustomasset or getsynasset
-            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
-            if not isFileExist then
-                local imageBytes = game:HttpGet(avatarUrl)
-                if imageBytes and #imageBytes > 0 then
-                    writefile(fileName, imageBytes)
-                end
-            end
-            if typeof(isfile) == "function" and isfile(fileName) then
-                customAvatarAsset = getAsset(fileName)
-            end
-        end
-    end)
+local isAvatarLoading = false
 
-    if not customAvatarAsset then
-        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+local function loadCustomAvatarImage(targetImageLabel)
+    local defaultThumb = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+    if customAvatarAsset then
+        if targetImageLabel then targetImageLabel.Image = customAvatarAsset end
+        return customAvatarAsset
     end
-    return customAvatarAsset
+
+    if targetImageLabel then targetImageLabel.Image = defaultThumb end
+
+    if not isAvatarLoading then
+        isAvatarLoading = true
+        task.spawn(function()
+            local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+            local fileName = "payomboyz_avatar.jpg"
+            
+            pcall(function()
+                if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+                    local getAsset = getcustomasset or getsynasset
+                    local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+                    if not isFileExist and typeof(game.HttpGet) == "function" then
+                        local imageBytes = game:HttpGet(avatarUrl)
+                        if imageBytes and #imageBytes > 0 then
+                            writefile(fileName, imageBytes)
+                        end
+                    end
+                    if typeof(isfile) == "function" and isfile(fileName) then
+                        customAvatarAsset = getAsset(fileName)
+                    end
+                end
+            end)
+
+            if not customAvatarAsset then
+                customAvatarAsset = defaultThumb
+            end
+
+            if targetImageLabel and targetImageLabel.Parent then
+                targetImageLabel.Image = customAvatarAsset
+            end
+        end)
+    end
+    return defaultThumb
 end
 
+-- 🔔 TOAST NOTIFICATION ENGINE
 function ObsidianGlassEngine:Notify(cfg)
     pcall(function()
         local title = cfg.Title or "PayomboyZ"
@@ -159,6 +177,7 @@ function ObsidianGlassEngine:Notify(cfg)
         toast.Size = UDim2.new(0, 300, 0, 65)
         toast.Position = UDim2.new(1, 20, 1, -85)
         toast.BackgroundColor3 = COLORS.glass
+        toast.BackgroundTransparency = 0.15
         toast.BorderSizePixel = 0
         toast.Parent = notifHolder
         
@@ -206,6 +225,7 @@ function ObsidianGlassEngine:Notify(cfg)
     end)
 end
 
+-- 🖼️ MAIN WINDOW ENGINE
 function ObsidianGlassEngine:CreateWindow(cfg)
     local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
     if parentGui:FindFirstChild("PayomboyZ_ObsidianGlassUI") then
@@ -222,22 +242,33 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local uiScale = Instance.new("UIScale")
     
-    -- 📱 AUTOMATIC MOBILE RESPONSIVE SCALING ENGINE
-    local camera = workspace.CurrentCamera
+    -- 📱 AUTOMATIC MOBILE RESPONSIVE SCALING ENGINE (HANDLES CAMERA REASSIGNMENT)
     local function updateScale()
-        if camera and camera.ViewportSize then
-            local vp = camera.ViewportSize
-            local targetWidth, targetHeight = 920, 600
-            local scaleX = (vp.X - 24) / targetWidth
-            local scaleY = (vp.Y - 24) / targetHeight
-            local calcScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
-            uiScale.Scale = calcScale
-        end
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            if camera and camera.ViewportSize and camera.ViewportSize.X > 0 and camera.ViewportSize.Y > 0 then
+                local vp = camera.ViewportSize
+                local targetWidth, targetHeight = 920, 600
+                local scaleX = (vp.X - 20) / targetWidth
+                local scaleY = (vp.Y - 20) / targetHeight
+                local calcScale = math.clamp(math.min(scaleX, scaleY), 0.40, 1.0)
+                uiScale.Scale = calcScale
+            end
+        end)
     end
     updateScale()
-    if camera then
-        camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
-    end
+
+    pcall(function()
+        if workspace.CurrentCamera then
+            workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+        end
+        workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+            if workspace.CurrentCamera then
+                updateScale()
+                workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+            end
+        end)
+    end)
     uiScale.Parent = gui
 
     local shell = Instance.new("Frame")
@@ -261,7 +292,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     shellStroke.Transparency = 0.3
     shellStroke.Parent = shell
 
-    -- Snow Particles Animation Effect Layer
+    -- ❄️ OPTIMIZED SNOW PARTICLES ANIMATION LAYER (PAUSES WHEN HIDDEN / LOW MOBILE IMPACT)
     local snowLayer = Instance.new("Frame")
     snowLayer.Name = "SnowLayer"
     snowLayer.Size = UDim2.fromScale(1, 1)
@@ -270,8 +301,10 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     snowLayer.Parent = shell
 
     task.spawn(function()
+        local isTouch = UserInputService.TouchEnabled
+        local dotCount = isTouch and 15 or 30
         local dots = {}
-        for i = 1, 35 do
+        for i = 1, dotCount do
             local dot = Instance.new("Frame")
             dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
             dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -292,18 +325,21 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        local sleepInterval = isTouch and 0.06 or 0.03
+        while task.wait(sleepInterval) do
             if not gui or not gui.Parent then break end
-            for _, data in ipairs(dots) do
-                data.pos = data.pos + data.speed
-                if data.pos > 1.05 then data.pos = -0.05 end
-                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
-                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            if shell and shell.Visible then
+                for _, data in ipairs(dots) do
+                    data.pos = data.pos + data.speed
+                    if data.pos > 1.05 then data.pos = -0.05 end
+                    local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                    data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+                end
             end
         end
     end)
 
-    -- 💎 UNIVERSAL DRAGGABLE TOGGLE CAPSULE WITH SNOW, IMAGE & METRICS (FPS/PING)
+    -- 💎 UNIVERSAL DRAGGABLE TOGGLE CAPSULE WITH AVATAR, USERNAME & METRICS (FPS/PING)
     local toggleCapsule = Instance.new("Frame")
     toggleCapsule.Name = "ObsidianToggleCapsule"
     toggleCapsule.Size = UDim2.fromOffset(230, 58)
@@ -335,7 +371,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     task.spawn(function()
         local dots = {}
-        for i = 1, 12 do
+        for i = 1, 8 do
             local dot = Instance.new("Frame")
             dot.Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3))
             dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -357,7 +393,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(0.06) do
             if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
             for _, data in ipairs(dots) do
                 data.pos = data.pos + data.speed
@@ -368,7 +404,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
     end)
 
-    -- 🖼️ AVATAR IMAGE BOX (CUSTOM GITHUB LOGO / AVATAR)
+    -- 🖼️ AVATAR IMAGE BOX
     local capAvatarFrame = Instance.new("Frame")
     capAvatarFrame.Size = UDim2.fromOffset(42, 42)
     capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
@@ -389,9 +425,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local capAvatarImg = Instance.new("ImageLabel")
     capAvatarImg.Size = UDim2.fromScale(1, 1)
     capAvatarImg.BackgroundTransparency = 1
-    capAvatarImg.Image = loadCustomAvatarImage()
     capAvatarImg.ZIndex = 4
     capAvatarImg.Parent = capAvatarFrame
+    loadCustomAvatarImage(capAvatarImg)
 
     local caiCorner = Instance.new("UICorner")
     caiCorner.CornerRadius = UDim.new(1, 0)
@@ -507,7 +543,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
     end)
 
-    -- LEFT COLUMN: SIDEBAR (USER INFO & VERTICAL TAB NAVIGATION)
+    -- 👤 LEFT COLUMN: SIDEBAR (USER INFO & VERTICAL TAB NAVIGATION)
     local userPanel = Instance.new("Frame")
     userPanel.Name = "UserPanel"
     userPanel.Size = UDim2.new(0, 240, 1, 0)
@@ -546,9 +582,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local avatarImg = Instance.new("ImageLabel")
     avatarImg.Size = UDim2.fromScale(1, 1)
     avatarImg.BackgroundTransparency = 1
-    avatarImg.Image = loadCustomAvatarImage()
     avatarImg.ZIndex = 11
     avatarImg.Parent = avatarFrame
+    loadCustomAvatarImage(avatarImg)
 
     local avImgCorner = Instance.new("UICorner")
     avImgCorner.CornerRadius = UDim.new(1, 0)
@@ -614,15 +650,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     loStroke.Transparency = 0.4
     loStroke.Parent = logoutBtn
 
-    -- Hover Animation Effects
     logoutBtn.MouseEnter:Connect(function()
         TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
             BackgroundColor3 = COLORS.danger,
             BackgroundTransparency = 0.15
         }):Play()
-        TweenService:Create(loStroke, TweenInfo.new(0.2), {
-            Transparency = 0
-        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), { Transparency = 0 }):Play()
         logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     end)
 
@@ -631,28 +664,15 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             BackgroundColor3 = COLORS.surfacePressed,
             BackgroundTransparency = 0.20
         }):Play()
-        TweenService:Create(loStroke, TweenInfo.new(0.2), {
-            Transparency = 0.4
-        }):Play()
+        TweenService:Create(loStroke, TweenInfo.new(0.2), { Transparency = 0.4 }):Play()
         logoutBtn.TextColor3 = COLORS.danger
     end)
 
-    -- Click Handler (เมื่อกดปุ่ม Logout)
     logoutBtn.MouseButton1Click:Connect(function()
         playClickSound()
-
-        -- 1. สั่งหยุดการทำงานของสคริปต์ทั้งหมด (Terminate all script threads & loops)
         stopAllScriptOperations()
-
-        -- 2. ลบคีย์ในเครื่องและล้างค่าตัวแปรในระบบ (พร้อมตั้งค่า Flag getgenv().PayomboyZ_LoggedOut = true)
         performLogoutKeyClear()
-
-        -- 3. ทำลายหน้าจอ UI ปัจจุบัน
-        if gui then
-            pcall(function() gui:Destroy() end)
-        end
-
-        -- 4. โหลดสคริปต์กลับสู่หน้าเมนูหลัก (Start UI Redirection)
+        if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
         end)
@@ -762,7 +782,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     stTitle.TextSize = 12
     stTitle.Parent = statusCard
 
-    -- RIGHT COLUMN: MAIN HUB PANEL
+    -- 🖥️ RIGHT COLUMN: MAIN HUB PANEL
     local mainPanel = Instance.new("Frame")
     mainPanel.Name = "MainPanel"
     mainPanel.Size = UDim2.new(1, -240, 1, 0)
@@ -1267,7 +1287,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             return OptionObj
         end
 
-        -- DROPDOWN WIDGET WITH INTERACTIVE POPUP MODAL
+        -- 📋 DROPDOWN WIDGET WITH FULLY RESPONSIVE MOBILE MODAL OVERLAY (SCROLLS TO THE END!)
         function TabObj:AddDropdown(id, dCfg)
             local title = dCfg.Title or id
             local values = dCfg.Values or {}
@@ -1383,7 +1403,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 OptionObj.Values = newVals
             end
 
-            -- POPUP OVERLAY MODAL FOR SELECTION
+            -- POPUP OVERLAY MODAL FOR SELECTION (MOBILE TOUCH OPTIMIZED & SCROLLABLE TO END)
             dBtn.MouseButton1Click:Connect(function()
                 playClickSound()
                 local gui = shell.Parent
@@ -1415,8 +1435,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.Parent = modalOverlay
 
                 local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-                local maxModalH = math.clamp(cameraVP.Y * 0.72, 320, 460)
-                local maxModalW = math.min(380, cameraVP.X - 30)
+                local maxModalH = math.clamp(cameraVP.Y * 0.78, 300, 440)
+                local maxModalW = math.min(380, cameraVP.X - 24)
 
                 local modalFrame = Instance.new("Frame")
                 modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
@@ -1440,7 +1460,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 -- Header
                 local mHeader = Instance.new("TextLabel")
                 mHeader.Size = UDim2.new(1, -50, 0, 22)
-                mHeader.Position = UDim2.new(0, 16, 0, 12)
+                mHeader.Position = UDim2.new(0, 16, 0, 10)
                 mHeader.BackgroundTransparency = 1
                 mHeader.Text = "📌 " .. title
                 mHeader.TextColor3 = COLORS.text
@@ -1452,7 +1472,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 local mSub = Instance.new("TextLabel")
                 mSub.Size = UDim2.new(1, -50, 0, 16)
-                mSub.Position = UDim2.new(0, 16, 0, 34)
+                mSub.Position = UDim2.new(0, 16, 0, 32)
                 mSub.BackgroundTransparency = 1
                 mSub.Text = isMulti and "คำแนะนำ: คลิกเลือก/ยกเลิกได้หลายรายการ" or "คำแนะนำ: คลิก 1 รายการเพื่อเลือก"
                 mSub.TextColor3 = COLORS.textMuted
@@ -1464,7 +1484,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 local closeModBtn = Instance.new("TextButton")
                 closeModBtn.Size = UDim2.fromOffset(26, 26)
-                closeModBtn.Position = UDim2.new(1, -36, 0, 12)
+                closeModBtn.Position = UDim2.new(1, -36, 0, 10)
                 closeModBtn.BackgroundColor3 = COLORS.glass
                 closeModBtn.Text = "✕"
                 closeModBtn.TextColor3 = COLORS.textMuted
@@ -1489,7 +1509,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 -- 🔍 SEARCH FILTER INPUT BOX
                 local searchFrame = Instance.new("Frame")
                 searchFrame.Size = UDim2.new(1, -28, 0, 32)
-                searchFrame.Position = UDim2.new(0, 14, 0, 56)
+                searchFrame.Position = UDim2.new(0, 14, 0, 52)
                 searchFrame.BackgroundColor3 = COLORS.glassDeep
                 searchFrame.BorderSizePixel = 0
                 searchFrame.ZIndex = 1000001
@@ -1518,16 +1538,40 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 searchBox.ZIndex = 1000002
                 searchBox.Parent = searchFrame
 
-                -- Option list
+                -- 🔘 CONFIRM BUTTON AT BOTTOM
+                local confirmBtn = Instance.new("TextButton")
+                confirmBtn.Size = UDim2.new(1, -28, 0, 38)
+                confirmBtn.Position = UDim2.new(0, 14, 1, -46)
+                confirmBtn.BackgroundColor3 = COLORS.primary
+                confirmBtn.BackgroundTransparency = 0.15
+                confirmBtn.Text = "✓ ตกลง / ยืนยันการเลือก (Confirm)"
+                confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                confirmBtn.Font = Enum.Font.GothamBold
+                confirmBtn.TextSize = 13
+                confirmBtn.ZIndex = 1000003
+                confirmBtn.Parent = modalFrame
+
+                local cfCorner = Instance.new("UICorner")
+                cfCorner.CornerRadius = UDim.new(0, 8)
+                cfCorner.Parent = confirmBtn
+
+                confirmBtn.MouseButton1Click:Connect(function()
+                    playClickSound()
+                    if isMulti then updateDropdown(currentSelected) end
+                    modalOverlay:Destroy()
+                end)
+
+                -- 📜 OPTION SCROLL CONTAINER (CALCULATED HEIGHT & BOTTOM PADDING)
                 local optScroll = Instance.new("ScrollingFrame")
-                optScroll.Size = UDim2.new(1, -28, 1, -100)
-                optScroll.Position = UDim2.new(0, 14, 0, 94)
+                optScroll.Size = UDim2.new(1, -28, 1, -144)
+                optScroll.Position = UDim2.new(0, 14, 0, 90)
                 optScroll.BackgroundTransparency = 1
                 optScroll.Active = true
                 optScroll.ScrollingDirection = Enum.ScrollingDirection.Y
                 optScroll.ScrollBarThickness = 6
                 optScroll.ScrollBarImageColor3 = COLORS.primary
                 optScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+                optScroll.ElasticBehavior = Enum.ElasticBehavior.Always
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
@@ -1538,7 +1582,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optLayout.Parent = optScroll
 
                 optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 10)
+                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 60)
                 end)
 
                 local currentSelected = {}
