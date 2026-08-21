@@ -1768,7 +1768,7 @@ local Tabs = {
     Clone = Window:AddTab({ Title = "เครื่องโคลน (Clone Machine)", Icon = "copy" }),
     Trait = Window:AddTab({ Title = "ปรับแต่ง Trait (Trait Machine)", Icon = "sparkles" }),
     AutoSell = Window:AddTab({ Title = "ออโต้ขายยูนิต (Auto Sell)", Icon = "trash-2" }),
-    Filter = Window:AddTab({ Title = "ตัวละคร / Rarity", Icon = "users" }),
+    Misc = Window:AddTab({ Title = "ฟังชั่นอื่นๆ (Misc)", Icon = "grid" }),
     Upgrade = Window:AddTab({ Title = "อัปเกรด (Upgrade)", Icon = "trending-up" }),
     Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
 }
@@ -2682,9 +2682,26 @@ end
 
 -- ===== FLUENT UI COMPONENTS =====
 
-Tabs.Filter:AddSection("Select Unit Type Rarity")
+Tabs.Main:AddSection("ระบบออโต้หลัก (Main Auto)")
 
-local Rarities1 = Tabs.Filter:AddDropdown("Rarities1", {
+local AutoBuyPlot = Tabs.Main:AddToggle("AutoBuyPlot", {
+    Title = "Auto Roll/Buy",
+    Description = "ออโต้โรลและซื้อ",
+    Default = false,
+})
+
+local RollDelaySlider = Tabs.Main:AddSlider("RollDelay", {
+    Title = "Roll Delay",
+    Description = "ดีเลย์การสุ่ม (วินาที) [ค่าเริ่มต้น 2 วินาที]",
+    Default = 2.0,
+    Min = 0.5,
+    Max = 10.0,
+    Rounding = 1,
+})
+
+Tabs.Main:AddSection("Select Unit Type Rarity")
+
+local Rarities1 = Tabs.Main:AddDropdown("Rarities1", {
     Title = "Rarity 1",
     Description = "เลือกระดับที่ต้องการ 1",
     Values = RarityValues,
@@ -2692,7 +2709,7 @@ local Rarities1 = Tabs.Filter:AddDropdown("Rarities1", {
     Default = {},
 })
 
-local Mutations1 = Tabs.Filter:AddDropdown("Mutations1", {
+local Mutations1 = Tabs.Main:AddDropdown("Mutations1", {
     Title = "Mutation 1",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
@@ -2700,7 +2717,7 @@ local Mutations1 = Tabs.Filter:AddDropdown("Mutations1", {
     Default = {},
 })
 
-local Rarities2 = Tabs.Filter:AddDropdown("Rarities2", {
+local Rarities2 = Tabs.Main:AddDropdown("Rarities2", {
     Title = "Rarity 2",
     Description = "เลือกระดับที่ต้องการ 2",
     Values = RarityValues,
@@ -2708,7 +2725,7 @@ local Rarities2 = Tabs.Filter:AddDropdown("Rarities2", {
     Default = {},
 })
 
-local Mutations2 = Tabs.Filter:AddDropdown("Mutations2", {
+local Mutations2 = Tabs.Main:AddDropdown("Mutations2", {
     Title = "Mutation 2",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
@@ -2716,9 +2733,9 @@ local Mutations2 = Tabs.Filter:AddDropdown("Mutations2", {
     Default = {},
 })
 
-Tabs.Filter:AddSection("Select Unit Type Name")
+Tabs.Main:AddSection("Select Unit Type Name")
 
-local Names3 = Tabs.Filter:AddDropdown("Names3", {
+local Names3 = Tabs.Main:AddDropdown("Names3", {
     Title = "Name 1",
     Description = "เลือกชื่อที่ต้องการ 1",
     Values = CharacterValues,
@@ -2726,7 +2743,7 @@ local Names3 = Tabs.Filter:AddDropdown("Names3", {
     Default = {},
 })
 
-local Mutations3 = Tabs.Filter:AddDropdown("Mutations3", {
+local Mutations3 = Tabs.Main:AddDropdown("Mutations3", {
     Title = "Mutation 1",
     Description = "เลือกบัพที่ต้องการ 1",
     Values = MutationValues,
@@ -2734,7 +2751,7 @@ local Mutations3 = Tabs.Filter:AddDropdown("Mutations3", {
     Default = {},
 })
 
-local Names4 = Tabs.Filter:AddDropdown("Names4", {
+local Names4 = Tabs.Main:AddDropdown("Names4", {
     Title = "Name 2",
     Description = "เลือกชื่อที่ต้องการ 2",
     Values = CharacterValues,
@@ -2742,7 +2759,7 @@ local Names4 = Tabs.Filter:AddDropdown("Names4", {
     Default = {},
 })
 
-local Mutations4 = Tabs.Filter:AddDropdown("Mutations4", {
+local Mutations4 = Tabs.Main:AddDropdown("Mutations4", {
     Title = "Mutation 2",
     Description = "เลือกบัพที่ต้องการ 2",
     Values = MutationValues,
@@ -2758,6 +2775,26 @@ Names3:OnChanged(rebuildTargetLookup)
 Mutations3:OnChanged(rebuildTargetLookup)
 Names4:OnChanged(rebuildTargetLookup)
 Mutations4:OnChanged(rebuildTargetLookup)
+
+Tabs.Misc:AddSection("ฟังชั่นอื่นๆ (Misc)")
+
+local AutoSpinWheel = Tabs.Misc:AddToggle("AutoSpinWheel", {
+    Title = "Auto Spin Wheel",
+    Description = "ออโต้วงล้อ",
+    Default = false,
+})
+
+local AutoClaimBattlepass = Tabs.Misc:AddToggle("AutoClaimBattlepass", {
+    Title = "Auto Claim Battlepass (Free)",
+    Description = "ออโต้เคลมแบทเทิลพาส (ฟรี)",
+    Default = false,
+})
+
+local AutoClaimPremiumBattlepass = Tabs.Misc:AddToggle("AutoClaimPremiumBattlepass", {
+    Title = "Auto Claim Battlepass (Premium)",
+    Description = "ออโต้เคลมแบทเทิลพาส (พรีเมียม)",
+    Default = false,
+})
 
 Tabs.AutoSell:AddSection("ระบบออโต้ขายยูนิต (Auto Sell Units)")
 
@@ -2818,44 +2855,6 @@ Tabs.AutoSell:AddButton({
             end
         end)
     end
-})
-
-
-Tabs.Main:AddSection("ระบบออโต้หลัก (Main Auto)")
-
-local AutoBuyPlot = Tabs.Main:AddToggle("AutoBuyPlot", {
-    Title = "Auto Roll/Buy",
-    Description = "ออโต้โรลและซื้อ",
-    Default = false,
-})
-
-local RollDelaySlider = Tabs.Main:AddSlider("RollDelay", {
-    Title = "Roll Delay",
-    Description = "ดีเลย์การสุ่ม (วินาที) [ค่าเริ่มต้น 2 วินาที]",
-    Default = 2.0,
-    Min = 0.5,
-    Max = 10.0,
-    Rounding = 1,
-})
-
-Tabs.Main:AddSection("ฟังชั่นอื่นๆ (Misc)")
-
-local AutoSpinWheel = Tabs.Main:AddToggle("AutoSpinWheel", {
-    Title = "Auto Spin Wheel",
-    Description = "ออโต้วงล้อ",
-    Default = false,
-})
-
-local AutoClaimBattlepass = Tabs.Main:AddToggle("AutoClaimBattlepass", {
-    Title = "Auto Claim Battlepass (Free)",
-    Description = "ออโต้เคลมแบทเทิลพาส (ฟรี)",
-    Default = false,
-})
-
-local AutoClaimPremiumBattlepass = Tabs.Main:AddToggle("AutoClaimPremiumBattlepass", {
-    Title = "Auto Claim Battlepass (Premium)",
-    Description = "ออโต้เคลมแบทเทิลพาส (พรีเมียม)",
-    Default = false,
 })
 
 Tabs.Upgrade:AddSection("ระบบออโต้อัปเกรด (Auto Upgrade)")
