@@ -304,7 +304,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     task.spawn(function()
         local isTouch = UserInputService.TouchEnabled
-        local dotCount = isTouch and 15 or 30
+        -- [OPT] ลดจำนวน dot ลงครึ่งนึงเพื่อลด CPU load
+        local dotCount = isTouch and 8 or 15
         local dots = {}
         for i = 1, dotCount do
             local dot = Instance.new("Frame")
@@ -327,7 +328,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        local sleepInterval = isTouch and 0.06 or 0.03
+        -- [OPT] เพิ่ม sleep interval ให้นานขึ้น (0.08s mobile, 0.06s PC) ลด CPU spike
+        local sleepInterval = isTouch and 0.10 or 0.06
         while task.wait(sleepInterval) do
             if not gui or not gui.Parent then break end
             if shell and shell.Visible then
@@ -372,8 +374,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     capsuleSnowLayer.Parent = toggleCapsule
 
     task.spawn(function()
+        -- [OPT] ลด capsule snow dots เหลือ 4 ใบ
         local dots = {}
-        for i = 1, 8 do
+        for i = 1, 4 do
             local dot = Instance.new("Frame")
             dot.Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3))
             dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -395,7 +398,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.06) do
+        -- [OPT] เพิ่ม interval เป็น 0.10s
+        while task.wait(0.10) do
             if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
             for _, data in ipairs(dots) do
                 data.pos = data.pos + data.speed
@@ -461,13 +465,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     capMetricsLabel.Parent = toggleCapsule
 
     -- 🔄 REALTIME FPS & PING UPDATE LOOP FOR TOGGLE CAPSULE
+    -- [OPT] ใช้ Heartbeat นับ frame แทน RenderStepped (ลด overhead), อัปเดต label ทุก 2s
     task.spawn(function()
         local frameCount = 0
         local lastFpsTime = tick()
         local fpsVal = 60
 
-        local renderConn
-        renderConn = RunService.RenderStepped:Connect(function()
+        local heartbeatConn
+        heartbeatConn = RunService.Heartbeat:Connect(function()
             frameCount = frameCount + 1
             local now = tick()
             if now - lastFpsTime >= 1 then
@@ -477,9 +482,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             end
         end)
 
-        while task.wait(0.8) do
+        while task.wait(2) do
             if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
-                if renderConn then renderConn:Disconnect() end
+                if heartbeatConn then heartbeatConn:Disconnect() end
                 break
             end
             local pingVal = 0
@@ -3731,7 +3736,14 @@ AFK.wantHide = false
 if AFK.gui then AFK.gui.Enabled = false end
 
 if AFK.conns.pump then AFK.conns.pump:Disconnect() end
-AFK.conns.pump = RunService.Heartbeat:Connect(function() pcall(afkPump) end)
+-- [OPT] Throttle afkPump: รัน max 10 ครั้ง/วินาที แทน 60 ครั้ง/วินาที
+local _afkPumpLast = 0
+AFK.conns.pump = RunService.Heartbeat:Connect(function()
+    local now = tick()
+    if now - _afkPumpLast < 0.10 then return end
+    _afkPumpLast = now
+    pcall(afkPump)
+end)
 getgenv().AFK_PumpConn = AFK.conns.pump  -- เก็บไว้เพื่อ disconnect ตอน re-run
 
 ---------------------------------------------------------
@@ -3962,9 +3974,13 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop (Fast, Unthrottled like p.txt)
+-- Heartbeat Instant Buy Loop (Throttled: max 12 executions/s)
+local _buyLoopLastRun = 0
 local function instantBuyLoop()
-    if not getgenv().AutoBuyCards then return end
+    if not getgenv().AutoBuyCards then return end  -- [OPT] exit immediately when off
+    local now = tick()
+    if now - _buyLoopLastRun < 0.08 then return end  -- [OPT] cap at ~12 runs/s
+    _buyLoopLastRun = now
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
@@ -6589,31 +6605,29 @@ AutoAcceptToggle:OnChanged(function(state)
                 pcall(function()
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
+                        -- [OPT] ค้นหาเฉพาะ TextButton ที่ Visible เท่านั้น ลด scan overhead
                         for _, v in ipairs(playerGui:GetDescendants()) do
-                            if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Text then
+                            if v:IsA("TextButton") and v.Visible and v.Text then
                                 local text = string.upper(string.match(v.Text or "", "^%s*(.-)%s*$") or "")
                                 if text == "ACCEPT" or text == "YES" or text == "รับ" or text == "ยอมรับ" or text == "ตกลง" then
-                                    local btn = v:IsA("TextButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
-                                    if btn and btn.Visible then
-                                        local fired = false
-                                        if getconnections then
-                                            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do conn:Fire() fired = true end
-                                            for _, conn in pairs(getconnections(btn.Activated)) do conn:Fire() fired = true end
-                                        end
-                                        if not fired then
-                                            local vim = game:GetService("VirtualInputManager")
-                                            local center = btn.AbsolutePosition + (btn.AbsoluteSize / 2)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                                            task.wait(0.1)
-                                            vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
-                                        end
+                                    local fired = false
+                                    if getconnections then
+                                        for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire() fired = true end
+                                        for _, conn in pairs(getconnections(v.Activated)) do conn:Fire() fired = true end
+                                    end
+                                    if not fired then
+                                        local vim = game:GetService("VirtualInputManager")
+                                        local center = v.AbsolutePosition + (v.AbsoluteSize / 2)
+                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+                                        task.wait(0.1)
+                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
                                     end
                                 end
                             end
                         end
                     end
                 end)
-                task.wait(0.5)
+                task.wait(1.5)  -- [OPT] เพิ่ม interval จาก 0.5s -> 1.5s ลด scan ใน playerGui
             end
         end)
     end
