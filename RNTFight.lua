@@ -61,31 +61,101 @@ local function playClickSound()
 end
 
 local customAvatarAsset = nil
+local isDownloadingAvatar = false
+
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
     local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
     local fileName = "payomboyz_avatar.jpg"
     
     pcall(function()
-        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-            local getAsset = getcustomasset or getsynasset
-            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
-            if not isFileExist then
-                local imageBytes = game:HttpGet(avatarUrl)
-                if imageBytes and #imageBytes > 0 then
-                    writefile(fileName, imageBytes)
-                end
-            end
-            if typeof(isfile) == "function" and isfile(fileName) then
+        if typeof(isfile) == "function" and isfile(fileName) then
+            if typeof(getcustomasset) == "function" or typeof(getsynasset) == "function" then
+                local getAsset = getcustomasset or getsynasset
                 customAvatarAsset = getAsset(fileName)
             end
         end
     end)
 
+    if not customAvatarAsset and not isDownloadingAvatar then
+        isDownloadingAvatar = true
+        task.spawn(function()
+            pcall(function()
+                if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+                    local getAsset = getcustomasset or getsynasset
+                    local imageBytes = game:HttpGet(avatarUrl)
+                    if imageBytes and #imageBytes > 0 then
+                        writefile(fileName, imageBytes)
+                        if typeof(isfile) == "function" and isfile(fileName) then
+                            customAvatarAsset = getAsset(fileName)
+                        end
+                    end
+                end
+            end)
+            isDownloadingAvatar = false
+        end)
+    end
+
     if not customAvatarAsset then
         customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
     end
     return customAvatarAsset
+end
+
+-- ============================================================================
+-- 🔴 LOGOUT & CREDENTIAL CLEARING ENGINE
+-- ============================================================================
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
+    end)
+end
+
+local function stopAllScriptOperations()
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+
+    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+        for _, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.SetValue then
+                pcall(function() option:SetValue(false) end)
+            end
+        end
+    end
 end
 
 function ObsidianGlassEngine:Notify(cfg)
@@ -528,10 +598,10 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     logoutBtn.Name = "LogoutButton"
     logoutBtn.Size = UDim2.fromOffset(62, 24)
     logoutBtn.Position = UDim2.new(1, -74, 0, 20)
-    logoutBtn.BackgroundColor3 = COLORS.danger
-    logoutBtn.BackgroundTransparency = 0.15
+    logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+    logoutBtn.BackgroundTransparency = 0.20
     logoutBtn.Text = "Log out"
-    logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    logoutBtn.TextColor3 = COLORS.danger
     logoutBtn.Font = Enum.Font.GothamBold
     logoutBtn.TextSize = 11
     logoutBtn.ZIndex = 12
@@ -542,40 +612,29 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     loCorner.Parent = logoutBtn
 
     local loStroke = Instance.new("UIStroke")
-    loStroke.Color = Color3.fromRGB(255, 80, 80)
+    loStroke.Color = COLORS.danger
     loStroke.Thickness = 1
+    loStroke.Transparency = 0.4
     loStroke.Parent = logoutBtn
 
     logoutBtn.MouseEnter:Connect(function()
-        TweenService:Create(logoutBtn, TweenInfo.new(0.2), { BackgroundTransparency = 0, BackgroundColor3 = Color3.fromRGB(220, 38, 38) }):Play()
+        game:GetService("TweenService"):Create(logoutBtn, TweenInfo.new(0.2), { BackgroundColor3 = COLORS.danger, BackgroundTransparency = 0.15 }):Play()
+        game:GetService("TweenService"):Create(loStroke, TweenInfo.new(0.2), { Transparency = 0 }):Play()
+        logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     end)
     logoutBtn.MouseLeave:Connect(function()
-        TweenService:Create(logoutBtn, TweenInfo.new(0.2), { BackgroundTransparency = 0.15, BackgroundColor3 = COLORS.danger }):Play()
+        game:GetService("TweenService"):Create(logoutBtn, TweenInfo.new(0.2), { BackgroundColor3 = COLORS.surfacePressed, BackgroundTransparency = 0.20 }):Play()
+        game:GetService("TweenService"):Create(loStroke, TweenInfo.new(0.2), { Transparency = 0.4 }):Play()
+        logoutBtn.TextColor3 = COLORS.danger
     end)
 
     logoutBtn.MouseButton1Click:Connect(function()
         playClickSound()
-        
-        -- Stop operations & reset settings
-        if stopAllScriptOperations then
-            stopAllScriptOperations()
-        end
-        
-        -- Clear local key files & global variables
-        if performLogoutKeyClear then
-            performLogoutKeyClear()
-        end
-        
-        -- Safely destroy UI container
+        stopAllScriptOperations()
+        performLogoutKeyClear()
+        if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
-            if gui then gui:Destroy() end
-        end)
-        
-        -- Re-execute main loader script
-        task.spawn(function()
-            pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
-            end)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
         end)
     end)
 
@@ -1693,61 +1752,7 @@ local InterfaceManager = {
     BuildInterfaceSection = function() end,
 }
 
--- ============================================================================
--- 🔴 LOGOUT & CREDENTIAL CLEARING ENGINE
--- ============================================================================
-local function performLogoutKeyClear()
-    pcall(function()
-        local filesToDelete = {
-            "PayomboyZ_LuarmorKey.txt",
-            "PayomboyZ_VVIPKey.txt",
-            "PayomboyZ_SavedKey.txt"
-        }
-        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
-            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
-        end
-
-        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
-        for _, file in ipairs(filesToDelete) do
-            pcall(function()
-                if isfile and isfile(file) then
-                    if del then
-                        del(file)
-                    elseif type(writefile) == "function" then
-                        writefile(file, "")
-                    end
-                end
-            end)
-        end
-    end)
-
-    pcall(function()
-        if getgenv then
-            getgenv().script_key = nil
-            getgenv().PayomboyZ_InputKey = nil
-            getgenv().PayomboyZ_LoggedOut = true
-        end
-        if getrenv then pcall(function() getrenv().script_key = nil end) end
-        if getfenv then pcall(function() getfenv().script_key = nil end) end
-        if _G then _G.script_key = nil end
-        if shared then shared.script_key = nil end
-        script_key = nil
-    end)
-end
-
-local function stopAllScriptOperations()
-    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
-    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
-    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
-
-    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
-        for _, option in pairs(ObsidianGlassEngine.Options) do
-            if type(option) == "table" and option.SetValue then
-                pcall(function() option:SetValue(false) end)
-            end
-        end
-    end
-end
+-- Logout & Credential functions defined in upper scope above CreateWindow
 
 -- Kaitun AFK engine removed as requested
 
@@ -2168,20 +2173,24 @@ local function getOwnInventoryUnits()
         local hotbar = safeFindPath(playerGui, "MainUI", "Hotbar") or safeFindPath(playerGui, "Hotbar")
         if hotbar then
             for _, slot in ipairs(hotbar:GetChildren()) do
-                local textLabel = slot:FindFirstChildWhichIsA("TextLabel", true)
+                local textLabel = slot:FindFirstChildOfClass("TextLabel")
                 if textLabel and textLabel.Text and textLabel.Text ~= "" and not tonumber(textLabel.Text) then
                     addUnit(textLabel.Text)
                 end
             end
         end
 
-        local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
-                      or safeFindPath(playerGui, "MainUI", "Frames", "Animes")
+        local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
+                      or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
         if invSlots then
-            for _, slot in ipairs(invSlots:GetDescendants()) do
-                if slot:IsA("TextLabel") and (slot.Name == "UnitName" or slot.Name == "Title" or slot.Name == "Name") then
-                    if slot.Text and slot.Text ~= "" then
-                        addUnit(slot.Text)
+            for _, slot in ipairs(invSlots:GetChildren()) do
+                if slot:IsA("GuiObject") then
+                    local nameLabel = safeFindPath(slot, "Frame", "Info", "AnimeName")
+                                   or slot:FindFirstChild("AnimeName")
+                                   or slot:FindFirstChild("UnitName")
+                                   or slot:FindFirstChild("Title")
+                    if nameLabel and nameLabel:IsA("TextLabel") and nameLabel.Text and nameLabel.Text ~= "" then
+                        addUnit(nameLabel.Text)
                     end
                 end
             end
@@ -2289,6 +2298,10 @@ local function getCharacterValues()
         end
     end
 
+    for _, name in ipairs(CharacterFallbackValues) do
+        addName(name)
+    end
+
     local module = getModule("Modules", "Characters", "CharactersInfo")
     if module then
         local ok, data = pcall(require, module)
@@ -2305,26 +2318,6 @@ local function getCharacterValues()
                 end
             end
         end
-    end
-
-    if not next(values) then
-        local plots = workspace:FindFirstChild("Plots")
-        if plots then
-            for _, plot in ipairs(plots:GetChildren()) do
-                local characters = plot:FindFirstChild("Characters")
-                if characters then
-                    for _, model in ipairs(characters:GetChildren()) do
-                        if model:IsA("Model") then
-                            addWorkspaceModelName(model, values)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    for _, name in ipairs(CharacterFallbackValues) do
-        values[name] = true
     end
 
     return sortedValues(values)
@@ -2642,28 +2635,16 @@ local function scanAndExecuteAutoSell()
         local animesFrame = safeFindPath(playerGui, "MainUI", "Frames", "Animes")
                          or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame")
         if animesFrame then
-            local isSellModeActive = false
-            for _, desc in ipairs(animesFrame:GetDescendants()) do
-                if desc:IsA("TextLabel") and desc.Visible then
-                    local txt = desc.Text:lower()
-                    if txt:find("select") and txt:find("sell") then
-                        isSellModeActive = true
-                        break
-                    end
-                end
-            end
-
-            if not isSellModeActive then
-                for _, desc in ipairs(animesFrame:GetDescendants()) do
-                    if (desc:IsA("ImageButton") or desc:IsA("TextButton")) and desc.Visible then
-                        local n = desc.Name:lower()
-                        if n:find("sell") or n:find("dollar") or n:find("toggle") then
-                            if firesignal then firesignal(desc.MouseButton1Click)
-                            elseif firebutton then firebutton(desc) end
-                            task.wait(0.2)
-                            break
-                        end
-                    end
+            local sellBtn = safeFindPath(animesFrame, "Frame", "Main", "Buttons", "Sell")
+                         or safeFindPath(animesFrame, "Buttons", "Sell")
+                         or animesFrame:FindFirstChild("Sell")
+            if sellBtn then
+                local clickable = sellBtn:IsA("GuiButton") and sellBtn or sellBtn:FindFirstChildWhichIsA("GuiButton") or sellBtn
+                if firesignal then
+                    pcall(function() firesignal(clickable.Activated) end)
+                    pcall(function() firesignal(clickable.MouseButton1Click) end)
+                elseif firebutton then
+                    pcall(function() firebutton(clickable) end)
                 end
             end
         end
@@ -3271,7 +3252,9 @@ local function readCash()
             lastCashSearch = tick()
             cashLabel = safeFindPath(playerGui, "MainUI", "UILeft", "TopButtons", "Cash", "CashLabel")
                      or safeFindPath(playerGui, "MainUI", "TopButtons", "Cash", "CashLabel")
-                     or playerGui:FindFirstChild("CashLabel", true)
+                     or safeFindPath(playerGui, "MainUI", "UILeft", "Cash", "CashLabel")
+                     or safeFindPath(playerGui, "MainUI", "CashLabel")
+                     or safeFindPath(playerGui, "CashLabel")
         end
     end
     if cashLabel and cashLabel:IsA("TextLabel") then
