@@ -3801,29 +3801,14 @@ Tabs.Main:AddButton({
     end
 })
 
-getgenv().AutoSpawnSpeed = 0.4
-
 local AutoSpawnToggle = Tabs.Main:AddToggle("AutoSpawnPack", { Title = "🎲 สุ่มแพ็กอัตโนมัติ", Default = false })
 AutoSpawnToggle:OnChanged(function(state)
     getgenv().AutoSpawnPack = state
-    if not state then
-        getgenv().PauseRerollForSpawn = false
-    end
     if state then
         task.spawn(function()
             local cd = nil
             local retryCount = 0
             while getgenv().AutoSpawnPack do
-                local speed = math.clamp(tonumber(getgenv().AutoSpawnSpeed) or 0.4, 0.2, 5.0)
-                local isHighPriority = (speed <= 1.0)
-
-                -- High Priority Queue (0.2s - 1.0s): Pause rerolls while spawning packs to prioritize network bandwidth
-                if isHighPriority then
-                    getgenv().PauseRerollForSpawn = true
-                else
-                    getgenv().PauseRerollForSpawn = false
-                end
-
                 if not cd or not cd.Parent then
                     cd = getSpawnPackClickDetector()
                 end
@@ -3833,7 +3818,6 @@ AutoSpawnToggle:OnChanged(function(state)
                         Fluent:Notify({ Title = "ข้อผิดพลาด", Content = "ไม่พบปุ่มสุ่มแพ็กใน Plot!", Duration = 3 })
                         getgenv().AutoSpawnPack = false
                         AutoSpawnToggle:SetValue(false)
-                        getgenv().PauseRerollForSpawn = false
                         return
                     end
                     task.wait(1)
@@ -3850,38 +3834,30 @@ AutoSpawnToggle:OnChanged(function(state)
                         end
                     end
                 end
-                if getgenv().AutoBuyCards then
-                    if activeCards == 0 then
-                        pcall(fireclickdetector, cd)
-                        task.wait(speed)
-                    else
-                        task.wait(math.min(speed, 0.15))
-                    end
+                pcall(fireclickdetector, cd)
+                local userDelay = tonumber(getgenv().AutoSpawnDelay) or 0.01
+                if activeCards >= 3 then
+                    task.wait(math.max(userDelay, 0.12))
                 else
-                    pcall(fireclickdetector, cd)
-                    if activeCards >= 3 then
-                        task.wait(math.max(speed, 0.2))
-                    else
-                        task.wait(speed)
-                    end
+                    task.wait(userDelay)
                 end
             end
-            getgenv().PauseRerollForSpawn = false
         end)
     end
 end)
 
-local AutoSpawnSlider = Tabs.Main:AddSlider("AutoSpawnSpeed", {
-    Title = "⚡ ความเร็วในการสุ่มแพ็ก (วินาที)",
-    Description = "ปรับระยะเวลาหน่วงในการสุ่มแพ็ก (0.2s - 5.0s) | ช่วง 0.2s - 1.0s ระบบจะจัดคิวให้มีลำดับความสำคัญสูงสุด (High Priority)",
-    Default = 0.4,
-    Min = 0.2,
-    Max = 5.0,
-    Rounding = 1,
-    Callback = function(Value)
-        getgenv().AutoSpawnSpeed = tonumber(Value) or 0.4
-    end
+getgenv().AutoSpawnDelay = getgenv().AutoSpawnDelay or 0.01
+local AutoSpawnSlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
+    Title = "⏱️ ความเร็วการสุ่มแพ็ก (วินาที)",
+    Description = "ปรับระยะเวลารอระหว่างการกดสุ่มแพ็กแต่ละรอบ",
+    Default = 0.01,
+    Min = 0,
+    Max = 2,
+    Rounding = 2
 })
+AutoSpawnSlider:OnChanged(function(Value)
+    getgenv().AutoSpawnDelay = Value
+end)
 
 local RarityDropdown = Tabs.Main:AddDropdown("SelectedRarities", {
     Title = "✨ เลือกความหายากที่ต้องการซื้อ",
@@ -3986,13 +3962,9 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop (Throttled for network stability & low remote spam)
-local lastBuyLoopTick = 0
+-- Heartbeat Instant Buy Loop (Fast, Unthrottled like p.txt)
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
-    local now = tick()
-    if now - lastBuyLoopTick < 0.2 then return end
-    lastBuyLoopTick = now
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
@@ -4017,7 +3989,7 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 15 or (tick() - firstSeen > 15) then
+        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
             model:SetAttribute("Rejected", true)
             continue
         end
@@ -4037,7 +4009,7 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.25 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
@@ -4073,9 +4045,7 @@ local function instantBuyLoop()
                 end
             end
         else
-            if tick() - firstSeen > 1.5 then
-                model:SetAttribute("Rejected", true)
-            end
+            model:SetAttribute("Rejected", true)
         end
     end
 end
@@ -5825,24 +5795,24 @@ local function collect4BestBaseCards(cardSource)
                     if targetPos and hrp then
                         table.insert(getgenv().CollectedCardPositions, targetPos)
                         hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
-                        task.wait(0.8)
+                        task.wait(0.12)
                         
                         if item.interact:IsA("ProximityPrompt") then
                             item.interact.RequiresLineOfSight = false
                             item.interact.MaxActivationDistance = 99999
                             item.interact.HoldDuration = 0
-                            for _ = 1, 5 do
+                            for _ = 1, 2 do
                                 if not item.interact or not item.interact.Parent then break end
                                 fireproximityprompt(item.interact)
-                                task.wait(0.3)
+                                task.wait(0.05)
                             end
                         elseif item.interact:IsA("ClickDetector") then
-                            for _ = 1, 5 do
+                            for _ = 1, 2 do
                                 fireclickdetector(item.interact)
-                                task.wait(0.3)
+                                task.wait(0.05)
                             end
                         end
-                        task.wait(1.0)
+                        task.wait(0.08)
                     end
                 end)
             end
@@ -5850,7 +5820,7 @@ local function collect4BestBaseCards(cardSource)
 
         if originalCFrame and hrp then
             hrp.CFrame = originalCFrame
-            task.wait(0.5)
+            task.wait(0.1)
         end
     end)
 end
@@ -5884,13 +5854,13 @@ local function placeCollectedCardsBack()
 
                 if tool then
                     humanoid:EquipTool(tool)
-                    task.wait(1.0)
+                    task.wait(0.12)
                 else
                     return
                 end
 
                 hrp.CFrame = CFrame.new(pos) + Vector3.new(0, 2, 0)
-                task.wait(0.8)
+                task.wait(0.12)
 
                 local plotFolder = findPlayerPlot()
                 if plotFolder then
@@ -5905,23 +5875,23 @@ local function placeCollectedCardsBack()
                                     desc.RequiresLineOfSight = false
                                     desc.MaxActivationDistance = 99999
                                     desc.HoldDuration = 0
-                                    for _ = 1, 5 do fireproximityprompt(desc) task.wait(0.3) end
+                                    for _ = 1, 2 do fireproximityprompt(desc) task.wait(0.05) end
                                 elseif desc:IsA("ClickDetector") then
-                                    for _ = 1, 4 do fireclickdetector(desc) task.wait(0.3) end
+                                    for _ = 1, 2 do fireclickdetector(desc) task.wait(0.05) end
                                 end
                                 break
                             end
                         end
                     end
                 end
-                task.wait(1.7)
+                task.wait(0.1)
             end)
         end
 
         getgenv().CollectedCardPositions = nil
         if LocalPlayer.Character and startCF then
             LocalPlayer.Character:PivotTo(startCF)
-            task.wait(0.5)
+            task.wait(0.1)
         end
     end)
 end
@@ -6976,6 +6946,7 @@ local function SaveConfig(name)
         Rarities = getgenv().SelectedRarities or {},
         Mutations = getgenv().SelectedMutations or {},
         AutoSpawn = getgenv().AutoSpawnPack or false,
+        AutoSpawnDelay = getgenv().AutoSpawnDelay or 0.01,
         AutoBuy = getgenv().AutoBuyCards or false,
         AutoCarry = getgenv().AutoCarry or false,
         AutoSellBox = getgenv().AutoSellBox or false,
@@ -7103,6 +7074,7 @@ local function LoadConfig(name)
             safeSetToggle("AutoTower", data.AutoTower)
             safeSetToggle("AutoBossRaid", data.AutoBossRaid)
 
+            if Options.AutoSpawnDelay and data.AutoSpawnDelay then pcall(function() Options.AutoSpawnDelay:SetValue(tonumber(data.AutoSpawnDelay)) end) end
             if Options.AutoCarryDelay and data.AutoCarryDelay then pcall(function() Options.AutoCarryDelay:SetValue(tonumber(data.AutoCarryDelay)) end) end
             if Options.RerollSpeed and data.RerollSpeed then pcall(function() Options.RerollSpeed:SetValue(tonumber(data.RerollSpeed)) end) end
             if Options.BossRaidDifficulty and data.BossRaidDifficulty then pcall(function() Options.BossRaidDifficulty:SetValue(tostring(data.BossRaidDifficulty)) end) end
