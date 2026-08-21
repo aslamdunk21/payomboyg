@@ -1401,7 +1401,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 mfStroke.Parent = modalFrame
 
                 local mTitle = Instance.new("TextLabel")
-                mTitle.Size = UDim2.new(1, -60, 0, 40)
+                mTitle.Size = UDim2.new(1, -60, 0, 36)
                 mTitle.Position = UDim2.new(0, 16, 0, 8)
                 mTitle.BackgroundTransparency = 1
                 mTitle.Text = title
@@ -1433,9 +1433,35 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     modalOverlay:Destroy()
                 end)
 
+                -- 🔍 REAL-TIME DROPDOWN SEARCH INPUT BAR
+                local searchBox = Instance.new("TextBox")
+                searchBox.Name = "DropdownSearchBox"
+                searchBox.Size = UDim2.new(1, -24, 0, 32)
+                searchBox.Position = UDim2.new(0, 12, 0, 46)
+                searchBox.BackgroundColor3 = COLORS.input
+                searchBox.BackgroundTransparency = 0.20
+                searchBox.PlaceholderText = "🔍 ค้นหา (Search)..."
+                searchBox.PlaceholderColor3 = COLORS.textMuted
+                searchBox.Text = ""
+                searchBox.TextColor3 = COLORS.cyan
+                searchBox.Font = Enum.Font.GothamBold
+                searchBox.TextSize = 12
+                searchBox.ClearTextOnFocus = false
+                searchBox.ZIndex = 1000001
+                searchBox.Parent = modalFrame
+
+                local sbCorner = Instance.new("UICorner")
+                sbCorner.CornerRadius = UDim.new(0, 8)
+                sbCorner.Parent = searchBox
+
+                local sbStroke = Instance.new("UIStroke")
+                sbStroke.Color = COLORS.surfaceRaised
+                sbStroke.Thickness = 1
+                sbStroke.Parent = searchBox
+
                 local itemScroll = Instance.new("ScrollingFrame")
-                itemScroll.Size = UDim2.new(1, -24, 1, -64)
-                itemScroll.Position = UDim2.new(0, 12, 0, 52)
+                itemScroll.Size = UDim2.new(1, -24, 1, -92)
+                itemScroll.Position = UDim2.new(0, 12, 0, 84)
                 itemScroll.BackgroundTransparency = 1
                 itemScroll.ScrollBarThickness = 4
                 itemScroll.ScrollBarImageColor3 = COLORS.cyan
@@ -1451,6 +1477,20 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     itemScroll.CanvasSize = UDim2.new(0, 0, 0, iLayout.AbsoluteContentSize.Y + 10)
                 end)
 
+                searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+                    local query = searchBox.Text:lower():match("^%s*(.-)%s*$") or ""
+                    for _, child in ipairs(itemScroll:GetChildren()) do
+                        if child:IsA("TextButton") then
+                            local rawName = child:GetAttribute("ItemName") or ""
+                            if query == "" or rawName:lower():find(query, 1, true) then
+                                child.Visible = true
+                            else
+                                child.Visible = false
+                            end
+                        end
+                    end
+                end)
+
                 local currentValues = (type(OptionObj.Values) == "function" and OptionObj.Values()) or OptionObj.Values or values
                 if type(currentValues) ~= "table" then currentValues = {} end
 
@@ -1464,6 +1504,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     end
 
                     local itemBtn = Instance.new("TextButton")
+                    itemBtn.Name = "Item_" .. itemStr
+                    itemBtn:SetAttribute("ItemName", itemStr)
                     itemBtn.Size = UDim2.new(1, -8, 0, 36)
                     itemBtn.BackgroundColor3 = isSelected and COLORS.primary or COLORS.glassDeep
                     itemBtn.BackgroundTransparency = 0.18
