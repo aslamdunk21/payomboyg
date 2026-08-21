@@ -1965,7 +1965,7 @@ local RaritiesList = {
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknow", "Newmutation", "Limited", "Event"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Newmutation", "Limited", "Event"
 }
 
 local TraitsList = {
