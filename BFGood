@@ -30,7 +30,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Automatic Team Assignment (From LogicMain.txt)
 if not LocalPlayer.Team then
-    repeat task.wait()
+    repeat task.wait(0.5)
         pcall(function()
             ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", getgenv().Configs.Team)
         end)
@@ -151,10 +151,11 @@ local function Tween(target, speed)
 end
 
 -- Remote Scanner & Bit Key (From LogicMain.txt)
+-- Remote Scanner & Bit Key (Optimized to stop scanning once found)
 local r = nil
 task.spawn(function()
-    while task.wait() do
-        local paths = {ReplicatedStorage.Util, ReplicatedStorage.Remotes, ReplicatedStorage.Assets, ReplicatedStorage.Common, ReplicatedStorage.FX}
+    while not r do
+        local paths = {ReplicatedStorage:FindFirstChild("Util"), ReplicatedStorage:FindFirstChild("Remotes"), ReplicatedStorage:FindFirstChild("Assets"), ReplicatedStorage:FindFirstChild("Common"), ReplicatedStorage:FindFirstChild("FX")}
         for _, v in ipairs(paths) do
             if v then
                 for _, v1 in ipairs(v:GetChildren()) do
@@ -164,7 +165,9 @@ task.spawn(function()
                     end
                 end
             end
+            if r then break end
         end
+        if not r then task.wait(1) end
     end
 end)
 
@@ -1898,17 +1901,22 @@ local Prerequisites = {
     ["Godhuman"] = {"Superhuman", "Death Step", "Sharkman Karate", "Electric Claw", "Dragon Talon"}
 }
 
-for i, v in pairs(Melees) do
-    if CommF_:InvokeServer(v.BuyID, true) == 1 then
-        if Prerequisites[i] then
-            for _, v1 in ipairs(Prerequisites[i]) do
-                if Melees[v1] then
-                    Melees[v1].IsCompleted = true
+task.spawn(function()
+    for i, v in pairs(Melees) do
+        pcall(function()
+            if CommF_:InvokeServer(v.BuyID, true) == 1 then
+                if Prerequisites[i] then
+                    for _, v1 in ipairs(Prerequisites[i]) do
+                        if Melees[v1] then
+                            Melees[v1].IsCompleted = true
+                        end
+                    end
                 end
             end
-        end
+        end)
+        task.wait(0.05)
     end
-end
+end)
 
 -- Main Single-Engine Farming Coroutine (From LogicMain.txt)
 task.spawn(function()
@@ -2078,13 +2086,12 @@ task.spawn(function()
     end
 end)
 
--- Auto Stats & Haki Loop (From LogicMain.txt)
+-- Auto Stats & Haki Loop (Throttled to prevent thread freezing)
 task.spawn(function()
-    while task.wait() do
-        if getgenv().Configs.AutoStats and LocalPlayer.Data.Points.Value > 0 then
+    while task.wait(1.5) do
+        if getgenv().Configs.AutoStats and LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Points") and LocalPlayer.Data.Points.Value > 0 then
             local Melee = LocalPlayer.Data.Stats.Melee.Level.Value
             local Defense = LocalPlayer.Data.Stats.Defense.Level.Value
-            local Sword = LocalPlayer.Data.Stats.Sword.Level.Value
             pcall(function()
                 CommF_:InvokeServer("AddPoint", "Melee", LocalPlayer.Data.Level.Value * 2 - Melee)
                 CommF_:InvokeServer("AddPoint", "Defense", LocalPlayer.Data.Level.Value - Defense)
@@ -2093,7 +2100,7 @@ task.spawn(function()
                 end
             end)
         end
-        if getgenv().Configs.AutoHaki then
+        if getgenv().Configs.AutoHaki and LocalPlayer.Character and LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli") then
             pcall(function()
                 if not CollectionService:HasTag(LocalPlayer.Character, "Buso") and LocalPlayer.Data.Beli.Value >= 25000 then
                     CommF_:InvokeServer("BuyHaki", "Buso")
