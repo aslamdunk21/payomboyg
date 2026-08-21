@@ -173,6 +173,7 @@ local SUPPORTED_GAMES = {
     [125927821145949] = "Mine a Mountain (VVIP)",
     [142823291] = "Murder Mystery 2 (VVIP)",
     [104973076655377] = "Capybara Vs Plant (VVIP)",
+    [2753915549] = "Blox Fruit",
 }
 
 local function resolveGameName()
@@ -1286,7 +1287,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, userPanel)
     round(gamesTabBtn, 8)
     local gamesTabIcon = lucideIcon(gamesTabBtn, "gamepad", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.textFaint, 6)
-    local gamesTabLabel = textLabel(gamesTabBtn, "Games (11)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    local gamesTabLabel = textLabel(gamesTabBtn, "Games (12)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
     gamesTabLabel.ZIndex = 6
 
     create("Frame", {
@@ -1588,6 +1589,15 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             IconId = 126509999114328,
             Type = "FREE",
             Keywords = "99Nights • Forest",
+        },
+        {
+            Name = "Blox Fruit",
+            FullName = "Blox Fruit",
+            PlaceId = 2753915549,
+            AltPlaceIds = {},
+            IconId = 2753915549,
+            Type = "FREE",
+            Keywords = "BF • Auto Farm",
         },
 
         -- VVIP GAMES
