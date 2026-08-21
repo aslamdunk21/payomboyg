@@ -2243,74 +2243,100 @@ local function GetPlayerNames()
     return names
 end
 
+local cachedPlayerPlot = nil
 local function findPlayerPlot()
-    local plotNum = LocalPlayer:FindFirstChild("PlotNumber") and LocalPlayer.PlotNumber.Value or 0
-    if plotNum ~= 0 then
-        local plotFolder = workspace:FindFirstChild("MAP")
-            and workspace.MAP:FindFirstChild("Plots")
-            and workspace.MAP.Plots:FindFirstChild(tostring(plotNum))
-        if plotFolder then return plotFolder end
+    if cachedPlayerPlot and cachedPlayerPlot.Parent then
+        return cachedPlayerPlot
     end
-    local plots = workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")
-    if plots then
-        for _, plot in ipairs(plots:GetChildren()) do
+    local plotNum = LocalPlayer:FindFirstChild("PlotNumber") and LocalPlayer.PlotNumber.Value or 0
+    local mapPlots = (workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")) 
+        or workspace:FindFirstChild("Plots")
+    if mapPlots then
+        if plotNum ~= 0 then
+            local plotFolder = mapPlots:FindFirstChild(tostring(plotNum))
+            if plotFolder then 
+                cachedPlayerPlot = plotFolder
+                return plotFolder 
+            end
+        end
+        for _, plot in ipairs(mapPlots:GetChildren()) do
             if plot:GetAttribute("Owner") == LocalPlayer.Name or plot.Name == LocalPlayer.Name or plot.Name == tostring(plotNum) then
+                cachedPlayerPlot = plot
                 return plot
             end
         end
     end
-    for _, desc in ipairs(workspace:GetDescendants()) do
-        if desc:IsA("Folder") or desc:IsA("Model") then
-            if desc.Name == LocalPlayer.Name or desc:GetAttribute("Owner") == LocalPlayer.Name then
-                local plotsFolder = desc:FindFirstAncestor("Plots")
-                if plotsFolder then return desc end
-            end
+    for _, child in ipairs(workspace:GetChildren()) do
+        if (child:IsA("Folder") or child:IsA("Model")) and (child.Name == LocalPlayer.Name or child:GetAttribute("Owner") == LocalPlayer.Name) then
+            cachedPlayerPlot = child
+            return child
         end
     end
     return nil
 end
 
+local cachedClickDetector = nil
 local function getSpawnPackClickDetector()
+    if cachedClickDetector and cachedClickDetector.Parent then
+        return cachedClickDetector
+    end
     local plotFolder = findPlayerPlot()
-    if plotFolder and plotFolder:FindFirstChild("Plot_N0") then
-        for _, v in ipairs(plotFolder.Plot_N0:GetDescendants()) do
-            if v:IsA("ClickDetector") and v.Parent and v.Parent.Name == "ButtonPart" then
-                return v
+    if plotFolder then
+        local p0 = plotFolder:FindFirstChild("Plot_N0")
+        if p0 then
+            local buttonPart = p0:FindFirstChild("ButtonPart")
+            if buttonPart then
+                local cd = buttonPart:FindFirstChildOfClass("ClickDetector")
+                if cd then
+                    cachedClickDetector = cd
+                    return cd
+                end
+            end
+            for _, child in ipairs(p0:GetChildren()) do
+                if child:IsA("ClickDetector") then cachedClickDetector = child return child end
+                if child:IsA("Model") or child:IsA("BasePart") then
+                    local cd = child:FindFirstChildOfClass("ClickDetector")
+                    if cd then cachedClickDetector = cd return cd end
+                end
             end
         end
-    end
-    for _, desc in ipairs(workspace:GetDescendants()) do
-        if desc:IsA("ClickDetector") and desc.Parent and desc.Parent.Name == "ButtonPart" and desc.Parent.Parent and desc.Parent.Parent.Name == "Plot_N0" then
-            return desc
-        end
-    end
-    if plotFolder then
-        for _, v in ipairs(plotFolder:GetDescendants()) do
-            if v:IsA("ClickDetector") then return v end
+        for _, child in ipairs(plotFolder:GetChildren()) do
+            local cd = child:FindFirstChildWhichIsA("ClickDetector", true)
+            if cd then cachedClickDetector = cd return cd end
         end
     end
     return nil
 end
 
 local function findCardFolder()
+    if getgenv().CardFolder and getgenv().CardFolder.Parent then
+        return true
+    end
     local plot = findPlayerPlot()
     if plot then
-        for _, desc in ipairs(plot:GetDescendants()) do
-            if desc:IsA("ProximityPrompt") then
-                local model = desc:FindFirstAncestorOfClass("Model")
-                if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
-                    getgenv().CardFolder = model.Parent
-                    return true
+        for _, child in ipairs(plot:GetChildren()) do
+            if child:IsA("Folder") or child:IsA("Model") then
+                for _, sub in ipairs(child:GetChildren()) do
+                    if sub:IsA("Model") and sub:GetAttribute("IgnoreTutoBeam") ~= nil then
+                        getgenv().CardFolder = sub.Parent
+                        return true
+                    end
                 end
             end
         end
     end
-    for _, desc in ipairs(workspace:GetDescendants()) do
-        if desc:IsA("ProximityPrompt") then
-            local model = desc:FindFirstAncestorOfClass("Model")
-            if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
-                getgenv().CardFolder = model.Parent
-                return true
+    local mapPlots = (workspace:FindFirstChild("MAP") and workspace.MAP:FindFirstChild("Plots")) or workspace:FindFirstChild("Plots")
+    if mapPlots then
+        for _, p in ipairs(mapPlots:GetChildren()) do
+            for _, child in ipairs(p:GetChildren()) do
+                if child:IsA("Folder") or child:IsA("Model") then
+                    for _, sub in ipairs(child:GetChildren()) do
+                        if sub:IsA("Model") and sub:GetAttribute("IgnoreTutoBeam") ~= nil then
+                            getgenv().CardFolder = sub.Parent
+                            return true
+                        end
+                    end
+                end
             end
         end
     end
@@ -2787,14 +2813,19 @@ local function getPlayerMoney()
     pcall(function()
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
         if playerGui then
-            for _, v in ipairs(playerGui:GetDescendants()) do
-                if v:IsA("TextLabel") and v.Visible and v.Text then
-                    local txt = v.Text
-                    if (txt:find("¥") or txt:find("%$") or txt:find("Yen")) and string.match(txt, "%d+") then
-                        amount = txt
-                        break
+            for _, gui in ipairs(playerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Enabled then
+                    for _, child in ipairs(gui:GetChildren()) do
+                        if child:IsA("TextLabel") and child.Visible and child.Text then
+                            local txt = child.Text
+                            if (txt:find("¥") or txt:find("%$") or txt:find("Yen")) and string.match(txt, "%d+") then
+                                amount = txt
+                                break
+                            end
+                        end
                     end
                 end
+                if amount then break end
             end
         end
     end)
@@ -2802,25 +2833,21 @@ local function getPlayerMoney()
     return amount or "0"
 end
 
+local _cachedTowerStatus = "ไม่ได้ลงหอคอย"
+local _cachedBossStatus = ""
+local _lastTowerBossCheck = 0
+
 local function getTowerAndBossStatus()
+    local nowTime = tick()
+    if nowTime - _lastTowerBossCheck < 4 then
+        return _cachedTowerStatus, _cachedBossStatus
+    end
+    _lastTowerBossCheck = nowTime
+
     local towerStatus = "ไม่ได้ลงหอคอย"
     local bossStatus = ""
     
     pcall(function()
-        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if playerGui then
-            for _, v in ipairs(playerGui:GetDescendants()) do
-                if v:IsA("TextLabel") and v.Text and v.Visible then
-                    local clean = string.gsub(v.Text, "<[^>]+>", "")
-                    local floorNum = string.match(clean, "[Ff][Ll][Oo][Oo][Rr]%s*(%d+)") or string.match(clean, "ชั้นที่%s*(%d+)")
-                    if floorNum then
-                        towerStatus = "กำลังลงชั้นที่ " .. floorNum
-                        break
-                    end
-                end
-            end
-        end
-        
         if towerStatus == "ไม่ได้ลงหอคอย" then
             if getgenv().AutoReplayToggled or getgenv().AutoTower then
                 towerStatus = "กำลังดำเนินการ..."
@@ -2837,34 +2864,12 @@ local function getTowerAndBossStatus()
             local now = os.date("*t")
             local remMin = 59 - now.min
             local remSec = 59 - now.sec
-            
-            local dynamicTimer = ""
-            if playerGui then
-                for _, v in ipairs(playerGui:GetDescendants()) do
-                    if v:IsA("TextLabel") and v.Visible and v.Text then
-                        local clean = string.gsub(v.Text, "<[^>]+>", "")
-                        local lower = string.lower(clean)
-                        if lower:find("boss") or lower:find("บอส") then
-                            local tm = string.match(clean, "%d+:%d+") or string.match(clean, "%d+%s*m")
-                            if tm then
-                                dynamicTimer = tm
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-
-            if dynamicTimer ~= "" then
-                bossStatus = "เกิดใน " .. dynamicTimer
-            elseif remMin == 0 and remSec < 10 then
-                bossStatus = "⚡ บอสเปิดอยู่!"
-            else
-                bossStatus = string.format("เกิดใน %02d:%02d นาที", remMin, remSec)
-            end
+            bossStatus = string.format("เกิดใน %02d:%02d นาที", remMin, remSec)
         end
     end)
     
+    _cachedTowerStatus = towerStatus
+    _cachedBossStatus = bossStatus
     return towerStatus, bossStatus
 end
 
@@ -3646,6 +3651,10 @@ local function afkBuild()
 end
 
 local function afkOpen()
+    if not AFK.built then
+        afkBuild()
+        AFK.built = true
+    end
     AFK.on = true
     AFK.startAt = os.clock()
     AFK.lastSec = -1
@@ -3728,8 +3737,8 @@ afkClose = function()
     end
 end
 
-afkBuild()
--- Force-disable และ reset สถานะ AFK ทั้งหมด ป้องกัน loadConfig หรือ pump เก่าเปิดขึ้นมาเอง
+-- Lazy build AFK Dashboard on demand to prevent script launch lag
+AFK.built = false
 AFK.on = false
 AFK.wantShow = false
 AFK.wantHide = false
@@ -3912,15 +3921,21 @@ end)
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
 
-    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
+    local cRarity = model:GetAttribute("CachedRarity")
+    local cMut = model:GetAttribute("CachedMutation")
+    if cRarity and cMut then
+        return cRarity, cMut
+    end
+
+    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity") or model:GetAttribute("CardName") or model:GetAttribute("TemplateName")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
 
     rarity = rarity and tostring(rarity) or ""
     mutation = mutation and tostring(mutation) or "Normal"
 
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel"}) do
-            local obj = model:FindFirstChild(childName, true)
+        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "CardName", "RarityLabel"}) do
+            local obj = model:FindFirstChild(childName)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
                     rarity = obj.Value
@@ -3937,39 +3952,23 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
-    if mutation == "" or mutation == "Normal" or mutation == "nil" then
-        for _, childName in ipairs({"Mutation", "CardMutation", "MutationLabel"}) do
-            local obj = model:FindFirstChild(childName, true)
-            if obj then
-                if obj:IsA("StringValue") and obj.Value ~= "" then
-                    mutation = obj.Value
+    if rarity == "" then
+        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt then
+            local txt = prompt.ActionText .. " " .. prompt.ObjectText
+            for _, rName in ipairs(RaritiesList or {}) do
+                if string.find(string.lower(txt), string.lower(rName)) then
+                    rarity = rName
                     break
-                elseif (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-                    local cl = string.gsub(obj.Text, "<[^>]+>", "")
-                    cl = string.match(cl, "^%s*(.-)%s*$") or ""
-                    if cl ~= "" and cl ~= "Label" then
-                        mutation = cl
-                        break
-                    end
                 end
             end
         end
     end
 
-    if rarity == "" then
-        for _, desc in ipairs(model:GetDescendants()) do
-            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
-                local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(RaritiesList or {"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
-                    if cl:find(string.lower(rName)) then
-                        rarity = rName
-                        break
-                    end
-                end
-                if rarity ~= "" then break end
-            end
-        end
-    end
+    if rarity == "" then rarity = model.Name end
+
+    model:SetAttribute("CachedRarity", rarity)
+    model:SetAttribute("CachedMutation", mutation)
 
     return rarity, mutation
 end
