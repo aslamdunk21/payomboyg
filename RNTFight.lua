@@ -7,6 +7,7 @@ local StarterGui = game:GetService("StarterGui")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
+local TeleportService = game:GetService("TeleportService")
 
 local player = Players.LocalPlayer
 while not player do task.wait(0.1); player = Players.LocalPlayer end
@@ -48,6 +49,7 @@ local COLORS = {
 
 local ObsidianGlassEngine = { Options = {} }
 local Fluent = ObsidianGlassEngine
+local Options = ObsidianGlassEngine.Options
 
 local function playClickSound()
     pcall(function()
@@ -1862,10 +1864,14 @@ end
 local remoteQueue = {}
 local isProcessingQueue = false
 local MIN_REMOTE_INTERVAL = 0.08
+local MAX_REMOTE_QUEUE_SIZE = 20
 
 local function safeFireRemote(remote, ...)
     if not remote then return end
     local args = { ... }
+    if #remoteQueue >= MAX_REMOTE_QUEUE_SIZE then
+        table.remove(remoteQueue, 1) -- Drop oldest remote to keep queue fast and prevent high ping
+    end
     table.insert(remoteQueue, { remote = remote, args = args })
 
     if not isProcessingQueue then
@@ -2182,70 +2188,84 @@ local function getGameWave()
     return 1
 end
 
-local function getOwnInventoryUnits()
-    local unitNames = {}
+local function getOwnInventoryUnitObjects()
+    local unitList = {}
     local seen = {}
 
-    local function addUnit(name)
-        if name and type(name) == "string" and name ~= "" and not seen[name] then
-            seen[name] = true
-            table.insert(unitNames, name)
-        end
-    end
-
     pcall(function()
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then
-            for _, item in ipairs(backpack:GetChildren()) do
-                if item:IsA("Tool") then
-                    addUnit(item.Name)
-                end
-            end
-        end
+        -- 1. Direct DataService client check (Primary source of truth)
+        local ok, dataServiceModule = pcall(function()
+            local ds = safeFindPath(ReplicatedStorage, "Data", "DataService")
+            return ds and require(ds)
+        end)
 
-        local char = player.Character
-        if char then
-            for _, item in ipairs(char:GetChildren()) do
-                if item:IsA("Tool") then
-                    addUnit(item.Name)
-                end
-            end
-        end
-
-        local hotbar = safeFindPath(playerGui, "MainUI", "Hotbar") or safeFindPath(playerGui, "Hotbar")
-        if hotbar then
-            for _, slot in ipairs(hotbar:GetChildren()) do
-                local textLabel = slot:FindFirstChildOfClass("TextLabel")
-                if textLabel and textLabel.Text and textLabel.Text ~= "" and not tonumber(textLabel.Text) then
-                    addUnit(textLabel.Text)
-                end
-            end
-        end
-
-        local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
-                      or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
-        if invSlots then
-            for _, slot in ipairs(invSlots:GetChildren()) do
-                if slot:IsA("GuiObject") then
-                    local nameLabel = safeFindPath(slot, "Frame", "Info", "AnimeName")
-                                   or slot:FindFirstChild("AnimeName")
-                                   or slot:FindFirstChild("UnitName")
-                                   or slot:FindFirstChild("Title")
-                    if nameLabel and nameLabel:IsA("TextLabel") and nameLabel.Text and nameLabel.Text ~= "" then
-                        addUnit(nameLabel.Text)
+        if ok and dataServiceModule and dataServiceModule.client then
+            local categories = {"Inventory", "Equipped", "Cloning", "Evolution"}
+            for _, cat in ipairs(categories) do
+                local list = dataServiceModule.client:get(cat)
+                if type(list) == "table" then
+                    for _, uData in pairs(list) do
+                        if type(uData) == "table" then
+                            local uuid = tostring(uData.UUID or uData.CharacterId or uData.Id or "")
+                            local name = tostring(uData.Name or uData.CharacterName or uData.Title or "")
+                            if name ~= "" and uuid ~= "" and not seen[uuid] then
+                                seen[uuid] = true
+                                table.insert(unitList, {
+                                    UUID = uuid,
+                                    Name = name,
+                                    DisplayName = name .. " [" .. uuid:sub(1, 8) .. "]",
+                                    Trait = uData.Trait or uData.CurrentTrait or "None",
+                                    RawData = uData,
+                                })
+                            end
+                        end
                     end
                 end
             end
         end
+
+        -- 2. Fallback check Backpack & Character Tools
+        local function checkTools(container)
+            if not container then return end
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") then
+                    local uuid = item:GetAttribute("UUID") or item:GetAttribute("Id") or item.Name
+                    local name = item.Name
+                    if not seen[uuid] then
+                        seen[uuid] = true
+                        table.insert(unitList, {
+                            UUID = uuid,
+                            Name = name,
+                            DisplayName = name .. " [" .. tostring(uuid):sub(1, 8) .. "]",
+                            Trait = item:GetAttribute("Trait") or "None",
+                            ToolInstance = item,
+                        })
+                    end
+                end
+            end
+        end
+
+        checkTools(player:FindFirstChild("Backpack"))
+        checkTools(player.Character)
     end)
 
-    table.sort(unitNames)
-    if #unitNames == 0 then
+    return unitList
+end
+
+local function getOwnInventoryUnits()
+    local unitObjects = getOwnInventoryUnitObjects()
+    local unitDisplayNames = {}
+    for _, u in ipairs(unitObjects) do
+        table.insert(unitDisplayNames, u.DisplayName)
+    end
+    table.sort(unitDisplayNames)
+
+    if #unitDisplayNames == 0 then
         for _, name in ipairs(CharacterFallbackValues) do
-            addUnit(name)
+            table.insert(unitDisplayNames, name)
         end
     end
-    return unitNames
+    return unitDisplayNames
 end
 
 local function sortedValues(set)
@@ -2450,9 +2470,22 @@ local function buildTargetConfig()
     local function collectSelectedValues(selectedValues, allowedValues)
         local list = {}
         if type(selectedValues) == "table" then
+            -- 1. Dictionary format: { ["Mythic"] = true, ["God"] = false }
             for _, value in ipairs(allowedValues) do
-                if selectedValues[value] or table.find(selectedValues, value) then
+                if selectedValues[value] == true then
                     table.insert(list, value)
+                end
+            end
+            -- 2. Case-insensitive dictionary check & Array format: { "Mythic", "God" }
+            for k, v in pairs(selectedValues) do
+                if type(k) == "number" and type(v) == "string" and v ~= "" then
+                    if not table.find(list, v) then
+                        table.insert(list, v)
+                    end
+                elseif type(k) == "string" and v == true then
+                    if not table.find(list, k) then
+                        table.insert(list, k)
+                    end
                 end
             end
         end
@@ -2460,7 +2493,7 @@ local function buildTargetConfig()
     end
 
     local function addSelectedTargets(mode, selectedValues, selectedMutations)
-        local sourceValues = mode == "Rarity" and RarityValues or CharacterValues
+        local sourceValues = (mode == "Rarity") and RarityValues or CharacterValues
         local selectedList = collectSelectedValues(selectedValues, sourceValues)
         if #selectedList == 0 then
             return
@@ -2469,8 +2502,19 @@ local function buildTargetConfig()
         local mutations = {}
         if type(selectedMutations) == "table" then
             for _, mutation in ipairs(MutationValues) do
-                if selectedMutations[mutation] or table.find(selectedMutations, mutation) then
+                if selectedMutations[mutation] == true then
                     table.insert(mutations, mutation)
+                end
+            end
+            for k, v in pairs(selectedMutations) do
+                if type(k) == "number" and type(v) == "string" and v ~= "" then
+                    if not table.find(mutations, v) then
+                        table.insert(mutations, v)
+                    end
+                elseif type(k) == "string" and v == true then
+                    if not table.find(mutations, k) then
+                        table.insert(mutations, k)
+                    end
                 end
             end
         end
@@ -2597,68 +2641,86 @@ local function scanAndExecuteAutoSell()
     end
 
     local sellUUIDs = {}
-    local sellInstances = {}
 
-    -- METHOD 1: Scan Inventory GUI Slots (PlayerGui.MainUI.Frames.Animes.Frame.Main.ScrollingFrame)
-    local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
-                  or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
+    -- Primary: Query DataService Inventory directly for exact unit data & rarity
+    pcall(function()
+        local dsModule = safeFindPath(ReplicatedStorage, "Data", "DataService")
+        local ds = dsModule and require(dsModule)
+        if ds and ds.client then
+            local inv = ds.client:get("Inventory")
+            if type(inv) == "table" then
+                for _, uData in pairs(inv) do
+                    if type(uData) == "table" then
+                        local isLocked = (uData.Locked == true or uData.IsLocked == true or uData.Lock == true)
+                        local isEquipped = (uData.Equipped == true or uData.IsEquipped == true)
+                        local uuid = tostring(uData.UUID or uData.CharacterId or uData.Id or "")
+                        local unitName = tostring(uData.Name or uData.CharacterName or uData.Title or "")
+                        local rarity = tostring(uData.Rarity or uData.Tier or getUnitRarity(unitName, nil) or "")
 
-    if invSlots then
-        for _, slot in ipairs(invSlots:GetChildren()) do
-            if slot:IsA("Frame") or slot:IsA("GuiObject") then
-                if slot.Name == "Template" or slot.Name:find("Layout") then continue end
-
-                -- Check lock
-                if isUnitLocked(slot) then continue end
-
-                -- Check equipped
-                local eqLabel = slot:FindFirstChild("Equipped", true) or slot:GetAttribute("Equipped")
-                if eqLabel == true or (eqLabel and eqLabel:IsA("GuiObject") and eqLabel.Visible) then
-                    continue
-                end
-
-                -- Find unit name
-                local nameLabel = safeFindPath(slot, "Frame", "Info", "AnimeName")
-                               or slot:FindFirstChild("AnimeName", true)
-                               or slot:FindFirstChild("Title", true)
-                               or slot:FindFirstChild("UnitName", true)
-                local unitName = nameLabel and nameLabel.Text or slot.Name
-                local rarity = getUnitRarity(unitName, slot)
-
-                if rarity then
-                    local lowerR = rarity:lower()
-                    -- EXCLUSION: Never sell Secret or Limited!
-                    if lowerR ~= "secret" and lowerR ~= "limited" then
-                        if activeRaritySet[lowerR] then
-                            local uuid = getUnitUUID(slot)
-                            if uuid then
+                        if not isLocked and not isEquipped and uuid ~= "" and rarity ~= "" then
+                            local lowerR = rarity:lower()
+                            if lowerR ~= "secret" and lowerR ~= "limited" and activeRaritySet[lowerR] then
                                 table.insert(sellUUIDs, uuid)
                             end
-                            table.insert(sellInstances, slot)
                         end
                     end
                 end
             end
         end
-    end
+    end)
 
-    -- METHOD 2: Scan Player Backpack Tools
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") and tool.Parent ~= player.Character then
-                if not isUnitLocked(tool) then
-                    local rarity = getUnitRarity(tool.Name, tool)
+    -- Fallback GUI / Backpack scan if DataService was not available or returned no items
+    if #sellUUIDs == 0 then
+        local seenUUIDs = {}
+        local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
+                      or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "InventorySlots")
+
+        if invSlots then
+            for _, slot in ipairs(invSlots:GetChildren()) do
+                if slot:IsA("Frame") or slot:IsA("GuiObject") then
+                    if slot.Name == "Template" or slot.Name:find("Layout") then continue end
+                    if isUnitLocked(slot) then continue end
+
+                    local eqLabel = slot:FindFirstChild("Equipped", true) or slot:GetAttribute("Equipped")
+                    if eqLabel == true or (eqLabel and eqLabel:IsA("GuiObject") and eqLabel.Visible) then
+                        continue
+                    end
+
+                    local nameLabel = safeFindPath(slot, "Frame", "Info", "AnimeName")
+                                   or slot:FindFirstChild("AnimeName", true)
+                                   or slot:FindFirstChild("Title", true)
+                                   or slot:FindFirstChild("UnitName", true)
+                    local unitName = nameLabel and nameLabel.Text or slot.Name
+                    local rarity = getUnitRarity(unitName, slot)
+
                     if rarity then
                         local lowerR = rarity:lower()
-                        -- EXCLUSION: Never sell Secret or Limited!
-                        if lowerR ~= "secret" and lowerR ~= "limited" then
-                            if activeRaritySet[lowerR] then
+                        if lowerR ~= "secret" and lowerR ~= "limited" and activeRaritySet[lowerR] then
+                            local uuid = getUnitUUID(slot)
+                            if uuid and not seenUUIDs[uuid] then
+                                seenUUIDs[uuid] = true
+                                table.insert(sellUUIDs, uuid)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") and tool.Parent ~= player.Character then
+                    if not isUnitLocked(tool) then
+                        local rarity = getUnitRarity(tool.Name, tool)
+                        if rarity then
+                            local lowerR = rarity:lower()
+                            if lowerR ~= "secret" and lowerR ~= "limited" and activeRaritySet[lowerR] then
                                 local uuid = getUnitUUID(tool)
-                                if uuid then
+                                if uuid and not seenUUIDs[uuid] then
+                                    seenUUIDs[uuid] = true
                                     table.insert(sellUUIDs, uuid)
                                 end
-                                table.insert(sellInstances, tool)
                             end
                         end
                     end
@@ -2667,59 +2729,30 @@ local function scanAndExecuteAutoSell()
         end
     end
 
-    local countToSell = math.max(#sellUUIDs, #sellInstances)
-    if countToSell == 0 then
+    if #sellUUIDs == 0 then
         return 0
     end
 
-    -- ENSURE SELL MODE IS OPEN IN GAME UI BEFORE SELLING
-    pcall(function()
-        local animesFrame = safeFindPath(playerGui, "MainUI", "Frames", "Animes")
-                         or safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame")
-        if animesFrame then
-            local sellBtn = safeFindPath(animesFrame, "Frame", "Main", "Buttons", "Sell")
-                         or safeFindPath(animesFrame, "Buttons", "Sell")
-                         or animesFrame:FindFirstChild("Sell")
-            if sellBtn then
-                local clickable = sellBtn:IsA("GuiButton") and sellBtn or sellBtn:FindFirstChildWhichIsA("GuiButton") or sellBtn
-                if firesignal then
-                    pcall(function() firesignal(clickable.Activated) end)
-                    pcall(function() firesignal(clickable.MouseButton1Click) end)
-                elseif firebutton then
-                    pcall(function() firebutton(clickable) end)
-                end
-            end
+    -- Step 1: Remove units from Hotbar if they are currently set in hotbar slots
+    local updateHotbarRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "UpdateInventory")
+    if updateHotbarRemote then
+        for _, uuid in ipairs(sellUUIDs) do
+            pcall(function()
+                safeFireRemote(updateHotbarRemote, "ToggleHotbar", uuid)
+            end)
         end
-    end)
-
-    -- EXECUTE SELL REMOTE VIA LATENCY-MANAGED BATCH QUEUE
-    pcall(function()
-        if sellRemote then
-            if #sellUUIDs > 0 then
-                -- Single batch array call format: Sell:FireServer({ UUID_1, UUID_2, ... })
-                safeFireRemote(sellRemote, sellUUIDs)
-            elseif #sellInstances > 0 then
-                for _, inst in ipairs(sellInstances) do
-                    safeFireRemote(sellRemote, inst)
-                end
-            end
-        end
-    end)
-
-    -- Also trigger UI click buttons on card slots if present
-    for _, slot in ipairs(sellInstances) do
-        pcall(function()
-            if slot:IsA("GuiObject") then
-                local clickBtn = slot:FindFirstChild("ClickButton", true) or slot:FindFirstChildWhichIsA("GuiButton", true)
-                if clickBtn then
-                    if firesignal then firesignal(clickBtn.MouseButton1Click)
-                    elseif firebutton then firebutton(clickBtn) end
-                end
-            end
-        end)
     end
 
-    return countToSell
+    -- Step 2: Execute Sell Remote (Format: FireServer({ uuid1, uuid2, ... }))
+    local sellRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Sell")
+                    or safeFindPath(ReplicatedStorage, "Remotes", "Sell")
+                    or ReplicatedStorage:FindFirstChild("Sell", true)
+
+    if sellRemote then
+        safeFireRemote(sellRemote, sellUUIDs)
+    end
+
+    return #sellUUIDs
 end
 
 -- ===== FLUENT UI COMPONENTS =====
@@ -2817,6 +2850,7 @@ Names3:OnChanged(rebuildTargetLookup)
 Mutations3:OnChanged(rebuildTargetLookup)
 Names4:OnChanged(rebuildTargetLookup)
 Mutations4:OnChanged(rebuildTargetLookup)
+rebuildTargetLookup()
 
 Tabs.Misc:AddSection("ฟังชั่นอื่นๆ (Misc)")
 
@@ -3066,9 +3100,88 @@ Tabs.Tower:AddButton({
     end
 })
 
+Tabs.Tower:AddSection("ระบบซื้อตั๋วทาวเวอร์อัตโนมัติ (Auto Buy Infinite Ticket)")
+
+local AutoBuyTicket = Tabs.Tower:AddToggle("AutoBuyTicket", {
+    Title = "Auto Buy Infinite Ticket",
+    Description = "ออโต้เช็คและสั่งซื้อตั๋ว Infinite Ticket หากจำนวนตั๋วในตัวน้อยกว่าขั้นต่ำที่กำหนด",
+    Default = false,
+})
+
+local TicketMinThreshold = Tabs.Tower:AddDropdown("TicketMinThreshold", {
+    Title = "จำนวนตั๋วขั้นต่ำที่ต้องการให้มีในตัว (Minimum Ticket Amount)",
+    Description = "หากตั๋ว Infinite Ticket ในตัวน้อยกว่าจำนวนนี้ ระบบจะสั่งซื้อตั๋วเพิ่มให้อัตโนมัติ",
+    Values = {"1", "3", "5", "10", "20", "50", "100"},
+    Default = "5",
+})
+
+Tabs.Tower:AddButton({
+    Title = "ซื้อตั๋วทาวเวอร์ 1 ใบ (Buy 1 Ticket Now)",
+    Description = "ส่งคำสั่งซื้อตั๋ว Infinite Ticket 1 ใบ ทันที",
+    Callback = function()
+        local talkRemote = safeFindPath(ReplicatedStorage, "Remotes", "NPCEvents", "TalkTickets")
+        if talkRemote then
+            safeFireRemote(talkRemote, "BuyOne")
+            Fluent:Notify({
+                Title = "Infinite Ticket",
+                Content = "ส่งคำสั่งซื้อตั๋ว 1 ใบ เรียบร้อยแล้ว! 🎫",
+                Duration = 3
+            })
+        end
+    end
+})
+
 Tabs.Clone:AddSection("ระบบเครื่องโคลนยูนิต (Clone Machine System)")
 
 local initialUnits = getOwnInventoryUnits()
+
+local function equipAndSelectCloneUnit(selectedDisplayName)
+    if not selectedDisplayName or selectedDisplayName == "" then return end
+
+    pcall(function()
+        local unitObj = nil
+        local unitUUID = nil
+        local allObjects = getOwnInventoryUnitObjects()
+
+        for _, u in ipairs(allObjects) do
+            if u.DisplayName == selectedDisplayName or u.Name == selectedDisplayName then
+                unitObj = u
+                unitUUID = u.UUID
+                break
+            end
+        end
+
+        -- 1. Hold / Equip tool in player's hands
+        local char = player.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        local backpack = player:FindFirstChild("Backpack")
+
+        if humanoid then
+            local toolToEquip = nil
+            if unitObj and unitObj.ToolInstance then
+                toolToEquip = unitObj.ToolInstance
+            elseif backpack then
+                local baseName = selectedDisplayName:gsub("%s*%[[^%]]+%]","")
+                toolToEquip = backpack:FindFirstChild(baseName) or backpack:FindFirstChild(selectedDisplayName)
+            end
+
+            if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip.Parent ~= char then
+                humanoid:EquipTool(toolToEquip)
+            end
+        end
+
+        -- 2. Notify Game Remote of selected unit for Clone Machine
+        local cloneRemote = safeFindPath(ReplicatedStorage, "Remotes", "CloneRemotes", "Request")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Clone", "Request")
+
+        if cloneRemote and unitUUID then
+            safeFireRemote(cloneRemote, "Select", { UUID = unitUUID, CharacterId = unitUUID })
+            safeFireRemote(cloneRemote, "Start", { UUID = unitUUID, CharacterId = unitUUID })
+            safeFireRemote(cloneRemote, "Equip", { UUID = unitUUID, CharacterId = unitUUID })
+            safeFireRemote(cloneRemote, "SetUnit", { UUID = unitUUID, CharacterId = unitUUID })
+        end
+    end)
+end
 
 local SelectCloneUnit = Tabs.Clone:AddDropdown("SelectCloneUnit", {
     Title = "เลือกยูนิตที่จะโคลน (Select Clone Unit)",
@@ -3076,6 +3189,10 @@ local SelectCloneUnit = Tabs.Clone:AddDropdown("SelectCloneUnit", {
     Values = initialUnits,
     Default = initialUnits[1] or "",
 })
+
+SelectCloneUnit:OnChanged(function(selected)
+    equipAndSelectCloneUnit(selected)
+end)
 
 Tabs.Clone:AddButton({
     Title = "รีเฟรชรายชื่อยูนิตในกระเป๋า (Refresh Inventory Units)",
@@ -3132,12 +3249,65 @@ local TraitValues = {
 
 local initialTraitUnits = getOwnInventoryUnits()
 
+local function equipAndSelectTraitUnit(selectedDisplayName)
+    if not selectedDisplayName or selectedDisplayName == "" then return end
+
+    pcall(function()
+        local unitObj = nil
+        local unitUUID = nil
+        local allObjects = getOwnInventoryUnitObjects()
+
+        for _, u in ipairs(allObjects) do
+            if u.DisplayName == selectedDisplayName or u.Name == selectedDisplayName then
+                unitObj = u
+                unitUUID = u.UUID
+                break
+            end
+        end
+
+        -- 1. Hold / Equip tool in player's hands
+        local char = player.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        local backpack = player:FindFirstChild("Backpack")
+
+        if humanoid then
+            local toolToEquip = nil
+            if unitObj and unitObj.ToolInstance then
+                toolToEquip = unitObj.ToolInstance
+            elseif backpack then
+                local baseName = selectedDisplayName:gsub("%s*%[[^%]]+%]","")
+                toolToEquip = backpack:FindFirstChild(baseName) or backpack:FindFirstChild(selectedDisplayName)
+            end
+
+            if toolToEquip and toolToEquip:IsA("Tool") and toolToEquip.Parent ~= char then
+                humanoid:EquipTool(toolToEquip)
+            end
+        end
+
+        -- 2. Notify Game Remote of selected unit
+        local traitRemote = safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Request")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Roll")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Select")
+
+        if traitRemote and unitUUID then
+            safeFireRemote(traitRemote, "Select", { UUID = unitUUID })
+            safeFireRemote(traitRemote, "Equip", { UUID = unitUUID })
+            safeFireRemote(traitRemote, "Change", { UUID = unitUUID })
+            safeFireRemote(traitRemote, "SetUnit", { UUID = unitUUID })
+        end
+    end)
+end
+
 local SelectTraitUnit = Tabs.Trait:AddDropdown("SelectTraitUnit", {
     Title = "เลือกตัวละครจากกระเป๋า (Select Trait Unit)",
     Description = "เลือกตัวละครจากในกระเป๋าเพื่อสุ่ม Trait",
     Values = initialTraitUnits,
     Default = initialTraitUnits[1] or "",
 })
+
+SelectTraitUnit:OnChanged(function(selected)
+    equipAndSelectTraitUnit(selected)
+end)
 
 Tabs.Trait:AddButton({
     Title = "รีเฟรชรายชื่อยูนิตในกระเป๋า (Refresh Inventory Units)",
@@ -3247,18 +3417,75 @@ Tabs.Trait:AddButton({
     end
 })
 
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
+Tabs.Settings:AddSection("การควบคุม & ปุ่มคีย์ลัด (Controls & Hotkeys)")
 
-InterfaceManager:SetFolder("PayomboyZ")
-SaveManager:SetFolder("PayomboyZ/RollAnimeToFight")
+Tabs.Settings:AddParagraph({
+    Title = "⌨️ ปุ่มคีย์ลัดในเกม (Keyboard Shortcuts)",
+    Description = "• กด [ K ] : เพื่อซ่อน / แสดง หน้าต่างเมนูสคริปต์ (Toggle UI Window)\n• กด [ F ] : เพื่อสลับขนาดหน้าต่าง UI ระหว่าง 85% กับ 100%",
+})
 
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+Tabs.Settings:AddSection("ระบบปรับขนาดหน้าจอ UI (UI Scaling)")
 
-SaveManager:LoadAutoloadConfig()
+local UIScaleSlider = Tabs.Settings:AddSlider("UIScaleSlider", {
+    Title = "ปรับขนาดหน้าต่าง UI (UI Scale)",
+    Description = "ปรับย่อ/ขยายขนาดเมนูหลักตามความต้องการ",
+    Default = 1.0,
+    Min = 0.7,
+    Max = 1.2,
+    Rounding = 2,
+})
+
+UIScaleSlider:OnChanged(function(val)
+    if uiScale then
+        uiScale.Scale = tonumber(val) or 1.0
+    end
+end)
+
+Tabs.Settings:AddSection("ระบบเซิร์ฟเวอร์ & การเชื่อมต่อ (Server Options)")
+
+Tabs.Settings:AddButton({
+    Title = "รีเซิร์ฟเวอร์เดิม (Rejoin Current Server)",
+    Description = "โหลดกลับเข้าเซิร์ฟเวอร์เดิมใหม่อัตโนมัติ",
+    Callback = function()
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+        end)
+    end
+})
+
+Tabs.Settings:AddButton({
+    Title = "ย้ายเซิร์ฟเวอร์ใหม่ (Server Hop)",
+    Description = "ค้นหาและย้ายไปยังเซิร์ฟเวอร์อื่นทันที",
+    Callback = function()
+        pcall(function()
+            local raw = game:HttpGet("https://games.roblox.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/0?sortOrder=Asc&limit=100")
+            local data = HttpService:JSONDecode(raw)
+            if data and data.data then
+                for _, s in ipairs(data.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, player)
+                        break
+                    end
+                end
+            end
+        end)
+    end
+})
+
+Tabs.Settings:AddSection("ระบบ Anti-AFK & ความปลอดภัย (Security)")
+
+Tabs.Settings:AddParagraph({
+    Title = "🛡️ ระบบป้องกันหลุด AFK (Anti-AFK Active)",
+    Description = "ระบบจับการเคลื่อนไหวอัตโนมัติ ป้องกันเกมเตะออกเมื่อเปิดทิ้งไว้นานกว่า 20 นาที",
+})
+
+Tabs.Settings:AddSection("ข้อมูลสคริปต์ (Script Information)")
+
+Tabs.Settings:AddParagraph({
+    Title = "Roll Anime to Fight! ⚔️ (PayomboyZ HUB)",
+    Description = "• Version: v2.5 OBSIDIAN\n• UI Engine: Obsidian Glassmorphic 2 Engine\n• Developer: PayomboyZ HUB Studio",
+})
+
 Window:SelectTab(1)
 rebuildTargetLookup()
 
@@ -3437,15 +3664,109 @@ task.spawn(function()
     end
 end)
 
--- Throttled Auto Tower Thread
+-- Helper function to check current Infinite Ticket count from inventory
+local function getInfiniteTicketCount()
+    local ticketCount = 0
+    pcall(function()
+        -- 1. Direct DataService client check (Primary source of truth)
+        local ok, dataServiceModule = pcall(function()
+            local ds = safeFindPath(ReplicatedStorage, "Data", "DataService")
+            return ds and require(ds)
+        end)
+
+        if ok and dataServiceModule and dataServiceModule.client then
+            local items = dataServiceModule.client:get("Items")
+            if type(items) == "table" then
+                for _, itemData in pairs(items) do
+                    if type(itemData) == "table" then
+                        local itemName = tostring(itemData.Name or itemData.Title or "")
+                        if itemName:lower():find("infinite") or itemName:lower():find("ticket") then
+                            local amt = tonumber(itemData.amount or itemData.Amount or itemData.Quantity or itemData.Quanity) or 1
+                            ticketCount += amt
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. Fallback check Backpack
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item.Name:lower():find("infinite") or item.Name:lower():find("ticket") then
+                    local count = item:GetAttribute("Amount") or item:GetAttribute("Count") or tonumber(item.Name:match("%d+")) or 1
+                    ticketCount = math.max(ticketCount, count)
+                end
+            end
+        end
+
+        -- 3. Fallback check Inventory GUI (Items Frame)
+        local itemSlots = safeFindPath(playerGui, "MainUI", "Frames", "Items", "Frame", "Main", "ScrollingFrame")
+                       or safeFindPath(playerGui, "MainUI", "Frames", "Items", "ScrollingFrame")
+        if itemSlots then
+            for _, slot in ipairs(itemSlots:GetChildren()) do
+                if slot:IsA("GuiObject") then
+                    local nameLabel = safeFindPath(slot, "ItemName") or safeFindPath(slot, "Frame", "Info", "ItemName") or slot:FindFirstChild("Name")
+                    if nameLabel and nameLabel:IsA("TextLabel") and nameLabel.Text:lower():find("infinite") then
+                        local amountLabel = safeFindPath(slot, "Amount") or safeFindPath(slot, "Frame", "Amount") or slot:FindFirstChild("TextLabel")
+                        if amountLabel and amountLabel:IsA("TextLabel") then
+                            local num = tonumber(amountLabel.Text:match("%d+"))
+                            if num then ticketCount = math.max(ticketCount, num) end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return ticketCount
+end
+
+-- Throttled Auto Tower & Auto Buy Ticket Thread
 task.spawn(function()
     task.wait(1.0)
+    local lastTicketCheck = 0
+    local lastJoinTower = 0
+
     while task.wait(1.5) do
+        local currentPlaceId = game.PlaceId
+        local isLobby = (currentPlaceId == 107653945083776)
+
+        -- 1. Auto Join Tower (Only in Lobby Map, with 10s cooldown to prevent Error 279 rate limit disconnects)
         local doTower = Options.AutoJoinTower and Options.AutoJoinTower.Value
-        if doTower then
+        if doTower and isLobby and (tick() - lastJoinTower > 10) then
             local joinTowerRemote = safeFindPath(ReplicatedStorage, "Remotes", "JoinTower")
             if joinTowerRemote then
+                lastJoinTower = tick()
                 safeFireRemote(joinTowerRemote)
+            end
+        end
+
+        -- 2. Auto Buy Infinite Ticket (Only in Lobby Map, spaced safely to prevent disconnect)
+        local doBuyTicket = Options.AutoBuyTicket and Options.AutoBuyTicket.Value
+        if doBuyTicket and isLobby and (tick() - lastTicketCheck > 4) then
+            lastTicketCheck = tick()
+            local minThreshold = tonumber(Options.TicketMinThreshold and Options.TicketMinThreshold.Value) or 5
+            local currentTickets = getInfiniteTicketCount()
+
+            if currentTickets < minThreshold then
+                local needed = minThreshold - currentTickets
+                local talkRemote = safeFindPath(ReplicatedStorage, "Remotes", "NPCEvents", "TalkTickets")
+
+                if talkRemote then
+                    while needed > 0 do
+                        if needed >= 5 then
+                            safeFireRemote(talkRemote, "BuyFive")
+                            needed -= 5
+                        elseif needed >= 3 then
+                            safeFireRemote(talkRemote, "BuyThree")
+                            needed -= 3
+                        else
+                            safeFireRemote(talkRemote, "BuyOne")
+                            needed -= 1
+                        end
+                        task.wait(0.6)
+                    end
+                end
             end
         end
     end
@@ -3498,6 +3819,7 @@ task.spawn(function()
     while task.wait(3.0) do
         local doClone = Options.AutoClone and Options.AutoClone.Value
         local doHalfTime = Options.AutoCloneHalfTime and Options.AutoCloneHalfTime.Value
+        local selectedUnitName = Options.SelectCloneUnit and Options.SelectCloneUnit.Value
 
         if not (doClone or doHalfTime) then continue end
 
@@ -3508,6 +3830,10 @@ task.spawn(function()
         if prompt then
             pcall(function() firePrompt(prompt) end)
             task.wait(0.3)
+        end
+
+        if selectedUnitName then
+            equipAndSelectCloneUnit(selectedUnitName)
         end
 
         local cloneFrame = safeFindPath(playerGui, "MainUI", "Frames", "Clone", "Frame", "Main")
@@ -3530,9 +3856,26 @@ task.spawn(function()
                         if firesignal then firesignal(cloneBtn.MouseButton1Click)
                         elseif firebutton then firebutton(cloneBtn) end
                     end)
-                    lastCloneAttempt = tick()
-                    task.wait(0.5)
                 end
+
+                -- Direct Remote Fire fallback (Exact payload format: "Start", { UUID = ..., CharacterId = ... })
+                local cloneRemote = safeFindPath(ReplicatedStorage, "Remotes", "CloneRemotes", "Request")
+                                 or safeFindPath(ReplicatedStorage, "Remotes", "Clone", "Request")
+                if cloneRemote and selectedUnitName then
+                    local allObjects = getOwnInventoryUnitObjects()
+                    for _, uObj in ipairs(allObjects) do
+                        if uObj.DisplayName == selectedUnitName or uObj.Name == selectedUnitName then
+                            safeFireRemote(cloneRemote, "Start", {
+                                UUID = uObj.UUID,
+                                CharacterId = uObj.UUID
+                            })
+                            break
+                        end
+                    end
+                end
+
+                lastCloneAttempt = tick()
+                task.wait(0.5)
             end
         end
     end
@@ -3567,32 +3910,34 @@ task.spawn(function()
             end
         end
 
-        -- Step 2: Hold/equip selected unit tool in hand if present
+        -- Step 2: Find target unit object & UUID and equip it
         local targetUnitObj = nil
-        local backpack = player:FindFirstChild("Backpack")
-        local char = player.Character
-        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        local targetUUID = nil
+        local selectedDisplayName = Options.SelectTraitUnit and Options.SelectTraitUnit.Value
+        local delayVal = (Options.TraitRollDelay and Options.TraitRollDelay.Value) or 0.5
 
-        if selectedUnitName then
-            if backpack then
-                targetUnitObj = backpack:FindFirstChild(selectedUnitName)
-            end
-            if not targetUnitObj and char then
-                targetUnitObj = char:FindFirstChild(selectedUnitName)
-            end
-            if targetUnitObj and targetUnitObj:IsA("Tool") and humanoid and targetUnitObj.Parent ~= char then
-                pcall(function() humanoid:EquipTool(targetUnitObj) end)
+        if selectedDisplayName then
+            equipAndSelectTraitUnit(selectedDisplayName)
+            local allObjects = getOwnInventoryUnitObjects()
+            for _, uObj in ipairs(allObjects) do
+                if uObj.DisplayName == selectedDisplayName or uObj.Name == selectedDisplayName then
+                    targetUnitObj = uObj
+                    targetUUID = uObj.UUID
+                    break
+                end
             end
         end
 
         -- Step 3: Check current trait of unit to see if target lock is reached
         local targetLocks = (Options.TargetTraitLocks and Options.TargetTraitLocks.Value) or {}
         if targetUnitObj then
-            local currentTrait = targetUnitObj:GetAttribute("Trait")
-                              or targetUnitObj:GetAttribute("CurrentTrait")
+            local currentTrait = targetUnitObj.Trait
+            if (not currentTrait or currentTrait == "None") and targetUnitObj.ToolInstance then
+                currentTrait = targetUnitObj.ToolInstance:GetAttribute("Trait") or targetUnitObj.ToolInstance:GetAttribute("CurrentTrait")
+            end
 
             local isMatched = false
-            if currentTrait then
+            if currentTrait and currentTrait ~= "None" then
                 if type(targetLocks) == "table" then
                     if targetLocks[currentTrait] == true or table.find(targetLocks, currentTrait) then
                         isMatched = true
@@ -3608,7 +3953,7 @@ task.spawn(function()
                     AutoRollTrait:SetValue(false)
                     Fluent:Notify({
                         Title = "Trait Machine Success! 🎉",
-                        Content = "ได้รับ Trait ล็อคเป้าหมาย: " .. tostring(currentTrait) .. " ให้กับ " .. tostring(selectedUnitName) .. " เรียบร้อยแล้ว!",
+                        Content = "ได้รับ Trait ล็อคเป้าหมาย: " .. tostring(currentTrait) .. " ให้กับ " .. tostring(selectedDisplayName) .. " เรียบร้อยแล้ว!",
                         Duration = 8
                     })
                 end)
@@ -3616,12 +3961,14 @@ task.spawn(function()
             end
         end
 
-        -- Step 4: Execute Roll via RemoteEvent
+        -- Step 4: Execute Roll via RemoteEvent (Format: FireServer("Roll", { UUID = targetUUID }))
         local traitRemote = safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Request")
                          or safeFindPath(ReplicatedStorage, "Remotes", "Trait", "Roll")
         if traitRemote then
-            if targetUnitObj then
-                safeFireRemote(traitRemote, "Roll", targetUnitObj)
+            if targetUUID then
+                safeFireRemote(traitRemote, "Roll", { UUID = targetUUID })
+            elseif targetUnitObj and targetUnitObj.ToolInstance then
+                safeFireRemote(traitRemote, "Roll", targetUnitObj.ToolInstance)
             else
                 safeFireRemote(traitRemote, "Roll")
             end
@@ -3828,22 +4175,111 @@ end)
 
 -- Optimized & Throttled Auto Roll / Buy System
 task.spawn(function()
-    local character = player.Character
-    if not character then
-        character = player.CharacterAdded:Wait()
-    end
-    local hrp = character:WaitForChild("HumanoidRootPart", 10) or character:FindFirstChild("HumanoidRootPart")
-    local plotsFolder = workspace:WaitForChild("Plots", 10) or workspace:FindFirstChild("Plots")
-
-    if not hrp or not plotsFolder then return end
-
-    -- Auto-reconnect on respawn
     player.CharacterAdded:Connect(function(newChar)
         character = newChar
-        hrp = newChar:WaitForChild("HumanoidRootPart", 10)
     end)
 
     local state = { buying = false, hasBoughtThisRoll = false }
+
+    local function parseMoney(text)
+        if not text then return 0 end
+        local str = tostring(text):gsub("<.->", ""):gsub("%$", ""):gsub(",", ""):match("^%s*(.-)%s*$") or ""
+        local numStr, suffix = str:match("([%d%.]+)%s*([KkMmBbTtQq]?)")
+        if not numStr then return 0 end
+        local num = tonumber(numStr) or 0
+        if suffix then
+            local s = suffix:upper()
+            if s == "K" then num = num * 1000
+            elseif s == "M" then num = num * 1000000
+            elseif s == "B" then num = num * 1000000000
+            elseif s == "T" then num = num * 1000000000000
+            elseif s == "Q" then num = num * 1000000000000000
+            end
+        end
+        return num
+    end
+
+    local function readCash()
+        local cashAmount = math.huge -- Default math.huge so reading failures never block buying
+        pcall(function()
+            local dsModule = safeFindPath(ReplicatedStorage, "Data", "DataService")
+            local ds = dsModule and require(dsModule)
+            if ds and ds.client then
+                local gold = ds.client:get("Gold") or ds.client:get("Yen") or ds.client:get("Cash") or ds.client:get("Coins")
+                if type(gold) == "number" then
+                    cashAmount = gold
+                    return
+                end
+            end
+
+            local leaderstats = player:FindFirstChild("leaderstats")
+            if leaderstats then
+                for _, name in ipairs({"Gold", "Yen", "Cash", "Coins", "Money", "💰 Gold"}) do
+                    local val = leaderstats:FindFirstChild(name)
+                    if val and val.Value then
+                        cashAmount = tonumber(val.Value) or cashAmount
+                        return
+                    end
+                end
+            end
+
+            local goldLabel = safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Gold", "Frame", "TextLabel")
+                           or safeFindPath(playerGui, "MainUI", "UITop", "Top", "Main", "Gold", "TextLabel")
+                           or safeFindPath(playerGui, "MainUI", "GoldText")
+            if goldLabel and goldLabel:IsA("TextLabel") then
+                cashAmount = parseMoney(goldLabel.Text)
+                return
+            end
+        end)
+        return cashAmount
+    end
+
+    local function firePrompt(prompt)
+        if not prompt then return false end
+        return pcall(function()
+            if prompt:IsA("ProximityPrompt") then
+                if not prompt.Enabled then prompt.Enabled = true end
+                if fireproximityprompt then
+                    fireproximityprompt(prompt)
+                end
+                pcall(function()
+                    if prompt.InputHoldBegin then
+                        prompt:InputHoldBegin()
+                        task.wait(0.05)
+                        prompt:InputHoldEnd()
+                    end
+                end)
+            end
+        end)
+    end
+
+    local function findPrompt(root)
+        if not root then return nil end
+        local buyUI = root:FindFirstChild("BuyUI", true)
+        if buyUI then
+            local prompt = buyUI:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then return prompt end
+        end
+
+        local preferredPromptNames = {
+            "BuyPrompt",
+            "PlacementPrompt",
+            "RollPrompt",
+            "GiftPrompt",
+            "ProximityPrompt",
+            "Prox",
+            "Prompt",
+        }
+
+        for _, name in ipairs(preferredPromptNames) do
+            local inst = root:FindFirstChild(name, true)
+            if inst and inst:IsA("ProximityPrompt") then
+                return inst
+            end
+        end
+
+        return root:FindFirstChildWhichIsA("ProximityPrompt", true)
+    end
 
     local function normalizeKey(value)
         return tostring(value or ""):lower():gsub("%s+", "")
@@ -3859,11 +4295,12 @@ task.spawn(function()
 
     local function getRarityLabel(model)
         local head = model:FindFirstChild("Head")
-        local buyUI = head and head:FindFirstChild("BuyUI")
+        local buyUI = head and head:FindFirstChild("BuyUI") or model:FindFirstChild("BuyUI", true)
         if buyUI then
             local frame = buyUI:FindFirstChild("Frame")
             local chance = frame and frame:FindFirstChild("Chance")
             local label = chance and chance:FindFirstChild("TextLabel")
+                       or buyUI:FindFirstChildWhichIsA("TextLabel", true)
             if label then return label end
         end
         return nil
@@ -3878,11 +4315,12 @@ task.spawn(function()
 
     local function getCharacterNameLabel(model)
         local head = model:FindFirstChild("Head")
-        local buyUI = head and head:FindFirstChild("BuyUI")
+        local buyUI = head and head:FindFirstChild("BuyUI") or model:FindFirstChild("BuyUI", true)
         if buyUI then
             local frame = buyUI:FindFirstChild("Frame")
             local nameFrame = frame and frame:FindFirstChild("Name")
             local label = nameFrame and nameFrame:FindFirstChild("TextLabel")
+                       or buyUI:FindFirstChildWhichIsA("TextLabel", true)
             if label then return label end
         end
         return nil
@@ -3921,6 +4359,15 @@ task.spawn(function()
     end
 
     local function isBoughtCharacterModel(model, scanRoot)
+        if not model then return false end
+
+        -- Guard: If model has BuyUI or any ProximityPrompt, it is NOT bought yet!
+        local buyUI = model:FindFirstChild("BuyUI", true)
+        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if buyUI or prompt then
+            return false
+        end
+
         local current = model
         while current and current ~= scanRoot do
             if current:IsA("Model") and hasAttackAttribute(current) then
@@ -3976,7 +4423,7 @@ task.spawn(function()
             normalizedNames[normalizeKey(alias)] = alias
         end
 
-        if targetConfig and #targetConfig > 0 then
+        if type(targetConfig) == "table" and #targetConfig > 0 then
             for index, config in ipairs(targetConfig) do
                 if normalizeKey(config.Mutation) == normalizedMutation then
                     if config.Mode == "Rarity" and normalizedRarity and normalizeKey(config.Value) == normalizedRarity then
@@ -3990,22 +4437,20 @@ task.spawn(function()
                 end
             end
             return nil
-        else
-            -- DEFAULT: Score unit rarity so candidates[1] is ALWAYS the single best unit on the plot
-            local score = getRarityScore(model)
-            return (1000000000 - score), rarity or "Unknown", mutation, "Best"
         end
-    end
 
-    -- getPlotOwner, parseMoney, readCash are now defined at module scope above
+        -- FALLBACK: When no specific targets are selected in UI (#targetConfig == 0), buy best/most expensive unit
+        local score = getRarityScore(model)
+        return (1000000000 - score), rarity or "Unknown", mutation, "Best"
+    end
 
     local function getPriceLabel(model)
         local head = model:FindFirstChild("Head")
-        local buyUI = head and head:FindFirstChild("BuyUI")
+        local buyUI = head and head:FindFirstChild("BuyUI") or model:FindFirstChild("BuyUI", true)
         if buyUI then
             local frame = buyUI:FindFirstChild("Frame")
             local price = frame and frame:FindFirstChild("Price")
-            local label = price and price:FindFirstChild("TextLabel")
+            local label = price and price:FindFirstChild("TextLabel") or price and price:FindFirstChildWhichIsA("TextLabel", true)
             if label and label:IsA("TextLabel") then return label end
         end
 
@@ -4030,37 +4475,40 @@ task.spawn(function()
             return prompt
         end
 
-        return plot:FindFirstChild("RollPrompt", true)
+        return plot:FindFirstChild("RollPrompt", true) or plot:FindFirstChildWhichIsA("ProximityPrompt", true)
     end
 
     local function getBuyCandidates(plot)
         local candidates = {}
-        local scanRoot = plot:FindFirstChild("Characters") or plot
-        local models = scanRoot:GetChildren()
+        if not plot then return candidates end
+        local scanRoots = { plot:FindFirstChild("Characters"), plot:FindFirstChild("Units"), plot }
 
-        for _, inst in ipairs(models) do
-            if inst:IsA("Model") then
-                -- Fast Guard: Unit must have Head or BuyUI to be a buy candidate
-                local head = inst:FindFirstChild("Head")
-                local buyUI = head and head:FindFirstChild("BuyUI") or inst:FindFirstChild("BuyUI")
-                if not buyUI then continue end
+        for _, scanRoot in ipairs(scanRoots) do
+            if not scanRoot then continue end
+            for _, inst in ipairs(scanRoot:GetChildren()) do
+                if inst:IsA("Model") then
+                    local prompt = findPrompt(inst)
+                    local buyUI = inst:FindFirstChild("BuyUI", true)
 
-                if isBoughtCharacterModel(inst, scanRoot) then
-                    continue
-                end
+                    if not prompt and not buyUI then continue end
 
-                local priceLabel = getPriceLabel(inst)
-                local prompt = findPrompt(inst)
-                if not prompt then continue end
+                    if isBoughtCharacterModel(inst, scanRoot) then
+                        continue
+                    end
 
-                local targetIndex, characterName, mutation = getTargetIndex(inst)
+                    prompt = prompt or (buyUI and (buyUI:FindFirstChildWhichIsA("ProximityPrompt", true) or findPrompt(buyUI)))
+                    if not prompt then continue end
 
-                if priceLabel and targetIndex then
-                    local price = parseMoney(priceLabel.Text) or 0
+                    local targetIndex, characterName, mutation = getTargetIndex(inst)
+                    if not targetIndex then continue end
+
+                    local priceLabel = getPriceLabel(inst)
+                    local price = priceLabel and parseMoney(priceLabel.Text) or 0
+
                     table.insert(candidates, {
                         model = inst,
-                        characterName = characterName,
-                        mutation = mutation,
+                        characterName = characterName or inst.Name,
+                        mutation = mutation or "Normal",
                         targetIndex = targetIndex,
                         price = price,
                         priceLabel = priceLabel,
@@ -4068,13 +4516,14 @@ task.spawn(function()
                     })
                 end
             end
+            if #candidates > 0 then break end
         end
 
         table.sort(candidates, function(a, b)
             if a.targetIndex ~= b.targetIndex then
                 return a.targetIndex < b.targetIndex
             end
-            return a.price < b.price
+            return a.price > b.price
         end)
 
         return candidates
@@ -4083,7 +4532,7 @@ task.spawn(function()
     state.hasBoughtThisRoll = false
 
     while true do
-        local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 2.0
+        local delayTime = (Options.RollDelay and tonumber(Options.RollDelay.Value)) or 2.7
         if delayTime < 0.5 then delayTime = 0.5 end
 
         if not Options.AutoBuyPlot or not Options.AutoBuyPlot.Value then
@@ -4093,67 +4542,45 @@ task.spawn(function()
 
         local myPlot = getBestPlot()
         if not myPlot then
-            task.wait(0.5)
+            task.wait(1.0)
             continue
         end
 
         local cycleStartTime = tick()
         local boughtOrBlocked = false
 
-        if not state.buying and not state.hasBoughtThisRoll then
+        if not state.buying then
             local candidates = getBuyCandidates(myPlot)
-            local cash = readCash()
+            local cash = readCash() or 0
 
-            -- Buy ONLY the SINGLE BEST candidate from this roll round!
-            if #candidates > 0 then
-                local bestCandidate = candidates[1]
-                if cash >= bestCandidate.price then
-                    state.buying = true
-                    firePrompt(bestCandidate.prompt)
-                    task.wait(0.4)
-                    state.buying = false
-                    state.hasBoughtThisRoll = true
+            for _, candidate in ipairs(candidates) do
+                if cash < candidate.price then
                     boughtOrBlocked = true
-                else
-                    -- Cannot afford the best unit yet, hold and wait until cash accumulates
-                    boughtOrBlocked = true
+                    break
                 end
+
+                state.buying = true
+                firePrompt(candidate.prompt)
+                task.wait(0.75)
+                state.buying = false
+                boughtOrBlocked = true
+                break
             end
         end
 
-        -- If we already bought 1 unit from this roll (or if nothing to buy), Roll next round!
-        if not state.buying and (state.hasBoughtThisRoll or not boughtOrBlocked) then
+        if not state.buying and not boughtOrBlocked then
             local rollPrompt = getRollPrompt(myPlot)
-            if rollPrompt and rollPrompt.Enabled then
+            if rollPrompt then
                 firePrompt(rollPrompt)
-                state.hasBoughtThisRoll = false
-                
-                -- Wait for server to spawn/update the model & BuyUI on plot
-                task.wait(0.4)
-
-                -- Scan immediately after roll spawn
-                local postRollCandidates = getBuyCandidates(myPlot)
-                local cash = readCash()
-                if #postRollCandidates > 0 then
-                    local bestCandidate = postRollCandidates[1]
-                    if cash >= bestCandidate.price then
-                        state.buying = true
-                        firePrompt(bestCandidate.prompt)
-                        task.wait(0.4)
-                        state.buying = false
-                        state.hasBoughtThisRoll = true
-                    end
-                end
             end
         end
 
-        -- Throttle whole cycle so it fires once per delayTime (default 2 seconds)
         local elapsed = tick() - cycleStartTime
         local sleepTime = delayTime - elapsed
         if sleepTime > 0 then
             task.wait(sleepTime)
         else
-            task.wait(0.2)
+            task.wait(0.5)
         end
     end
 end)
