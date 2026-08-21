@@ -500,7 +500,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     onlineCorner.Parent = onlineDot
 
     local displayNameLabel = Instance.new("TextLabel")
-    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
+    displayNameLabel.Size = UDim2.new(1, -145, 0, 18)
     displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
     displayNameLabel.BackgroundTransparency = 1
     displayNameLabel.Text = LocalPlayer.DisplayName
@@ -512,7 +512,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     displayNameLabel.Parent = userPanel
 
     local usernameLabel = Instance.new("TextLabel")
-    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
+    usernameLabel.Size = UDim2.new(1, -145, 0, 14)
     usernameLabel.Position = UDim2.new(0, 66, 0, 33)
     usernameLabel.BackgroundTransparency = 1
     usernameLabel.Text = "@" .. LocalPlayer.Name
@@ -522,6 +522,62 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
     usernameLabel.ZIndex = 10
     usernameLabel.Parent = userPanel
+
+    -- 🔴 LOG OUT BUTTON (Obsidian Glassmorphic Style)
+    local logoutBtn = Instance.new("TextButton")
+    logoutBtn.Name = "LogoutButton"
+    logoutBtn.Size = UDim2.fromOffset(62, 24)
+    logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+    logoutBtn.BackgroundColor3 = COLORS.danger
+    logoutBtn.BackgroundTransparency = 0.15
+    logoutBtn.Text = "Log out"
+    logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    logoutBtn.Font = Enum.Font.GothamBold
+    logoutBtn.TextSize = 11
+    logoutBtn.ZIndex = 12
+    logoutBtn.Parent = userPanel
+
+    local loCorner = Instance.new("UICorner")
+    loCorner.CornerRadius = UDim.new(0, 6)
+    loCorner.Parent = logoutBtn
+
+    local loStroke = Instance.new("UIStroke")
+    loStroke.Color = Color3.fromRGB(255, 80, 80)
+    loStroke.Thickness = 1
+    loStroke.Parent = logoutBtn
+
+    logoutBtn.MouseEnter:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), { BackgroundTransparency = 0, BackgroundColor3 = Color3.fromRGB(220, 38, 38) }):Play()
+    end)
+    logoutBtn.MouseLeave:Connect(function()
+        TweenService:Create(logoutBtn, TweenInfo.new(0.2), { BackgroundTransparency = 0.15, BackgroundColor3 = COLORS.danger }):Play()
+    end)
+
+    logoutBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        
+        -- Stop operations & reset settings
+        if stopAllScriptOperations then
+            stopAllScriptOperations()
+        end
+        
+        -- Clear local key files & global variables
+        if performLogoutKeyClear then
+            performLogoutKeyClear()
+        end
+        
+        -- Safely destroy UI container
+        pcall(function()
+            if gui then gui:Destroy() end
+        end)
+        
+        -- Re-execute main loader script
+        task.spawn(function()
+            pcall(function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+            end)
+        end)
+    end)
 
     local metricsBox = Instance.new("Frame")
     metricsBox.Size = UDim2.new(1, -28, 0, 24)
@@ -1636,6 +1692,64 @@ local InterfaceManager = {
     SetFolder = function() end,
     BuildInterfaceSection = function() end,
 }
+
+-- ============================================================================
+-- 🔴 LOGOUT & CREDENTIAL CLEARING ENGINE
+-- ============================================================================
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
+    end)
+end
+
+local function stopAllScriptOperations()
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+
+    if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+        for _, option in pairs(ObsidianGlassEngine.Options) do
+            if type(option) == "table" and option.SetValue then
+                pcall(function() option:SetValue(false) end)
+            end
+        end
+    end
+end
+
+-- Kaitun AFK engine removed as requested
 
 local Window = ObsidianGlassEngine:CreateWindow({
     Title = "Roll Anime to Fight! ⚔️",
