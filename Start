@@ -567,14 +567,11 @@ local function ShowHopConfirmPopup(gameData)
     -- Hop button
     local hopBtn = Instance.new("TextButton")
     hopBtn.Size = UDim2.fromOffset(218, 38); hopBtn.Position = UDim2.new(1,-238,1,-54)
-    hopBtn.BackgroundColor3 = CH.primary; hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
-    hopBtn.TextColor3 = Color3.fromRGB(255,255,255); hopBtn.TextStrokeTransparency = 0.7
+    hopBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85); hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
+    hopBtn.TextColor3 = Color3.fromRGB(255,255,255)
     hopBtn.Font = Enum.Font.GothamBold; hopBtn.TextSize = 12
     hopBtn.BorderSizePixel = 0; hopBtn.ZIndex = 5; hopBtn.Parent = card
     local hopC = Instance.new("UICorner"); hopC.CornerRadius = UDim.new(0,10); hopC.Parent = hopBtn
-    local hopGrad = Instance.new("UIGradient")
-    hopGrad.Color = ColorSequence.new(CH.primaryHover, CH.primary)
-    hopGrad.Rotation = 90; hopGrad.Parent = hopBtn
 
     local function closePopup()
         TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
@@ -1727,11 +1724,9 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         local playBtn = Instance.new("TextButton")
         playBtn.Size = UDim2.fromOffset(46, 22)
         playBtn.Position = UDim2.new(1, -56, 1, -30)
-        playBtn.BackgroundColor3 = COLORS.primary
+        playBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
         playBtn.Text = "🎮 เล่น"
         playBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        playBtn.TextStrokeTransparency = 0.6
-        playBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
         playBtn.Font = Enum.Font.GothamBold
         playBtn.TextSize = 9
         playBtn.BorderSizePixel = 0
@@ -1740,15 +1735,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         local playBtnC = Instance.new("UICorner")
         playBtnC.CornerRadius = UDim.new(0, 5)
         playBtnC.Parent = playBtn
-        local playBtnG = Instance.new("UIGradient")
-        playBtnG.Color = ColorSequence.new(COLORS.primaryHover, COLORS.primary)
-        playBtnG.Rotation = 90
-        playBtnG.Parent = playBtn
         playBtn.MouseEnter:Connect(function()
             TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primaryHover }):Play()
         end)
         playBtn.MouseLeave:Connect(function()
-            TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primary }):Play()
+            TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(255, 45, 85) }):Play()
         end)
         playBtn.MouseButton1Click:Connect(function()
             ShowHopConfirmPopup(gameData)
