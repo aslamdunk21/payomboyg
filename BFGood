@@ -1,8 +1,11 @@
--- ======================================================================================
--- [[ OBSIDIAN GLASSMORPHIC 2 - BLOX FRUITS KAITUN & AUTO FARM SCRIPT ]]
--- Engine Source: 100% PURE LogicMain.txt + Obsidian Glassmorphic 2 UI Framework
--- All LogicSub.txt & LogicSub2.txt additions have been completely removed as requested.
--- ======================================================================================
+-- Re-entrancy Cleanup: terminate previous execution threads
+if getgenv().PayomboyZ_BloxFruits_Cleanup then
+    pcall(getgenv().PayomboyZ_BloxFruits_Cleanup)
+end
+local scriptRunning = true
+getgenv().PayomboyZ_BloxFruits_Cleanup = function()
+    scriptRunning = false
+end
 
 getgenv().Configs = {
     Team = "Pirates",
@@ -28,16 +31,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- Automatic Team Assignment (From LogicMain.txt)
-if not LocalPlayer.Team then
-    repeat task.wait(0.5)
-        pcall(function()
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", getgenv().Configs.Team)
-        end)
-    until LocalPlayer.Team
-end
-
-repeat task.wait() until LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+-- Automatic Team Assignment (Non-blocking background thread)
+task.spawn(function()
+    if not LocalPlayer.Team then
+        repeat task.wait(0.5)
+            pcall(function()
+                if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+                    ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", getgenv().Configs.Team)
+                end
+            end)
+        until LocalPlayer.Team or not scriptRunning
+    end
+end)
 
 local v106 = tostring(LocalPlayer.UserId):sub(2, 4) .. tostring(coroutine.running()):sub(11, 15)
 local placeid = game.PlaceId
@@ -65,22 +70,60 @@ local IsPoleV1 = false
 local IsPoleV2 = false
 local Entrance = {}
 
--- Safe Parent GUI Resolver (Supports All Executors)
+-- Safe Parent GUI Resolver (Supports All Executors & Prevents CoreGui Capability Errors)
 local function GetSafeParentGui()
-    if typeof(gethui) == "function" then
-        local ok, res = pcall(gethui)
-        if ok and res and type(res) == "userdata" then return res end
+    local success, result = pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h and typeof(h) == "Instance" then return h end
+        end
+        local core = game:GetService("CoreGui")
+        local testObj = Instance.new("Folder")
+        testObj.Parent = core
+        testObj:Destroy()
+        return core
+    end)
+    if success and result then
+        return result
     end
-    local ok, core = pcall(function() return game:GetService("CoreGui") end)
-    if ok and core then
-        local testOk = pcall(function()
-            local testObj = Instance.new("Folder")
-            testObj.Parent = core
-            testObj:Destroy()
-        end)
-        if testOk then return core end
+    return LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+end
+
+-- Destroy Existing UI Elements across all potential parents
+local function DestroyExistingUI(uiName)
+    pcall(function()
+        if typeof(gethui) == "function" then
+            local h = gethui()
+            if h and h:FindFirstChild(uiName) then h[uiName]:Destroy() end
+        end
+        local core = game:GetService("CoreGui")
+        if core and core:FindFirstChild(uiName) then core[uiName]:Destroy() end
+        if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild(uiName) then
+            LocalPlayer.PlayerGui[uiName]:Destroy()
+        end
+    end)
+end
+
+-- Safe Script Loading Helper (Prevents 404 syntax errors)
+local function SafeLoadScript(url)
+    local ok, content = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok or not content or type(content) ~= "string" then
+        warn("[PayomboyZ Loader Error]: Failed to fetch script from URL: " .. tostring(url))
+        return false
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+    if content:find("404: Not Found") or content:sub(1, 3) == "404" then
+        warn("[PayomboyZ Loader Error]: Loader URL returned 404 Not Found: " .. tostring(url))
+        return false
+    end
+    local func, err = loadstring(content)
+    if not func then
+        warn("[PayomboyZ Loader Error]: Syntax error during loader string parsing: " .. tostring(err))
+        return false
+    end
+    pcall(func)
+    return true
 end
 
 -- Server Browser Teleport (From LogicMain.txt)
@@ -354,13 +397,12 @@ end
 -- 📊 TOP HUD STATUS BANNER (From LogicMain.txt)
 -- ======================================================================================
 
-local parentGui = GetSafeParentGui()
-if parentGui:FindFirstChild("Obsidian_HUD_Status") then parentGui.Obsidian_HUD_Status:Destroy() end
+DestroyExistingUI("Obsidian_HUD_Status")
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "Obsidian_HUD_Status"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = parentGui
+ScreenGui.Parent = GetSafeParentGui()
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 500, 0, 75)
@@ -470,7 +512,7 @@ local COLORS = {
     disabled = Color3.fromRGB(50, 25, 32),
 }
 
-local ObsidianGlassEngine = { Tabs = {}, ActiveTab = nil }
+local ObsidianGlassEngine = { Tabs = {}, ActiveTab = nil, CurrentLanguage = "th", LangElements = {} }
 
 -- ======================================================================================
 -- 🔑 LOGOUT & KEY CLEARING SYSTEM (From logout.txt)
@@ -614,10 +656,7 @@ function ObsidianGlassEngine:Notify(cfg)
 end
 
 function ObsidianGlassEngine:CreateWindow(cfg)
-    local parentGui = GetSafeParentGui()
-    if parentGui:FindFirstChild("ObsidianGlass2_BloxFruits") then
-        parentGui.ObsidianGlass2_BloxFruits:Destroy()
-    end
+    DestroyExistingUI("ObsidianGlass2_BloxFruits")
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "ObsidianGlass2_BloxFruits"
@@ -625,7 +664,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.DisplayOrder = 99999
-    gui.Parent = parentGui
+    gui.Parent = GetSafeParentGui()
 
     local uiScale = Instance.new("UIScale")
     local camera = workspace.CurrentCamera
@@ -694,7 +733,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        while scriptRunning and task.wait(0.03) do
             if not gui or not gui.Parent then break end
             for _, data in ipairs(dots) do
                 data.pos = data.pos + data.speed
@@ -787,7 +826,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 lastFpsTime = now
             end
         end)
-        while task.wait(0.8) do
+        while scriptRunning and task.wait(0.8) do
             if not gui or not gui.Parent then break end
             local pingVal = 0
             pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
@@ -952,9 +991,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         if gui then
             pcall(function() gui:Destroy() end)
         end
-        pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
-        end)
+        SafeLoadScript("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start")
     end)
 
     local tabScroll = Instance.new("ScrollingFrame")
@@ -1029,11 +1066,20 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     langCorner.CornerRadius = UDim.new(0, 8)
     langCorner.Parent = langBtn
 
-    local isThai = true
+    local isThai = (ObsidianGlassEngine.CurrentLanguage == "th")
     langBtn.MouseButton1Click:Connect(function()
         playClickSound()
         isThai = not isThai
+        ObsidianGlassEngine.CurrentLanguage = isThai and "th" or "en"
         langBtn.Text = isThai and "🇹🇭 ภาษาไทย" or "🇬🇧 English"
+        mainSubTitle.Text = isThai and "สคริปต์ออโต้ฟาร์มไก่ตัน Blox Fruits | Obsidian Glassmorphic 2 Engine" or "Blox Fruits Kaitun Hub | Obsidian Glassmorphic 2 Engine"
+        
+        for _, elem in ipairs(ObsidianGlassEngine.LangElements) do
+            if elem.instance and elem.instance.Parent then
+                elem.instance.Text = isThai and elem.th or elem.en
+            end
+        end
+
         ObsidianGlassEngine:Notify({
             Title = "PayomboyZ HUB",
             Content = isThai and "เปลี่ยนภาษาเป็น ภาษาไทย เรียบร้อยแล้ว!" or "Switched language to English!"
@@ -1070,19 +1116,29 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local WindowObj = {}
 
     function WindowObj:CreateTab(tabCfg)
-        local tabName = tabCfg.Name or "Tab"
-        local tabIcon = tabCfg.Icon or "📌"
+        local tabNameTH = tabCfg.NameTH or tabCfg.Name or "Tab"
+        local tabNameEN = tabCfg.NameEN or tabCfg.Name or "Tab"
+        local tabIcon = tabCfg.Icon or ""
         
+        local prefix = (tabIcon ~= "" and (tabIcon .. "  ") or "")
+        local initialText = prefix .. (ObsidianGlassEngine.CurrentLanguage == "th" and tabNameTH or tabNameEN)
+
         local tabBtn = Instance.new("TextButton")
         tabBtn.Size = UDim2.new(1, 0, 0, 36)
         tabBtn.BackgroundColor3 = COLORS.surface
         tabBtn.BackgroundTransparency = 0.5
-        tabBtn.Text = tabIcon .. "  " .. tabName
+        tabBtn.Text = initialText
         tabBtn.TextColor3 = COLORS.textMuted
         tabBtn.Font = Enum.Font.GothamBold
         tabBtn.TextSize = 13
         tabBtn.TextXAlignment = Enum.TextXAlignment.Left
         tabBtn.Parent = tabScroll
+
+        table.insert(ObsidianGlassEngine.LangElements, {
+            instance = tabBtn,
+            th = prefix .. tabNameTH,
+            en = prefix .. tabNameEN
+        })
 
         local tbPadding = Instance.new("UIPadding")
         tbPadding.PaddingLeft = UDim.new(0, 12)
@@ -1093,7 +1149,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         tbCorner.Parent = tabBtn
 
         local pageScroll = Instance.new("ScrollingFrame")
-        pageScroll.Name = "Page_" .. tabName
+        pageScroll.Name = "Page_" .. tabNameTH
         pageScroll.Size = UDim2.fromScale(1, 1)
         pageScroll.BackgroundTransparency = 1
         pageScroll.Visible = false
@@ -1123,7 +1179,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             tabBtn.BackgroundTransparency = 0.2
             tabBtn.TextColor3 = COLORS.text
             pageScroll.Visible = true
-            ObsidianGlassEngine.ActiveTab = tabName
+            ObsidianGlassEngine.ActiveTab = tabNameTH
         end
 
         tabBtn.MouseButton1Click:Connect(function()
@@ -1140,7 +1196,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         local TabObj = {}
 
         function TabObj:AddToggle(tCfg)
-            local tName = tCfg.Name or "Toggle"
+            local tNameTH = tCfg.NameTH or tCfg.Name or "Toggle"
+            local tNameEN = tCfg.NameEN or tCfg.Name or "Toggle"
             local defaultVal = tCfg.Default or false
             local callback = tCfg.Callback or function() end
 
@@ -1158,12 +1215,18 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             cLabel.Size = UDim2.new(1, -60, 1, 0)
             cLabel.Position = UDim2.new(0, 12, 0, 0)
             cLabel.BackgroundTransparency = 1
-            cLabel.Text = tName
+            cLabel.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and tNameTH or tNameEN)
             cLabel.TextColor3 = COLORS.text
             cLabel.Font = Enum.Font.GothamBold
             cLabel.TextSize = 13
             cLabel.TextXAlignment = Enum.TextXAlignment.Left
             cLabel.Parent = card
+
+            table.insert(ObsidianGlassEngine.LangElements, {
+                instance = cLabel,
+                th = tNameTH,
+                en = tNameEN
+            })
 
             local switch = Instance.new("TextButton")
             switch.Size = UDim2.fromOffset(40, 22)
@@ -1198,18 +1261,25 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
 
         function TabObj:AddButton(bCfg)
-            local bName = bCfg.Name or "Button"
+            local bNameTH = bCfg.NameTH or bCfg.Name or "Button"
+            local bNameEN = bCfg.NameEN or bCfg.Name or "Button"
             local callback = bCfg.Callback or function() end
 
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -10, 0, 38)
             btn.BackgroundColor3 = COLORS.surfaceRaised
             btn.BackgroundTransparency = 0.2
-            btn.Text = bName
+            btn.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and bNameTH or bNameEN)
             btn.TextColor3 = COLORS.text
             btn.Font = Enum.Font.GothamBold
             btn.TextSize = 13
             btn.Parent = pageScroll
+
+            table.insert(ObsidianGlassEngine.LangElements, {
+                instance = btn,
+                th = bNameTH,
+                en = bNameEN
+            })
 
             local bCorner = Instance.new("UICorner")
             bCorner.CornerRadius = UDim.new(0, 8)
@@ -1234,84 +1304,96 @@ local Window = ObsidianGlassEngine:CreateWindow({
 })
 
 -- ======================================================================================
--- 🎮 UI TABS & MODULE INTEGRATION (PURE LogicMain.txt CONFIGS ONLY - THAI TRANSLATED)
+-- 🎮 UI TABS & MODULE INTEGRATION (PURE LogicMain.txt CONFIGS ONLY - DUAL LANGUAGE)
 -- ======================================================================================
 
-local MainTab = Window:CreateTab({ Name = "⚔️ ออโต้ฟาร์ม (Auto Farm)", Icon = "" })
-local KaitunTab = Window:CreateTab({ Name = "🥋 สำนักหมัด & ไก่ตัน", Icon = "" })
-local QuestTab = Window:CreateTab({ Name = "🧩 ปริศนา & เควสต์เปิดโลก", Icon = "" })
-local FruitTab = Window:CreateTab({ Name = "🍎 ผลไม้ & ไอเทม", Icon = "" })
-local StatsTab = Window:CreateTab({ Name = "📊 อัปสเตตัส (Auto Stats)", Icon = "" })
-local MiscTab = Window:CreateTab({ Name = "⚡ ตั้งค่า & อื่นๆ", Icon = "" })
+local MainTab = Window:CreateTab({ NameTH = "⚔️ ออโต้ฟาร์ม (Auto Farm)", NameEN = "⚔️ Auto Farm", Icon = "" })
+local KaitunTab = Window:CreateTab({ NameTH = "🥋 สำนักหมัด & ไก่ตัน", NameEN = "🥋 Kaitun & Melee", Icon = "" })
+local QuestTab = Window:CreateTab({ NameTH = "🧩 ปริศนา & เควสต์เปิดโลก", NameEN = "🧩 Puzzles & World", Icon = "" })
+local FruitTab = Window:CreateTab({ NameTH = "🍎 ผลไม้ & ไอเทม", NameEN = "🍎 Fruits & Items", Icon = "" })
+local StatsTab = Window:CreateTab({ NameTH = "📊 อัปสเตตัส (Auto Stats)", NameEN = "📊 Auto Stats", Icon = "" })
+local MiscTab = Window:CreateTab({ NameTH = "⚡ ตั้งค่า & อื่นๆ", NameEN = "⚡ Misc & Options", Icon = "" })
 
 MainTab:AddToggle({
-    Name = "ออโต้ฟาร์มเลเวล (Auto Farm Level)",
+    NameTH = "ออโต้ฟาร์มเลเวล (Auto Farm Level)",
+    NameEN = "Auto Farm Level",
     Default = getgenv().Configs.AutoFarmLevel,
     Callback = function(v) getgenv().Configs.AutoFarmLevel = v end
 })
 
 MainTab:AddToggle({
-    Name = "โจมตีเร็ว (Fast Attack - RegisterAttack)",
+    NameTH = "โจมตีเร็ว (Fast Attack - RegisterAttack)",
+    NameEN = "Fast Attack (RegisterAttack)",
     Default = getgenv().Configs.FastAttack,
     Callback = function(v) getgenv().Configs.FastAttack = v end
 })
 
 MainTab:AddToggle({
-    Name = "ดึงมอนสเตอร์มารวมกัน (Bring Mob)",
+    NameTH = "ดึงมอนสเตอร์มารวมกัน (Bring Mob)",
+    NameEN = "Bring Mob",
     Default = getgenv().Configs.BringMob,
     Callback = function(v) getgenv().Configs.BringMob = v end
 })
 
 MainTab:AddToggle({
-    Name = "ข้ามเลเวลฟาร์ม (Skip Level Farm: Dark Master/Royal Squad)",
+    NameTH = "ข้ามเลเวลฟาร์ม (Skip Level Farm)",
+    NameEN = "Skip Level Farming (Dark Master/Royal Squad)",
     Default = getgenv().Configs.SkipFarmLevel,
     Callback = function(v) getgenv().Configs.SkipFarmLevel = v end
 })
 
 KaitunTab:AddToggle({
-    Name = "ซื้อ & อัปเกรดหมัดอัตโนมัติ (Godhuman Chain)",
+    NameTH = "ซื้อ & อัปเกรดหมัดอัตโนมัติ (Godhuman Chain)",
+    NameEN = "Auto Buy & Upgrade Melee (Godhuman Chain)",
     Default = getgenv().Configs.AutoBuyMelee,
     Callback = function(v) getgenv().Configs.AutoBuyMelee = v end
 })
 
 KaitunTab:AddToggle({
-    Name = "ซื้อฮาคิอัตโนมัติ (Buso, Geppo, Soru, Ken)",
+    NameTH = "ซื้อฮาคิอัตโนมัติ (Buso, Geppo, Soru, Ken)",
+    NameEN = "Auto Buy Haki (Buso, Geppo, Soru, Ken)",
     Default = getgenv().Configs.AutoHaki,
     Callback = function(v) getgenv().Configs.AutoHaki = v end
 })
 
 QuestTab:AddToggle({
-    Name = "ทำเควสต์ดาบเซเบอร์ (Auto Saber Quest - Sea 1)",
+    NameTH = "ทำเควสต์ดาบเซเบอร์ (Auto Saber Quest)",
+    NameEN = "Auto Saber Quest (Sea 1)",
     Default = getgenv().Configs.Saber,
     Callback = function(v) getgenv().Configs.Saber = v end
 })
 
 QuestTab:AddToggle({
-    Name = "ทำเควสต์กระบองเอเนล (Auto Pole V1 - Thunder God)",
+    NameTH = "ทำเควสต์กระบองเอเนล (Auto Pole V1)",
+    NameEN = "Auto Pole V1 (Thunder God)",
     Default = getgenv().Configs.Pole,
     Callback = function(v) getgenv().Configs.Pole = v end
 })
 
 FruitTab:AddToggle({
-    Name = "เก็บผลปีศาจลงกระเป๋าอัตโนมัติ (Auto Store Fruit)",
+    NameTH = "เก็บผลปีศาจลงกระเป๋าอัตโนมัติ",
+    NameEN = "Auto Store Fruit to Inventory",
     Default = getgenv().Configs.AutoStoreFruit,
     Callback = function(v) getgenv().Configs.AutoStoreFruit = v end
 })
 
 FruitTab:AddToggle({
-    Name = "สุ่มผลปีศาจอัตโนมัติ (Auto Random Fruit - Cousin)",
+    NameTH = "สุ่มผลปีศาจอัตโนมัติ (Auto Random Fruit)",
+    NameEN = "Auto Buy Random Fruit (Cousin)",
     Default = getgenv().Configs.AutoRandomFruit,
     Callback = function(v) getgenv().Configs.AutoRandomFruit = v end
 })
 
 StatsTab:AddToggle({
-    Name = "อัปสเตตัสอัตโนมัติ (Auto Allocate Stats Points)",
+    NameTH = "อัปสเตตัสอัตโนมัติ (Auto Stats Points)",
+    NameEN = "Auto Allocate Stats Points",
     Default = getgenv().Configs.AutoStats,
     Callback = function(v) getgenv().Configs.AutoStats = v end
 })
 
 MiscTab:AddButton({
-    Name = "🎁 รับโค้ดของขวัญทั้งหมด (Redeem All Promo Codes)",
+    NameTH = "🎁 รับโค้ดของขวัญทั้งหมด (Redeem Codes)",
+    NameEN = "🎁 Redeem All Promo Codes",
     Callback = function()
         task.spawn(function()
             local codes = {"BANEXPLOIT", "NOMOREHACKS", "WildDares", "BossBuild", "GetPranked", "EARN_FRUITS", "Sub2UncleKizaru", "FIGHT4FRUIT", "kittgaming", "TRIPLEABUSE", "Sub2CaptainMaui", "Sub2Fer999", "Enyu_is_Pro", "Magicbus", "JCWK", "Starcodeheo", "Bluxxy", "SUB2GAMERROBOT_EXP1", "Sub2NoobMaster123", "Sub2Daigrock", "Axiore", "TantaiGaming", "StrawHatMaine", "Sub2OfficialNoobie", "TheGreatAce", "SEATROLLIN", "24NOADMIN", "ADMIN_TROLL", "NEWTROLL", "SECRET_ADMIN", "staffbattle", "NOEXPLOIT", "NOOB2ADMIN", "CODESLIDE", "fruitconcepts"}
@@ -1319,20 +1401,25 @@ MiscTab:AddButton({
                 pcall(function() CommF_:InvokeServer("Redeem", code) end)
                 task.wait(0.05)
             end
-            ObsidianGlassEngine:Notify({ Title = "PayomboyZ HUB", Content = "รับโค้ดของขวัญสำเร็จทั้งหมดแล้ว!" })
+            ObsidianGlassEngine:Notify({
+                Title = "PayomboyZ HUB",
+                Content = ObsidianGlassEngine.CurrentLanguage == "th" and "รับโค้ดของขวัญสำเร็จทั้งหมดแล้ว!" or "Successfully redeemed all promo codes!"
+            })
         end)
     end
 })
 
 MiscTab:AddButton({
-    Name = "🌐 ย้ายเซิร์ฟเวอร์ (Server Hop)",
+    NameTH = "🌐 ย้ายเซิร์ฟเวอร์ (Server Hop)",
+    NameEN = "🌐 Server Hop",
     Callback = function()
         pcall(function() TeleportServer() end)
     end
 })
 
 MiscTab:AddButton({
-    Name = "🔄 เข้าเกมใหม่อีกครั้ง (Rejoin Game)",
+    NameTH = "🔄 เข้าเกมใหม่อีกครั้ง (Rejoin Game)",
+    NameEN = "🔄 Rejoin Game",
     Callback = function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
     end
@@ -1920,7 +2007,7 @@ end)
 
 -- Main Single-Engine Farming Coroutine (From LogicMain.txt)
 task.spawn(function()
-    while task.wait() do
+    while scriptRunning and task.wait() do
         if getgenv().Configs.AutoFarmLevel then
             DieWait()
             
@@ -2088,7 +2175,7 @@ end)
 
 -- Auto Stats & Haki Loop (Throttled to prevent thread freezing)
 task.spawn(function()
-    while task.wait(1.5) do
+    while scriptRunning and task.wait(1.5) do
         if getgenv().Configs.AutoStats and LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Points") and LocalPlayer.Data.Points.Value > 0 then
             local Melee = LocalPlayer.Data.Stats.Melee.Level.Value
             local Defense = LocalPlayer.Data.Stats.Defense.Level.Value
