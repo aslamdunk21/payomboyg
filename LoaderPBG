@@ -144,6 +144,7 @@ local NormalRouter = {
 
     -- 4. Roll Anime To Fight (RATF)
     [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
+    [133623616308412] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
 
     -- 5. Gakuran (GKR)
     [128736949265057] = { Name = "Gakuran", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
