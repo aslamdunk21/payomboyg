@@ -216,6 +216,7 @@ local GAME_DATABASE = {
     { Name = "Roll Anime To Fight", Category = "VIP", PlaceId = 107653945083776, Description = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units", IconPlaceId = 107653945083776 },
     { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed", IconPlaceId = 128736949265057 },
     { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard", IconPlaceId = 126509999114328 },
+    { Name = "Blox Fruit", Category = "VIP", PlaceId = 2753915549, Description = "Auto Farm, Sea Events, Quest & Raid", IconPlaceId = 2753915549 },
 
     -- VVIP Exclusive Games
     { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan", IconPlaceId = 125927821145949 },
