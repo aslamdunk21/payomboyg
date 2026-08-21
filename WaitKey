@@ -526,8 +526,8 @@ local function ShowHopConfirmPopup(gameData)
     local hopBtn = Instance.new("TextButton")
     hopBtn.Size = UDim2.fromOffset(218, 38)
     hopBtn.Position = UDim2.new(1, -238, 1, -54)
-    hopBtn.BackgroundColor3 = COLORS.primary
-    hopBtn.Text = "🚀  เข้าเล่นแมพนี้เลย!"
+    hopBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
+    hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
     hopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     hopBtn.Font = Enum.Font.GothamBold
     hopBtn.TextSize = 12
@@ -537,16 +537,12 @@ local function ShowHopConfirmPopup(gameData)
     local hopC = Instance.new("UICorner")
     hopC.CornerRadius = UDim.new(0, 10)
     hopC.Parent = hopBtn
-    local hopGrad = Instance.new("UIGradient")
-    hopGrad.Color = ColorSequence.new(COLORS.primaryHover, COLORS.primary)
-    hopGrad.Rotation = 90
-    hopGrad.Parent = hopBtn
 
     hopBtn.MouseEnter:Connect(function()
         TweenService:Create(hopBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.primaryHover }):Play()
     end)
     hopBtn.MouseLeave:Connect(function()
-        TweenService:Create(hopBtn, TweenInfo.new(0.18), { BackgroundColor3 = COLORS.primary }):Play()
+        TweenService:Create(hopBtn, TweenInfo.new(0.18), { BackgroundColor3 = Color3.fromRGB(255, 45, 85) }):Play()
     end)
     hopBtn.MouseButton1Click:Connect(function()
         playClickSound()
@@ -1529,11 +1525,9 @@ for index, gameData in ipairs(GAME_DATABASE) do
     local hopServerBtn = Instance.new("TextButton")
     hopServerBtn.Size = UDim2.new(0, 72, 0, 22)
     hopServerBtn.Position = UDim2.new(1, -152, 0, 81)
-    hopServerBtn.BackgroundColor3 = COLORS.primary
+    hopServerBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
     hopServerBtn.Text = "🎮 เล่น"
     hopServerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    hopServerBtn.TextStrokeTransparency = 0.6
-    hopServerBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     hopServerBtn.Font = Enum.Font.GothamBold
     hopServerBtn.TextSize = 10
     hopServerBtn.BorderSizePixel = 0
@@ -1542,11 +1536,6 @@ for index, gameData in ipairs(GAME_DATABASE) do
     local hBtnCorner = Instance.new("UICorner")
     hBtnCorner.CornerRadius = UDim.new(0, 4)
     hBtnCorner.Parent = hopServerBtn
-
-    local hBtnGrad = Instance.new("UIGradient")
-    hBtnGrad.Color = ColorSequence.new(COLORS.primaryHover, COLORS.primary)
-    hBtnGrad.Rotation = 90
-    hBtnGrad.Parent = hopServerBtn
 
     hopServerBtn.MouseEnter:Connect(function()
         TweenService:Create(hopServerBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primaryHover }):Play()
