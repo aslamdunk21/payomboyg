@@ -38,10 +38,10 @@ local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- ════════════════════════════════════════════════════
--- 1. CORE LOGIC ENGINE (100% ต้นฉบับ.txt - LINES 1 TO 1584)
+-- 1. CORE LOGIC ENGINE (100% VERBATIM FROM ต้นฉบับ.txt LINES 1-1584)
 -- ════════════════════════════════════════════════════
 local Config = {
-    AutoFarm = true,
+    AutoFarm = false,
     AutoSkill = true,
     AutoAttack = true,
     AutoAvoid = false,
@@ -49,7 +49,7 @@ local Config = {
     AutoCollectEggs = true,
     SaveSettings = true,
     PerformanceMode = false,
-    Debug = true,
+    Debug = false,
     SafeMode = true,
     EmergencyEscape = true,
 
@@ -160,7 +160,7 @@ local State = {
 local Connections = {}
 local CharacterConnections = {}
 
-local SETTINGS_FILE = "IronSoulDungeonSettings.json"
+local SETTINGS_FILE = "IronSoulSettings.json"
 
 local function syncConfigGlobals()
     _G.AutoFarm = Config.AutoFarm
@@ -266,6 +266,9 @@ local function connectCharacter(signal, callback)
 end
 
 pcall(loadSettings)
+
+Config.AutoFarm = false
+_G.AutoFarm = false
 
 local function disconnectList(list)
     for _, connection in ipairs(list) do
@@ -873,9 +876,50 @@ local function findProximityPrompt(rootObject)
     return rootObject:FindFirstChildWhichIsA("ProximityPrompt", true)
 end
 
+local function beginTravel()
+    if not State.Humanoid then
+        return
+    end
+
+    pcall(function()
+        State.Humanoid.PlatformStand = false
+        State.Humanoid.AutoRotate = true
+        State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end)
+
+    State.UndergroundPhysics = false
+end
+
+local function travelToPosition(position, lookAt)
+    if not State.Character or not State.Root then
+        return false
+    end
+
+    beginTravel()
+
+    local cframe
+
+    if lookAt then
+        cframe = CFrame.new(position, lookAt)
+    else
+        cframe = CFrame.new(position)
+    end
+
+    local ok = pcall(function()
+        State.Character:PivotTo(cframe)
+        State.Root.CFrame = cframe
+        State.Root.AssemblyLinearVelocity = Vector3.zero
+        State.Root.AssemblyAngularVelocity = Vector3.zero
+    end)
+
+    return ok
+end
+
 local function interactWithDoor(door)
     if not door
         or not door.Parent
+        or State.DoorBusy
+        or State.DoorCooldown
         or not State.Root
         or not State.Humanoid then
         return false
@@ -1390,6 +1434,29 @@ local function updateAutoAvoid(dt)
     if Config.EmergencyEscape and State.DangerDistance < 6 then
         emergencyEscape("Emergency Escape")
     end
+end
+
+local function getAccentColor()
+    local c = Config.AccentColor or {92, 82, 145}
+    return Color3.fromRGB(
+        math.clamp(tonumber(c[1]) or 92, 0, 255),
+        math.clamp(tonumber(c[2]) or 82, 0, 255),
+        math.clamp(tonumber(c[3]) or 145, 0, 255)
+    )
+end
+
+local function getAccentSoft()
+    local c = getAccentColor()
+    return c:Lerp(Color3.fromRGB(34, 34, 42), 0.48)
+end
+
+local function setAccentColor(color)
+    Config.AccentColor = {
+        math.floor(color.R * 255 + 0.5),
+        math.floor(color.G * 255 + 0.5),
+        math.floor(color.B * 255 + 0.5),
+    }
+    saveSettings()
 end
 
 -- ════════════════════════════════════════════════════
@@ -2145,15 +2212,15 @@ local CollectTab = Window:AddTab({ Title = "🎒 Dragon Eggs" })
 local DebugTab   = Window:AddTab({ Title = "🔍 Debug Scan Telemetry" })
 
 -- ──────── MAIN TAB: CORE TOGGLES (from ต้นฉบับ.txt) ────────
-MainTab:AddToggle("AutoFarmToggle", { Title = "AUTO FARM", Desc = "Enable automated monster farming & boss targeting", Default = true, Callback = function(t) Config.AutoFarm = t; _G.AutoFarm = t; saveSettings() end })
-MainTab:AddToggle("AutoSkillToggle", { Title = "AUTO SKILL (Q, E, R)", Desc = "Automatically press skill keys when target is active", Default = true, Callback = function(t) Config.AutoSkill = t; _G.AutoSkill = t; saveSettings() end })
-MainTab:AddToggle("AutoAttackToggle", { Title = "AUTO ATTACK (KillAura)", Desc = "Automatically attack target when within KillAura radius", Default = true, Callback = function(t) Config.AutoAttack = t; _G.AutoAttack = t; saveSettings() end })
-MainTab:AddToggle("AutoProgressToggle", { Title = "AUTO PROGRESS STAGE", Desc = "Teleport to Door/Portal transitions after room clear", Default = true, Callback = function(t) Config.AutoProgressStage = t; _G.AutoProgressStage = t; saveSettings() end })
-MainTab:AddToggle("UndergroundToggle", { Title = "UNDERGROUND ORBIT MODE", Desc = "Lock CFrame below target to avoid attacks (Underground)", Default = true, Callback = function(t) Config.UndergroundMode = t; _G.UndergroundMode = t; saveSettings() end })
-MainTab:AddToggle("AutoAvoidToggle", { Title = "AUTO AVOID RED ATTACKS", Desc = "Detect red ground indicators and step out of danger radius", Default = false, Callback = function(t) Config.AutoAvoid = t; _G.AutoAvoid = t; saveSettings() end })
-MainTab:AddToggle("EmergencyToggle", { Title = "EMERGENCY ESCAPE", Desc = "Dodge away instantly upon receiving sudden damage", Default = true, Callback = function(t) Config.EmergencyEscape = t; saveSettings() end })
-MainTab:AddToggle("SafeModeToggle", { Title = "SAFE MODE", Desc = "Use wider safety margins for avoidance", Default = true, Callback = function(t) Config.SafeMode = t; saveSettings() end })
-MainTab:AddToggle("PerformanceToggle", { Title = "PERFORMANCE MODE", Desc = "Reduce scan rates for higher client FPS", Default = false, Callback = function(t) Config.PerformanceMode = t; saveSettings() end })
+MainTab:AddToggle("AutoFarmToggle", { Title = "AUTO FARM", Desc = "Enable automated monster farming & boss targeting", Default = Config.AutoFarm, Callback = function(t) Config.AutoFarm = t; _G.AutoFarm = t; saveSettings() end })
+MainTab:AddToggle("AutoSkillToggle", { Title = "AUTO SKILL (Q, E, R)", Desc = "Automatically press skill keys when target is active", Default = Config.AutoSkill, Callback = function(t) Config.AutoSkill = t; _G.AutoSkill = t; saveSettings() end })
+MainTab:AddToggle("AutoAttackToggle", { Title = "AUTO ATTACK (KillAura)", Desc = "Automatically attack target when within KillAura radius", Default = Config.AutoAttack, Callback = function(t) Config.AutoAttack = t; _G.AutoAttack = t; saveSettings() end })
+MainTab:AddToggle("AutoProgressToggle", { Title = "AUTO PROGRESS STAGE", Desc = "Teleport to Door/Portal transitions after room clear", Default = Config.AutoProgressStage, Callback = function(t) Config.AutoProgressStage = t; _G.AutoProgressStage = t; saveSettings() end })
+MainTab:AddToggle("UndergroundToggle", { Title = "UNDERGROUND ORBIT MODE", Desc = "Lock CFrame below target to avoid attacks (Underground)", Default = Config.UndergroundMode, Callback = function(t) Config.UndergroundMode = t; _G.UndergroundMode = t; saveSettings() end })
+MainTab:AddToggle("AutoAvoidToggle", { Title = "AUTO AVOID RED ATTACKS", Desc = "Detect red ground indicators and step out of danger radius", Default = Config.AutoAvoid, Callback = function(t) Config.AutoAvoid = t; _G.AutoAvoid = t; saveSettings() end })
+MainTab:AddToggle("EmergencyToggle", { Title = "EMERGENCY ESCAPE", Desc = "Dodge away instantly upon receiving sudden damage", Default = Config.EmergencyEscape, Callback = function(t) Config.EmergencyEscape = t; saveSettings() end })
+MainTab:AddToggle("SafeModeToggle", { Title = "SAFE MODE", Desc = "Use wider safety margins for avoidance", Default = Config.SafeMode, Callback = function(t) Config.SafeMode = t; saveSettings() end })
+MainTab:AddToggle("PerformanceToggle", { Title = "PERFORMANCE MODE", Desc = "Reduce scan rates for higher client FPS", Default = Config.PerformanceMode, Callback = function(t) Config.PerformanceMode = t; saveSettings() end })
 
 MainTab:AddButton({ Title = "🚪 TELEPORT TO NEAREST EXIT PORTAL", Callback = function()
     teleportNearPortal()
@@ -2161,10 +2228,10 @@ MainTab:AddButton({ Title = "🚪 TELEPORT TO NEAREST EXIT PORTAL", Callback = f
 end })
 
 -- ──────── COLLECT TAB: DRAGON EGGS ────────
-CollectTab:AddToggle("CollectEggsToggle", { Title = "AUTO COLLECT DRAGON EGGS", Desc = "Scan room and fire proximity interaction for Dragon Eggs", Default = true, Callback = function(t) Config.AutoCollectEggs = t; saveSettings() end })
+CollectTab:AddToggle("CollectEggsToggle", { Title = "AUTO COLLECT DRAGON EGGS", Desc = "Scan room and fire proximity interaction for Dragon Eggs", Default = Config.AutoCollectEggs, Callback = function(t) Config.AutoCollectEggs = t; saveSettings() end })
 
 -- ──────── DEBUG TAB: TELEMETRY (100% ต้นฉบับ.txt) ────────
-DebugTab:AddToggle("DebugScanToggle", { Title = "DEBUG MONITOR SCANNER", Desc = "Enable scan telemetry logging and real-time counters", Default = true, Callback = function(t) Config.Debug = t; saveSettings() end })
+DebugTab:AddToggle("DebugScanToggle", { Title = "DEBUG MONITOR SCANNER", Desc = "Enable scan telemetry logging and real-time counters", Default = Config.Debug, Callback = function(t) Config.Debug = t; saveSettings() end })
 
 local StatusPanelCard = DebugTab:AddParagraph({ Title = "LIVE STATUS TELEMETRY", Desc = "State    Idle\nTarget   -\nDistance -\nHP       -\nDanger   -" })
 local DebugPanelCard  = DebugTab:AddParagraph({ Title = "DEBUG CONSOLE TELEMETRY", Desc = "Initializing scan telemetry..." })
