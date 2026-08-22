@@ -38,6 +38,7 @@ end
 -- 3. รายชื่อคีย์ VVIP (ดึงมาจากไฟล์ VVIP.txt)
 local VVIP_Keys = {
     ["HqknYxtQZPczCtbVnrrUDtpNVMLDltGD"] = true,
+    ["iSYrBFIpuwzmimGRrFTqERIUUoNBQGZO"] = true,
     ["PAYOMVVIP280342PBGZ19"] = true,
     ["yujPUHfzAUMbnlHSntOpRQusYurkNddT"] = true,
     ["GORsrIhgRhgyDhdYquLOprpkbvGRysBr"] = true,
