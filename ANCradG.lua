@@ -1960,7 +1960,7 @@ local RaritiesList = {
     "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
     "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
     "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
-    "Smash", "Emblem", "Chrono", "Dunk", "Blossom", "Zenith", "Limited"
+    "Smash", "Emblem", "Dunk", "Chrono", "Blossom", "Zenith"
 }
 
 local MutationsList = {
