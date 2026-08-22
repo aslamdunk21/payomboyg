@@ -157,6 +157,11 @@ local NormalRouter = {
 
     -- 7. Blox Fruit (BF)
     [2753915549] = { Name = "Blox Fruit", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BFGood", Keywords = {"Blox Fruit"} },
+
+    -- 8. Iron Soul (IRS)
+    [117533937949084] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/IronSoul", Keywords = {"Iron Soul"} },
+    [116456628154258] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
+    [132445869992129] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
