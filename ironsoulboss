@@ -57,7 +57,6 @@ local Config = {
     AutoAvoid            = false,
     AutoProgressStage    = true,
     AutoCollectEggs      = true,
-    AutoCollectChests    = true,
     SaveSettings         = true,
     PerformanceMode      = false,
     Debug                = true,
@@ -158,7 +157,6 @@ local State = {
     },
 
     CollectingEggs       = false,
-    CollectingChests     = false,
     Unloaded             = false,
 }
 
@@ -910,19 +908,7 @@ local function collectDragonEggs()
     end)
 end
 
-local function collectChests()
-    if not Config.AutoCollectChests or not State.Root or State.StageBusy then return end
-    pcall(function()
-        for _, v in pairs(workspace:GetChildren()) do
-            if v:IsA("Model") and string.find(v.Name, "Chest") and v:FindFirstChild("Root") and (v:GetAttribute("HitCount") or 0) > 0 then
-                State.CollectingChests = true
-                travelToPosition(v.Root.Position + Vector3.new(0, 3, 0))
-                task.wait(0.1)
-                State.CollectingChests = false
-            end
-        end
-    end)
-end
+
 
 -- ════════════════════════════════════════════════════
 -- 4. OBSIDIAN GLASSMORPHIC 2 UI ENGINE
@@ -1668,7 +1654,6 @@ end })
 -- ──────── TAB 2: COLLECT & ITEMS ────────
 CollectTab:AddSection("Dungeon Drops & Interactions")
 CollectTab:AddToggle("AutoEggsToggle", { Title = "Auto Collect Dragon Eggs", Desc = "Scan room for Dragon Eggs and fire proximity interaction", Default = true, Callback = function(t) Config.AutoCollectEggs = t end })
-CollectTab:AddToggle("AutoChestsToggle", { Title = "Auto Collect Treasure Chests", Desc = "Automatically approach and harvest spawned treasure chests", Default = true, Callback = function(t) Config.AutoCollectChests = t end })
 
 -- ──────── TAB 3: DEBUG & TELEMETRY (Ported from ต้นฉบับ.txt) ────────
 DebugTab:AddSection("Realtime System Monitor")
@@ -1769,12 +1754,11 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- 🔁 ASYNC LOOP: DRAGON EGG & TREASURE CHEST COLLECTION
+-- 🔁 ASYNC LOOP: DRAGON EGG COLLECTION
 task.spawn(function()
     while task.wait(0.5) do
         if State.Unloaded then break end
         if Config.AutoCollectEggs then pcall(collectDragonEggs) end
-        if Config.AutoCollectChests then pcall(collectChests) end
     end
 end)
 
@@ -1836,4 +1820,3 @@ ObsidianGlassEngine:Notify({
 })
 
 print("✅ [PayomboyZ HUB] Dungeon & Auto Cave Engine fully initialized!")
-
