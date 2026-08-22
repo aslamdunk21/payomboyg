@@ -1,1 +1,1839 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════════════════════╗
+    ║                 PAYOMBOYZ HUB — DUNGEON AUTOMATION ENGINE                    ║
+    ║                 Target Map IDs:                                              ║
+    ║                 - Dungeon Map : 116456628154258                              ║
+    ║                 - Auto Cave   : 132445869992129                              ║
+    ║                 UI Engine: Obsidian Glassmorphic 2 UI Engine                 ║
+    ║                 Core Logic: Derived from ต้นฉบับ.txt                           ║
+    ║                 Features: Auto Farm, Boss Priority, Door/Portal Entry,       ║
+    ║                           Auto Avoid, Emergency Escape, Dragon Eggs &        ║
+    ║                           Treasure Chests, Realtime Debug Telemetry.         ║
+    ╚══════════════════════════════════════════════════════════════════════════════╝
+--]]
+
+-- ════════════════════════════════════════════════════
+-- 0. MAP GATE & SERVICES
+-- ════════════════════════════════════════════════════
+local TARGET_DUNGEON_ID = 116456628154258
+local TARGET_CAVE_ID    = 132445869992129 -- Auto Cave
+
+local currentPlace = game.PlaceId
+local currentGame  = game.GameId
+if currentPlace ~= TARGET_DUNGEON_ID and currentGame ~= TARGET_DUNGEON_ID
+   and currentPlace ~= TARGET_CAVE_ID and currentGame ~= TARGET_CAVE_ID then
+    print("[PayomboyZ HUB] Notice: Current PlaceId (" .. tostring(currentPlace) .. ") running Dungeon Engine...")
+end
+
+task.wait(1)
+
+local CoreGui           = game:GetService("CoreGui")
+local Players           = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser       = game:GetService("VirtualUser")
+local RunService        = game:GetService("RunService")
+local TweenService      = game:GetService("TweenService")
+local UserInputService  = game:GetService("UserInputService")
+local HttpService       = game:GetService("HttpService")
+local Stats             = game:GetService("Stats")
+local SoundService      = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player            = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local character         = player.Character or player.CharacterAdded:Wait()
+local Camera            = workspace.CurrentCamera
+
+player.CharacterAdded:Connect(function(char)
+    character = char
+end)
+
+-- ════════════════════════════════════════════════════
+-- 1. CONFIGURATION & STATE ENGINE (ต้นฉบับ.txt Specification)
+-- ════════════════════════════════════════════════════
+local Config = {
+    AutoFarm             = true,
+    AutoSkill            = true,
+    AutoAttack           = true,
+    AutoAvoid            = false,
+    AutoProgressStage    = true,
+    AutoCollectEggs      = true,
+    AutoCollectChests    = true,
+    SaveSettings         = true,
+    PerformanceMode      = false,
+    Debug                = true,
+    SafeMode             = true,
+    EmergencyEscape      = true,
+
+    AccentColor          = {255, 45, 85},
+
+    OrbitRadius          = 6,
+    OrbitSpeed           = 4,
+    AboveHeight          = 8,
+    UndergroundHeight    = 8,
+    UndergroundMode      = true,
+    KillAuraRadius       = 45,
+
+    TargetRefresh        = 0.20,
+    PortalRefresh        = 1.00,
+    SkillInterval        = 2.50,
+    RoomClearRadius      = 140,
+    RoomClearDelay       = 1.25,
+    TargetSearchRadius   = 600,
+    DoorInteractDistance = 18,
+    DoorOpenWait         = 0.90,
+    ExitSearchRadius     = 600,
+    ExitRetryDelay       = 0.75,
+
+    MovementInterval     = 1 / 30,
+    AttackInterval       = 0.10,
+    StatusInterval       = 0.20,
+    GroundSampleInterval = 0.10,
+}
+
+_G.AutoFarm          = Config.AutoFarm
+_G.AutoSkill         = Config.AutoSkill
+_G.AutoAttack        = Config.AutoAttack
+_G.AutoAvoid         = Config.AutoAvoid
+_G.AutoProgressStage = Config.AutoProgressStage
+_G.OrbitRadius       = Config.OrbitRadius
+_G.OrbitSpeed        = Config.OrbitSpeed
+_G.FloatHeight       = Config.AboveHeight
+_G.UndergroundMode   = Config.UndergroundMode
+_G.KillAuraRadius    = Config.KillAuraRadius
+
+local State = {
+    Character            = nil,
+    Humanoid             = nil,
+    Root                 = nil,
+
+    TargetModel          = nil,
+    TargetRoot           = nil,
+    TargetHumanoid       = nil,
+
+    Portal               = nil,
+    PortalScore          = 0,
+
+    OrbitAngle           = 0,
+    TargetTimer          = 0,
+    PortalTimer          = 0,
+    SkillTimer           = 0,
+    MovementTimer        = 0,
+    AttackTimer          = 0,
+    StatusTimer          = 0,
+    VerticalLockTimer    = 0,
+    SkillCooldowns       = { Q = 0, E = 0, R = 0 },
+
+    StageBusy            = false,
+    StageCooldown        = false,
+    EmergencyBusy        = false,
+    CurrentAction        = "Idle",
+    LastDamageTime       = 0,
+    DamageFlash          = false,
+    LastTargetName       = "-",
+    LastTargetDistance   = math.huge,
+    TargetHealthPercent  = 0,
+    PortalName           = "-",
+    PortalDistance       = math.huge,
+    DangerDistance       = math.huge,
+    DangerPart           = nil,
+    DangerTimer          = 0,
+    GroundY              = nil,
+    GroundTimer          = 0,
+    UndergroundPhysics   = false,
+    LastPortalScan       = 0,
+    RoomClearTimer       = 0,
+    DoorBusy             = false,
+    DoorCooldown         = false,
+    StageBusyTimer       = 0,
+    WatchdogTimer        = 0,
+    FallbackTargetTimer  = 0,
+
+    -- Telemetry & Debug Counters (Ported from ต้นฉบับ.txt)
+    Stats = {
+        Heartbeats       = 0,
+        TargetScans      = 0,
+        PortalScans      = 0,
+        DangerScans      = 0,
+        LastHeartbeatMs  = 0,
+    },
+
+    CollectingEggs       = false,
+    CollectingChests     = false,
+    Unloaded             = false,
+}
+
+local Connections          = {}
+local CharacterConnections = {}
+local SETTINGS_FILE        = "IronSoulDungeonSettings.json"
+
+local function syncConfigGlobals()
+    _G.AutoFarm          = Config.AutoFarm
+    _G.AutoSkill         = Config.AutoSkill
+    _G.AutoAttack        = Config.AutoAttack
+    _G.AutoAvoid         = Config.AutoAvoid
+    _G.AutoProgressStage = Config.AutoProgressStage
+    _G.OrbitRadius       = Config.OrbitRadius
+    _G.OrbitSpeed        = Config.OrbitSpeed
+    _G.FloatHeight       = Config.AboveHeight
+    _G.AboveHeight       = Config.AboveHeight
+    _G.UnderGroundHeight = Config.UndergroundHeight
+    _G.UndergroundMode   = Config.UndergroundMode
+    _G.KillAuraRadius    = Config.KillAuraRadius
+end
+
+local function connect(signal, callback)
+    local conn = signal:Connect(callback)
+    table.insert(Connections, conn)
+    return conn
+end
+
+local function connectCharacter(signal, callback)
+    local conn = signal:Connect(callback)
+    table.insert(CharacterConnections, conn)
+    return conn
+end
+
+local function disconnectList(list)
+    for _, conn in ipairs(list) do
+        if conn.Connected then conn:Disconnect() end
+    end
+    table.clear(list)
+end
+
+-- ════════════════════════════════════════════════════
+-- 2. ANTI-AFK & CHARACTER MANAGEMENT
+-- ════════════════════════════════════════════════════
+if not _G.AntiAFK_Loaded then
+    _G.AntiAFK_Loaded = true
+    connect(player.Idled, function()
+        if State.Unloaded then return end
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.zero)
+        end)
+    end)
+end
+
+local function refreshCharacter(char)
+    disconnectList(CharacterConnections)
+
+    State.Character          = char
+    State.Humanoid           = char:FindFirstChildOfClass("Humanoid")
+    State.Root               = char:FindFirstChild("HumanoidRootPart")
+
+    State.TargetModel        = nil
+    State.TargetRoot         = nil
+    State.TargetHumanoid     = nil
+    State.StageBusy          = false
+    State.StageCooldown      = false
+    State.DoorBusy           = false
+    State.DoorCooldown       = false
+    State.RoomClearTimer     = 0
+    State.StageBusyTimer     = 0
+    State.GroundY            = nil
+    State.GroundTimer        = Config.GroundSampleInterval
+    State.UndergroundPhysics = false
+
+    if State.Humanoid then
+        pcall(function()
+            State.Humanoid.PlatformStand = false
+            State.Humanoid.AutoRotate = true
+        end)
+    end
+
+    if not State.Humanoid then State.Humanoid = char:WaitForChild("Humanoid", 5) end
+    if not State.Root then State.Root = char:WaitForChild("HumanoidRootPart", 5) end
+
+    local function configurePart(obj)
+        if obj:IsA("BasePart") then obj.CanCollide = false end
+    end
+
+    for _, obj in ipairs(char:GetDescendants()) do configurePart(obj) end
+    connectCharacter(char.DescendantAdded, configurePart)
+end
+
+connect(player.CharacterAdded, refreshCharacter)
+if player.Character then refreshCharacter(player.Character) end
+
+-- ════════════════════════════════════════════════════
+-- 3. CORE LOGIC ENGINE (TARGETING, PORTALS, COMBAT)
+-- ════════════════════════════════════════════════════
+local function pressKey(keyName)
+    local keyCode = Enum.KeyCode[keyName]
+    if not keyCode then return end
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(0.02)
+        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    end)
+end
+
+local function beginTravel()
+    if not State.Humanoid then return end
+    pcall(function()
+        State.Humanoid.PlatformStand = false
+        State.Humanoid.AutoRotate = true
+        State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end)
+    State.UndergroundPhysics = false
+end
+
+local function travelToPosition(position, lookAt)
+    if not State.Character or not State.Root then return false end
+    beginTravel()
+    local cf = lookAt and CFrame.new(position, lookAt) or CFrame.new(position)
+    local ok = pcall(function()
+        State.Character:PivotTo(cf)
+        State.Root.CFrame = cf
+        State.Root.AssemblyLinearVelocity = Vector3.zero
+        State.Root.AssemblyAngularVelocity = Vector3.zero
+    end)
+    return ok
+end
+
+-- ── TARGET SCANNER (ต้นฉบับ.txt + Boss Priority + Boss Portal Jitter Fix) ──
+local enemyCandidates = {}
+
+local function looksLikeEnemyModel(model)
+    if not model or not model:IsA("Model") or model == State.Character or Players:GetPlayerFromCharacter(model) ~= nil then
+        return false
+    end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+    if not root or not root:IsA("BasePart") then return false end
+
+    local enemyNpc = workspace:FindFirstChild("EnemyNpc")
+    if enemyNpc then
+        if model:IsDescendantOf(enemyNpc) then return true end
+        if model.Parent == workspace or model.Parent == workspace:FindFirstChild("BossNpc") or model.Name:lower():find("boss") or model:GetAttribute("LevelType") == "Boss" then
+            return true
+        end
+        return false
+    end
+    return true
+end
+
+local function addEnemyCandidate(obj)
+    local m = obj:IsA("Model") and obj or obj:FindFirstAncestorOfClass("Model")
+    if m and m ~= State.Character and looksLikeEnemyModel(m) then enemyCandidates[m] = true end
+end
+
+local function removeEnemyCandidate(obj)
+    if obj:IsA("Model") then enemyCandidates[obj] = nil else
+        local m = obj:FindFirstAncestorOfClass("Model")
+        if m then enemyCandidates[m] = nil end
+    end
+end
+
+for _, obj in ipairs(workspace:GetDescendants()) do addEnemyCandidate(obj) end
+connect(workspace.DescendantAdded, addEnemyCandidate)
+connect(workspace.DescendantRemoving, removeEnemyCandidate)
+
+local function getAliveTargetParts(model)
+    if not model or model == State.Character then return nil, nil end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return nil, nil end
+    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+    if not root or not root:IsA("BasePart") then return nil, nil end
+    return hum, root
+end
+
+local function scoreTarget(model, humanoid, root, distanceSquared)
+    local score = 0
+    local name = string.lower(model.Name)
+    if distanceSquared < 15 * 15 then score += 8 elseif distanceSquared < 35 * 35 then score += 5 else score += 2 end
+    if name:find("boss", 1, true) or model:GetAttribute("LevelType") == "Boss" then score += 500 elseif name:find("elite", 1, true) then score += 15 end
+    if humanoid.MaxHealth > 0 and (humanoid.Health / humanoid.MaxHealth) < 0.25 then score += 4 end
+    if root.Position.Y < -500 then score -= 2 end
+    return score
+end
+
+local fallbackOverlapParams = OverlapParams.new()
+fallbackOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function findNearestTargetFallback()
+    if not State.Root or not State.Root.Parent then return nil, nil, nil end
+    fallbackOverlapParams.FilterDescendantsInstances = { State.Character }
+    local origin = State.Root.Position
+    local radius = Config.TargetSearchRadius
+    local radiusSquared = radius * radius
+    local seen, bestModel, bestRoot, bestHumanoid, bestScore = {}, nil, nil, nil, -math.huge
+
+    local ok, parts = pcall(function() return workspace:GetPartBoundsInRadius(origin, radius, fallbackOverlapParams) end)
+    if ok and parts then
+        for _, part in ipairs(parts) do
+            local model = part:FindFirstAncestorOfClass("Model")
+            if model and model ~= State.Character and not seen[model] then
+                seen[model] = true
+                local hum, root = getAliveTargetParts(model)
+                if hum and root then
+                    local offset = origin - root.Position
+                    local distSq = offset:Dot(offset)
+                    if distSq <= radiusSquared then
+                        local score = scoreTarget(model, hum, root, distSq)
+                        if score > bestScore then
+                            bestModel, bestRoot, bestHumanoid, bestScore = model, root, hum, score
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestModel, bestRoot, bestHumanoid
+end
+
+local findBestExit
+
+local function findNearestTarget()
+    State.Stats.TargetScans += 1
+    if not State.Root or not State.Root.Parent then return nil, nil, nil end
+
+    local exitObj, exitScore, exitType = nil, 0, nil
+    if typeof(findBestExit) == "function" then pcall(function() exitObj, exitScore, exitType = findBestExit() end) end
+    local exitDist = (exitObj and exitObj:IsA("BasePart")) and (State.Root.Position - exitObj.Position).Magnitude or math.huge
+
+    local origin = State.Root.Position
+    local radius = Config.TargetSearchRadius
+    local radiusSq = radius * radius
+    local bestModel, bestRoot, bestHumanoid, bestScore = nil, nil, nil, -math.huge
+
+    for model in pairs(enemyCandidates) do
+        if not model or not model.Parent then
+            enemyCandidates[model] = nil
+        else
+            local hum, root = getAliveTargetParts(model)
+            if hum and root then
+                local distSq = (origin - root.Position):Dot(origin - root.Position)
+                if distSq <= radiusSq then
+                    local targetDist = math.sqrt(distSq)
+                    local name = string.lower(model.Name)
+                    local isBoss = name:find("boss", 1, true) or model:GetAttribute("LevelType") == "Boss"
+
+                    if not isBoss and exitObj and exitDist < 120 and exitDist < (targetDist - 20) then
+                        -- Ignore next-room regular mobs
+                    else
+                        local score = scoreTarget(model, hum, root, distSq)
+                        if score > bestScore then
+                            bestScore = score; bestModel = model; bestRoot = root; bestHumanoid = hum
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if bestModel then return bestModel, bestRoot, bestHumanoid end
+    if State.FallbackTargetTimer > 0 then return nil, nil, nil end
+    State.FallbackTargetTimer = 1.0
+    return findNearestTargetFallback()
+end
+
+local function targetIsValid()
+    local model = State.TargetModel
+    local hum   = State.TargetHumanoid
+    local root  = State.TargetRoot
+    return model and model.Parent and hum and hum.Parent and hum.Health > 0 and root and root.Parent
+end
+
+local function refreshTarget()
+    if not Config.AutoFarm or State.StageBusy then
+        State.TargetModel = nil; State.TargetRoot = nil; State.TargetHumanoid = nil; State.RoomClearTimer = 0
+        return
+    end
+    local model, root, hum = findNearestTarget()
+    State.TargetModel = model
+    State.TargetRoot = root
+    State.TargetHumanoid = hum
+    State.LastTargetName = model and model.Name or "No target"
+    State.LastTargetDistance = root and State.Root and (State.Root.Position - root.Position).Magnitude or math.huge
+    State.TargetHealthPercent = hum and hum.MaxHealth > 0 and math.clamp(hum.Health / hum.MaxHealth, 0, 1) * 100 or 0
+    if model and hum and hum.Health > 0 then State.RoomClearTimer = 0 end
+end
+
+-- ── PORTAL & DOOR ENGINE (ต้นฉบับ.txt) ──
+local portalCandidates = {}
+
+local function getExitType(part)
+    if not part or not part:IsA("BasePart") then return nil end
+    local names = { string.lower(part.Name) }
+    local ancestor = part.Parent
+    local depth = 0
+    while ancestor and depth < 4 do
+        if ancestor:IsA("Model") or ancestor:IsA("Folder") then table.insert(names, string.lower(ancestor.Name)) end
+        ancestor = ancestor.Parent; depth += 1
+    end
+    local hasPortalName, hasDoorName = false, false
+    for _, name in ipairs(names) do
+        if name:find("portal", 1, true) or name:find("teleport", 1, true) or name:find("portalexit", 1, true) or name:find("warp", 1, true) or name:find("next", 1, true) or name:find("finish", 1, true) then
+            hasPortalName = true
+        end
+        if name:find("door", 1, true) or name:find("gate", 1, true) or name:find("exit", 1, true) or name:find("entrance", 1, true) or name:find("rounddoor", 1, true) then
+            hasDoorName = true
+        end
+    end
+    if hasPortalName then return "portal" end
+    if hasDoorName then return "door" end
+    return nil
+end
+
+local function isPortalCandidate(part) return getExitType(part) ~= nil end
+
+local function rebuildPortalCandidates()
+    State.Stats.PortalScans += 1
+    table.clear(portalCandidates)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isPortalCandidate(obj) then table.insert(portalCandidates, obj) end
+    end
+end
+
+local function scorePortal(part, origin)
+    if not part or not part.Parent then return -math.huge, nil end
+    local exitType = getExitType(part)
+    if not exitType then return -math.huge, nil end
+
+    local name = string.lower(part.Name)
+    local parentName = part.Parent and string.lower(part.Parent.Name) or ""
+    local score = 0
+
+    if exitType == "portal" then
+        score += 8
+        if name:find("portal", 1, true) or parentName:find("portal", 1, true) then score += 5 end
+        if name:find("teleport", 1, true) or parentName:find("teleport", 1, true) then score += 3 end
+    else
+        score += 2
+        if name:find("door", 1, true) then score += 2 end
+        if name:find("gate", 1, true) then score += 2 end
+    end
+
+    if name:find("next", 1, true) or name:find("finish", 1, true) or name:find("exit", 1, true) then score += 2 end
+    if part:FindFirstChildOfClass("TouchTransmitter") then score += 3 end
+    if part:FindFirstChildOfClass("ProximityPrompt") then score += 4 end
+    if part.Material == Enum.Material.Neon then score += 3 end
+    if part.Size.Y > 5 and part.Size.X > 5 then score += 2 end
+
+    local distSq = (origin - part.Position):Dot(origin - part.Position)
+    score += math.max(0, 1 - distSq / (50 * 50))
+    return score, exitType
+end
+
+connect(workspace.DescendantAdded, function(obj)
+    if isPortalCandidate(obj) and not table.find(portalCandidates, obj) then table.insert(portalCandidates, obj) end
+end)
+
+connect(workspace.DescendantRemoving, function(obj)
+    local idx = table.find(portalCandidates, obj)
+    if idx then table.remove(portalCandidates, idx) end
+end)
+
+findBestExit = function()
+    if not State.Root then return nil, 0, nil end
+    local origin = State.Root.Position
+    local maxDistSq = Config.ExitSearchRadius * Config.ExitSearchRadius
+    local bestPortal, bestPortalScore = nil, -math.huge
+    local bestDoor, bestDoorScore     = nil, -math.huge
+
+    for idx = #portalCandidates, 1, -1 do
+        local part = portalCandidates[idx]
+        if not part or not part.Parent then
+            table.remove(portalCandidates, idx)
+        else
+            local distSq = (origin - part.Position):Dot(origin - part.Position)
+            if distSq <= maxDistSq then
+                local score, exitType = scorePortal(part, origin)
+                if exitType == "portal" and score > bestPortalScore then
+                    bestPortal = part; bestPortalScore = score
+                elseif exitType == "door" and score > bestDoorScore then
+                    bestDoor = part; bestDoorScore = score
+                end
+            end
+        end
+    end
+
+    if bestPortal then return bestPortal, bestPortalScore, "portal" end
+    if bestDoor then return bestDoor, bestDoorScore, "door" end
+    return nil, 0, nil
+end
+
+local function findProximityPrompt(rootObj)
+    if not rootObj then return nil end
+    if rootObj:IsA("ProximityPrompt") then return rootObj end
+    return rootObj:FindFirstChildOfClass("ProximityPrompt") or rootObj:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+local function TriggerDoorAndPortalRemotes()
+    pcall(function()
+        if ReplicatedStorage:FindFirstChild("Remotes") then
+            local gRound = ReplicatedStorage.Remotes:FindFirstChild("GameRoundRE")
+            if gRound then
+                gRound:FireServer("StartGame")
+                gRound:FireServer("RequestNextStage")
+            end
+        end
+    end)
+end
+
+local function moveToNextStage()
+    if not Config.AutoProgressStage or State.StageBusy or State.StageCooldown or State.DoorBusy or not State.Root or not State.Humanoid or not Config.AutoFarm then
+        return
+    end
+
+    local model, root, hum = findNearestTarget()
+    if model and root and hum and hum.Health > 0 then
+        State.TargetModel = model; State.TargetRoot = root; State.TargetHumanoid = hum; State.RoomClearTimer = 0
+        State.CurrentAction = "Farming"
+        return
+    end
+
+    State.TargetModel = nil; State.TargetRoot = nil; State.TargetHumanoid = nil
+    if State.RoomClearTimer < Config.RoomClearDelay then
+        State.CurrentAction = "Clearing"
+        return
+    end
+
+    State.StageBusy = true
+    State.StageBusyTimer = 0
+
+    -- Priority 1: Trigger Wave / Boss Spawners (PlayerRespawn)
+    local playerRespawnFolder = workspace:FindFirstChild("PlayerRespawn")
+    if playerRespawnFolder then
+        local triggerPart = playerRespawnFolder:FindFirstChildWhichIsA("BasePart", true)
+        if triggerPart and State.Root then
+            State.CurrentAction = "Triggering Wave/Boss Spawn"
+            pcall(function()
+                State.Root.CFrame = triggerPart.CFrame + Vector3.new(0, 3, 0)
+                TriggerDoorAndPortalRemotes()
+            end)
+            task.wait(0.8)
+            local checkModel, checkRoot, checkHum = findNearestTarget()
+            if checkModel and checkRoot and checkHum then
+                State.TargetModel = checkModel; State.TargetRoot = checkRoot; State.TargetHumanoid = checkHum
+                State.StageBusy = false; State.StageBusyTimer = 0
+                return
+            end
+        end
+    end
+
+    -- Priority 2: Stage Doors / Prompts
+    local roundDoor = workspace:FindFirstChild("RoundDoor")
+    if roundDoor then
+        local door = roundDoor:FindFirstChild("Door")
+        local prompt = findProximityPrompt(door or roundDoor)
+        if prompt then
+            State.CurrentAction = "Opening Stage Door"
+            pcall(function()
+                State.Root.CFrame = (door and door:GetPivot() or roundDoor:GetPivot()) + Vector3.new(0, 2, 0)
+                if type(fireproximityprompt) == "function" then fireproximityprompt(prompt) else pressKey("F") end
+                TriggerDoorAndPortalRemotes()
+            end)
+            task.wait(0.6)
+            State.StageBusy = false; State.StageBusyTimer = 0
+            return
+        end
+    end
+
+    -- Priority 3: Exit Portals
+    rebuildPortalCandidates()
+    local exitObject, score, exitType = findBestExit()
+    if roundDoor or exitObject then
+        State.CurrentAction = "Entering RoundDoor/Portal"
+        local portalPart = (roundDoor and (roundDoor:FindFirstChild("Portal") or roundDoor:FindFirstChild("Door"))) or exitObject
+        local rootPart = portalPart and (portalPart:FindFirstChild("Root") or portalPart)
+        if rootPart and State.Root then
+            pcall(function()
+                State.Root.CFrame = rootPart.CFrame + Vector3.new(0, 3, 0)
+                TriggerDoorAndPortalRemotes()
+                if type(firetouchinterest) == "function" and portalPart:IsA("BasePart") then
+                    firetouchinterest(State.Root, portalPart, 0)
+                    task.wait(0.05)
+                    firetouchinterest(State.Root, portalPart, 1)
+                end
+            end)
+        end
+    end
+
+    State.StageBusy = false
+    State.StageBusyTimer = 0
+end
+
+-- ── COMBAT POSITION LOCKING & SKILLS ──
+local controller = nil
+local function getController()
+    if controller and typeof(controller) == "table" and type(controller.PerformAction) == "function" then
+        return controller
+    end
+    pcall(function()
+        local char = player.Character or character
+        if not char then return end
+        local mgr = char:FindFirstChild("LocalControlMgr") or char:WaitForChild("LocalControlMgr", 3)
+        if not mgr then return end
+        local actFolder = mgr:FindFirstChild("Action")
+        local actMods = {}
+        if actFolder then
+            for _, m in ipairs(actFolder:GetChildren()) do
+                if m:IsA("ModuleScript") then pcall(function() actMods[m.Name] = require(m) end) end
+            end
+        end
+        if mgr:FindFirstChild("Controller") then
+            local CtrlClass = require(mgr.Controller)
+            controller = CtrlClass.new(char, actMods)
+        end
+    end)
+    return controller
+end
+
+local function activateTool()
+    if not State.Character then return nil end
+    local tool = State.Character:FindFirstChildOfClass("Tool")
+    if not tool then
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            tool = bp:FindFirstChildOfClass("Tool")
+            if tool and State.Humanoid then pcall(function() State.Humanoid:EquipTool(tool) end) end
+        end
+    end
+    if tool then pcall(function() tool:Activate() end) end
+    return tool
+end
+
+local function Attack(bool)
+    if not Config.AutoFarm then return end
+    bool = bool or Config.AutoSkill or false
+    local ctrl = getController() or controller
+    if ctrl then
+        pcall(function()
+            ctrl:PerformAction("BaseAttack")
+            task.wait()
+            ctrl:StopAction("BaseAttack")
+        end)
+    end
+
+    if bool then
+        task.spawn(function()
+            pcall(function()
+                local pgui = player:FindFirstChild("PlayerGui")
+                local skillsFolder = pgui and pgui:FindFirstChild("ScreenInput")
+                    and pgui.ScreenInput:FindFirstChild("PCInput")
+                    and pgui.ScreenInput.PCInput:FindFirstChild("Skills")
+
+                if skillsFolder then
+                    for _, v in pairs(skillsFolder:GetChildren()) do
+                        if v:IsA("ImageButton") and v:GetAttribute("OnCD") == false then
+                            if v:GetAttribute("FullCharge") == true then
+                                if ctrl then ctrl:PerformAction("SkillU") end
+                                task.wait(0.1)
+                                return
+                            end
+                            if ctrl then
+                                ctrl:PerformAction("Skill1")
+                                task.wait(0.1)
+                                ctrl:PerformAction("Skill2")
+                                task.wait(0.1)
+                                ctrl:PerformAction("SkillAW")
+                            end
+                        end
+                    end
+                end
+            end)
+        end)
+    end
+end
+
+local SkillCooldownConfig = { Q = 0.70, E = 0.70, R = 1.50 }
+local function useSkills()
+    if not Config.AutoFarm or not Config.AutoSkill or not targetIsValid() or State.StageBusy then return end
+    local now = os.clock()
+    for _, key in ipairs({ "E", "Q", "R" }) do
+        if now >= (State.SkillCooldowns[key] or 0) then
+            pressKey(key)
+            State.SkillCooldowns[key] = now + (SkillCooldownConfig[key] or 1.0)
+            task.wait(0.15)
+        end
+    end
+    Attack(true)
+end
+
+local function updateKillAura()
+    if not Config.AutoFarm or State.StageBusy then return end
+    Attack(Config.AutoSkill)
+end
+
+local function setUndergroundPhysics(enabled)
+    if not State.Humanoid or not State.Humanoid.Parent then return end
+    if State.UndergroundPhysics == enabled then return end
+    pcall(function()
+        if enabled then
+            State.Humanoid.AutoRotate = false
+            State.Humanoid.PlatformStand = true
+            State.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+        else
+            State.Humanoid.PlatformStand = false
+            State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            State.Humanoid.AutoRotate = true
+        end
+    end)
+    State.UndergroundPhysics = enabled
+end
+
+local function getDesiredCombatCFrame()
+    if not Config.AutoFarm or State.StageBusy or not State.Root or not State.TargetRoot or not State.Humanoid or not targetIsValid() then
+        return nil
+    end
+
+    local targetPosition = State.TargetRoot.Position
+    local radius = Config.OrbitRadius
+    local verticalOffset = Config.UndergroundMode and math.max(0, tonumber(Config.UndergroundHeight) or 0) or math.max(0, tonumber(Config.AboveHeight) or 0)
+
+    State.OrbitAngle += (1 / 60) * Config.OrbitSpeed
+    local x = math.sin(State.OrbitAngle) * radius
+    local z = math.cos(State.OrbitAngle) * radius
+
+    local y, tilt
+    if Config.UndergroundMode then
+        setUndergroundPhysics(true)
+        y = targetPosition.Y - verticalOffset
+        tilt = 90
+    else
+        setUndergroundPhysics(false)
+        y = targetPosition.Y + verticalOffset
+        tilt = -90
+    end
+
+    return CFrame.new(targetPosition.X + x, y, targetPosition.Z + z) * CFrame.Angles(math.rad(tilt), 0, 0)
+end
+
+local function lockCombatPosition()
+    local desiredCFrame = getDesiredCombatCFrame()
+    if not desiredCFrame or not State.Character or not State.Root then return end
+    pcall(function() State.Character:PivotTo(desiredCFrame) end)
+    pcall(function()
+        State.Root.CFrame = desiredCFrame
+        State.Root.AssemblyLinearVelocity = Vector3.zero
+        State.Root.AssemblyAngularVelocity = Vector3.zero
+    end)
+end
+
+-- ── AUTO AVOID & EMERGENCY ESCAPE ──
+local function isRedAttackObject(object)
+    if not object:IsA("BasePart") then return false end
+    local color = object.Color
+    local hue, saturation, value = Color3.toHSV(color)
+    local redHue = hue < 0.055 or hue > 0.945
+    return redHue and saturation > 0.55 and value > 0.35 and color.R > color.G * 1.35 and color.R > color.B * 1.35
+end
+
+local dangerOverlapParams = OverlapParams.new()
+dangerOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function findNearbyRedAttack()
+    State.Stats.DangerScans += 1
+    if not Config.AutoAvoid or not State.Root then return nil end
+    dangerOverlapParams.FilterDescendantsInstances = { State.Character }
+    local origin = State.Root.Position
+    local dangerRadius = 35
+    local nearest, nearestDistSq = nil, dangerRadius * dangerRadius
+    local ok, parts = pcall(function() return workspace:GetPartBoundsInRadius(origin, dangerRadius, dangerOverlapParams) end)
+    if ok and parts then
+        for _, object in ipairs(parts) do
+            if isRedAttackObject(object) then
+                local distSq = (origin - object.Position):Dot(origin - object.Position)
+                if distSq < nearestDistSq then nearestDistSq = distSq; nearest = object end
+            end
+        end
+    end
+    return nearest
+end
+
+local function emergencyEscape(reason)
+    if not Config.EmergencyEscape or State.EmergencyBusy or not State.Root or not State.Humanoid then return end
+    State.EmergencyBusy = true
+    State.CurrentAction = reason or "Emergency Escape"
+    local root, humanoid = State.Root, State.Humanoid
+    local danger = State.DangerPart
+    local direction
+    if danger and danger.Parent then
+        direction = Vector3.new((root.Position - danger.Position).X, 0, (root.Position - danger.Position).Z)
+    end
+    if not direction or direction.Magnitude < 0.05 then
+        direction = Vector3.new(math.cos(State.OrbitAngle), 0, math.sin(State.OrbitAngle))
+    else
+        direction = direction.Unit
+    end
+    humanoid:MoveTo(root.Position + direction * 18)
+    task.delay(0.45, function()
+        if not State.Unloaded then
+            State.EmergencyBusy = false
+            State.CurrentAction = Config.AutoFarm and "Farming" or "Idle"
+        end
+    end)
+end
+
+local function updateAutoAvoid(dt)
+    if not Config.AutoAvoid or State.StageBusy or State.EmergencyBusy or not State.Root or not State.Humanoid then
+        State.DangerPart = nil; State.DangerDistance = math.huge; return
+    end
+    State.DangerTimer += dt
+    local scanInterval = Config.PerformanceMode and 0.30 or 0.12
+    if State.DangerTimer >= scanInterval then
+        State.DangerTimer = 0; State.DangerPart = findNearbyRedAttack()
+    end
+    local danger = State.DangerPart
+    if not danger or not danger.Parent then
+        State.DangerPart = nil; State.DangerDistance = math.huge
+        if Config.AutoFarm then State.CurrentAction = "Farming" end
+        return
+    end
+    local toDanger = danger.Position - State.Root.Position
+    State.DangerDistance = Vector3.new(toDanger.X, 0, toDanger.Z).Magnitude
+    local predicted = danger.Position + danger.AssemblyLinearVelocity * 0.20
+    local away = Vector3.new((State.Root.Position - predicted).X, 0, (State.Root.Position - predicted).Z)
+    away = away.Magnitude < 0.05 and Vector3.new(1, 0, 0) or away.Unit
+    local safeDistance = Config.SafeMode and 16 or 12
+    State.CurrentAction = "Avoiding Attack"
+    State.Humanoid:MoveTo(State.Root.Position + away * safeDistance)
+    if Config.EmergencyEscape and State.DangerDistance < 6 then emergencyEscape("Emergency Escape") end
+end
+
+-- ── DRAGON EGG & TREASURE CHEST COLLECTION ──
+local function collectDragonEggs()
+    if not Config.AutoCollectEggs or not State.Root or State.StageBusy then return end
+    pcall(function()
+        for _, v in pairs(workspace:GetChildren()) do
+            if v:FindFirstChild("DragonEgg") and v.DragonEgg:FindFirstChild("EggModel") and v.DragonEgg.EggModel:FindFirstChild("Root") and v:FindFirstChild("Root") and not v:GetAttribute("Active") then
+                State.CollectingEggs = true
+                travelToPosition(v.DragonEgg.EggModel.Root.Position)
+                task.wait(0.1)
+                pcall(fireproximityprompt, v.Root.Interact_ProximityPrompt)
+                State.CollectingEggs = false
+            end
+        end
+    end)
+end
+
+local function collectChests()
+    if not Config.AutoCollectChests or not State.Root or State.StageBusy then return end
+    pcall(function()
+        for _, v in pairs(workspace:GetChildren()) do
+            if v:IsA("Model") and string.find(v.Name, "Chest") and v:FindFirstChild("Root") and (v:GetAttribute("HitCount") or 0) > 0 then
+                State.CollectingChests = true
+                travelToPosition(v.Root.Position + Vector3.new(0, 3, 0))
+                task.wait(0.1)
+                State.CollectingChests = false
+            end
+        end
+    end)
+end
+
+-- ════════════════════════════════════════════════════
+-- 4. OBSIDIAN GLASSMORPHIC 2 UI ENGINE
+-- ════════════════════════════════════════════════════
+local COLORS = {
+    backdrop       = Color3.fromRGB(12, 5, 8),
+    shell          = Color3.fromRGB(20, 10, 14),
+    glass          = Color3.fromRGB(32, 14, 20),
+    glassDeep      = Color3.fromRGB(25, 11, 16),
+    glassRaised    = Color3.fromRGB(48, 18, 28),
+    userPanel      = Color3.fromRGB(28, 12, 18),
+    surface        = Color3.fromRGB(42, 18, 26),
+    surfaceRaised  = Color3.fromRGB(58, 24, 34),
+    surfaceHover   = Color3.fromRGB(78, 30, 44),
+    surfacePressed = Color3.fromRGB(34, 14, 20),
+    input          = Color3.fromRGB(20, 9, 13),
+    inputFocus     = Color3.fromRGB(36, 14, 22),
+    divider        = Color3.fromRGB(140, 40, 60),
+    primary        = Color3.fromRGB(255, 45, 85),
+    primaryHover   = Color3.fromRGB(255, 75, 110),
+    primaryPressed = Color3.fromRGB(210, 30, 65),
+    secondary      = Color3.fromRGB(52, 18, 28),
+    text           = Color3.fromRGB(255, 255, 255),
+    textMuted      = Color3.fromRGB(242, 218, 228),
+    textFaint      = Color3.fromRGB(210, 168, 182),
+    cyan           = Color3.fromRGB(255, 55, 85),
+    success        = Color3.fromRGB(46, 224, 140),
+    warning        = Color3.fromRGB(255, 185, 70),
+    danger         = Color3.fromRGB(255, 60, 60),
+    disabled       = Color3.fromRGB(50, 25, 32),
+}
+
+local ObsidianGlassEngine = { Options = {} }
+
+local function playClickSound()
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://6895079853"
+        sound.Volume = 0.3
+        sound.Parent = SoundService
+        sound:Play()
+        sound.Ended:Connect(function() sound:Destroy() end)
+    end)
+end
+
+local customAvatarAsset = nil
+local function loadCustomAvatarImage()
+    if customAvatarAsset then return customAvatarAsset end
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local fileName  = "payomboyz_avatar.jpg"
+    
+    pcall(function()
+        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+            local getAsset = getcustomasset or getsynasset
+            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+            if not isFileExist then
+                local imageBytes = game:HttpGet(avatarUrl)
+                if imageBytes and #imageBytes > 0 then writefile(fileName, imageBytes) end
+            end
+            if typeof(isfile) == "function" and isfile(fileName) then customAvatarAsset = getAsset(fileName) end
+        end
+    end)
+
+    if not customAvatarAsset then customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150" end
+    return customAvatarAsset
+end
+
+function ObsidianGlassEngine:Notify(cfg)
+    pcall(function()
+        local title    = cfg.Title or "System"
+        local content  = cfg.Content or ""
+        local duration = cfg.Duration or 4
+        
+        local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        local notifHolder = parentGui:FindFirstChild("ObsidianGlass_NotifHolder")
+        if not notifHolder then
+            notifHolder = Instance.new("ScreenGui")
+            notifHolder.Name = "ObsidianGlass_NotifHolder"
+            notifHolder.ResetOnSpawn = false
+            notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            notifHolder.Parent = parentGui
+        end
+        
+        local toast = Instance.new("Frame")
+        toast.Size = UDim2.new(0, 300, 0, 65)
+        toast.Position = UDim2.new(1, 20, 1, -85)
+        toast.BackgroundColor3 = COLORS.glass
+        toast.BackgroundTransparency = 0.15
+        toast.BorderSizePixel = 0
+        toast.Parent = notifHolder
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = toast
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = COLORS.cyan
+        stroke.Thickness = 1.5
+        stroke.Parent = toast
+        
+        local tTitle = Instance.new("TextLabel")
+        tTitle.Size = UDim2.new(1, -20, 0, 22)
+        tTitle.Position = UDim2.new(0, 10, 0, 6)
+        tTitle.BackgroundTransparency = 1
+        tTitle.Text = title
+        tTitle.TextColor3 = COLORS.cyan
+        tTitle.Font = Enum.Font.GothamBold
+        tTitle.TextSize = 13
+        tTitle.TextXAlignment = Enum.TextXAlignment.Left
+        tTitle.Parent = toast
+        
+        local tDesc = Instance.new("TextLabel")
+        tDesc.Size = UDim2.new(1, -20, 0, 32)
+        tDesc.Position = UDim2.new(0, 10, 0, 26)
+        tDesc.BackgroundTransparency = 1
+        tDesc.Text = content
+        tDesc.TextColor3 = COLORS.text
+        tDesc.Font = Enum.Font.Gotham
+        tDesc.TextSize = 11
+        tDesc.TextWrapped = true
+        tDesc.TextXAlignment = Enum.TextXAlignment.Left
+        tDesc.Parent = toast
+        
+        playClickSound()
+        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -320, 1, -85) }):Play()
+        task.delay(duration, function()
+            if toast and toast.Parent then
+                local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
+                tw:Play()
+                tw.Completed:Connect(function() toast:Destroy() end)
+            end
+        end)
+    end)
+end
+
+function ObsidianGlassEngine:CreateWindow(cfg)
+    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    if parentGui:FindFirstChild("ObsidianGlass2_DungeonUI") then
+        parentGui.ObsidianGlass2_DungeonUI:Destroy()
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ObsidianGlass2_DungeonUI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 99999
+    gui.Parent = parentGui
+
+    local uiScale = Instance.new("UIScale")
+    local function updateScale()
+        if Camera and Camera.ViewportSize then
+            local vp = Camera.ViewportSize
+            local scaleX = (vp.X - 24) / 920
+            local scaleY = (vp.Y - 24) / 600
+            uiScale.Scale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
+        end
+    end
+    updateScale()
+    if Camera then Camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale) end
+    uiScale.Parent = gui
+
+    local shell = Instance.new("Frame")
+    shell.Name = "MainShell"
+    shell.Size = UDim2.fromOffset(920, 600)
+    shell.AnchorPoint = Vector2.new(0.5, 0.5)
+    shell.Position = UDim2.new(0.5, 0, 0.5, 0)
+    shell.BackgroundColor3 = COLORS.shell
+    shell.BackgroundTransparency = 0.20
+    shell.BorderSizePixel = 0
+    shell.ClipsDescendants = true
+    shell.Parent = gui
+
+    local shellCorner = Instance.new("UICorner")
+    shellCorner.CornerRadius = UDim.new(0, 18)
+    shellCorner.Parent = shell
+
+    local shellStroke = Instance.new("UIStroke")
+    shellStroke.Color = COLORS.cyan
+    shellStroke.Thickness = 1.5
+    shellStroke.Transparency = 0.3
+    shellStroke.Parent = shell
+
+    -- Snow Particles Animation Layer
+    local snowLayer = Instance.new("Frame")
+    snowLayer.Name = "SnowLayer"
+    snowLayer.Size = UDim2.fromScale(1, 1)
+    snowLayer.BackgroundTransparency = 1
+    snowLayer.ZIndex = 2
+    snowLayer.Parent = shell
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 30 do
+            local dot = Instance.new("Frame")
+            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+            dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+            dot.BackgroundTransparency = math.random(30, 70) / 100
+            dot.BorderSizePixel = 0
+            dot.Parent = snowLayer
+
+            local dCorner = Instance.new("UICorner")
+            dCorner.CornerRadius = UDim.new(1, 0)
+            dCorner.Parent = dot
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 40) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
+
+    -- Toggle Capsule (Floating Icon with Metrics)
+    local toggleCapsule = Instance.new("Frame")
+    toggleCapsule.Name = "ObsidianToggleCapsule"
+    toggleCapsule.Size = UDim2.fromOffset(230, 58)
+    toggleCapsule.Position = UDim2.new(0, 15, 0.5, -29)
+    toggleCapsule.BackgroundColor3 = COLORS.shell
+    toggleCapsule.BackgroundTransparency = 0.18
+    toggleCapsule.BorderSizePixel = 0
+    toggleCapsule.ClipsDescendants = true
+    toggleCapsule.ZIndex = 99999
+    toggleCapsule.Parent = gui
+
+    local tcCorner = Instance.new("UICorner")
+    tcCorner.CornerRadius = UDim.new(0, 16)
+    tcCorner.Parent = toggleCapsule
+
+    local tcStroke = Instance.new("UIStroke")
+    tcStroke.Color = COLORS.cyan
+    tcStroke.Thickness = 1.5
+    tcStroke.Transparency = 0.2
+    tcStroke.Parent = toggleCapsule
+
+    local capAvatarFrame = Instance.new("Frame")
+    capAvatarFrame.Size = UDim2.fromOffset(42, 42)
+    capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
+    capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+    capAvatarFrame.BorderSizePixel = 0
+    capAvatarFrame.ZIndex = 3
+    capAvatarFrame.Parent = toggleCapsule
+
+    local caCorner = Instance.new("UICorner")
+    caCorner.CornerRadius = UDim.new(1, 0)
+    caCorner.Parent = capAvatarFrame
+
+    local capAvatarImg = Instance.new("ImageLabel")
+    capAvatarImg.Size = UDim2.fromScale(1, 1)
+    capAvatarImg.BackgroundTransparency = 1
+    capAvatarImg.Image = loadCustomAvatarImage()
+    capAvatarImg.ZIndex = 4
+    capAvatarImg.Parent = capAvatarFrame
+
+    local caiCorner = Instance.new("UICorner")
+    caiCorner.CornerRadius = UDim.new(1, 0)
+    caiCorner.Parent = capAvatarImg
+
+    local capUserLabel = Instance.new("TextLabel")
+    capUserLabel.Size = UDim2.new(1, -58, 0, 18)
+    capUserLabel.Position = UDim2.new(0, 56, 0, 10)
+    capUserLabel.BackgroundTransparency = 1
+    capUserLabel.Text = "@" .. player.Name
+    capUserLabel.TextColor3 = COLORS.text
+    capUserLabel.Font = Enum.Font.GothamBold
+    capUserLabel.TextSize = 12
+    capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capUserLabel.ZIndex = 3
+    capUserLabel.Parent = toggleCapsule
+
+    local capMetricsLabel = Instance.new("TextLabel")
+    capMetricsLabel.Size = UDim2.new(1, -58, 0, 16)
+    capMetricsLabel.Position = UDim2.new(0, 56, 0, 28)
+    capMetricsLabel.BackgroundTransparency = 1
+    capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
+    capMetricsLabel.TextColor3 = COLORS.cyan
+    capMetricsLabel.Font = Enum.Font.GothamBold
+    capMetricsLabel.TextSize = 10
+    capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capMetricsLabel.ZIndex = 3
+    capMetricsLabel.Parent = toggleCapsule
+
+    task.spawn(function()
+        local frameCount, lastFpsTime, fpsVal = 0, tick(), 60
+        local renderConn = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local now = tick()
+            if now - lastFpsTime >= 1 then
+                fpsVal = frameCount; frameCount = 0; lastFpsTime = now
+            end
+        end)
+
+        while task.wait(0.8) do
+            if not gui or not gui.Parent then if renderConn then renderConn:Disconnect() end break end
+            local pingVal = 0
+            pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+        end
+    end)
+
+    local capBtn = Instance.new("TextButton")
+    capBtn.Size = UDim2.fromScale(1, 1)
+    capBtn.BackgroundTransparency = 1
+    capBtn.Text = ""
+    capBtn.ZIndex = 10
+    capBtn.Parent = toggleCapsule
+
+    local tDragging, tDragInput, tDragStart, tStartPos
+    local hasDragged = false
+
+    capBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            tDragging = true; hasDragged = false; tDragStart = input.Position; tStartPos = toggleCapsule.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then tDragging = false end
+            end)
+        end
+    end)
+
+    capBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then tDragInput = input end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == tDragInput and tDragging then
+            local delta = input.Position - tDragStart
+            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then hasDragged = true end
+            toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    capBtn.MouseButton1Click:Connect(function()
+        if not hasDragged then playClickSound(); shell.Visible = not shell.Visible end
+    end)
+
+    -- Left Sidebar Navigation
+    local userPanel = Instance.new("Frame")
+    userPanel.Name = "UserPanel"
+    userPanel.Size = UDim2.new(0, 240, 1, 0)
+    userPanel.BackgroundColor3 = COLORS.userPanel
+    userPanel.BackgroundTransparency = 0.20
+    userPanel.BorderSizePixel = 0
+    userPanel.ZIndex = 5
+    userPanel.Parent = shell
+
+    local avatarFrame = Instance.new("Frame")
+    avatarFrame.Size = UDim2.fromOffset(44, 44)
+    avatarFrame.Position = UDim2.new(0, 14, 0, 14)
+    avatarFrame.BackgroundColor3 = COLORS.glassDeep
+    avatarFrame.BorderSizePixel = 0
+    avatarFrame.ZIndex = 10
+    avatarFrame.Parent = userPanel
+
+    local avCorner = Instance.new("UICorner")
+    avCorner.CornerRadius = UDim.new(1, 0)
+    avCorner.Parent = avatarFrame
+
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Size = UDim2.fromScale(1, 1)
+    avatarImg.BackgroundTransparency = 1
+    avatarImg.Image = loadCustomAvatarImage()
+    avatarImg.ZIndex = 11
+    avatarImg.Parent = avatarFrame
+
+    local displayNameLabel = Instance.new("TextLabel")
+    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
+    displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
+    displayNameLabel.BackgroundTransparency = 1
+    displayNameLabel.Text = player.DisplayName
+    displayNameLabel.TextColor3 = COLORS.text
+    displayNameLabel.Font = Enum.Font.GothamBold
+    displayNameLabel.TextSize = 13
+    displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    displayNameLabel.ZIndex = 10
+    displayNameLabel.Parent = userPanel
+
+    local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
+    usernameLabel.Position = UDim2.new(0, 66, 0, 33)
+    usernameLabel.BackgroundTransparency = 1
+    usernameLabel.Text = "@" .. player.Name
+    usernameLabel.TextColor3 = COLORS.textMuted
+    usernameLabel.Font = Enum.Font.Gotham
+    usernameLabel.TextSize = 10
+    usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    usernameLabel.ZIndex = 10
+    usernameLabel.Parent = userPanel
+
+    local tabScroll = Instance.new("ScrollingFrame")
+    tabScroll.Name = "VerticalTabScroll"
+    tabScroll.Size = UDim2.new(1, -20, 1, -178)
+    tabScroll.Position = UDim2.new(0, 10, 0, 126)
+    tabScroll.BackgroundTransparency = 1
+    tabScroll.ScrollBarThickness = 3
+    tabScroll.ScrollBarImageColor3 = COLORS.cyan
+    tabScroll.ZIndex = 10
+    tabScroll.Parent = userPanel
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.FillDirection = Enum.FillDirection.Vertical
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabLayout.Parent = tabScroll
+
+    -- Main Content Right Panel
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = UDim2.new(1, -240, 1, 0)
+    mainPanel.Position = UDim2.new(0, 240, 0, 0)
+    mainPanel.BackgroundTransparency = 1
+    mainPanel.ZIndex = 5
+    mainPanel.Parent = shell
+
+    local headerBar = Instance.new("Frame")
+    headerBar.Size = UDim2.new(1, 0, 0, 48)
+    headerBar.BackgroundTransparency = 1
+    headerBar.Parent = mainPanel
+
+    local mainTitle = Instance.new("TextLabel")
+    mainTitle.Size = UDim2.new(0, 300, 0, 22)
+    mainTitle.Position = UDim2.new(0, 20, 0, 8)
+    mainTitle.BackgroundTransparency = 1
+    mainTitle.Text = cfg.Title or "PayomboyZ HUB"
+    mainTitle.TextColor3 = COLORS.text
+    mainTitle.Font = Enum.Font.GothamBold
+    mainTitle.TextSize = 18
+    mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainTitle.Parent = headerBar
+
+    local mainSubTitle = Instance.new("TextLabel")
+    mainSubTitle.Size = UDim2.new(0, 400, 0, 16)
+    mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
+    mainSubTitle.BackgroundTransparency = 1
+    mainSubTitle.Text = cfg.SubTitle or "Dungeon Automation Engine (Map: 116456628154258)"
+    mainSubTitle.TextColor3 = COLORS.textMuted
+    mainSubTitle.Font = Enum.Font.Gotham
+    mainSubTitle.TextSize = 11
+    mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainSubTitle.Parent = headerBar
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(28, 28)
+    closeBtn.Position = UDim2.new(1, -38, 0, 10)
+    closeBtn.BackgroundColor3 = COLORS.glass
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.textMuted
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.Parent = headerBar
+    closeBtn.MouseButton1Click:Connect(function() playClickSound(); shell.Visible = not shell.Visible end)
+
+    local dragging, dragInput, dragStart, startPos
+    headerBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = shell.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    headerBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    local WindowObj = { Tabs = {}, CurrentTab = nil }
+
+    function WindowObj:AddTab(tCfg)
+        local tabTitle = tCfg.Title or "Tab"
+        local TabObj = { Buttons = {} }
+
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Size = UDim2.new(1, 0, 0, 36)
+        tabBtn.BackgroundColor3 = COLORS.glassDeep
+        tabBtn.BackgroundTransparency = 0.5
+        tabBtn.Text = "   " .. tabTitle
+        tabBtn.TextColor3 = COLORS.textMuted
+        tabBtn.Font = Enum.Font.GothamBold
+        tabBtn.TextSize = 13
+        tabBtn.TextXAlignment = Enum.TextXAlignment.Left
+        tabBtn.Parent = tabScroll
+
+        local tbCorner = Instance.new("UICorner")
+        tbCorner.CornerRadius = UDim.new(0, 8)
+        tbCorner.Parent = tabBtn
+
+        local pageScroll = Instance.new("ScrollingFrame")
+        pageScroll.Name = "Page_" .. tabTitle
+        pageScroll.Size = UDim2.new(1, -30, 1, -60)
+        pageScroll.Position = UDim2.new(0, 15, 0, 52)
+        pageScroll.BackgroundTransparency = 1
+        pageScroll.Visible = false
+        pageScroll.ScrollBarThickness = 4
+        pageScroll.ScrollBarImageColor3 = COLORS.primary
+        pageScroll.Parent = mainPanel
+
+        local pageLayout = Instance.new("UIListLayout")
+        pageLayout.Padding = UDim.new(0, 8)
+        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        pageLayout.Parent = pageScroll
+
+        pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+        end)
+
+        function TabObj:Select()
+            for _, t in ipairs(WindowObj.Tabs) do
+                t.Page.Visible = false
+                t.TabButton.BackgroundColor3 = COLORS.glassDeep
+                t.TabButton.BackgroundTransparency = 0.5
+                t.TabButton.TextColor3 = COLORS.textMuted
+            end
+            pageScroll.Visible = true
+            tabBtn.BackgroundColor3 = COLORS.surfaceRaised
+            tabBtn.BackgroundTransparency = 0.18
+            tabBtn.TextColor3 = COLORS.text
+            WindowObj.CurrentTab = TabObj
+        end
+
+        tabBtn.MouseButton1Click:Connect(function() playClickSound(); TabObj:Select() end)
+
+        TabObj.TabButton = tabBtn
+        TabObj.Page = pageScroll
+
+        -- WIDGETS
+        function TabObj:AddToggle(id, togCfg)
+            local title = togCfg.Title or id
+            local desc = togCfg.Desc or ""
+            local defaultState = togCfg.Default or false
+            local callback = togCfg.Callback or function() end
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 52)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local lblTitle = Instance.new("TextLabel")
+            lblTitle.Size = UDim2.new(1, -70, 0, 20)
+            lblTitle.Position = UDim2.new(0, 12, 0, 6)
+            lblTitle.BackgroundTransparency = 1
+            lblTitle.Text = title
+            lblTitle.TextColor3 = COLORS.text
+            lblTitle.Font = Enum.Font.GothamBold
+            lblTitle.TextSize = 13
+            lblTitle.TextXAlignment = Enum.TextXAlignment.Left
+            lblTitle.Parent = frame
+
+            local lblDesc = Instance.new("TextLabel")
+            lblDesc.Size = UDim2.new(1, -70, 0, 18)
+            lblDesc.Position = UDim2.new(0, 12, 0, 26)
+            lblDesc.BackgroundTransparency = 1
+            lblDesc.Text = desc
+            lblDesc.TextColor3 = COLORS.textMuted
+            lblDesc.Font = Enum.Font.Gotham
+            lblDesc.TextSize = 10
+            lblDesc.TextXAlignment = Enum.TextXAlignment.Left
+            lblDesc.Parent = frame
+
+            local switchBg = Instance.new("Frame")
+            switchBg.Size = UDim2.fromOffset(44, 22)
+            switchBg.Position = UDim2.new(1, -54, 0.5, -11)
+            switchBg.BackgroundColor3 = defaultState and COLORS.primary or COLORS.surface
+            switchBg.Parent = frame
+
+            local swCorner = Instance.new("UICorner")
+            swCorner.CornerRadius = UDim.new(1, 0)
+            swCorner.Parent = switchBg
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.fromOffset(18, 18)
+            knob.Position = defaultState and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+            knob.BackgroundColor3 = COLORS.text
+            knob.Parent = switchBg
+
+            local knCorner = Instance.new("UICorner")
+            knCorner.CornerRadius = UDim.new(1, 0)
+            knCorner.Parent = knob
+
+            local state = defaultState
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.fromScale(1, 1)
+            btn.BackgroundTransparency = 1
+            btn.Text = ""
+            btn.Parent = frame
+
+            btn.MouseButton1Click:Connect(function()
+                playClickSound()
+                state = not state
+                switchBg.BackgroundColor3 = state and COLORS.primary or COLORS.surface
+                knob.Position = state and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+                pcall(callback, state)
+            end)
+        end
+
+        function TabObj:AddButton(bCfg)
+            local title = bCfg.Title or "Button"
+            local cb = bCfg.Callback or function() end
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -10, 0, 40)
+            btn.BackgroundColor3 = COLORS.surfaceRaised
+            btn.BackgroundTransparency = 0.18
+            btn.Text = title
+            btn.TextColor3 = COLORS.text
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 13
+            btn.Parent = pageScroll
+
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(0, 8)
+            bCorner.Parent = btn
+
+            local bStroke = Instance.new("UIStroke")
+            bStroke.Color = COLORS.primary
+            bStroke.Thickness = 1
+            bStroke.Parent = btn
+
+            btn.MouseButton1Click:Connect(function() playClickSound(); pcall(cb) end)
+            return btn
+        end
+
+        function TabObj:AddSection(title)
+            local sec = Instance.new("TextLabel")
+            sec.Size = UDim2.new(1, -10, 0, 26)
+            sec.BackgroundTransparency = 1
+            sec.Text = "──  " .. title .. "  ──"
+            sec.TextColor3 = COLORS.cyan
+            sec.Font = Enum.Font.GothamBold
+            sec.TextSize = 13
+            sec.Parent = pageScroll
+            return sec
+        end
+
+        function TabObj:AddParagraph(pCfg)
+            local title = pCfg.Title or ""
+            local desc = pCfg.Desc or ""
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 54)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local pTitle = Instance.new("TextLabel")
+            pTitle.Size = UDim2.new(1, -20, 0, 22)
+            pTitle.Position = UDim2.new(0, 10, 0, 6)
+            pTitle.BackgroundTransparency = 1
+            pTitle.Text = title
+            pTitle.TextColor3 = COLORS.text
+            pTitle.Font = Enum.Font.GothamBold
+            pTitle.TextSize = 13
+            pTitle.TextXAlignment = Enum.TextXAlignment.Left
+            pTitle.Parent = frame
+
+            local pDesc = Instance.new("TextLabel")
+            pDesc.Size = UDim2.new(1, -20, 0, 24)
+            pDesc.Position = UDim2.new(0, 10, 0, 26)
+            pDesc.BackgroundTransparency = 1
+            pDesc.Text = desc
+            pDesc.TextColor3 = COLORS.textMuted
+            pDesc.Font = Enum.Font.Gotham
+            pDesc.TextSize = 11
+            pDesc.TextWrapped = true
+            pDesc.TextXAlignment = Enum.TextXAlignment.Left
+            pDesc.Parent = frame
+            return frame
+        end
+
+        table.insert(WindowObj.Tabs, TabObj)
+        if #WindowObj.Tabs == 1 then TabObj:Select() end
+        return TabObj
+    end
+
+    UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+            playClickSound()
+            shell.Visible = not shell.Visible
+        end
+    end)
+
+    return WindowObj
+end
+
+-- ════════════════════════════════════════════════════
+-- 5. INITIALIZE UI & TELEMETRY DASHBOARD
+-- ════════════════════════════════════════════════════
+local Window = ObsidianGlassEngine:CreateWindow({
+    Title    = "PayomboyZ HUB",
+    SubTitle = "Iron Soul — Dungeon & Auto Cave Engine"
+})
+
+local DungeonTab = Window:AddTab({ Title = "⚔️ Dungeon Farm" })
+local CollectTab = Window:AddTab({ Title = "🎒 Collect & Items" })
+local DebugTab   = Window:AddTab({ Title = "🔍 Debug & Telemetry" })
+
+-- ──────── TAB 1: DUNGEON FARM ────────
+DungeonTab:AddSection("Automation Engine Controls")
+DungeonTab:AddToggle("AutoFarmToggle", { Title = "Enable Auto Farm", Desc = "Zero-Jitter Combat + Boss Priority + Room Advancement", Default = true, Callback = function(t) Config.AutoFarm = t; _G.AutoFarm = t end })
+DungeonTab:AddToggle("AutoSkillToggle", { Title = "Auto Use Skill", Desc = "Execute full weapon skill combos automatically", Default = true, Callback = function(t) Config.AutoSkill = t; _G.AutoSkill = t end })
+DungeonTab:AddToggle("AutoProgressToggle", { Title = "Auto Progress Stage", Desc = "Trigger Wave/Boss spawns and enter Stage Doors/Portals", Default = true, Callback = function(t) Config.AutoProgressStage = t; _G.AutoProgressStage = t end })
+DungeonTab:AddToggle("UndergroundModeToggle", { Title = "Underground Orbit Mode", Desc = "Lock position underneath target to avoid attacks", Default = true, Callback = function(t) Config.UndergroundMode = t; _G.UndergroundMode = t end })
+
+DungeonTab:AddSection("Safety & Avoidance")
+DungeonTab:AddToggle("AutoAvoidToggle", { Title = "Auto Avoid Red Attacks", Desc = "Detect red ground indicators and step out of range", Default = false, Callback = function(t) Config.AutoAvoid = t; _G.AutoAvoid = t end })
+DungeonTab:AddToggle("EmergencyEscapeToggle", { Title = "Emergency Escape", Desc = "Dodge away instantly when taking rapid damage", Default = true, Callback = function(t) Config.EmergencyEscape = t end })
+DungeonTab:AddButton({ Title = "🚪 Manual Teleport To Nearest Exit Portal", Callback = function()
+    rebuildPortalCandidates()
+    local exitObject = findBestExit()
+    if exitObject and State.Root then
+        travelToPosition(exitObject.Position + Vector3.new(0, 3, 0))
+        ObsidianGlassEngine:Notify({ Title = "Teleport Exit", Content = "Teleported to " .. exitObject.Name, Duration = 3 })
+    else
+        ObsidianGlassEngine:Notify({ Title = "Teleport Exit", Content = "No valid exit portal found nearby!", Duration = 3 })
+    end
+end })
+
+-- ──────── TAB 2: COLLECT & ITEMS ────────
+CollectTab:AddSection("Dungeon Drops & Interactions")
+CollectTab:AddToggle("AutoEggsToggle", { Title = "Auto Collect Dragon Eggs", Desc = "Scan room for Dragon Eggs and fire proximity interaction", Default = true, Callback = function(t) Config.AutoCollectEggs = t end })
+CollectTab:AddToggle("AutoChestsToggle", { Title = "Auto Collect Treasure Chests", Desc = "Automatically approach and harvest spawned treasure chests", Default = true, Callback = function(t) Config.AutoCollectChests = t end })
+
+-- ──────── TAB 3: DEBUG & TELEMETRY (Ported from ต้นฉบับ.txt) ────────
+DebugTab:AddSection("Realtime System Monitor")
+DebugTab:AddToggle("DebugMonitorToggle", { Title = "Enable Realtime Telemetry Monitor", Desc = "Track target scans, portal scans, heartbeats, and latency", Default = true, Callback = function(t) Config.Debug = t end })
+
+local StatusCard = DebugTab:AddParagraph({ Title = "📡 LIVE STATUS TELEMETRY", Desc = "Initializing live state metrics..." })
+local DebugConsoleCard = DebugTab:AddParagraph({ Title = "🖥️ DEBUG CONSOLE MONITOR", Desc = "Initializing diagnostic telemetry..." })
+
+-- ════════════════════════════════════════════════════
+-- 6. UNIFIED HEARTBEAT & AUTOMATION LOOPS
+-- ════════════════════════════════════════════════════
+
+-- 🔁 CORE HEARTBEAT DRIVE (COMBAT + STAGE ENTRY + AVOIDANCE + RECOVERY)
+RunService.Heartbeat:Connect(function(dt)
+    if State.Unloaded then return end
+    State.Stats.Heartbeats += 1
+    State.Stats.LastHeartbeatMs = math.floor(dt * 1000)
+
+    if not Config.AutoFarm then
+        State.TargetModel = nil; State.TargetRoot = nil; State.TargetHumanoid = nil
+        State.WatchdogTimer = 0; State.StageBusyTimer = 0; State.CurrentAction = "Idle"
+        return
+    end
+
+    if not State.Character or not State.Root or not State.Humanoid or State.Humanoid.Health <= 0 then return end
+
+    -- Watchdog Timer: Auto-recover if stuck in stage transition > 6 seconds
+    State.WatchdogTimer += dt
+    if State.StageBusy then
+        State.StageBusyTimer += dt
+        if State.StageBusyTimer >= 6 then
+            State.StageBusy = false; State.DoorBusy = false; State.StageBusyTimer = 0
+            State.RoomClearTimer = 0; State.CurrentAction = "Recovering"
+        end
+    else
+        State.StageBusyTimer = 0
+    end
+
+    if State.WatchdogTimer >= 2 then
+        State.WatchdogTimer = 0
+        if Config.AutoProgressStage and not State.StageBusy then rebuildPortalCandidates() end
+        if not State.TargetRoot or not targetIsValid() then
+            local model, root, hum = findNearestTarget()
+            State.TargetModel = model; State.TargetRoot = root; State.TargetHumanoid = hum
+            if model and root and hum then State.RoomClearTimer = 0 end
+        end
+    end
+
+    if not State.TargetRoot or not targetIsValid() then State.RoomClearTimer += dt end
+    if State.FallbackTargetTimer > 0 then State.FallbackTargetTimer = math.max(0, State.FallbackTargetTimer - dt) end
+
+    -- Target Scan Cadence
+    State.TargetTimer += dt
+    local targetInterval = Config.PerformanceMode and 0.25 or 0.15
+    if State.TargetTimer >= targetInterval then
+        State.TargetTimer = 0
+        refreshTarget()
+    end
+
+    -- Portal / Door Auto-Entry Cadence
+    State.PortalTimer += dt
+    local portalInterval = Config.PerformanceMode and 1.0 or 0.8
+    if State.PortalTimer >= portalInterval then
+        State.PortalTimer = 0
+        if Config.AutoProgressStage and not State.StageBusy then
+            task.spawn(function()
+                local ok, err = pcall(moveToNextStage)
+                if not ok then
+                    State.StageBusy = false; State.DoorBusy = false; State.RoomClearTimer = 0
+                    State.CurrentAction = "Recovering"
+                end
+            end)
+        end
+    end
+
+    -- Combat Position Lock / Auto Avoid / Emergency Escape
+    if State.EmergencyBusy then
+        State.CurrentAction = "Emergency Escape"
+    elseif Config.AutoAvoid and State.DangerPart then
+        updateAutoAvoid(dt)
+    elseif Config.AutoProgressStage and State.StageBusy then
+        if State.CurrentAction == "Farming" then State.CurrentAction = "Portal" end
+    else
+        lockCombatPosition()
+        State.AttackTimer += dt
+        if State.AttackTimer >= Config.AttackInterval then
+            State.AttackTimer = 0
+            updateKillAura()
+        end
+        State.CurrentAction = "Farming"
+    end
+
+    -- Skill Cadence
+    State.SkillTimer += dt
+    if State.SkillTimer >= Config.SkillInterval then
+        State.SkillTimer = 0
+        if Config.AutoSkill and targetIsValid() then task.spawn(useSkills) end
+    end
+end)
+
+-- 🔁 ASYNC LOOP: DRAGON EGG & TREASURE CHEST COLLECTION
+task.spawn(function()
+    while task.wait(0.5) do
+        if State.Unloaded then break end
+        if Config.AutoCollectEggs then pcall(collectDragonEggs) end
+        if Config.AutoCollectChests then pcall(collectChests) end
+    end
+end)
+
+-- 🔁 ASYNC LOOP: REALTIME DEBUG TELEMETRY CARD UPDATER (Ported from ต้นฉบับ.txt)
+task.spawn(function()
+    while task.wait(0.2) do
+        if State.Unloaded then break end
+        pcall(function()
+            local statusDesc = string.format(
+                "State: %s\nTarget: %s\nDistance: %s\nHP: %s%%\nDanger: %s studs",
+                tostring(State.CurrentAction),
+                tostring(State.LastTargetName or "-"),
+                (State.LastTargetDistance < 9999 and string.format("%.1f", State.LastTargetDistance) or "-"),
+                string.format("%.0f", State.TargetHealthPercent or 0),
+                (State.DangerDistance < 9999 and string.format("%.1f", State.DangerDistance) or "-")
+            )
+            local sDescLabel = StatusCard:FindFirstChild("TextLabel", true)
+            if sDescLabel then sDescLabel.Text = statusDesc end
+
+            local consoleDesc = string.format(
+                "Heartbeats: %d (%d ms)\nTarget Scans (T): %d\nPortal Scans (P): %d\nDanger Scans (D): %d",
+                State.Stats.Heartbeats,
+                State.Stats.LastHeartbeatMs,
+                State.Stats.TargetScans,
+                State.Stats.PortalScans,
+                State.Stats.DangerScans
+            )
+            local cDescLabel = DebugConsoleCard:FindFirstChild("TextLabel", true)
+            if cDescLabel then cDescLabel.Text = consoleDesc end
+        end)
+    end
+end)
+
+-- ════════════════════════════════════════════════════
+-- ✅ SCRIPT UNLOAD & NOTIFICATION
+-- ════════════════════════════════════════════════════
+local function unload()
+    if State.Unloaded then return end
+    State.Unloaded = true
+    Config.AutoFarm = false; _G.AutoFarm = false
+    disconnectList(CharacterConnections)
+    disconnectList(Connections)
+    if State.Humanoid then
+        pcall(function()
+            State.Humanoid.PlatformStand = false
+            State.Humanoid.AutoRotate = true
+            State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+    end
+    print("✅ [PayomboyZ HUB] Dungeon Automation Engine Unloaded successfully.")
+end
+
+_G.IronSoulDungeonUnload = unload
+
+ObsidianGlassEngine:Notify({
+    Title   = "PayomboyZ HUB Loaded",
+    Content = "Dungeon & Auto Cave Engine loaded with Boss Priority, Dragon Eggs, Chests & Debug Scan Telemetry!",
+    Duration = 5
+})
+
+print("✅ [PayomboyZ HUB] Dungeon & Auto Cave Engine fully initialized!")
 
