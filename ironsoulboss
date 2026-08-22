@@ -245,8 +245,17 @@ local function isSettlementScreenVisible()
         or playerGui:FindFirstChild("SettlementGUI")
 
     if sGui then
-        if sGui:IsA("ScreenGui") and sGui.Enabled then
-            return true
+        if sGui:IsA("ScreenGui") then
+            if sGui.Enabled then
+                local hasVisibleChild = false
+                for _, child in ipairs(sGui:GetChildren()) do
+                    if child:IsA("GuiObject") and child.Visible then
+                        hasVisibleChild = true
+                        break
+                    end
+                end
+                if hasVisibleChild then return true end
+            end
         elseif sGui:IsA("GuiObject") and sGui.Visible then
             return true
         end
@@ -1211,6 +1220,30 @@ local function moveToNextStage()
     local exitObject, score, exitType = findBestExit()
 
     if not exitObject or not exitObject.Parent then
+        local respawnFolder = workspace:FindFirstChild("PlayerRespawn")
+        if respawnFolder and #respawnFolder:GetChildren() > 0 then
+            State.StageBusy = true
+            State.CurrentAction = "Checkpoint Teleport"
+            local oldCFrame = State.Root and State.Root.CFrame
+            for _, v in ipairs(respawnFolder:GetChildren()) do
+                if v:IsA("BasePart") and State.Root then
+                    State.Root.CFrame = v.CFrame
+                    task.wait(1)
+                end
+            end
+            if oldCFrame and State.Root then
+                State.Root.CFrame = oldCFrame
+            end
+            State.StageBusy = false
+            State.StageCooldown = true
+            task.delay(2.0, function()
+                if not State.Unloaded then
+                    State.StageCooldown = false
+                end
+            end)
+            return
+        end
+
         State.CurrentAction = "Searching Exit"
         State.StageBusy = false
         State.StageBusyTimer = 0
@@ -1231,8 +1264,6 @@ local function moveToNextStage()
             if opened then
                 task.wait(Config.DoorOpenWait)
 
-                -- The portal inside the door may not exist until the door has
-                -- opened, so rebuild after the interaction.
                 rebuildPortalCandidates()
 
                 local newPortal, newScore = findBestPortalOnly()
@@ -1253,7 +1284,6 @@ local function moveToNextStage()
                         newPortal.Position + newPortal.CFrame.LookVector
                     )
                 else
-                    -- If the door itself is the transition, enter the door.
                     State.CurrentAction = "Entering Door"
 
                     local approach =
@@ -1271,9 +1301,6 @@ local function moveToNextStage()
         else
             State.CurrentAction = "Moving To Portal"
 
-            -- Direct portal travel. No arbitrary 220-stud limit and no score
-            -- cutoff here; findBestExit already selected the best candidate
-            -- inside ExitSearchRadius.
             local approach =
                 exitObject.Position
                 - exitObject.CFrame.LookVector * 8
@@ -1294,12 +1321,15 @@ local function moveToNextStage()
         warn("[IronSoul] exit transition error:", err)
     end
 
+    -- Allow 1.5 - 2 seconds for server to load the next stage and spawn new mobs
+    task.wait(1.5)
+
     State.StageBusy = false
     State.StageBusyTimer = 0
     State.StageCooldown = true
     State.RoomClearTimer = 0
 
-    task.delay(Config.ExitRetryDelay, function()
+    task.delay(2.0, function()
         if not State.Unloaded then
             State.StageCooldown = false
         end
@@ -3496,6 +3526,7 @@ connect(RunService.Heartbeat, function(dt)
             State.CurrentAction = "Return to Lobby"
             returnToLobby()
         end
+        return
     end
 
     if not Config.AutoFarm then
