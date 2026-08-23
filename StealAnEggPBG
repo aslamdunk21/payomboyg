@@ -2105,7 +2105,7 @@ local RARITY_OPTIONS = {
 }
 
 -- Available map areas to harvest from
-local MAP_OPTIONS = { "Lake", "Forest", "Desert", "Jungle", "Snow", "Volcano", "Prehistoric", "Abyss Ocean", "Cosmic" }
+local MAP_OPTIONS = { "Lake", "Forest", "Desert", "Jungle", "Snow", "Volcano", "Prehistoric", "Abyss Ocean", "Cosmic", "Cherry Blossom" }
 local AREA_SPEED  = {}
 
 -- Rare Egg Hunter tier presets
