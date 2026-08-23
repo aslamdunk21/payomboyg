@@ -1033,19 +1033,74 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageScroll.Name = "Page_" .. tabTitle
         pageScroll.Size = UDim2.fromScale(1, 1)
         pageScroll.BackgroundTransparency = 1
-        pageScroll.ScrollBarThickness = 4
+        pageScroll.Active = true
+        pageScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+        pageScroll.ScrollBarThickness = 5
         pageScroll.ScrollBarImageColor3 = COLORS.primary
+        pageScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+        pageScroll.ElasticBehavior = Enum.ElasticBehavior.Always
+        pageScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
+        pageScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
         pageScroll.Visible = (tabIndex == 1)
         pageScroll.Parent = pagesFolder
+
+        local pagePadding = Instance.new("UIPadding")
+        pagePadding.PaddingBottom = UDim.new(0, 80)
+        pagePadding.PaddingTop = UDim.new(0, 4)
+        pagePadding.PaddingLeft = UDim.new(0, 2)
+        pagePadding.PaddingRight = UDim.new(0, 6)
+        pagePadding.Parent = pageScroll
 
         local pageLayout = Instance.new("UIListLayout")
         pageLayout.Padding = UDim.new(0, 8)
         pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
         pageLayout.Parent = pageScroll
 
-        pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
-        end)
+        local function updatePageCanvas()
+            if pageScroll and pageLayout then
+                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 80)
+            end
+        end
+        pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePageCanvas)
+
+        -- Mobile Touch Drag Scrolling Handler for Tab Content Pages
+        local isPageDragging = false
+        local pageTouchStartY = 0
+        local pageStartCanvasY = 0
+
+        local function onPageTouchBegan(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isPageDragging = false
+                pageTouchStartY = input.Position.Y
+                pageStartCanvasY = pageScroll.CanvasPosition.Y
+            end
+        end
+
+        local function onPageTouchChanged(input)
+            if pageTouchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                local deltaY = input.Position.Y - pageTouchStartY
+                if math.abs(deltaY) > 5 then
+                    isPageDragging = true
+                end
+                if isPageDragging then
+                    local maxCanvasY = math.max(0, (pageLayout.AbsoluteContentSize.Y + 80) - pageScroll.AbsoluteSize.Y)
+                    pageScroll.CanvasPosition = Vector2.new(0, math.clamp(pageStartCanvasY - deltaY, 0, maxCanvasY))
+                end
+            end
+        end
+
+        local function onPageTouchEnded(input)
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                pageTouchStartY = 0
+                task.delay(0.05, function()
+                    isPageDragging = false
+                end)
+            end
+        end
+
+        pageScroll.InputBegan:Connect(onPageTouchBegan)
+        pageScroll.InputChanged:Connect(onPageTouchChanged)
+        pageScroll.InputEnded:Connect(onPageTouchEnded)
 
         local function activateTab()
             playClickSound()
@@ -1430,7 +1485,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 modalOverlay:SetAttribute("DropdownId", id)
                 modalOverlay.Size = UDim2.fromScale(1, 1)
                 modalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                modalOverlay.BackgroundTransparency = 0.55
+                modalOverlay.BackgroundTransparency = 0.70
+                modalOverlay.Active = true
                 modalOverlay.ZIndex = 999999
                 modalOverlay.Parent = gui
 
@@ -1442,15 +1498,15 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.Parent = modalOverlay
 
                 local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-                local maxModalH = math.clamp(cameraVP.Y * 0.85, 260, 480)
-                local maxModalW = math.min(420, cameraVP.X - 24)
+                local maxModalH = math.clamp(cameraVP.Y * 0.88, 280, 520)
+                local maxModalW = math.min(750, cameraVP.X - 20)
 
                 local modalFrame = Instance.new("Frame")
                 modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
                 modalFrame.AnchorPoint = Vector2.new(0.5, 0.5)
                 modalFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-                modalFrame.BackgroundColor3 = COLORS.shell
-                modalFrame.BackgroundTransparency = 0.15
+                modalFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
+                modalFrame.BackgroundTransparency = 0
                 modalFrame.BorderSizePixel = 0
                 modalFrame.ZIndex = 1000000
                 modalFrame.Parent = modalOverlay
@@ -1652,8 +1708,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                             itemBtn.Text = (isSelected and "   ✓  " or "       ") .. valStr
                             itemBtn.TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or COLORS.text
                             itemBtn.Font = Enum.Font.GothamBold
-                            itemBtn.TextSize = 13
+                            itemBtn.TextSize = 11.5
                             itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+                            itemBtn.TextTruncate = Enum.TextTruncate.AtEnd
                             itemBtn.AutoButtonColor = false
                             itemBtn.Active = false
                             itemBtn.ZIndex = 1000002
