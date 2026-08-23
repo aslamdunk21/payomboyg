@@ -1556,7 +1556,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optScroll.ScrollBarImageColor3 = COLORS.primary
                 optScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
                 optScroll.ElasticBehavior = Enum.ElasticBehavior.Always
-                optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+                optScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
@@ -1573,9 +1573,51 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optLayout.SortOrder = Enum.SortOrder.LayoutOrder
                 optLayout.Parent = optScroll
 
-                optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 45)
-                end)
+                local function updateModalCanvas()
+                    if optScroll and optLayout then
+                        optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 60)
+                    end
+                end
+                optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateModalCanvas)
+
+                -- Mobile & Touch Drag Scrolling Handler
+                local isTouchDragging = false
+                local touchStartY = 0
+                local startCanvasY = 0
+
+                local function onTouchBegan(input)
+                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        isTouchDragging = false
+                        touchStartY = input.Position.Y
+                        startCanvasY = optScroll.CanvasPosition.Y
+                    end
+                end
+
+                local function onTouchChanged(input)
+                    if touchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                        local deltaY = input.Position.Y - touchStartY
+                        if math.abs(deltaY) > 5 then
+                            isTouchDragging = true
+                        end
+                        if isTouchDragging then
+                            local maxCanvasY = math.max(0, optLayout.AbsoluteContentSize.Y + 60 - optScroll.AbsoluteSize.Y)
+                            optScroll.CanvasPosition = Vector2.new(0, math.clamp(startCanvasY - deltaY, 0, maxCanvasY))
+                        end
+                    end
+                end
+
+                local function onTouchEnded(input)
+                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        touchStartY = 0
+                        task.delay(0.05, function()
+                            isTouchDragging = false
+                        end)
+                    end
+                end
+
+                optScroll.InputBegan:Connect(onTouchBegan)
+                optScroll.InputChanged:Connect(onTouchChanged)
+                optScroll.InputEnded:Connect(onTouchEnded)
 
                 local currentSelected = {}
                 if isMulti then
@@ -1612,6 +1654,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                             itemBtn.Font = Enum.Font.GothamBold
                             itemBtn.TextSize = 13
                             itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+                            itemBtn.AutoButtonColor = false
+                            itemBtn.Active = false
                             itemBtn.ZIndex = 1000002
                             itemBtn.Parent = optScroll
 
@@ -1624,7 +1668,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                             ibStroke.Thickness = 1
                             ibStroke.Parent = itemBtn
 
+                            itemBtn.InputBegan:Connect(onTouchBegan)
+                            itemBtn.InputChanged:Connect(onTouchChanged)
+                            itemBtn.InputEnded:Connect(onTouchEnded)
+
                             itemBtn.MouseButton1Click:Connect(function()
+                                if isTouchDragging then return end
                                 playClickSound()
                                 if isMulti then
                                     local foundIdx = table.find(currentSelected, optVal)
@@ -1645,6 +1694,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                             table.insert(optionButtons, itemBtn)
                         end
                     end
+
+                    task.defer(updateModalCanvas)
                 end
 
                 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
