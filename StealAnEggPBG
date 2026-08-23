@@ -2020,11 +2020,31 @@ local function FastWalk(targetPos, timeout)
             hum:MoveTo(targetPos)
         end
 
-        -- Stuck recovery (jump)
+        -- Advanced Anti-Stuck & Wall-Bypass recovery logic
         if (hrp.Position - lastPos).Magnitude < 1.5 then
             stuckCount = stuckCount + 1
-            if stuckCount >= 6 then
+            if stuckCount >= 4 then
                 pcall(function() hum.Jump = true end)
+            end
+            if stuckCount >= 6 then
+                -- Nudge / Detour sideways away from the obstacle
+                local forwardDir = (targetPos - hrp.Position)
+                if forwardDir.Magnitude > 0.5 then
+                    local unitForward = forwardDir.Unit
+                    local rightVec = Vector3.new(-unitForward.Z, 0, unitForward.X)
+                    local detourSide = (stuckCount % 2 == 0) and 1 or -1
+                    local detourTarget = hrp.Position + (rightVec * 8 * detourSide) + (unitForward * 2)
+                    hum:MoveTo(detourTarget)
+                    task.wait(0.18)
+                end
+            end
+            if stuckCount >= 10 then
+                -- If stuck for ~0.8s, micro CFrame step forward/upward to bypass wall geometry
+                local dirVec = (targetPos - hrp.Position)
+                if dirVec.Magnitude > 0.1 then
+                    local stepDist = math.min(dist, 6)
+                    hrp.CFrame = CFrame.new(hrp.Position + (dirVec.Unit * stepDist) + Vector3.new(0, 2.5, 0))
+                end
                 stuckCount = 0
             end
         else
@@ -2163,21 +2183,62 @@ local function InitGameApi()
     return ENV_OK
 end
 
-local function IsAreaSelected(areaId)
-    if not areaId then return true end
+local function ResolveAreaName(areaId, assetCategory)
+    -- 1. Direct string matching with MAP_OPTIONS
+    if type(areaId) == "string" then
+        for _, mapName in ipairs(MAP_OPTIONS) do
+            if string.find(areaId:lower(), mapName:lower(), 1, true) then
+                return mapName
+            end
+        end
+    end
+
+    -- 2. Index number matching (e.g. 1 -> Lake, 6 -> Volcano)
+    local numId = tonumber(areaId)
+    if not numId and type(areaId) == "string" then
+        numId = tonumber(areaId:match("%d+"))
+    end
+    if numId and MAP_OPTIONS[numId] then
+        return MAP_OPTIONS[numId]
+    end
+
+    -- 3. Check assetCategory (e.g., "Egg_Volcano_SuperRare")
+    if type(assetCategory) == "string" then
+        for _, mapName in ipairs(MAP_OPTIONS) do
+            if string.find(assetCategory:lower(), mapName:lower(), 1, true) then
+                return mapName
+            end
+        end
+    end
+
+    -- 4. Try ReplicatedStorage Directory.Areas lookup if available
+    pcall(function()
+        if ReplicatedStorage:FindFirstChild("Directory") and ReplicatedStorage.Directory:FindFirstChild("Areas") then
+            local ok, AreasModule = pcall(require, ReplicatedStorage.Directory.Areas)
+            if ok and type(AreasModule) == "table" then
+                local dir = AreasModule.Directory or AreasModule.Areas or AreasModule
+                if type(dir) == "table" then
+                    local aInfo = dir[areaId] or (numId and dir[numId])
+                    if type(aInfo) == "table" and (aInfo.Name or aInfo.Title) then
+                        local n = tostring(aInfo.Name or aInfo.Title)
+                        for _, mapName in ipairs(MAP_OPTIONS) do
+                            if string.find(n:lower(), mapName:lower(), 1, true) then
+                                return mapName
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    return nil
+end
+
+local function IsAreaSelected(areaId, assetCategory)
     if not stealAreaSet or CountTable(stealAreaSet) == 0 then return true end
 
-    local strId = tostring(areaId)
-    local numId = tonumber(areaId)
-
-    if stealAreaSet[areaId] == true or stealAreaSet[strId] == true then
-        return true
-    end
-
-    if numId and MAP_OPTIONS[numId] and stealAreaSet[MAP_OPTIONS[numId]] == true then
-        return true
-    end
-
+    -- Check if ALL maps are selected in UI
     local allSelected = true
     for _, opt in ipairs(MAP_OPTIONS) do
         if not stealAreaSet[opt] then
@@ -2187,7 +2248,13 @@ local function IsAreaSelected(areaId)
     end
     if allSelected then return true end
 
-    return false
+    local mapName = ResolveAreaName(areaId, assetCategory)
+    if not mapName then
+        -- Fallback safety: If area cannot be identified, allow it so stealing never breaks!
+        return true
+    end
+
+    return stealAreaSet[mapName] == true
 end
 
 local function AreaReachable(areaId)
@@ -2498,14 +2565,43 @@ local function WalkThroughGate()
         local gy = hrp.Position.Y
         hum:MoveTo(Vector3.new(546, gy, -370))
         local t0 = os.clock()
-        while not HUB.dead and os.clock() - t0 < 12 do
-            if (hrp.Position - Vector3.new(546, gy, -370)).Magnitude < 6 then break end
+        local lastP = hrp.Position
+        local stuckT = 0
+        while not HUB.dead and os.clock() - t0 < 8 do
+            if (hrp.Position - Vector3.new(546, gy, -370)).Magnitude < 6 or hrp.Position.X > 565 then break end
+            if (hrp.Position - lastP).Magnitude < 1 then
+                stuckT = stuckT + 1
+                if stuckT >= 4 then
+                    pcall(function() hum.Jump = true end)
+                end
+                if stuckT >= 8 then
+                    -- Wall corner bypass: CFrame step forward past the gate obstacle
+                    hrp.CFrame = CFrame.new(555, gy + 2, -368)
+                    stuckT = 0
+                end
+            else
+                stuckT = 0
+            end
+            lastP = hrp.Position
             task.wait(0.15)
         end
         hum:MoveTo(Vector3.new(585, gy, -366))
         t0 = os.clock()
-        while not HUB.dead and os.clock() - t0 < 12 do
+        stuckT = 0
+        lastP = hrp.Position
+        while not HUB.dead and os.clock() - t0 < 8 do
             if hrp.Position.X > 575 then break end
+            if (hrp.Position - lastP).Magnitude < 1 then
+                stuckT = stuckT + 1
+                if stuckT >= 4 then pcall(function() hum.Jump = true end) end
+                if stuckT >= 8 then
+                    hrp.CFrame = CFrame.new(580, gy + 2, -366)
+                    stuckT = 0
+                end
+            else
+                stuckT = 0
+            end
+            lastP = hrp.Position
             task.wait(0.15)
         end
         crossed = hrp.Position.X > 570
@@ -2826,8 +2922,9 @@ local function StealOnce()
             for _, r in ipairs(records) do
                 if r.State == "Slot" or r.State == "Dropped" then
                     local rId = EggRarityId(r)
-                    local isAllowed = (rId and stealRaritySet[rId]) or (type(r.AssetCategory) == "string" and stealRaritySet[r.AssetCategory]) or (not rId) or (CountTable(stealRaritySet) == 0)
-                    if isAllowed then
+                    local isRarityAllowed = (rId and stealRaritySet[rId]) or (type(r.AssetCategory) == "string" and stealRaritySet[r.AssetCategory]) or (not rId) or (CountTable(stealRaritySet) == 0)
+                    local isAreaAllowed = IsAreaSelected(r.AreaId, r.AssetCategory)
+                    if isRarityAllowed and isAreaAllowed then
                         local eggPos = r.BottomCFrame and r.BottomCFrame.Position or nil
                         if eggPos then
                             local d = (eggPos - mypos).Magnitude
@@ -3498,27 +3595,7 @@ FarmTab:AddToggle({
         end
     end),
 })
-FarmTab:AddToggle({
-    Title = "Speed Boost",
-    Name = "Speed Boost",
-    Default = false,
-    Flag = "steal_speedboost",
-    Callback = safeCallback(function(v)
-        speedBoostEnabled = v
-        ApplySpeedBoost(v)
-        Notify("Speed Boost", v and ("ON · legal speed now " .. math.floor(GetLegalWalkSpeed()) .. " stud/s") or "OFF", v and "Success" or "Info")
-    end),
-})
-FarmTab:AddSlider({
-    Title = "Glide Speed",
-    Name = "Glide Speed",
-    Min = 50,
-    Max = 400,
-    Default = 250,
-    Suffix = " studs/s",
-    Flag = "steal_speed",
-    Callback = function(v) stealSpeed = math.clamp(v, 50, 400) end,
-})
+
 FarmTab:AddLabel("Eggs stolen: " .. tostring(stealCount) .. " (this session)")
 
 local stealMapDropdown = FarmTab:AddMultiDropdown({
@@ -4030,7 +4107,9 @@ local function ServerHasWantedEgg()
     for _, r in ipairs(records) do
         if r.State == "Slot" or r.State == "Dropped" then
             local id = EggRarityId(r)
-            if (not id) or stealRaritySet[id] or (type(r.AssetCategory) == "string" and stealRaritySet[r.AssetCategory]) or (CountTable(stealRaritySet) == 0) then
+            local isRarityAllowed = (not id) or stealRaritySet[id] or (type(r.AssetCategory) == "string" and stealRaritySet[r.AssetCategory]) or (CountTable(stealRaritySet) == 0)
+            local isAreaAllowed = IsAreaSelected(r.AreaId, r.AssetCategory)
+            if isRarityAllowed and isAreaAllowed then
                 if not rareHunterEnabled or EggRarityNumber(r) >= rareMinTier then
                     return true
                 end
