@@ -1986,8 +1986,40 @@ track(LocalPlayer.CharacterAdded:Connect(function(chr)
     end
 end))
 
+local function GetLegalWalkSpeed()
+    local sp = nil
+    if Save then
+        local okS, s = pcall(Save.Get, LocalPlayer)
+        if okS and s and type(s.SpeedPower) == "number" then sp = s.SpeedPower end
+    end
+    if sp == nil and SPP then
+        local okSp, s2 = pcall(SPP.GetSpeedPower)
+        if okSp and type(s2) == "number" then sp = s2 end
+    end
+    if TreadmillUtil and sp ~= nil then
+        local okWs, ws = pcall(TreadmillUtil.SpeedPowerToWalkSpeed, sp)
+        if okWs and type(ws) == "number" then
+            return math.max(16, ws)
+        end
+    end
+    local chr = LocalPlayer and LocalPlayer.Character
+    local hum = chr and chr:FindFirstChildOfClass("Humanoid")
+    if hum and type(hum.WalkSpeed) == "number" and hum.WalkSpeed > 0 then
+        return math.max(16, hum.WalkSpeed)
+    end
+    return 16
+end
+
+local speedMultiplier = 3
+
+local function GetTargetStealSpeed()
+    local baseSpeed = GetLegalWalkSpeed()
+    local mult = speedMultiplier or 3
+    return math.max(baseSpeed * mult, 48)
+end
+
 -- MoveTo-based walk: uses the game's pathfinding (respects walls/navmesh).
--- Max WalkSpeed on the bare Humanoid (no anti-cheat limiting it).
+-- Sets WalkSpeed to 3x of player's current/legal walk speed.
 local function FastWalk(targetPos, timeout)
     local chr = LocalPlayer.Character
     if not chr then return false end
@@ -1995,7 +2027,7 @@ local function FastWalk(targetPos, timeout)
     local hum = chr:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return false end
 
-    local speed = math.clamp(stealSpeed or 300, 50, 400)
+    local speed = GetTargetStealSpeed()
     hum.WalkSpeed = speed
     local t0 = os.clock()
     local maxTime = timeout or 60
@@ -2016,7 +2048,7 @@ local function FastWalk(targetPos, timeout)
         -- Periodically re-trigger MoveTo every 0.4s to prevent Roblox 8s internal timeout
         if os.clock() - lastMoveCall >= 0.4 then
             lastMoveCall = os.clock()
-            hum.WalkSpeed = math.clamp(stealSpeed or 300, 50, 400)
+            hum.WalkSpeed = GetTargetStealSpeed()
             hum:MoveTo(targetPos)
         end
 
@@ -2399,25 +2431,6 @@ local function PlotCFrame()
     return CFrame.new(pos + off)
 end
 
-local function GetLegalWalkSpeed()
-    local sp = nil
-    if Save then
-        local okS, s = pcall(Save.Get, LocalPlayer)
-        if okS and s and type(s.SpeedPower) == "number" then sp = s.SpeedPower end
-    end
-    if sp == nil and SPP then
-        local okSp, s2 = pcall(SPP.GetSpeedPower)
-        if okSp and type(s2) == "number" then sp = s2 end
-    end
-    if TreadmillUtil and sp ~= nil then
-        local okWs, ws = pcall(TreadmillUtil.SpeedPowerToWalkSpeed, sp)
-        if okWs and type(ws) == "number" then
-            return math.max(16, ws)
-        end
-    end
-    return 16
-end
-
 local function ApplySpeedBoost(on)
     if not SPP then return GetLegalWalkSpeed() end
     if on then
@@ -2561,7 +2574,7 @@ local function WalkThroughGate()
     if hrp.Position.X > 570 then
         crossed = true
     else
-        hum.WalkSpeed = 300
+        hum.WalkSpeed = GetTargetStealSpeed()
         local gy = hrp.Position.Y
         hum:MoveTo(Vector3.new(546, gy, -370))
         local t0 = os.clock()
