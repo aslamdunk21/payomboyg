@@ -2092,7 +2092,7 @@ local RaritiesList = {
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar", "Limited", "Event"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar"
 }
 
 local TraitsList = {
@@ -4037,215 +4037,129 @@ MutationDropdown:OnChanged(function(Value)
 end)
 
 ---------------------------------------------------------
--- 🔄 LIVE DROPDOWN AUTO-SCANNER (Rarity & Mutation)
--- สแกน CardFolder อัตโนมัติ: ดึง Rarity/Mutation ใหม่จากสายพาน
--- Dev อัพ Pack ใหม่ → dropdown อัพเดทเองไม่ต้องมาแก้โค้ด
+-- 🔄 LIVE DROPDOWN AUTO-SCANNER (Packs & Mutations)
+-- สแกน ReplicatedStorage.Tools.Packs & ReplicatedStorage.VFX.Mutation อัตโนมัติ
+-- เมื่อเกมอัพเดท Pack หรือ Mutation ใหม่ Dropdown จะอัพเดทรายการทันทีโดยไม่ต้องแก้โค้ด
 ---------------------------------------------------------
 do
-    local _liveDropdownKnownRarities = {}   -- set ของ rarity ที่รู้จักแล้ว (lowercase)
-    local _liveDropdownKnownMutations = {}  -- set ของ mutation ที่รู้จักแล้ว (lowercase)
-    local _liveDropdownRarityList = {}      -- ordered list สำหรับ dropdown
-    local _liveDropdownMutationList = {}    -- ordered list สำหรับ dropdown
+    local _liveKnownRarities = {}
+    local _liveKnownMutations = {}
+    local _liveRarityList = {}
+    local _liveMutationList = {}
 
-    -- seed จาก hardcoded list เดิม ไม่ให้หาย
-    for _, r in ipairs(RaritiesList) do
-        local k = string.lower(r)
-        if not _liveDropdownKnownRarities[k] then
-            _liveDropdownKnownRarities[k] = true
-            table.insert(_liveDropdownRarityList, r)
+    local function _cleanDisplayName(raw)
+        if not raw or type(raw) ~= "string" then return nil end
+        local clean = string.gsub(raw, "%s*[Pp][Aa][Cc][Kk]%s*$", "")
+        clean = string.gsub(clean, "%s*[Cc][Aa][Rr][Dd]%s*$", "")
+        clean = string.match(clean, "^%s*(.-)%s*$") or clean
+        if #clean >= 2 and #clean <= 40 and not string.match(clean, "[%d%$%%#@!&%*%(%)%+%=]") then
+            return string.upper(string.sub(clean, 1, 1)) .. string.sub(clean, 2)
         end
-    end
-    for _, m in ipairs(MutationsList) do
-        local k = string.lower(m)
-        if not _liveDropdownKnownMutations[k] then
-            _liveDropdownKnownMutations[k] = true
-            table.insert(_liveDropdownMutationList, m)
-        end
+        return nil
     end
 
-    -- ฟังก์ชันดึง Rarity/Mutation จาก model บนสายพาน (ใช้ตรรกะเดียวกับ getCardModelRarityAndMutation)
-    local function _liveExtractRarityMutation(model)
-        if not model or not model:IsA("Model") then return nil, nil end
-        -- ตรวจสอบว่าเป็นการ์ดจริง (ไม่ใช่ Pack, Boss, Ticket)
-        if model:GetAttribute("IgnoreTutoBeam") == nil then return nil, nil end
-
-        local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade")
-            or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
-        local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
-
-        rarity = rarity and tostring(rarity) or ""
-        mutation = mutation and tostring(mutation) or ""
-
-        -- fallback: สแกน TextLabel ถ้า attribute ว่าง
-        if rarity == "" or rarity == "nil" then
-            for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel"}) do
-                local obj = model:FindFirstChild(childName, true)
-                if obj then
-                    if obj:IsA("StringValue") and obj.Value ~= "" then
-                        rarity = obj.Value; break
-                    elseif (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-                        local cl = string.match(string.gsub(obj.Text, "<[^>]+>", ""), "^%s*(.-)%s*$") or ""
-                        if cl ~= "" and cl ~= "Label" then rarity = cl; break end
-                    end
-                end
+    local function _liveAddRarity(rawRarity)
+        local display = _cleanDisplayName(rawRarity)
+        if display then
+            local key = string.lower(display)
+            if not _liveKnownRarities[key] then
+                _liveKnownRarities[key] = true
+                table.insert(_liveRarityList, display)
+                return true
             end
         end
-        if mutation == "" or mutation == "nil" then
-            for _, childName in ipairs({"Mutation", "CardMutation", "MutationLabel"}) do
-                local obj = model:FindFirstChild(childName, true)
-                if obj then
-                    if obj:IsA("StringValue") and obj.Value ~= "" then
-                        mutation = obj.Value; break
-                    elseif (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
-                        local cl = string.match(string.gsub(obj.Text, "<[^>]+>", ""), "^%s*(.-)%s*$") or ""
-                        if cl ~= "" and cl ~= "Label" then mutation = cl; break end
-                    end
-                end
-            end
-        end
-
-        -- sanitize: ต้องเป็น string ที่มีตัวอักษร ไม่ใช่ตัวเลขล้วน/ว่าง
-        rarity = (rarity ~= "" and rarity ~= "nil" and not tonumber(rarity)) and rarity or nil
-        mutation = (mutation ~= "" and mutation ~= "nil" and not tonumber(mutation)) and mutation or nil
-        return rarity, mutation
+        return false
     end
 
-    -- merge ค่าใหม่เข้า list และอัพ dropdown ถ้ามีของใหม่
-    local function _liveDropdownTryAdd(model)
-        local rarity, mutation = _liveExtractRarityMutation(model)
-        local changed = false
-
-        if rarity then
-            local key = string.lower(rarity)
-            -- กรอง noise: ต้องมีความยาว 2-40 ตัวอักษร ไม่มีตัวเลข ไม่มีอักขระพิเศษ
-            if #key >= 2 and #key <= 40 and not string.match(key, "[%d%$%%#@!&%*%(%)%+%=]") then
-                if not _liveDropdownKnownRarities[key] then
-                    _liveDropdownKnownRarities[key] = true
-                    -- Capitalize first letter เพื่อให้สวยงาม
-                    local displayRarity = string.upper(string.sub(rarity, 1, 1)) .. string.sub(rarity, 2)
-                    table.insert(_liveDropdownRarityList, displayRarity)
-                    changed = true
-                end
+    local function _liveAddMutation(rawMutation)
+        local display = _cleanDisplayName(rawMutation)
+        if display and string.lower(display) ~= "normal" then
+            local key = string.lower(display)
+            if not _liveKnownMutations[key] then
+                _liveKnownMutations[key] = true
+                table.insert(_liveMutationList, display)
+                return true
             end
         end
-
-        if mutation then
-            local key = string.lower(mutation)
-            if #key >= 2 and #key <= 40 and not string.match(key, "[%d%$%%#@!&%*%(%)%+%=]") and key ~= "normal" then
-                if not _liveDropdownKnownMutations[key] then
-                    _liveDropdownKnownMutations[key] = true
-                    local displayMut = string.upper(string.sub(mutation, 1, 1)) .. string.sub(mutation, 2)
-                    table.insert(_liveDropdownMutationList, displayMut)
-                    changed = true
-                end
-            end
-        end
-
-        return changed
+        return false
     end
 
-    -- อัพเดท dropdown UI (SetValues) — ทำใน task.defer เพื่อไม่ block main loop
-    local _liveDropdownUpdatePending = false
-    local function _liveDropdownFlushUpdate()
-        if _liveDropdownUpdatePending then return end
-        _liveDropdownUpdatePending = true
+    -- Seed จากรายการเดิมเพื่อรักษาค่าคงที่
+    for _, r in ipairs(RaritiesList) do _liveAddRarity(r) end
+    for _, m in ipairs(MutationsList) do _liveAddMutation(m) end
+
+    -- ฟังก์ชัน Flush อัพเดท UI Dropdown
+    local _updatePending = false
+    local function _flushDropdowns()
+        if _updatePending then return end
+        _updatePending = true
         task.defer(function()
-            _liveDropdownUpdatePending = false
+            _updatePending = false
             pcall(function()
                 if RarityDropdown and RarityDropdown.SetValues then
-                    RarityDropdown:SetValues(_liveDropdownRarityList)
+                    RarityDropdown:SetValues(_liveRarityList)
                 end
             end)
             pcall(function()
                 if MutationDropdown and MutationDropdown.SetValues then
-                    MutationDropdown:SetValues(_liveDropdownMutationList)
+                    MutationDropdown:SetValues(_liveMutationList)
                 end
             end)
         end)
     end
 
-    -- Background watcher: เช็ค CardFolder ทุก 8 วินาที หาของใหม่
-    task.spawn(function()
-        -- รอ script init เสร็จก่อน
-        task.wait(5)
-        local _lastFullScanTick = 0
+    -- ฟังก์ชันสแกนหลักจาก ReplicatedStorage.Tools.Packs และ ReplicatedStorage.VFX.Mutation
+    local function _scanAllGameData()
+        local changed = false
+        pcall(function()
+            local rep = game:GetService("ReplicatedStorage")
 
-        while true do
-            task.wait(8)
-            pcall(function()
-                -- ถ้า CardFolder ยังไม่มี ลองหา
-                if not getgenv().CardFolder or not getgenv().CardFolder.Parent then
-                    findCardFolder()
-                end
-                local folder = getgenv().CardFolder
-                if not folder then return end
-
-                local anyNew = false
-                local now = tick()
-
-                -- Full scan ทุก 60 วินาที หรือเมื่อ scan ครั้งแรก
-                if now - _lastFullScanTick >= 60 then
-                    _lastFullScanTick = now
-                    for _, model in ipairs(folder:GetChildren()) do
-                        if _liveDropdownTryAdd(model) then anyNew = true end
+            -- 1. สแกนเฉพาะ Packs จาก ReplicatedStorage.Tools.Packs เท่านั้น (ไม่ดึงการ์ดย่อย)
+            local toolsFolder = rep:FindFirstChild("Tools")
+            if toolsFolder then
+                local packsFolder = toolsFolder:FindFirstChild("Packs")
+                if packsFolder then
+                    for _, packObj in ipairs(packsFolder:GetChildren()) do
+                        if _liveAddRarity(packObj.Name) then changed = true end
                     end
                 end
+            end
 
-                -- ฟัง ChildAdded สำหรับการ์ดที่เพิ่งเข้าสายพาน (เชื่อมต่อเพียงครั้งเดียว)
-                if not getgenv()._liveDropdownFolderConn or not getgenv()._liveDropdownFolderConnValid then
-                    getgenv()._liveDropdownFolderConnValid = true
-                    local connFolder = folder
-                    getgenv()._liveDropdownFolderConn = connFolder.ChildAdded:Connect(function(child)
-                        pcall(function()
-                            task.wait(0.2)  -- รอ attribute โหลด
-                            if _liveDropdownTryAdd(child) then
-                                _liveDropdownFlushUpdate()
-                            end
-                        end)
-                    end)
-                    -- disconnect เมื่อ folder หาย
-                    connFolder.AncestryChanged:Connect(function()
-                        if not connFolder.Parent then
-                            getgenv()._liveDropdownFolderConnValid = false
-                            pcall(function()
-                                if getgenv()._liveDropdownFolderConn then
-                                    getgenv()._liveDropdownFolderConn:Disconnect()
-                                end
-                            end)
-                        end
-                    end)
+            -- 2. สแกน Mutations จาก ReplicatedStorage.VFX.Mutation
+            local vfxFolder = rep:FindFirstChild("VFX") or rep:FindFirstChild("Vfx")
+            if vfxFolder then
+                local mutFolder = vfxFolder:FindFirstChild("Mutation") or vfxFolder:FindFirstChild("Mutations")
+                if mutFolder then
+                    for _, mutObj in ipairs(mutFolder:GetChildren()) do
+                        if _liveAddMutation(mutObj.Name) then changed = true end
+                    end
                 end
+            end
+        end)
 
-                if anyNew then _liveDropdownFlushUpdate() end
-            end)
+        if changed then
+            _flushDropdowns()
         end
+        return changed
+    end
+
+    -- สแกนครั้งเดียวทันทีเมื่อเข้าเกม / สคริปต์เริ่มทำงาน
+    task.spawn(function()
+        task.wait(0.5)
+        _scanAllGameData()
     end)
 
-    -- สแกนทันทีเมื่อกดปุ่ม Manual scan
+    -- ปุ่มกดสแกนด้วยตนเอง
     Tabs.Main:AddButton({
-        Title = "🔍 สแกน Rarity/Mutation จากสายพานทันที",
-        Description = "อัพเดท dropdown รายการ Rarity และ Mutation ตามการ์ดจริงในเกมตอนนี้",
+        Title = "🔍 สแกน Pack & Mutation ใหม่ในเกมทันที",
+        Description = "ดึงข้อมูล Pack จาก ReplicatedStorage.Tools.Packs และ Mutation จาก VFX ทันที",
         Callback = function()
-            task.spawn(function()
-                if not getgenv().CardFolder or not getgenv().CardFolder.Parent then
-                    findCardFolder()
-                end
-                local folder = getgenv().CardFolder
-                local found = 0
-                if folder then
-                    for _, model in ipairs(folder:GetChildren()) do
-                        if _liveDropdownTryAdd(model) then found = found + 1 end
-                    end
-                    _liveDropdownFlushUpdate()
-                end
-                Fluent:Notify({
-                    Title = "สแกน Dropdown",
-                    Content = found > 0
-                        and ("พบ Rarity/Mutation ใหม่ " .. tostring(found) .. " รายการ! อัพเดท dropdown แล้ว")
-                        or "ไม่พบ Rarity/Mutation ใหม่ (ครบแล้ว)",
-                    Duration = 3
-                })
-            end)
+            local foundNew = _scanAllGameData()
+            Fluent:Notify({
+                Title = "Auto Dropdown Scanner",
+                Content = foundNew and "อัพเดทพบ Pack/Mutation ใหม่เข้าใน Dropdown แล้ว! ✅" or "สแกนสมบูรณ์ (รายการล่าสุดครบถ้วนแล้ว) ✅",
+                Duration = 3
+            })
         end
     })
 end
