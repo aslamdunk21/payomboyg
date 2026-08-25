@@ -1,3 +1,339 @@
+-- ═══════════════════════════════════════════════════════════════
+-- BAC FULL BYPASS v5 — FINAL UNIFIED BUILD
+-- Covers: BAC-4511, BAC-4518, BAC-5695, BAC-4697, BAC-73210
+-- Game: Steal An Egg (PlaceId: 107778070777162)
+-- ═══════════════════════════════════════════════════════════════
+
+local BAC = {}
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ═══════════════════════════════════════════════════════════════
+-- §1  BAC-4518 — Script Identity & Environment Masking
+-- ═══════════════════════════════════════════════════════════════
+do
+    local thisScript = (typeof(script) == "Instance" and script)
+    if thisScript then
+        local legitNames = {
+            "LocalScript", "ModuleScript", "Handler",
+            "ClientHandler", "GameLogic", "UIController",
+            "NetworkManager", "AssetLoader", "DataHandler"
+        }
+        pcall(function() thisScript.Name = legitNames[math.random(1, #legitNames)] end)
+        pcall(function()
+            thisScript:SetAttribute("ModuleType", "Client")
+            thisScript:SetAttribute("Version", "1.0." .. math.random(0, 99))
+        end)
+    end
+
+    local noise = 0
+    for i = 1, math.random(50, 200) do
+        noise = noise + i
+        if noise > 10000 then noise = 0 end
+    end
+    pcall(function() collectgarbage("count") end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- §2  BAC-4511 — Server-Side Behavior Analysis Evasion
+-- ═══════════════════════════════════════════════════════════════
+local BehaviorProfile = {
+    reactionTime = { mean = 250, stdDev = 80 },
+    actionDuration = { mean = 1.2, stdDev = 0.4 },
+    actionInterval = { mean = 2.5, stdDev = 1.0 },
+}
+
+local ActionTimer = {
+    lastTimes = {},
+    maxHistory = 20,
+}
+
+local function recordAction(actionType)
+    local now = tick()
+    table.insert(ActionTimer.lastTimes, { type = actionType, time = now })
+    while #ActionTimer.lastTimes > ActionTimer.maxHistory do
+        table.remove(ActionTimer.lastTimes, 1)
+    end
+end
+
+local function getNaturalDelay(minDelay, maxDelay)
+    minDelay = minDelay or 0.1
+    maxDelay = maxDelay or 0.5
+    local now = tick()
+    local recentCount = 0
+    for i = #ActionTimer.lastTimes, 1, -1 do
+        if now - ActionTimer.lastTimes[i].time < 1.0 then
+            recentCount = recentCount + 1
+        else
+            break
+        end
+    end
+    if recentCount > 10 then
+        return maxDelay * 0.8 + math.random() * maxDelay * 0.4
+    end
+    local avg = (minDelay + maxDelay) / 2
+    local variance = (maxDelay - minDelay) / 4
+    local u1 = math.random()
+    local u2 = math.random()
+    local normal = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
+    return math.clamp(avg + normal * variance, minDelay, maxDelay)
+end
+
+local ScanDetector = {
+    isActive = false,
+    lastScanTime = 0,
+    scanInterval = 30,
+}
+
+local function checkScan()
+    local now = tick()
+    if now - ScanDetector.lastScanTime > ScanDetector.scanInterval - 5
+        and now - ScanDetector.lastScanTime < ScanDetector.scanInterval + 5 then
+        ScanDetector.isActive = true
+        ScanDetector.lastScanTime = now
+        return true
+    end
+    ScanDetector.isActive = false
+    return false
+end
+
+local function enterStealthMode()
+    BehaviorProfile.reactionTime.mean = 350
+    BehaviorProfile.actionInterval.mean = 4.0
+end
+
+local function exitStealthMode()
+    BehaviorProfile.reactionTime.mean = 250
+    BehaviorProfile.actionInterval.mean = 2.5
+end
+
+task.spawn(function()
+    while true do
+        task.wait(5)
+        if checkScan() then
+            if not ScanDetector.isActive then
+                enterStealthMode()
+                warn("[BAC-4511] Scan detected — stealth mode")
+            end
+        else
+            if ScanDetector.isActive then
+                exitStealthMode()
+                warn("[BAC-4511] Scan passed — normal operation")
+            end
+        end
+        ScanDetector.isActive = false
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- §3  ENVIRONMENT HARDENING (BAC-5695/4697/73210)
+-- ═══════════════════════════════════════════════════════════════
+local function hardenEnv()
+    local _gc = rawget(_G, "getgc")
+    local _constants = rawget(_G, "getconstants")
+    local _hookfn = rawget(_G, "hookfunction")
+    local _islclosure = rawget(_G, "islclosure")
+
+    local function safeConstants(fn)
+        if not _constants or not fn then return {} end
+        local ok, consts = pcall(_constants, fn)
+        if not ok then return {} end
+        local copy = {}
+        for i = 1, #consts do
+            local v = consts[i]
+            if type(v) == "string" and #v > 2 then
+                copy[i] = v
+            end
+        end
+        return copy
+    end
+
+    local lastFire = 0
+    local function throttledFire(remote, arg1, arg2, arg3, arg4, arg5)
+        local now = tick()
+        local delay = getNaturalDelay(0.03, 0.08)
+        if now - lastFire < delay then
+            task.wait(delay - (now - lastFire))
+        end
+        lastFire = tick()
+        local args = {arg1, arg2, arg3, arg4, arg5}
+        local n = 0
+        for i = 1, 5 do if args[i] ~= nil then n = i end end
+        -- Add random padding for BAC-73210
+        args[n + 1] = math.random(0, 1)
+        return pcall(function() remote:FireServer(table.unpack(args, 1, n + 1)) end)
+    end
+
+    local function protectUpvalues(fn)
+        if not fn then return fn end
+        local mt = getmetatable(fn) or {}
+        local originalIndex = mt.__index
+        mt.__index = function(t, k)
+            if k == "getupvalue" or k == "setupvalue" then
+                return function(f, i, v)
+                    if v ~= nil then return true end
+                    return nil
+                end
+            end
+            if originalIndex then return originalIndex(t, k) end
+            return rawget(t, k)
+        end
+        setmetatable(fn, mt)
+        return fn
+    end
+
+    return {
+        gc = _gc,
+        constants = safeConstants,
+        hookfn = _hookfn,
+        islclosure = _islclosure,
+        fire = throttledFire,
+        protectUpvalues = protectUpvalues,
+    }
+end
+
+local BYPASS = hardenEnv()
+
+-- ═══════════════════════════════════════════════════════════════
+-- §4  BAC-5695 — GC & Hook Function Camouflage
+-- ═══════════════════════════════════════════════════════════════
+local function bac5695_bypass(targetConstant)
+    targetConstant = targetConstant or "X-16"
+    if not BYPASS.gc then return nil end
+
+    local found = nil
+    local ok, gcTable = pcall(BYPASS.gc)
+    if not ok or type(gcTable) ~= "table" then return nil end
+
+    for _, obj in ipairs(gcTable) do
+        if type(obj) == "function" then
+            local isLua = false
+            if BYPASS.islclosure then
+                isLua = pcall(BYPASS.islclosure, obj) == true
+            end
+            if isLua then
+                local consts = BYPASS.constants(obj)
+                if type(consts) == "table" then
+                    for _, c in ipairs(consts) do
+                        if c == targetConstant then
+                            found = obj
+                            break
+                        end
+                    end
+                end
+            end
+            if found then break end
+        end
+    end
+
+    if not found then return nil end
+
+    local original = found
+    local hooked = function(p1, p2, p3, p4, p5)
+        for lvl = 1, 5 do
+            local info = debug.getinfo(lvl, "f")
+            if info and info.func == hooked then
+                local stack = debug.getstack(lvl)
+                for idx, val in pairs(stack) do
+                    if val == targetConstant then
+                        pcall(function() debug.setstack(lvl, idx, nil) end)
+                    end
+                end
+            end
+        end
+        return original(p1, p2, p3, p4, p5)
+    end
+
+    if BYPASS.hookfn then
+        local protected = BYPASS.protectUpvalues(hooked)
+        pcall(function() BYPASS.hookfn(found, protected) end)
+    end
+    return hooked
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- §5  BAC-4697 — Constant Table Leak Prevention
+-- ═══════════════════════════════════════════════════════════════
+local function bac4697_sanitize(fn)
+    local consts = BYPASS.constants(fn)
+    if not consts then return end
+    for i, v in ipairs(consts) do
+        if type(v) == "string" then
+            if v:match("^BAC") or v:match("^Byfron") or v:match("^X-%d+") then
+                consts[i] = string.rep("\0", #v)
+            end
+        end
+    end
+    return consts
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- §6  BAC-73210 — Remote Fire Pattern Obfuscation
+-- ═══════════════════════════════════════════════════════════════
+local function bac73210_fire(remote, a1, a2, a3, a4, a5)
+    local args = {a1, a2, a3, a4, a5}
+    local n = 0
+    for i = 1, 5 do if args[i] ~= nil then n = i end end
+    args[n + 1] = math.random(0, 1)
+    return BYPASS.fire(remote, table.unpack(args, 1, n + 1))
+end
+
+local function bac73210_invoke(remote, a1, a2, a3, a4, a5)
+    local args = {a1, a2, a3, a4, a5}
+    local n = 0
+    for i = 1, 5 do if args[i] ~= nil then n = i end end
+    args[n + 1] = math.random(0, 1)
+    return pcall(function() return remote:InvokeServer(table.unpack(args, 1, n + 1)) end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- §7  BAC-4511 — Safe Action Wrappers
+-- ═══════════════════════════════════════════════════════════════
+local function safeFire(remote, a1, a2, a3, a4, a5)
+    -- Natural delay (BAC-4511)
+    local delay = getNaturalDelay(0.05, 0.15)
+    task.wait(delay)
+    recordAction("fire")
+    -- Throttle + padding (BAC-73210)
+    return bac73210_fire(remote, a1, a2, a3, a4, a5)
+end
+
+local function safeInvoke(remote, a1, a2, a3, a4, a5)
+    local delay = getNaturalDelay(0.08, 0.2)
+    task.wait(delay)
+    recordAction("invoke")
+    return bac73210_invoke(remote, a1, a2, a3, a4, a5)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- §8  EXECUTION
+-- ═══════════════════════════════════════════════════════════════
+task.spawn(function()
+    task.wait(4.5)
+    local r5695 = bac5695_bypass("X-16")
+    warn("[BAC BYPASS v5] 4518: identity masked")
+    warn("[BAC BYPASS v5] 4511: behavior analysis active")
+    warn("[BAC BYPASS v5] 5695: " .. (r5695 and "hooked" or "not found"))
+    warn("[BAC BYPASS v5] 4697: constant sanitizer ready")
+    warn("[BAC BYPASS v5] 73210: fire pattern obfuscated")
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- §9  EXPORTS
+-- ═══════════════════════════════════════════════════════════════
+BAC.bypass5695 = bac5695_bypass
+BAC.sanitize4697 = bac4697_sanitize
+BAC.fire73210 = bac73210_fire
+BAC.invoke73210 = bac73210_invoke
+BAC.safeFire = safeFire
+BAC.safeInvoke = safeInvoke
+BAC.env = BYPASS
+BAC.behavior = BehaviorProfile
+BAC.actionTimer = ActionTimer
+
+return BAC
+
 -- ======================================================================================
 -- [[ OBSIDIAN GLASSMORPHIC 2 UI ENGINE - เก็บไข่ไปกับพยอมบอย ]]
 -- Master UI Spec & Full Automation Engine for Roblox Steal An Egg
