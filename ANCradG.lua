@@ -2092,7 +2092,7 @@ local RaritiesList = {
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar", "Limited", "Event"
 }
 
 local TraitsList = {
@@ -4400,13 +4400,17 @@ AutoCarryToggle:OnChanged(function(state)
                                 if hrp and targetPos then
                                     originalCFrame = hrp.CFrame
                                     hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 3, 0)
-                                    task.wait(0.2)
+                                    task.wait(0.4)
                                 end
                                 prompt.RequiresLineOfSight = false
                                 prompt.MaxActivationDistance = 99999
+                                prompt.HoldDuration = 0
                                 fireproximityprompt(prompt)
-                                task.wait(0.1)
+                                task.wait(0.3)
+                                fireproximityprompt(prompt)
+                                task.wait(0.5)
                                 if originalCFrame and hrp then hrp.CFrame = originalCFrame end
+                                task.wait(0.3)
                             end)
                         end
                     end
