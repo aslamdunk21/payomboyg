@@ -1672,10 +1672,11 @@ local ToggleAutoLook    = Tabs.Combat:AddToggle("AutoLook",    { Title = "ช่
 
 Tabs.Combat:AddParagraph({ Title = "ระบบโจมตี & ล็อกเป้า", Content = "ต่อยอัตโนมัติ, จับทุ่ม (M2) อัตโนมัติ และหันมองศัตรูตอนโจมตี" })
 
-local ToggleAutoAttack  = Tabs.Combat:AddToggle("AutoAttack",  { Title = "ต่อยอัตโนมัติ (Auto M1)", Default = false })
-local ToggleAutoGrapple = Tabs.Combat:AddToggle("AutoGrapple", { Title = "ใช้ท่าจับ/ทุ่มอัตโนมัติ (Auto M2)", Default = false })
-local TogglePunchAssist = Tabs.Combat:AddToggle("PunchAssist", { Title = "ช่วยล็อกเป้าตอนต่อย (Punch Assist)", Default = false })
-local ToggleAntiGrapple = Tabs.Combat:AddToggle("AntiGrapple", { Title = "ดิ้นหลุดจากการโดนจับ (Anti Grapple)", Default = false })
+local ToggleAutoAttack    = Tabs.Combat:AddToggle("AutoAttack",    { Title = "ต่อยอัตโนมัติ (Auto M1)", Default = false })
+local ToggleSmartMovement = Tabs.Combat:AddToggle("SmartMovement", { Title = "เดินเคลื่อนที่ยุทธวิธี (Smart Tactical Movement)", Default = false })
+local ToggleAutoGrapple   = Tabs.Combat:AddToggle("AutoGrapple",   { Title = "ใช้ท่าจับ/ทุ่มอัตโนมัติ (Auto M2)", Default = false })
+local TogglePunchAssist   = Tabs.Combat:AddToggle("PunchAssist",   { Title = "ช่วยล็อกเป้าตอนต่อย (Punch Assist)", Default = false })
+local ToggleAntiGrapple   = Tabs.Combat:AddToggle("AntiGrapple",   { Title = "ดิ้นหลุดจากการโดนจับ (Anti Grapple)", Default = false })
 
 -- [แท็บ: ระบบอัตโนมัติ]
 Tabs.Automation:AddParagraph({ Title = "ระบบซ้ำ & แบกผู้เล่นที่ล้ม", Content = "ซ้ำผู้เล่นที่ล้มอัตโนมัติ, แบกผู้เล่น หรือเกิดใหม่อัตโนมัติ" })
@@ -1779,11 +1780,11 @@ if not callClientFunction then
         local character = LocalPlayer.Character
         if not character then return end
         local playerData = getPlayerData(character)
-        local combatType = playerData and playerData:GetAttribute("CombatType") or "Base"
+        local combatType = playerData and (playerData:GetAttribute("CombatType") or playerData:GetAttribute("CombatStyle")) or "Base"
 
         if CombatSystemClient then
             local folder = CombatSystemClient:FindFirstChild(actionType)
-            local style = folder and folder:FindFirstChild(combatType)
+            local style = folder and (folder:FindFirstChild(combatType) or folder:FindFirstChild("Base") or folder:GetChildren()[1])
             local mod = style and style:FindFirstChild(moduleName)
             if mod then
                 local loaded = require(mod)
@@ -1796,12 +1797,12 @@ if not callClientFunction then
 end
 
 -- ── 7. ระบบแอนิเมชัน & ฟังก์ชันช่วยต่อสู้ ─────────────────────────────────────
-local MAX_REACH_DISTANCE = 14.0
+local MAX_REACH_DISTANCE = 20.0
 local StrictCombatMovements = {}
 
 local function indexStrictCombatAnimations()
     local ok, animationsFolder = pcall(function()
-        return ReplicatedStorage:WaitForChild("Animations", 3)
+        return ReplicatedStorage:WaitForChild("Animations", 8)
     end)
     if not ok or not animationsFolder then return end
 
@@ -1864,27 +1865,19 @@ local FORCE_LOOK_PRIORITY = Enum.RenderPriority.Camera.Value + 1
 
 local function forceLookAt(myHRP, enemyHRP, duration)
     if not myHRP or not enemyHRP then return end
-    local bindName = "GSE_ForceLook_" .. tostring(math.random(1, 1e9))
-    local startTime = os.clock()
-
-    RunService:BindToRenderStep(bindName, FORCE_LOOK_PRIORITY, function()
-        if not myHRP.Parent or not enemyHRP.Parent or (os.clock() - startTime) >= duration then
-            RunService:UnbindFromRenderStep(bindName)
+    local myChar = LocalPlayer.Character
+    if myChar then
+        if myChar:GetAttribute("Ragdoll") == true
+        or myChar:GetAttribute("Downed") == true
+        or myChar:GetAttribute("Stunned") == true
+        or myChar:GetAttribute("Grappling") == true then
             return
         end
-        local myChar = LocalPlayer.Character
-        if myChar then
-            if myChar:GetAttribute("Ragdoll") == true
-            or myChar:GetAttribute("Downed") == true
-            or myChar:GetAttribute("Stunned") == true
-            or myChar:GetAttribute("Grappling") == true then
-                RunService:UnbindFromRenderStep(bindName)
-                return
-            end
-        end
-        local targetPos = Vector3.new(enemyHRP.Position.X, myHRP.Position.Y, enemyHRP.Position.Z)
+    end
+    local targetPos = Vector3.new(enemyHRP.Position.X, myHRP.Position.Y, enemyHRP.Position.Z)
+    if (targetPos - myHRP.Position).Magnitude > 0.1 then
         myHRP.CFrame = CFrame.new(myHRP.Position, targetPos)
-    end)
+    end
 end
 
 -- ── 8. ลูปทำงาน Auto Grip / Auto Carry ────────────────────────────────────────
@@ -1989,48 +1982,9 @@ local autoGripThread = task.spawn(function()
 end)
 registerCleanup(autoGripThread)
 
--- ── 9. ลูปทำงาน Auto Grapple (M2) ─────────────────────────────────────────────
-local GRAPPLE_REACH_DISTANCE = 10.0
-
-local autoGrappleThread = task.spawn(function()
-    while true do
-        task.wait(0.15)
-        if not (Options.AutoGrapple and Options.AutoGrapple.Value) then continue end
-
-        local myChar = LocalPlayer.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-        if not myHRP or myChar:GetAttribute("M2Cooldown") == true then continue end
-
-        local nearestEnemyHRP = nil
-        local nearestDist = GRAPPLE_REACH_DISTANCE
-
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr == LocalPlayer then continue end
-            local enemyChar = plr.Character
-            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
-            if enemyHRP then
-                local dist = (myHRP.Position - enemyHRP.Position).Magnitude
-                if dist <= nearestDist then
-                    nearestDist = dist
-                    nearestEnemyHRP = enemyHRP
-                end
-            end
-        end
-
-        if nearestEnemyHRP then
-            if myChar:GetAttribute("Grappling") == true then continue end
-            local states = myChar:FindFirstChild("States")
-            local gripped = states and states:FindFirstChild("BeingGripped")
-            if gripped and gripped:IsA("ObjectValue") and gripped.Value ~= nil then continue end
-            pcall(function() callClientFunction("Combat", "M2", "OnM2Activated") end)
-        end
-    end
-end)
-registerCleanup(autoGrappleThread)
-
--- ── 10. ลูปทำงาน Auto Attack (M1 / Auto Punch) ─────────────────────────────────
-local AUTO_ATTACK_REACH = 14.0
-local autoAttackM1Holding = false
+-- ══════════════════════════════════════════════════════════════════════════════
+-- ── 9. COMBAT INTELLIGENCE MODULE ──────────────────────────────────────────────
+-- ══════════════════════════════════════════════════════════════════════════════
 
 local function canAttack(myChar)
     if not myChar then return false end
@@ -2048,83 +2002,500 @@ local function canAttack(myChar)
     return true
 end
 
-local function getNearestEnemy(myHRP, maxDist)
-    local nearest = nil
-    local nearestDist = maxDist
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        local char = plr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local d = (myHRP.Position - hrp.Position).Magnitude
-            if d < nearestDist then
-                nearestDist = d
-                nearest = hrp
-            end
+-- ── 9a. GOD-TIER SYSTEM 1: Enemy Cooldown Telemetry ──────────────────────────
+local EnemyCooldownTracker = {}
+
+local function trackEnemySkillUse(userId, skillType, duration)
+    if not userId then return end
+    EnemyCooldownTracker[userId] = EnemyCooldownTracker[userId] or {}
+    EnemyCooldownTracker[userId][skillType] = os.clock() + (duration or 4.0)
+end
+
+local function isEnemySkillOnCD(userId, skillType)
+    if not userId or not EnemyCooldownTracker[userId] then return false end
+    local expTime = EnemyCooldownTracker[userId][skillType]
+    if not expTime then return false end
+    return os.clock() < expTime
+end
+
+-- ── 9b. GOD-TIER SYSTEM 2: Frame Advantage & Startup Counter Engine ────────────
+local function analyzeTrackPhase(track)
+    if not track or not track.IsPlaying or track.Length <= 0 then
+        return "UNKNOWN", 0
+    end
+    local progress = track.TimePosition / track.Length
+    if progress < 0.28 then
+        return "STARTUP", progress  -- Prime counter-hit interrupt window!
+    elseif progress <= 0.65 then
+        return "ACTIVE", progress   -- Active hitbox: Must Parry or Dodge!
+    else
+        return "RECOVERY", progress -- Punish window!
+    end
+end
+
+-- ── 9c. GOD-TIER SYSTEM 3: Raycast Environment & Corner Trapping ──────────────
+local wallRayParams = RaycastParams.new()
+wallRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function evalEnvironmentHazards(myHRP, enemyHRP)
+    local myChar = LocalPlayer.Character
+    if not myChar or not myHRP then
+        return { myBackWall = false, enemyCornered = false }
+    end
+
+    local ignoreList = {myChar}
+    if enemyHRP and enemyHRP.Parent then
+        table.insert(ignoreList, enemyHRP.Parent)
+    end
+    wallRayParams.FilterDescendantsInstances = ignoreList
+
+    local myPos = myHRP.Position + Vector3.new(0, 1, 0)
+    local myBackDir = -myHRP.CFrame.LookVector
+    local rayMyBack = Workspace:Raycast(myPos, myBackDir * 4.5, wallRayParams)
+    local myBackWall = (rayMyBack ~= nil)
+
+    local enemyCornered = false
+    if enemyHRP then
+        local ePos = enemyHRP.Position + Vector3.new(0, 1, 0)
+        local eLook = enemyHRP.CFrame.LookVector
+        local rayEBack  = Workspace:Raycast(ePos, -eLook * 4.0, wallRayParams)
+        local rayELeft  = Workspace:Raycast(ePos, -enemyHRP.CFrame.RightVector * 3.5, wallRayParams)
+        local rayERight = Workspace:Raycast(ePos, enemyHRP.CFrame.RightVector * 3.5, wallRayParams)
+
+        if rayEBack and (rayELeft or rayERight) then
+            enemyCornered = true
         end
     end
-    return nearest, nearestDist
+
+    return {
+        myBackWall = myBackWall,
+        enemyCornered = enemyCornered
+    }
 end
+
+-- ── 9d. Enemy State Reader (Enhanced with Telemetry) ───────────────────────────
+local function readEnemyState(enemyChar)
+    if not enemyChar then return nil end
+    local hrp = enemyChar:FindFirstChild("HumanoidRootPart")
+    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return nil end
+    local hp = hum.Health
+    local maxHp = hum.MaxHealth
+    local blocking  = enemyChar:GetAttribute("Blocking") == true
+    local stunned   = enemyChar:GetAttribute("Stunned") == true
+    local ragdoll   = enemyChar:GetAttribute("Ragdoll") == true
+    local downed    = enemyChar:GetAttribute("Downed") == true
+    local grappling = enemyChar:GetAttribute("Grappling") == true
+    local guardBroken = enemyChar:GetAttribute("GuardBroken") == true
+    local evasiveCD = enemyChar:GetAttribute("EvasiveCooldown") == true
+    local m2CD      = enemyChar:GetAttribute("M2Cooldown") == true
+
+    local plr = Players:GetPlayerFromCharacter(enemyChar)
+    local telemetryNoDodge = (plr and isEnemySkillOnCD(plr.UserId, "Evasive")) or evasiveCD
+
+    return {
+        HRP = hrp, Humanoid = hum, Char = enemyChar, Player = plr,
+        HP = hp, MaxHP = maxHp, HPRatio = (maxHp > 0) and (hp / maxHp) or 1,
+        Blocking = blocking, Stunned = stunned, Ragdoll = ragdoll,
+        Downed = downed, Grappling = grappling, GuardBroken = guardBroken,
+        EvasiveCD = telemetryNoDodge, M2CD = m2CD,
+        IsDisabled = (stunned or ragdoll or downed or guardBroken),
+    }
+end
+
+-- ── 9e. Threat Scoring (multi-target priority) ────────────────────────────────
+local function scoreThreat(myHRP, plr)
+    local char = plr.Character
+    local state = readEnemyState(char)
+    if not state or not state.HRP then return -999 end
+    local dist = (myHRP.Position - state.HRP.Position).Magnitude
+    if dist > 25 then return -999 end
+    if state.Downed or state.Ragdoll then return -500 end
+
+    local score = 100 - dist * 3              -- closer = higher threat
+    if state.Blocking then score = score - 15 end
+    if state.Stunned or state.GuardBroken then score = score + 30 end -- free hit
+    if state.HPRatio < 0.3 then score = score + 20 end               -- finish low HP
+    if state.Grappling then score = score - 40 end
+
+    local toMe = (myHRP.Position - state.HRP.Position)
+    if toMe.Magnitude > 0.5 then
+        local dot = state.HRP.CFrame.LookVector:Dot(toMe.Unit)
+        if dot > 0.6 then score = score + 25 end -- facing us = high threat
+    end
+    return score
+end
+
+local function getThreatsRanked(myHRP, maxCount)
+    maxCount = maxCount or 5
+    local threats = {}
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local sc = scoreThreat(myHRP, plr)
+        if sc > -500 then
+            table.insert(threats, {Player = plr, Score = sc})
+        end
+    end
+    table.sort(threats, function(a, b) return a.Score > b.Score end)
+    if #threats > maxCount then
+        for i = #threats, maxCount + 1, -1 do threats[i] = nil end
+    end
+    return threats
+end
+
+-- ── 9f. Distance Zone Classification ──────────────────────────────────────────
+local ZONE_MELEE   = 6.0   -- close enough to M1
+local ZONE_GRAPPLE = 10.0  -- M2 range
+local ZONE_MID     = 16.0  -- approach zone
+local ZONE_FAR     = 25.0  -- disengage
+
+local function getZone(dist)
+    if dist <= ZONE_MELEE   then return "MELEE"   end
+    if dist <= ZONE_GRAPPLE then return "GRAPPLE" end
+    if dist <= ZONE_MID     then return "MID"     end
+    return "FAR"
+end
+
+-- ── 9g. GOD-TIER SYSTEM 4: Smart Attack & Parry Bait Decision ────────────────
+-- Returns: "M1", "M2", "FEINT", "WAIT", "NONE"
+local function decideAttack(myChar, enemyState, dist, zone, multiCount)
+    if not canAttack(myChar) then return "NONE" end
+    if myChar:GetAttribute("Grappling") == true then return "NONE" end
+
+    -- enemy is disabled → free hit
+    if enemyState.IsDisabled then
+        if zone == "MELEE" then return "M1" end
+        if zone == "GRAPPLE" and not (myChar:GetAttribute("M2Cooldown") == true) then return "M2" end
+        return "WAIT"
+    end
+
+    -- enemy is blocking → check if we can M2 guard break or execute Parry Bait Feint
+    if enemyState.Blocking then
+        if zone == "GRAPPLE" and not (myChar:GetAttribute("M2Cooldown") == true) then
+            return "M2" -- Break guard with heavy
+        end
+        if zone == "MELEE" then
+            local enemyPlr = enemyState.Player
+            -- If enemy Parry is on recovery or CD, feint first!
+            if enemyPlr and not isEnemySkillOnCD(enemyPlr.UserId, "Parry") then
+                return "FEINT" -- Bait enemy parry!
+            end
+            return "WAIT" -- don't punch blindly into block
+        end
+        return "NONE"
+    end
+
+    -- multi-fight: be conservative
+    if multiCount > 1 then
+        if zone == "MELEE" then return "M1" end
+        return "WAIT"
+    end
+
+    -- 1v1 normal: if enemy cannot dodge (tracked via Telemetry), punish with M2 or full M1
+    if zone == "MELEE" then return "M1" end
+    if zone == "GRAPPLE" and not (myChar:GetAttribute("M2Cooldown") == true) and enemyState.EvasiveCD then
+        return "M2" -- guaranteed grapple punish when dodge is on CD
+    end
+    return "WAIT"
+end
+
+-- ── 9e. Smart Auto Grapple ────────────────────────────────────────────────────
+local autoGrappleThread = task.spawn(function()
+    while true do
+        task.wait(0.12)
+        if not (Options.AutoGrapple and Options.AutoGrapple.Value) then continue end
+
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then continue end
+        if myChar:GetAttribute("M2Cooldown") == true then continue end
+        if myChar:GetAttribute("Grappling") == true then continue end
+        if not canAttack(myChar) then continue end
+
+        local threats = getThreatsRanked(myHRP, 3)
+        if #threats == 0 then continue end
+
+        local target = threats[1].Player
+        local es = readEnemyState(target.Character)
+        if not es or not es.HRP then continue end
+        local dist = (myHRP.Position - es.HRP.Position).Magnitude
+        local zone = getZone(dist)
+
+        -- smart grapple: only when it makes sense
+        local shouldGrapple = false
+        if zone == "GRAPPLE" or zone == "MELEE" then
+            if es.Blocking then
+                shouldGrapple = true -- break their guard
+            elseif es.Stunned or es.GuardBroken then
+                shouldGrapple = true -- free grapple
+            elseif es.EvasiveCD and dist <= ZONE_GRAPPLE then
+                shouldGrapple = true -- can't dodge our M2
+            elseif #threats == 1 and es.HPRatio < 0.35 then
+                shouldGrapple = true -- finish them
+            end
+        end
+
+        if shouldGrapple then
+            forceLookAt(myHRP, es.HRP, 0.3)
+            pcall(function() callClientFunction("Combat", "M2", "OnM2Activated") end)
+            task.wait(0.4)
+        end
+    end
+end)
+registerCleanup(autoGrappleThread)
+
+-- ── 10. Smart Auto Attack Engine ─────────────────────────────────────────────
+local autoAttackM1Holding = false
+local _attackComboCount = 0
+local _lastAttackTime = 0
 
 ToggleAutoAttack:OnChanged(function(Value)
     if not Value then
         pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
         autoAttackM1Holding = false
+        _attackComboCount = 0
     end
 end)
 
 local autoAttackThread = task.spawn(function()
     while true do
-        task.wait(0.08)
+        task.wait(0.06)
 
         local autoAttackActive = Options.AutoAttack and Options.AutoAttack.Value
-
         if not autoAttackActive then
             if autoAttackM1Holding then
                 pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
                 autoAttackM1Holding = false
             end
+            _attackComboCount = 0
             continue
         end
 
         local myChar = LocalPlayer.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
         if not myHRP or not canAttack(myChar) then
             if autoAttackM1Holding then
                 pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
                 autoAttackM1Holding = false
             end
+            _attackComboCount = 0
             continue
         end
 
-        local enemyHRP, dist = getNearestEnemy(myHRP, AUTO_ATTACK_REACH)
+        -- use threat system for target selection
+        local threats = getThreatsRanked(myHRP, 5)
+        if #threats == 0 then
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+            _attackComboCount = 0
+            continue
+        end
 
-        if enemyHRP then
-            if myChar:GetAttribute("Grappling") == true then continue end
-            local states = myChar:FindFirstChild("States")
-            local gripped = states and states:FindFirstChild("BeingGripped")
-            if gripped and gripped:IsA("ObjectValue") and gripped.Value ~= nil then continue end
+        local primary = threats[1].Player
+        local es = readEnemyState(primary.Character)
+        if not es or not es.HRP then continue end
+
+        local dist = (myHRP.Position - es.HRP.Position).Magnitude
+        local zone = getZone(dist)
+        local multiCount = #threats
+        local decision = decideAttack(myChar, es, dist, zone, multiCount)
+
+        if decision == "M1" then
+            -- face target before punching
+            forceLookAt(myHRP, es.HRP, 0.25)
+
+            -- adaptive combo timing based on enemy state
+            local holdTime = 0.16
+            local pauseTime = 0.04
+            if es.Stunned or es.GuardBroken then
+                holdTime = 0.12  -- faster punches on stunned targets
+                pauseTime = 0.02
+            elseif multiCount > 1 then
+                holdTime = 0.20  -- slightly slower, more controlled in group fights
+                pauseTime = 0.06
+            end
+
+            -- combo limit: pause after 4 hits to avoid predictability
+            _attackComboCount = _attackComboCount + 1
+            if _attackComboCount > 4 then
+                if autoAttackM1Holding then
+                    pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                    autoAttackM1Holding = false
+                end
+                _attackComboCount = 0
+                task.wait(0.15) -- micro-pause between combos
+                continue
+            end
 
             if not autoAttackM1Holding then
                 pcall(function() callClientFunction("Combat", "M1", "Hold", "Start") end)
                 autoAttackM1Holding = true
             end
-            task.wait(0.18)
+            task.wait(holdTime)
             pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
             autoAttackM1Holding = false
-            task.wait(0.05)
-        else
+            task.wait(pauseTime)
+
+        elseif decision == "M2" then
+            -- grapple handled by section 9e, just face target
             if autoAttackM1Holding then
                 pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
                 autoAttackM1Holding = false
             end
+            forceLookAt(myHRP, es.HRP, 0.3)
+            _attackComboCount = 0
+
+        elseif decision == "FEINT" then
+            -- Micro-tap M1 once to bait enemy parry, then pause 0.22s to waste enemy parry window
+            forceLookAt(myHRP, es.HRP, 0.25)
+            pcall(function() callClientFunction("Combat", "M1", "Hold", "Start") end)
+            task.wait(0.08)
+            pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+            autoAttackM1Holding = false
+            _attackComboCount = 0
+            if primary then
+                trackEnemySkillUse(primary.UserId, "Parry", 1.8) -- record enemy parry attempt
+            end
+            task.wait(0.22) -- wait out enemy parry window
+
+        elseif decision == "WAIT" then
+            -- keep facing target, stop punching, wait for opening
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+            forceLookAt(myHRP, es.HRP, 0.2)
+            _attackComboCount = 0
+
+        else -- NONE
+            if autoAttackM1Holding then
+                pcall(function() callClientFunction("Combat", "M1", "Hold", "Stop") end)
+                autoAttackM1Holding = false
+            end
+            _attackComboCount = 0
         end
     end
 end)
 registerCleanup(autoAttackThread)
 
--- ── 11. ระบบตรวจจับ Auto Defense (Parry) & Auto Dodge (Evasive) ───────────────
+-- ── 10b. Intelligent Tactical Movement Engine ─────────────────────────────────
+local TACTICAL_MAX_DIST = 50.0
+
+local autoMovementThread = task.spawn(function()
+    while true do
+        task.wait(0.05)
+
+        local smartMove  = Options.SmartMovement and Options.SmartMovement.Value
+        local autoAttack = Options.AutoAttack and Options.AutoAttack.Value
+
+        if not (smartMove or autoAttack) then continue end
+
+        local myChar = LocalPlayer.Character
+        local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myHum  = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if not myHRP or not myHum or myHum.Health <= 0 then continue end
+
+        if myChar:GetAttribute("Ragdoll") == true
+        or myChar:GetAttribute("Downed") == true
+        or myChar:GetAttribute("Stunned") == true
+        or myChar:GetAttribute("Grappling") == true then
+            continue
+        end
+
+        local states = myChar:FindFirstChild("States")
+        if states then
+            local beingGripped = states:FindFirstChild("BeingGripped")
+            if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then continue end
+            local beingCarried = states:FindFirstChild("BeingCarried")
+            if beingCarried and beingCarried:IsA("ObjectValue") and beingCarried.Value ~= nil then continue end
+        end
+
+        -- Evaluate threats using Threat Scoring System
+        local threats = getThreatsRanked(myHRP, 5)
+        if #threats == 0 then continue end
+
+        local enemyCount = #threats
+        local primaryTarget = threats[1].Player
+        local primaryState  = readEnemyState(primaryTarget.Character)
+        if not primaryState or not primaryState.HRP then continue end
+
+        local primaryHRP = primaryState.HRP
+        local primaryDist = (myHRP.Position - primaryHRP.Position).Magnitude
+        if primaryDist > TACTICAL_MAX_DIST then continue end
+
+        -- Ensure Humanoid AutoRotate is enabled for smooth turning
+        myHum.AutoRotate = true
+
+        -- =========================================================================
+        -- STRATEGY A: 1v1 FIGHT MODE (Direct Aggressive Push)
+        -- =========================================================================
+        if enemyCount == 1 then
+            if primaryDist > 2.5 then
+                -- Push straight forward into target
+                myHum:MoveTo(primaryHRP.Position)
+            else
+                -- In Melee Range (<= 2.5 studs): Stick close to target
+                myHum:MoveTo(primaryHRP.Position)
+            end
+
+        -- =========================================================================
+        -- STRATEGY B: MULTI-FIGHT MODE (2+ Enemies: Smart Kiting)
+        -- =========================================================================
+        else
+            local crowdCenter = Vector3.zero
+            local activeCount = 0
+            for _, t in ipairs(threats) do
+                local es = readEnemyState(t.Player.Character)
+                if es and es.HRP then
+                    crowdCenter = crowdCenter + es.HRP.Position
+                    activeCount = activeCount + 1
+                end
+            end
+            if activeCount > 0 then crowdCenter = crowdCenter / activeCount end
+
+            -- Check for disabled/stunned enemy to punish
+            local disabledTarget = nil
+            for _, t in ipairs(threats) do
+                local es = readEnemyState(t.Player.Character)
+                if es and es.HRP and (es.Stunned or es.GuardBroken or es.Downed) then
+                    local d = (myHRP.Position - es.HRP.Position).Magnitude
+                    if d <= 12.0 then
+                        disabledTarget = es
+                        break
+                    end
+                end
+            end
+
+            if disabledTarget then
+                -- Punishment dive
+                myHum:MoveTo(disabledTarget.HRP.Position)
+
+            elseif primaryDist < 5.0 and primaryState.M2CD == false then
+                -- Dangerously close in multi-fight: Backpedal away
+                local awayVec = (myHRP.Position - crowdCenter)
+                if awayVec.Magnitude < 0.1 then awayVec = (myHRP.Position - primaryHRP.Position) end
+                local backPos = myHRP.Position + Vector3.new(awayVec.X, 0, awayVec.Z).Unit * 8.0
+                myHum:MoveTo(backPos)
+
+            else
+                -- Perimeter stance: Move towards primary target
+                myHum:MoveTo(primaryHRP.Position)
+            end
+        end
+
+        -- Raycast Environment Check: Avoid getting stuck against walls
+        local envInfo = evalEnvironmentHazards(myHRP, primaryHRP)
+        if envInfo.myBackWall and primaryDist <= 5.0 then
+            local escapePos = myHRP.Position + myHRP.CFrame.RightVector * 5.0
+            myHum:MoveTo(escapePos)
+        end
+    end
+end)
+registerCleanup(autoMovementThread)
+
+-- ── 11. Smart Defense System (Parry / Dodge) ─────────────────────────────────
 local M1_BASE_DELAY = {
     BaseCombat=0.22, BasicAnims=0.22, BoxingAnims=0.19, CaipoeiraAnims=0.25,
     HakariAnims=0.21, HakariOtherAnims=0.21, KarateAnims=0.22, KureAnims=0.20,
@@ -2137,18 +2508,85 @@ local M2_BASE_DELAY = {
 }
 local COMBO_SHAVE = {0, -0.015, -0.028, -0.038}
 
+-- smart evasive direction: in multi-fight, dodge AWAY from crowd center
+local function getSmartEvasiveDir(myHRP, attackerHRP)
+    local myChar = LocalPlayer.Character
+    if not myChar then return "Backward" end
+
+    local threats = getThreatsRanked(myHRP, 5)
+    if #threats <= 1 then
+        -- 1v1: dodge sideways to flank
+        local dirs = {"Left", "Right"}
+        return dirs[math.random(1, 2)]
+    end
+
+    -- multi-fight: compute crowd center, dodge away from it
+    local cx, cz, count = 0, 0, 0
+    for _, t in ipairs(threats) do
+        local es = readEnemyState(t.Player.Character)
+        if es and es.HRP then
+            cx = cx + es.HRP.Position.X
+            cz = cz + es.HRP.Position.Z
+            count = count + 1
+        end
+    end
+    if count == 0 then return "Backward" end
+    cx, cz = cx / count, cz / count
+
+    local awayVec = Vector3.new(myHRP.Position.X - cx, 0, myHRP.Position.Z - cz)
+    if awayVec.Magnitude < 0.1 then return "Backward" end
+    local localDir = myHRP.CFrame:VectorToObjectSpace(awayVec.Unit)
+
+    if math.abs(localDir.Z) > math.abs(localDir.X) then
+        return localDir.Z < 0 and "Forward" or "Backward"
+    else
+        return localDir.X < 0 and "Left" or "Right"
+    end
+end
+
+-- decide: DODGE, PARRY, or BOTH
+local function decideDefenseAction(isM2, myChar)
+    local autoDefense = Options.AutoDefense and Options.AutoDefense.Value
+    local autoEvasive = Options.AutoEvasive and Options.AutoEvasive.Value
+    local canDodge = autoEvasive and not (myChar:GetAttribute("EvasiveCooldown") == true)
+
+    if isM2 then
+        -- M2 (heavy): DODGE first priority (parry timing is tight, guard break risk)
+        if canDodge then return "DODGE" end
+        if autoDefense then return "PARRY" end
+        return "NONE"
+    else
+        -- M1 (light): PARRY preferred (saves dodge CD for heavies)
+        if autoDefense then return "PARRY" end
+        if canDodge then return "DODGE" end
+        return "NONE"
+    end
+end
+
 local function monitorAnimator(enemyPlayer, animator)
     local conn = animator.AnimationPlayed:Connect(function(track)
         if enemyPlayer == LocalPlayer then return end
         local autoDefense = Options.AutoDefense and Options.AutoDefense.Value
         local autoEvasive = Options.AutoEvasive and Options.AutoEvasive.Value
-
         if not autoDefense and not autoEvasive then return end
 
         local trackId = string.match(track.Animation.AnimationId, "%d+")
         if not trackId then return end
 
         local moveData = StrictCombatMovements[trackId]
+
+        -- fallback: detect unknown combat anims via Priority
+        if not moveData then
+            local pri = track.Priority
+            if pri == Enum.AnimationPriority.Action
+            or pri == Enum.AnimationPriority.Action2
+            or pri == Enum.AnimationPriority.Action3
+            or pri == Enum.AnimationPriority.Action4 then
+                local nameUp = string.upper(track.Animation.Name or "")
+                local guessHeavy = not not (string.find(nameUp, "M2") or string.find(nameUp, "BREAK") or string.find(nameUp, "HEAVY"))
+                moveData = { Style = "Unknown", Name = track.Animation.Name or "?", IsHeavy = guessHeavy, IsEHit = false, ComboIndex = 1 }
+            end
+        end
         if not moveData then return end
 
         local myChar  = LocalPlayer.Character
@@ -2156,12 +2594,24 @@ local function monitorAnimator(enemyPlayer, animator)
         local enemyChar = enemyPlayer.Character
         local enemyHRP  = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
         if not myHRP or not enemyHRP then return end
-        if (myHRP.Position - enemyHRP.Position).Magnitude > MAX_REACH_DISTANCE then return end
+
+        local dist = (myHRP.Position - enemyHRP.Position).Magnitude
+        if dist > MAX_REACH_DISTANCE then return end
 
         local isM2       = moveData.IsHeavy
         local isEHit     = moveData.IsEHit
         local comboIndex = moveData.ComboIndex
         local styleName  = moveData.Style
+
+        -- Record skill usage telemetry
+        if enemyPlayer and enemyPlayer.UserId then
+            if isM2 then
+                trackEnemySkillUse(enemyPlayer.UserId, "M2", 3.8)
+            end
+            if isEHit then
+                trackEnemySkillUse(enemyPlayer.UserId, "Evasive", 4.0)
+            end
+        end
 
         local fired = false
         local markerConns = {}
@@ -2192,29 +2642,21 @@ local function monitorAnimator(enemyPlayer, animator)
                 if beingGripped and beingGripped:IsA("ObjectValue") and beingGripped.Value ~= nil then return end
             end
 
-            local autoLook = Options.AutoLook and Options.AutoLook.Value
-            if autoLook then
-                forceLookAt(mh, eh, 0.35)
-            else
-                if mc:GetAttribute("Grappling") ~= true then
-                    mh.CFrame = CFrame.lookAt(mh.Position, Vector3.new(eh.Position.X, mh.Position.Y, eh.Position.Z))
-                end
-            end
+            -- always face attacker
+            forceLookAt(mh, eh, 0.35)
 
-            if Options.AutoEvasive and Options.AutoEvasive.Value then
+            local action = decideDefenseAction(isM2, mc)
+
+            if action == "DODGE" then
                 task.spawn(function()
-                    local c = LocalPlayer.Character
-                    if c:GetAttribute("EvasiveCooldown") then return end
-                    if c:GetAttribute("Grappling") == true then return end
-                    local dir = getEvasiveDirectionRelative(mh, eh)
+                    if mc:GetAttribute("Grappling") == true then return end
+                    local dir = getSmartEvasiveDir(mh, eh)
                     pcall(function() callClientFunction("Combat", "Evasive", "Evasive", dir) end)
                 end)
-            end
 
-            if Options.AutoDefense and Options.AutoDefense.Value then
+            elseif action == "PARRY" then
                 task.spawn(function()
-                    local c = LocalPlayer.Character
-                    if c:GetAttribute("Grappling") == true then return end
+                    if mc:GetAttribute("Grappling") == true then return end
                     local sigs = {
                         {"Combat","Block","Block"},
                         {"Combat","Block","OnBlockActivated"},
@@ -2222,10 +2664,8 @@ local function monitorAnimator(enemyPlayer, animator)
                         {"Block","Block","Block"},
                         {"Block","Block","OnBlockActivated"},
                     }
-                    local worked = nil
                     for _, s in ipairs(sigs) do
-                        local ok, err = pcall(function() callClientFunction(s[1], s[2], s[3]) end)
-                        if ok and not worked then worked = s end
+                        pcall(function() callClientFunction(s[1], s[2], s[3]) end)
                     end
                     local holdTime = isM2 and 0.55 or 0.25
                     task.wait(holdTime)
@@ -2262,17 +2702,32 @@ end
 
 local function setupPlayerTracking(player)
     if player == LocalPlayer then return end
-    local cAdded = player.CharacterAdded:Connect(function(char)
-        local humanoid = char:WaitForChild("Humanoid", 5)
-        local animator = humanoid and humanoid:WaitForChild("Animator", 5)
-        if animator then monitorAnimator(player, animator) end
-    end)
+
+    local function attachAnimator(char)
+        if not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+        if not humanoid then return end
+
+        local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid:WaitForChild("Animator", 5)
+        if animator then
+            monitorAnimator(player, animator)
+        else
+            local cConn
+            cConn = humanoid.ChildAdded:Connect(function(child)
+                if child:IsA("Animator") then
+                    cConn:Disconnect()
+                    monitorAnimator(player, child)
+                end
+            end)
+            registerCleanup(cConn)
+        end
+    end
+
+    local cAdded = player.CharacterAdded:Connect(attachAnimator)
     registerCleanup(cAdded)
 
     if player.Character then
-        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-        if animator then monitorAnimator(player, animator) end
+        task.spawn(attachAnimator, player.Character)
     end
 end
 
@@ -2467,20 +2922,13 @@ local PUNCH_ASSIST_REACH = 18.0
 local PUNCH_ASSIST_SNAP_DURATION = 0.35
 
 local function getNearest_PunchAssist(myHRP)
-    local nearest, nearestDist = nil, PUNCH_ASSIST_REACH
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        local char = plr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local d = (myHRP.Position - hrp.Position).Magnitude
-            if d < nearestDist then
-                nearestDist = d
-                nearest = hrp
-            end
-        end
+    local threats = getThreatsRanked(myHRP, 3)
+    if #threats > 0 then
+        local targetChar = threats[1].Player.Character
+        local hrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp end
     end
-    return nearest
+    return nil
 end
 
 local function punchAssistGuardCheck(myChar)
