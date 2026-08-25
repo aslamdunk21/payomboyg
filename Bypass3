@@ -1,951 +1,442 @@
--- ═══════════════════════════════════════════════════════════════
--- BAC FULL BYPASS v13.2 — StealAnEgg Compatible
--- Covers: BAC-1514, BAC-2519, BAC-4511, BAC-4518, BAC-4519,
---         BAC-5695, BAC-4697, BAC-6699, BAC-73210, BAC-9512,
---         BAC-9516
--- Game: Steal An Egg (PlaceId: 107778070777162)
--- ═══════════════════════════════════════════════════════════════
 
--- ═══════════════════════════════════════════════════════════════
--- §0  GLOBAL DECLARATIONS
--- ═══════════════════════════════════════════════════════════════
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
+repeat
+    task.wait()
+until game:IsLoaded()
 
-BAC = {}
+local player = game.Players.LocalPlayer
 
--- ═══════════════════════════════════════════════════════════════
--- §0.1  BAC-9516 — Heap Signature & Allocation Timing
--- ═══════════════════════════════════════════════════════════════
-local HeapFlow = {
-    allocSizes = {},
-    gcIntervals = {},
-    lastGCTime = 0,
-    signature = "",
+local CONFIG = {
+    DELAY = 12,
+    HIDE_CONSOLE = false,
+    FAKE_LAG = true,
+    BEHAVIOR_RANDOM = true,
+    BLOCK_REMOTES = true,
 }
 
-local function randomizeHeapSignature()
-    local noise = {}
-    for i = 1, math.random(10, 30) do
-        local size = math.random(64, 4096)
-        noise[i] = string.rep(string.char(math.random(0, 255)), size)
-        table.insert(HeapFlow.allocSizes, size)
-    end
-    local shuffled = {}
-    for i = 1, #noise do shuffled[i] = i end
-    for i = #shuffled, 2, -1 do
-        local j = math.random(i)
-        shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-    end
-    for _, idx in ipairs(shuffled) do
-        noise[idx] = nil
-    end
-    HeapFlow.signature = ""
-    for i = 1, 16 do
-        HeapFlow.signature = HeapFlow.signature .. string.char(math.random(0, 255))
-    end
-    while #HeapFlow.allocSizes > 50 do
-        table.remove(HeapFlow.allocSizes, 1)
-    end
-end
+print("Loading bypass framework...")
 
-local function maskGCTiming()
-    local now = tick()
-    local interval = now - HeapFlow.lastGCTime
-    table.insert(HeapFlow.gcIntervals, interval)
-    HeapFlow.lastGCTime = now
-    while #HeapFlow.gcIntervals > 20 do
-        table.remove(HeapFlow.gcIntervals, 1)
-    end
-    if math.random() < 0.3 then
-        pcall(function() gcinfo() end)
-    end
-end
+-- Layer 1: External bypass (DISABLED)
+-- local bypassLoaded = false
+-- pcall(function()
+--     loadstring(game:HttpGet("https://raw.githubusercontent.com/Jko-Scripts/Adonis-AC-Bypass/main/Source.luau"))()
+--     bypassLoaded = true
+--     print("External bypass loaded")
+-- end)
+local bypassLoaded = false
 
-local function sanitizeStringTable()
-    for i = 1, math.random(5, 15) do
-        local randomStr = ""
-        for j = 1, math.random(8, 32) do
-            randomStr = randomStr .. string.char(math.random(32, 126))
-        end
-        randomStr = nil
-    end
-end
+task.wait(2)
 
--- ═══════════════════════════════════════════════════════════════
--- §0.2  BAC-4519 — Network Packet Timing & Sequence Analysis
--- ═══════════════════════════════════════════════════════════════
-local NetworkFlow = {
-    packetTimes = {},
-    sequenceNumbers = {},
-    lastSeq = 0,
-    rttHistory = {},
-    maxHistory = 40,
-}
-
-local function maskSequenceGaps()
-    NetworkFlow.lastSeq = NetworkFlow.lastSeq + 1
-    if math.random() < 0.05 then
-        NetworkFlow.lastSeq = NetworkFlow.lastSeq - 1
-    end
-    table.insert(NetworkFlow.sequenceNumbers, NetworkFlow.lastSeq)
-    while #NetworkFlow.sequenceNumbers > NetworkFlow.maxHistory do
-        table.remove(NetworkFlow.sequenceNumbers, 1)
-    end
-end
-
-local function sanitizeRTT()
-    local fakeRTT = math.random(30, 150)
-    table.insert(NetworkFlow.rttHistory, fakeRTT)
-    while #NetworkFlow.rttHistory > NetworkFlow.maxHistory do
-        table.remove(NetworkFlow.rttHistory, 1)
-    end
-end
-
-local function generateNaturalPacketDelay()
-    local baseDelay = 0.05
-    local jitter = math.random() * 0.03
-    local now = tick()
-    local recentPackets = 0
-    for i = #NetworkFlow.packetTimes, 1, -1 do
-        if now - NetworkFlow.packetTimes[i] < 1.0 then
-            recentPackets = recentPackets + 1
-        else
+-- Layer 2: Smart delay system
+local function smartWait()
+    local startTime = tick()
+    local maxWait = CONFIG.DELAY + 5
+    
+    while tick() - startTime < CONFIG.DELAY do
+        local adonisReady = false
+        pcall(function()
+            for _, v in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+                if v.Name:lower():find("admin") then
+                    adonisReady = true
+                    break
+                end
+            end
+        end)
+        
+        if adonisReady and tick() - startTime > 8 then
+            task.wait(3)
             break
         end
-    end
-    if recentPackets > 15 then
-        baseDelay = baseDelay * 1.5
-    end
-    table.insert(NetworkFlow.packetTimes, now)
-    while #NetworkFlow.packetTimes > NetworkFlow.maxHistory do
-        table.remove(NetworkFlow.packetTimes, 1)
-    end
-    return baseDelay + jitter
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §0.3  BAC-9512 — Memory Pattern
--- ═══════════════════════════════════════════════════════════════
-MemoryFlow = {
-    allocCount = 0,
-    lastAllocTime = 0,
-    connectionCount = 0,
-    yieldHistory = {},
-    maxHistory = 30,
-}
-
-local function randomizeMemoryPattern()
-    local chunks = {}
-    for i = 1, math.random(5, 15) do
-        chunks[i] = string.rep("\0", math.random(100, 500))
-    end
-    local order = {}
-    for i = 1, #chunks do order[i] = i end
-    for i = #order, 2, -1 do
-        local j = math.random(i)
-        order[i], order[j] = order[j], order[i]
-    end
-    for _, idx in ipairs(order) do
-        chunks[idx] = nil
-    end
-    local memBefore = gcinfo()
-    for i = 1, 3 do chunks[i] = nil end
-    local memAfter = gcinfo()
-    MemoryFlow.allocCount = MemoryFlow.allocCount + (memBefore - memAfter)
-end
-
-local function maskConnectionCount()
-    local guiConns = 0
-    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in ipairs(playerGui:GetChildren()) do
-            guiConns = guiConns + #gui:GetChildren()
-        end
-    end
-    MemoryFlow.connectionCount = guiConns
-    return guiConns
-end
-
-local function sanitizeYieldPattern()
-    local now = tick()
-    table.insert(MemoryFlow.yieldHistory, now)
-    while #MemoryFlow.yieldHistory > MemoryFlow.maxHistory do
-        table.remove(MemoryFlow.yieldHistory, 1)
-    end
-    if #MemoryFlow.yieldHistory >= 5 then
-        local intervals = {}
-        for i = 2, #MemoryFlow.yieldHistory do
-            intervals[i-1] = MemoryFlow.yieldHistory[i] - MemoryFlow.yieldHistory[i-1]
-        end
-        local sum = 0
-        for _, v in ipairs(intervals) do sum = sum + v end
-        local avg = sum / #intervals
-        local variance = 0
-        for _, v in ipairs(intervals) do
-            variance = variance + (v - avg) * (v - avg)
-        end
-        variance = variance / #intervals
-        if variance < 0.001 then
-            return math.random() * 0.05
-        end
-    end
-    return 0
-end
-
-local function maskTableMetamethods(tbl)
-    local mt = getmetatable(tbl)
-    if not mt then return tbl end
-    local cleanMt = {}
-    for k, v in pairs(mt) do
-        if k ~= "__index" and k ~= "__newindex" and k ~= "__metatable" then
-            cleanMt[k] = v
-        end
-    end
-    local proxy = {}
-    setmetatable(proxy, cleanMt)
-    local proxyMt = getmetatable(proxy)
-    proxyMt.__index = function(_, k)
-        return tbl[k]
-    end
-    proxyMt.__newindex = function(_, k, v)
-        tbl[k] = v
-    end
-    return proxy
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §0.4  BAC-6699 — Remote Event Property Tampering Detection
--- ═══════════════════════════════════════════════════════════════
-local RemoteGuard = {
-    protectedRemotes = {},
-    originalFires = {},
-    originalInvokes = {},
-    knownNetworkFolder = nil,
-    argPadding = {},
-    callStackHistory = {},
-    maxHistory = 50,
-}
-
-local function captureOriginalNetworkFolder()
-    if not ReplicatedStorage then 
-        RemoteGuard.knownNetworkFolder = nil
-        return false 
-    end
-    RemoteGuard.knownNetworkFolder = ReplicatedStorage:FindFirstChild("Network")
-    return RemoteGuard.knownNetworkFolder ~= nil
-end
-
-local function padRemoteArgs(args, originalN)
-    local n = originalN
-    while n < 5 do
-        n = n + 1
-        args[n] = math.random(0, 1) == 1
-    end
-    return args, n
-end
-
-local function randomizeCallStack()
-    table.insert(RemoteGuard.callStackHistory, tick())
-    while #RemoteGuard.callStackHistory > RemoteGuard.maxHistory do
-        table.remove(RemoteGuard.callStackHistory, 1)
+        
+        task.wait(1)
     end
 end
 
-local function isProtectedRemote(remote)
-    if not remote or not remote:IsA("RemoteEvent") then return false end
+smartWait()
+
+-- Layer 3: Metatable protection
+local oldMeta = {}
+local metaProtected = false
+
+pcall(function()
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
     
-    if RemoteGuard.knownNetworkFolder then
-        local parent = remote.Parent
-        if parent and parent == RemoteGuard.knownNetworkFolder then
+    oldMeta.__index = mt.__index
+    oldMeta.__newindex = mt.__newindex
+    oldMeta.__namecall = mt.__namecall
+    
+    metaProtected = true
+    setreadonly(mt, true)
+    print("Metatable protection enabled")
+end)
+
+-- Layer 4: Remote interception and kick protection
+if CONFIG.BLOCK_REMOTES then
+    local blockedRemotes = {
+        "Detected", "Kick", "Ban", "AdminDetection",
+        "AntiCheat", "Security", "LogExploit",
+        "StaminaChange", "AntiToolClone"
+    }
+    
+    local suspiciousPatterns = {
+        "detect", "kick", "ban", "log", "report",
+        "exploit", "cheat", "hack", "inject", "security",
+        "anticheat", "admin", "stamina", "antitool"
+    }
+    
+    local function checkcaller()
+        local callingScript = getcallingscript()
+        if callingScript == nil then
             return true
         end
-    end
-    return false
-end
-
-local function maskRemoteFire(self, ...)
-    if not isProtectedRemote(self) then
-        return self.FireServer(self, ...)
-    end
-    
-    randomizeCallStack()
-    local args = table.pack(...)
-    args, args.n = padRemoteArgs(args, args.n)
-    
-    return self.FireServer(self, table.unpack(args, 1, args.n))
-end
-
-local function maskRemoteInvoke(self, ...)
-    if not isProtectedRemote(self) then
-        return self.InvokeServer(self, ...)
-    end
-    
-    randomizeCallStack()
-    local args = table.pack(...)
-    args, args.n = padRemoteArgs(args, args.n)
-    
-    return self.InvokeServer(self, table.unpack(args, 1, args.n))
-end
-
-local function setupRemoteGuard()
-    if captureOriginalNetworkFolder() then
-        warn("[BAC-6699] Network folder captured: " .. tostring(RemoteGuard.knownNetworkFolder.Name))
-    else
-        warn("[BAC-6699] Network folder not found — running in degraded mode")
-    end
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §0.5  BAC-2519 — HumanoidRootPart.Position Validation Bypass
--- ═══════════════════════════════════════════════════════════════
-local HRPGuard = {
-    enabled = true,
-    lastReadPosition = nil,
-    readHistory = {},
-    hookedRoots = {},
-    descriptorProtector = nil,
-    readFrequency = {},
-    maxHistory = 40,
-    positionVariance = 0.01,
-}
-
-local function getHRPPosition(character)
-    if not character then return Vector3.zero end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return Vector3.zero end
-    
-    table.insert(HRPGuard.readHistory, tick())
-    while #HRPGuard.readHistory > HRPGuard.maxHistory do
-        table.remove(HRPGuard.readHistory, 1)
-    end
-    
-    local pos = hrp.Position
-    HRPGuard.lastReadPosition = pos
-    return pos
-end
-
-local function getHRPCFrame(character)
-    if not character then return CFrame.new() end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return CFrame.new() end
-    
-    table.insert(HRPGuard.readHistory, tick())
-    while #HRPGuard.readHistory > HRPGuard.maxHistory do
-        table.remove(HRPGuard.readHistory, 1)
-    end
-    
-    local cf = hrp.CFrame
-    return cf
-end
-
-local function fakePosition(character)
-    if not character then return Vector3.zero end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return Vector3.zero end
-    
-    local actualPos = hrp.Position
-    local fakePos = Vector3.new(
-        actualPos.X + (math.random() - 0.5) * 2,
-        actualPos.Y,
-        actualPos.Z + (math.random() - 0.5) * 2
-    )
-    return fakePos
-end
-
-local function fakeCFrame(character)
-    if not character then return CFrame.new() end
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return CFrame.new() end
-    
-    local actualCF = hrp.CFrame
-    local pos = actualCF.Position
-    local _, y, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = actualCF:components()
-    local fakePos = Vector3.new(
-        pos.X + (math.random() - 0.5) * 2,
-        pos.Y,
-        pos.Z + (math.random() - 0.5) * 2
-    )
-    return CFrame.new(fakePos) * CFrame.new(0, 0, 0, r00, r01, r02, r10, r11, r12, r20, r21, r22)
-end
-
-local function checkReadFrequency()
-    local now = tick()
-    local recent = 0
-    for i = #HRPGuard.readHistory, 1, -1 do
-        if now - HRPGuard.readHistory[i] < 1.0 then
-            recent = recent + 1
-        else
-            break
-        end
-    end
-    HRPGuard.readFrequency[#HRPGuard.readFrequency + 1] = recent
-    while #HRPGuard.readFrequency > HRPGuard.maxHistory do
-        table.remove(HRPGuard.readFrequency, 1)
-    end
-    return recent
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §0.6  BAC-1514 — CFrame & Physics Validation Bypass
--- ═══════════════════════════════════════════════════════════════
-CFrameBypass = {
-    enabled = true,
-    lastPosition = nil,
-    lastVelocity = Vector3.zero,
-    velocityHistory = {},
-    positionHistory = {},
-    teleportThreshold = 50,
-    fakeVelocity = nil,
-    pinConns = {},
-    maxHistory = 30,
-    fakeSpeedRange = { min = 12, max = 16 },
-    lastTeleportTime = 0,
-    reconciliationFails = 0,
-}
-
-local function recordPosition(pos)
-    if not pos then return end
-    table.insert(CFrameBypass.positionHistory, pos)
-    while #CFrameBypass.positionHistory > CFrameBypass.maxHistory do
-        table.remove(CFrameBypass.positionHistory, 1)
-    end
-end
-
-local function recordVelocity(vel)
-    if not vel then return end
-    table.insert(CFrameBypass.velocityHistory, { v = vel, t = tick() })
-    while #CFrameBypass.velocityHistory > CFrameBypass.maxHistory do
-        table.remove(CFrameBypass.velocityHistory, 1)
-    end
-    CFrameBypass.lastVelocity = vel
-end
-
-local function getAverageSpeed()
-    if #CFrameBypass.velocityHistory < 2 then return 16 end
-    local total = 0
-    local count = 0
-    for i = 2, #CFrameBypass.velocityHistory do
-        local prev = CFrameBypass.velocityHistory[i - 1]
-        local curr = CFrameBypass.velocityHistory[i]
-        if prev.v and curr.v and curr.t and prev.t then
-            local dt = curr.t - prev.t
-            if dt > 0 then
-                total += (curr.v - prev.v).Magnitude / dt
-                count += 1
-            end
-        end
-    end
-    if count == 0 then return 16 end
-    return total / count
-end
-
-local function generateFakeVelocity(targetPos)
-    local speed = CFrameBypass.fakeSpeedRange.min
-        + math.random() * (CFrameBypass.fakeSpeedRange.max - CFrameBypass.fakeSpeedRange.min)
-    
-    if CFrameBypass.lastPosition then
-        local dir = (targetPos - CFrameBypass.lastPosition)
-        if dir.Magnitude > 0.1 then
-            dir = dir.Unit * speed
-            dir = Vector3.new(dir.X, math.abs(dir.Y) * 0.3, dir.Z)
-            return dir
-        end
-    end
-    
-    local angle = math.random() * math.pi * 2
-    return Vector3.new(math.cos(angle) * speed, 0, math.sin(angle) * speed)
-end
-
-local function maskCFrameChange(rootPart, newCFrame)
-    if not rootPart or not newCFrame then return newCFrame end
-    
-    local oldPos = rootPart.Position
-    local newPos = newCFrame.Position
-    local delta = (newPos - oldPos).Magnitude
-    
-    if delta > CFrameBypass.teleportThreshold then
-        local fakeVel = generateFakeVelocity(newPos)
-        CFrameBypass.fakeVelocity = fakeVel
-        CFrameBypass.lastTeleportTime = tick()
-    end
-    
-    CFrameBypass.lastPosition = newPos
-    recordPosition(newPos)
-    return newCFrame
-end
-
-local function applyFakeVelocity(rootPart)
-    if not rootPart or not CFrameBypass.fakeVelocity then return end
-    pcall(function()
-        rootPart.AssemblyLinearVelocity = CFrameBypass.fakeVelocity
-        task.delay(0.05, function()
-            if rootPart and rootPart.Parent then
-                rootPart.AssemblyLinearVelocity = Vector3.new(
-                    CFrameBypass.fakeVelocity.X * 0.7,
-                    CFrameBypass.fakeVelocity.Y,
-                    CFrameBypass.fakeVelocity.Z * 0.7
-                )
-            end
+        return not pcall(function()
+            game:IsDescendantOf(callingScript)
         end)
-    end)
-end
-
-local function safeSetCFrame(rootPart, newCFrame)
-    if not rootPart or not CFrameBypass.enabled then
-        if rootPart then rootPart.CFrame = newCFrame end
-        return
     end
     
-    local masked = maskCFrameChange(rootPart, newCFrame)
-    rootPart.CFrame = masked
-    applyFakeVelocity(rootPart)
-end
-
-local function smoothTeleport(rootPart, targetPos, steps)
-    steps = steps or 8
-    if not rootPart then return false end
-    
-    local startPos = rootPart.Position
-    local distance = (targetPos - startPos).Magnitude
-    if distance < 5 then
-        safeSetCFrame(rootPart, CFrame.new(targetPos))
-        return true
-    end
-    
-    for i = 1, steps do
-        local t = i / steps
-        local intermediatePos = startPos + (targetPos - startPos) * t
-        safeSetCFrame(rootPart, CFrame.new(intermediatePos))
-        task.wait(0.03)
-    end
-    
-    return true
-end
-
-local function setupCFrameBypass()
-    if not CFrameBypass.enabled then return end
-    
-    if CFrameBypass.pinConns.monitor then return end
-    
-    CFrameBypass.pinConns.monitor = RunService.Heartbeat:Connect(function()
-        -- Fixed: เช็ค LocalPlayer ก่อน
-        if not LocalPlayer then return end
-        
-        local character = LocalPlayer.Character
-        -- Fixed: เช็ค character ก่อน
-        if not character then return end
-        
-        local root = character:FindFirstChild("HumanoidRootPart")
-        -- Fixed: เช็ค root ก่อน
-        if not root then return end
-        
-        -- Fixed: ใช้ pcall ป้องกัน error
+    if not getgenv().namecallHooked then
+        getgenv().namecallHooked = true
         pcall(function()
-            recordVelocity(root.AssemblyLinearVelocity)
+            local mt = getrawmetatable(game)
+            if mt and mt.__namecall then
+                local originalNamecall = mt.__namecall
+                setreadonly(mt, false)
+                
+                mt.__namecall = newcclosure(function(self, ...)
+                    local args = {...}
+                    local method = getnamecallmethod()
+                    
+                    -- Block kick immediately
+                    if method == "Kick" then
+                        return nil
+                    end
+                    
+                    -- Exclude common operations to avoid detection
+                    if method == "GetPropertyChangedSignal" or 
+                       method == "GetAttribute" or 
+                       method == "SetAttribute" or
+                       method == "FindFirstChild" or
+                       method == "WaitForChild" or
+                       method == "GetChildren" or
+                       method == "GetDescendants" or
+                       method == "Clone" or
+                       method == "Destroy" or
+                       method == "Remove" or
+                       method == "GetService" then
+                        return originalNamecall(self, table.unpack(args))
+                    end
+                    
+                    -- Enhanced remote interception
+                    if method == "FireServer" or method == "InvokeServer" then
+                        local success2, remoteName = pcall(function() 
+                            if self and typeof(self) == "Instance" then
+                                return tostring(self.Name):lower()
+                            end
+                            return ""
+                        end)
+                        
+                        if success2 and remoteName and remoteName ~= "" then
+                            -- Check against blocked remotes
+                            for _, blocked in ipairs(blockedRemotes) do
+                                if remoteName:find(blocked:lower(), 1, true) then
+                                    if method == "InvokeServer" then
+                                        return nil
+                                    end
+                                    return
+                                end
+                            end
+                            
+                            -- Check against suspicious patterns
+                            for _, pattern in ipairs(suspiciousPatterns) do
+                                if remoteName:find(pattern, 1, true) then
+                                    if method == "InvokeServer" then
+                                        return nil
+                                    end
+                                    return
+                                end
+                            end
+                            
+                            -- Enhanced parameter modification
+                            if #args >= 4 then
+                                local success3, isExternal = pcall(checkcaller)
+                                if success3 and isExternal then
+                                    if args[1] == "FlllD" and args[4] == false then
+                                        args[2] = 0
+                                        args[3] = 0
+                                    end
+                                    
+                                    -- Additional parameter modifications
+                                    if remoteName:find("stamina") then
+                                        if #args >= 1 then
+                                            args[1] = math.max(0, math.min(100, args[1] or 100))
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    
+                    return originalNamecall(self, table.unpack(args))
+                end)
+                
+                setreadonly(mt, true)
+                print("Remote interception enabled")
+            end
         end)
-        
-        if CFrameBypass.fakeVelocity and (tick() - (CFrameBypass.lastTeleportTime or 0)) < 0.5 then
+    end
+    
+    -- Enhanced multi-layer Kick protection
+    if not getgenv().playerKickHooked then
+        getgenv().playerKickHooked = true
+        pcall(function()
+            -- Method 1: Direct replacement
+            if player then
+                local kickMethod = player.Kick
+                if kickMethod and typeof(kickMethod) == "function" then
+                    player.Kick = newcclosure(function(...)
+                        return nil
+                    end)
+                end
+            end
+            
+            -- Method 2: Metatable protection
+            local playerMeta = getrawmetatable(player)
+            if playerMeta then
+                setreadonly(playerMeta, false)
+                local oldIndex = playerMeta.__index
+                playerMeta.__index = newcclosure(function(self, key)
+                    if key == "Kick" then
+                        return function() end
+                    end
+                    return oldIndex(self, key)
+                end)
+                setreadonly(playerMeta, true)
+            end
+            
+            -- Method 3: Protect through Players service
+            local playersService = game:GetService("Players")
+            local originalKick = playersService.Kick
+            if originalKick then
+                playersService.Kick = newcclosure(function(...)
+                    local args = {...}
+                    if args[1] == player then
+                        return nil
+                    end
+                    return originalKick(table.unpack(args))
+                end)
+            end
+        end)
+    end
+end
+
+-- Layer 5: Behavior randomization
+if CONFIG.BEHAVIOR_RANDOM then
+    task.spawn(function()
+        while task.wait(math.random(30, 60)) do
             pcall(function()
-                applyFakeVelocity(root)
+                local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+                if humanoid and math.random(1, 5) == 1 then
+                    local originalWS = humanoid.WalkSpeed
+                    humanoid.WalkSpeed = originalWS * (math.random(98, 102) / 100)
+                    task.wait(0.1)
+                    humanoid.WalkSpeed = originalWS
+                end
             end)
         end
     end)
 end
 
-local function disableCFrameBypass()
-    if CFrameBypass.pinConns.monitor then
-        CFrameBypass.pinConns.monitor:Disconnect()
-        CFrameBypass.pinConns.monitor = nil
+-- Layer 6: Hide exploit traces
+pcall(function()
+    for _, name in ipairs({"syn", "KRNL_LOADED", "EXECUTOR_NAME", "getexecutorname"}) do
+        pcall(function()
+            if getfenv()[name] then
+                getfenv()[name] = nil
+            end
+        end)
     end
-    CFrameBypass.fakeVelocity = nil
-end
+end)
 
--- ═══════════════════════════════════════════════════════════════
--- §1  BAC-4518 — Script Identity Masking
--- ═══════════════════════════════════════════════════════════════
-local thisScript = (typeof(script) == "Instance" and script)
-if thisScript then
-    local legitNames = {
-        "LocalScript", "ModuleScript", "Handler",
-        "ClientHandler", "GameLogic", "UIController",
-        "NetworkManager", "AssetLoader", "DataHandler"
-    }
-    pcall(function() thisScript.Name = legitNames[math.random(1, #legitNames)] end)
-    pcall(function()
-        thisScript:SetAttribute("ModuleType", "Client")
-        thisScript:SetAttribute("Version", "1.0." .. math.random(0, 99))
+
+-- Layer 8: Fake lag system
+if CONFIG.FAKE_LAG then
+    task.spawn(function()
+        while task.wait(0.1) do
+            pcall(function()
+                if math.random(1, 50) == 1 then
+                    task.wait(math.random(5, 20) / 1000)
+                end
+            end)
+        end
     end)
 end
 
-local noise = 0
-for i = 1, math.random(50, 200) do
-    noise = noise + i
-    if noise > 10000 then noise = 0 end
-end
-pcall(function() gcinfo() end)
-randomizeMemoryPattern()
-randomizeHeapSignature()
-
--- ═══════════════════════════════════════════════════════════════
--- §2  BAC-4511 — Behavior Analysis
--- ═══════════════════════════════════════════════════════════════
-BehaviorProfile = {
-    reactionTime = { mean = 250, stdDev = 80 },
-    actionDuration = { mean = 1.2, stdDev = 0.4 },
-    actionInterval = { mean = 2.5, stdDev = 1.0 },
-}
-
-ActionTimer = {
-    lastTimes = {},
-    maxHistory = 20,
-}
-
-local function recordAction(actionType)
-    local now = tick()
-    table.insert(ActionTimer.lastTimes, { type = actionType, time = now })
-    while #ActionTimer.lastTimes > ActionTimer.maxHistory do
-        table.remove(ActionTimer.lastTimes, 1)
-    end
-end
-
-local function getNaturalDelay(minDelay, maxDelay)
-    minDelay = minDelay or 0.1
-    maxDelay = maxDelay or 0.5
-    local now = tick()
-    local recentCount = 0
-    for i = #ActionTimer.lastTimes, 1, -1 do
-        if now - ActionTimer.lastTimes[i].time < 1.0 then
-            recentCount = recentCount + 1
-        else
-            break
+-- Layer 9: Safe GetGC wrapper
+if not getgenv().getgcWrapped then
+    getgenv().getgcWrapped = true
+    pcall(function()
+        local realGetGC = getgc
+        local lastGCCall = 0
+        local callCount = 0
+        local maxCallsPerSecond = 5
+        
+        getgc = function(...)
+            local now = tick()
+            callCount = callCount + 1
+            
+            if now - lastGCCall >= 1 then
+                callCount = 0
+                lastGCCall = now
+            end
+            
+            if callCount > maxCallsPerSecond then
+                task.wait(math.random(50, 150) / 1000)
+            end
+            
+            lastGCCall = tick()
+            return realGetGC(...)
         end
-    end
-    if recentCount > 10 then
-        return maxDelay * 0.8 + math.random() * maxDelay * 0.4
-    end
-    local avg = (minDelay + maxDelay) / 2
-    local variance = (maxDelay - minDelay) / 4
-    local u1 = math.random()
-    local u2 = math.random()
-    local normal = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2)
-    return math.clamp(avg + normal * variance, minDelay, maxDelay)
+        
+        print("GetGC wrapper enabled")
+    end)
 end
 
-local ScanDetector = {
-    isActive = false,
-    lastScanTime = 0,
-    scanInterval = 30,
-}
-
-local function checkScan()
-    local now = tick()
-    if now - ScanDetector.lastScanTime > ScanDetector.scanInterval - 5
-        and now - ScanDetector.lastScanTime < ScanDetector.scanInterval + 5 then
-        ScanDetector.isActive = true
-        ScanDetector.lastScanTime = now
-        return true
-    end
-    ScanDetector.isActive = false
-    return false
-end
-
-local function enterStealthMode()
-    BehaviorProfile.reactionTime.mean = 350
-    BehaviorProfile.actionInterval.mean = 4.0
-end
-
-local function exitStealthMode()
-    BehaviorProfile.reactionTime.mean = 250
-    BehaviorProfile.actionInterval.mean = 2.5
-end
-
+-- Layer 10: GUI detection blocking
 task.spawn(function()
-    while true do
-        task.wait(5)
-        if checkScan() then
-            if not ScanDetector.isActive then
-                enterStealthMode()
-                warn("[BAC-4511] Scan detected — stealth mode")
-            end
-        else
-            if ScanDetector.isActive then
-                exitStealthMode()
-                warn("[BAC-4511] Scan passed — normal operation")
-            end
-        end
-        ScanDetector.isActive = false
-    end
-end)
-
--- ═══════════════════════════════════════════════════════════════
--- §3  ENVIRONMENT HARDENING
--- ═══════════════════════════════════════════════════════════════
-local function hardenEnv()
-    local _gc = rawget(_G, "getgc")
-    local _constants = rawget(_G, "getconstants")
-    local _hookfn = rawget(_G, "hookfunction")
-    local _islclosure = rawget(_G, "islclosure")
-
-    local function safeConstants(fn)
-        if not _constants or not fn then return {} end
-        local ok, consts = pcall(_constants, fn)
-        if not ok then return {} end
-        local copy = {}
-        for i = 1, #consts do
-            local v = consts[i]
-            if type(v) == "string" and #v > 2 then
-                copy[i] = v
-            end
-        end
-        return copy
-    end
-
-    local lastFire = 0
-    local function throttledFire(remote, arg1, arg2, arg3, arg4, arg5)
-        local now = tick()
-        local delay = getNaturalDelay(0.03, 0.08)
-        if now - lastFire < delay then
-            task.wait(delay - (now - lastFire))
-        end
-        lastFire = tick()
-        local args = {arg1, arg2, arg3, arg4, arg5}
-        local n = 0
-        for i = 1, 5 do if args[i] ~= nil then n = i end end
-        args[n + 1] = math.random(0, 1)
-        return pcall(function() remote:FireServer(table.unpack(args, 1, n + 1)) end)
-    end
-
-    local function protectUpvalues(fn)
-        if not fn then return fn end
-        local mt = getmetatable(fn) or {}
-        local originalIndex = mt.__index
-        mt.__index = function(t, k)
-            if k == "getupvalue" or k == "setupvalue" then
-                return function(f, i, v)
-                    if v ~= nil then return true end
-                    return nil
-                end
-            end
-            if originalIndex then return originalIndex(t, k) end
-            return rawget(t, k)
-        end
-        setmetatable(fn, mt)
-        return fn
-    end
-
-    return {
-        gc = _gc,
-        constants = safeConstants,
-        hookfn = _hookfn,
-        islclosure = _islclosure,
-        fire = throttledFire,
-        protectUpvalues = protectUpvalues,
-    }
-end
-
-local BYPASS = hardenEnv()
-
--- ═══════════════════════════════════════════════════════════════
--- §4  BAC-5695 — GC & Hook Camouflage
--- ═══════════════════════════════════════════════════════════════
-local function bac5695_bypass(targetConstant)
-    targetConstant = targetConstant or "X-16"
-    if not BYPASS.gc then return nil end
-
-    local found = nil
-    local ok, gcTable = pcall(BYPASS.gc)
-    if not ok or type(gcTable) ~= "table" then return nil end
-
-    for _, obj in ipairs(gcTable) do
-        if type(obj) == "function" then
-            local isLua = false
-            if BYPASS.islclosure then
-                isLua = pcall(BYPASS.islclosure, obj) == true
-            end
-            if isLua then
-                local consts = BYPASS.constants(obj)
-                if type(consts) == "table" then
-                    for _, c in ipairs(consts) do
-                        if c == targetConstant then
-                            found = obj
-                            break
+    pcall(function()
+        local playerGui = player:WaitForChild("PlayerGui", 10)
+        if playerGui then
+            playerGui.DescendantAdded:Connect(function(gui)
+                pcall(function()
+                    if gui and gui.Parent and (gui:IsA("TextLabel") or gui:IsA("TextBox")) then
+                        local success, text = pcall(function() return gui.Text:lower() end)
+                        if success and text and (text:find("detect") or text:find("kick") or text:find("ban")) then
+                            pcall(function()
+                                gui.Text = ""
+                                gui.Visible = false
+                            end)
                         end
                     end
+                end)
+            end)
+        end
+    end)
+end)
+
+-- Layer 11: Call stack spoofing
+if not getgenv().callStackSpoofed then
+    getgenv().callStackSpoofed = true
+    pcall(function()
+        local originalGetCallingScript = getcallingscript
+        
+        getcallingscript = function()
+            local calling = originalGetCallingScript()
+            
+            if calling == nil then
+                local success, result = pcall(function()
+                    return game:GetService("StarterPlayer").StarterPlayerScripts
+                end)
+                if success and result then
+                    return result
                 end
             end
-            if found then break end
+            
+            return calling
         end
-    end
+        
+        print("Call stack spoofing enabled")
+    end)
+end
 
-    if not found then return nil end
-
-    local original = found
-    local hooked = function(p1, p2, p3, p4, p5)
-        for lvl = 1, 5 do
-            local info = debug.getinfo(lvl, "f")
-            if info and info.func == hooked then
-                local stack = debug.getstack(lvl)
-                for idx, val in pairs(stack) do
-                    if val == targetConstant then
-                        pcall(function() debug.setstack(lvl, idx, nil) end)
+-- Layer 13: Enhanced Detected function hook
+if not getgenv().detectedHookAttempted then
+    getgenv().detectedHookAttempted = true
+    task.spawn(function()
+        task.wait(5)
+        
+        local function safeGetGC()
+            local success, result = pcall(function()
+                return getgc(true)
+            end)
+            return success and result or {}
+        end
+        
+        local objects = safeGetGC()
+        local checked = 0
+        local maxCheck = 80
+        
+        for _, v in next, objects do
+            checked = checked + 1
+            if checked > maxCheck then break end
+            
+            if typeof(v) == "table" then
+                local detected = rawget(v, "Detected")
+                local rlocked = rawget(v, "RLocked")
+                
+                if detected and typeof(detected) == "function" and rlocked then
+                    local hookSuccess = pcall(function()
+                        local oldDetected = detected
+                        hookfunction(detected, function(action, info, crash)
+                            if action == "_" and info == "_" and crash == false then
+                                return oldDetected(action, info, crash)
+                            end
+                            return task.wait(9e9)
+                        end)
+                    end)
+                    
+                    if hookSuccess then
+                        print("Detection hook installed successfully")
                     end
+                    break
                 end
             end
-        end
-        return original(p1, p2, p3, p4, p5)
-    end
-
-    if BYPASS.hookfn then
-        local protected = BYPASS.protectUpvalues(hooked)
-        pcall(function() BYPASS.hookfn(found, protected) end)
-    end
-    return hooked
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §5  BAC-4697 — Constant Sanitizer
--- ═══════════════════════════════════════════════════════════════
-local function bac4697_sanitize(fn)
-    local consts = BYPASS.constants(fn)
-    if not consts then return end
-    for i, v in ipairs(consts) do
-        if type(v) == "string" then
-            if v:match("^BAC") or v:match("^Byfron") or v:match("^X-%d+") then
-                consts[i] = string.rep("\0", #v)
+            
+            if checked % 10 == 0 then
+                task.wait(0.01)
             end
         end
-    end
-    return consts
+    end)
 end
 
--- ═══════════════════════════════════════════════════════════════
--- §6  BAC-73210 — Fire Pattern Obfuscation
--- ═══════════════════════════════════════════════════════════════
-local function bac73210_fire(remote, a1, a2, a3, a4, a5)
-    local args = {a1, a2, a3, a4, a5}
-    local n = 0
-    for i = 1, 5 do if args[i] ~= nil then n = i end end
-    args[n + 1] = math.random(0, 1)
-    return BYPASS.fire(remote, table.unpack(args, 1, n + 1))
+local bypassSuccess = bypassLoaded or metaProtected
+
+task.wait(0.5)
+
+if bypassSuccess then
+    print("|--FRAMEWORK LOADED--|")
+    print("Anti-cheat bypass successful")
+else
+    print("Anti-cheat bypass failed")
 end
 
-local function bac73210_invoke(remote, a1, a2, a3, a4, a5)
-    local args = {a1, a2, a3, a4, a5}
-    local n = 0
-    for i = 1, 5 do if args[i] ~= nil then n = i end end
-    args[n + 1] = math.random(0, 1)
-    return pcall(function() return remote:InvokeServer(table.unpack(args, 1, n + 1)) end)
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §7  BAC-4511/4519 — Safe Wrappers
--- ═══════════════════════════════════════════════════════════════
-local function safeFire(remote, a1, a2, a3, a4, a5)
-    local delay = getNaturalDelay(0.05, 0.15)
-    local yieldNoise = sanitizeYieldPattern()
-    local packetDelay = generateNaturalPacketDelay()
-    task.wait(math.max(delay + yieldNoise, packetDelay))
-    recordAction("fire")
-    maskSequenceGaps()
-    return bac73210_fire(remote, a1, a2, a3, a4, a5)
-end
-
-local function safeInvoke(remote, a1, a2, a3, a4, a5)
-    local delay = getNaturalDelay(0.08, 0.2)
-    local yieldNoise = sanitizeYieldPattern()
-    local packetDelay = generateNaturalPacketDelay()
-    task.wait(math.max(delay + yieldNoise, packetDelay))
-    recordAction("invoke")
-    maskSequenceGaps()
-    sanitizeRTT()
-    return bac73210_invoke(remote, a1, a2, a3, a4, a5)
-end
-
--- ═══════════════════════════════════════════════════════════════
--- §8  PERIODIC COUNTERMEASURES (All 11 layers)
--- ═══════════════════════════════════════════════════════════════
-task.spawn(function()
-    while true do
-        task.wait(math.random(8, 25))
-        randomizeMemoryPattern()
-        randomizeHeapSignature()
-        maskConnectionCount()
-        maskTableMetamethods(_G)
-        maskGCTiming()
-        sanitizeStringTable()
-        checkReadFrequency()
-        randomizeCallStack()
-    end
-end)
-
--- Setup systems
-setupRemoteGuard()
-setupCFrameBypass()
-
--- ═══════════════════════════════════════════════════════════════
--- §9  EXECUTION
--- ═══════════════════════════════════════════════════════════════
-task.spawn(function()
-    task.wait(4.5)
-    local r5695 = bac5695_bypass("X-16")
-    warn("[BAC BYPASS v13.2] 4518: identity masked")
-    warn("[BAC BYPASS v13.2] 4511: behavior analysis active")
-    warn("[BAC BYPASS v13.2] 4519: network timing masked")
-    warn("[BAC BYPASS v13.2] 9512: memory pattern active")
-    warn("[BAC BYPASS v13.2] 9516: heap signature masked")
-    warn("[BAC BYPASS v13.2] 1514: CFrame + physics validation bypassed")
-    warn("[BAC BYPASS v13.2] 6699: remote property tampering bypassed")
-    warn("[BAC BYPASS v13.2] 2519: HRP.Position validation bypassed")
-    warn("[BAC BYPASS v13.2] 5695: " .. (r5695 and "hooked" or "not found"))
-    warn("[BAC BYPASS v13.2] 4697: constant sanitizer ready")
-    warn("[BAC BYPASS v13.2] 73210: fire pattern obfuscated")
-end)
-
--- ═══════════════════════════════════════════════════════════════
--- §10  EXPORTS
--- ═══════════════════════════════════════════════════════════════
-BAC.bypass5695 = bac5695_bypass
-BAC.sanitize4697 = bac4697_sanitize
-BAC.fire73210 = bac73210_fire
-BAC.invoke73210 = bac73210_invoke
-BAC.safeFire = safeFire
-BAC.safeInvoke = safeInvoke
-BAC.env = BYPASS
-BAC.behavior = BehaviorProfile
-BAC.actionTimer = ActionTimer
-BAC.memoryFlow = MemoryFlow
-BAC.heapFlow = HeapFlow
-BAC.networkFlow = NetworkFlow
-BAC.cframeBypass = CFrameBypass
-BAC.remoteGuard = RemoteGuard
-BAC.hrpGuard = HRPGuard
-BAC.randomizeMemory = randomizeMemoryPattern
-BAC.randomizeHeap = randomizeHeapSignature
-BAC.maskConnections = maskConnectionCount
-BAC.sanitizeYield = sanitizeYieldPattern
-BAC.maskGCTiming = maskGCTiming
-BAC.maskSequenceGaps = maskSequenceGaps
-BAC.sanitizeRTT = sanitizeRTT
-BAC.generatePacketDelay = generateNaturalPacketDelay
-BAC.safeSetCFrame = safeSetCFrame
-BAC.smoothTeleport = smoothTeleport
-BAC.maskCFrameChange = maskCFrameChange
-BAC.applyFakeVelocity = applyFakeVelocity
-BAC.setupCFrameBypass = setupCFrameBypass
-BAC.disableCFrameBypass = disableCFrameBypass
-BAC.setupRemoteGuard = setupRemoteGuard
-BAC.maskRemoteFire = maskRemoteFire
-BAC.maskRemoteInvoke = maskRemoteInvoke
-BAC.getHRPPosition = getHRPPosition
-BAC.getHRPCFrame = getHRPCFrame
-BAC.fakePosition = fakePosition
-BAC.fakeCFrame = fakeCFrame
-BAC.checkReadFrequency = checkReadFrequency
-
--- ═══════════════════════════════════════════════════════════════
--- MAIN SCRIPT CONTINUES BELOW THIS LINE
--- ═══════════════════════════════════════════════════════════════
+return {
+    loaded = true,
+    bypassActive = bypassLoaded,
+    metaProtected = metaProtected,
+    
+    safeGetGC = function()
+        task.wait(math.random(100, 500) / 1000)
+        return getgc(true)
+    end,
+    
+    safeFireServer = function(remote, ...)
+        if math.random(1, 3) == 1 then
+            task.wait(math.random(10, 50) / 1000)
+        end
+        return remote:FireServer(...)
+    end,
+    
+    safeConnect = function(signal, func)
+        local connection
+        task.spawn(function()
+            connection = signal:Connect(function(...)
+                task.spawn(func, ...)
+            end)
+        end)
+        return connection
+    end,
+    
+    isSafe = function()
+        return bypassLoaded or (metaProtected and CONFIG.BLOCK_REMOTES)
+    end,
+}
