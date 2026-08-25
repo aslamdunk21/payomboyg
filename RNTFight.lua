@@ -17,6 +17,9 @@ local playerGui = player:WaitForChild("PlayerGui", 10) or player.PlayerGui
 -- [[ INSTANT ANTI-AFK ENGINE (AUTOMATICALLY ACTIVE ON SCRIPT RUN) ]]
 -- ======================================================================================
 task.spawn(function()
+    local VirtualInputManager = pcall(function() return game:GetService("VirtualInputManager") end) and game:GetService("VirtualInputManager")
+    local VirtualUser = game:GetService("VirtualUser")
+
     pcall(function()
         local gc = (typeof(getconnections) == "function" and getconnections)
                 or (typeof(get_connections) == "function" and get_connections)
@@ -28,18 +31,29 @@ task.spawn(function()
         end
     end)
 
-    player.Idled:Connect(function()
+    local function doAntiAFK()
+        if Options and Options.EnableAntiAFK and Options.EnableAntiAFK.Value == false then
+            return
+        end
+        pcall(function()
+            if VirtualInputManager then
+                VirtualInputManager:SendMouseButtonEvent(100, 100, 2, true, game, 0)
+                task.wait(0.05)
+                VirtualInputManager:SendMouseButtonEvent(100, 100, 2, false, game, 0)
+            end
+        end)
         pcall(function()
             VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
+            VirtualUser:Button2Down(Vector2.new(100, 100), workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
+            task.wait(0.05)
+            VirtualUser:Button2Up(Vector2.new(100, 100), workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new())
         end)
-    end)
+    end
 
-    while task.wait(120) do
-        pcall(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.new())
-        end)
+    player.Idled:Connect(doAntiAFK)
+
+    while task.wait(45) do
+        doAntiAFK()
     end
 end)
 
@@ -1811,7 +1825,7 @@ end
 -- SaveManager & Discord Webhook Engine
 local DEFAULT_CONFIG_NAME = "PayomboyZ_RollAnime_Config"
 
-local SaveManager = {}
+local SaveManager = { IsLoading = false }
 
 function SaveManager.Save(configName)
     configName = configName or DEFAULT_CONFIG_NAME
@@ -1846,6 +1860,7 @@ function SaveManager.Load(configName)
             if jsonStr and jsonStr ~= "" then
                 local dataObj = HttpService:JSONDecode(jsonStr)
                 if type(dataObj) == "table" then
+                    SaveManager.IsLoading = true
                     for id, val in pairs(dataObj) do
                         local option = ObsidianGlassEngine.Options[id]
                         if option and type(option) == "table" and option.SetValue then
@@ -1855,6 +1870,7 @@ function SaveManager.Load(configName)
                     if typeof(rebuildTargetLookup) == "function" then
                         pcall(rebuildTargetLookup)
                     end
+                    SaveManager.IsLoading = false
                     ObsidianGlassEngine:Notify({
                         Title = "Load Config 📂",
                         Content = "โหลดการตั้งค่าจากไฟล์ " .. fileName .. " เรียบร้อยแล้ว!",
@@ -1864,6 +1880,7 @@ function SaveManager.Load(configName)
             end
         end
     end)
+    SaveManager.IsLoading = false
 end
 
 function SaveManager.Delete(configName)
@@ -1883,7 +1900,8 @@ end
 
 function SaveManager.LoadAutoloadConfig()
     pcall(function()
-        if typeof(isfile) == "function" and isfile(DEFAULT_CONFIG_NAME .. ".json") then
+        local fileName = DEFAULT_CONFIG_NAME .. ".json"
+        if typeof(isfile) == "function" and isfile(fileName) then
             SaveManager.Load(DEFAULT_CONFIG_NAME)
         end
     end)
@@ -1949,6 +1967,7 @@ local Window = ObsidianGlassEngine:CreateWindow({
 local Tabs = {
     Main = Window:AddTab({ Title = "หน้าหลัก", Icon = "home" }),
     AutoPlacement = Window:AddTab({ Title = "ออโต้วางยูนิต (Auto Play)", Icon = "sword" }),
+    Raid = Window:AddTab({ Title = "ออโต้เรดบอส (Auto Raid)", Icon = "swords" }),
     Tower = Window:AddTab({ Title = "ออโต้ทาวเวอร์ (Auto Tower)", Icon = "shield" }),
     Clone = Window:AddTab({ Title = "เครื่องโคลน (Clone Machine)", Icon = "copy" }),
     Trait = Window:AddTab({ Title = "ปรับแต่ง Trait (Trait Machine)", Icon = "sparkles" }),
@@ -1960,12 +1979,6 @@ local Tabs = {
 
 local Options = ObsidianGlassEngine.Options
 local isUiInitialized = false
-
-
-player.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
 
 local CharacterFallbackValues = {
     "Zoro", "Krillin", "Luffy", "Ussop", "Itadori", "Maki",
@@ -3163,7 +3176,7 @@ local AutoSlotPlacement = Tabs.AutoPlacement:AddToggle("AutoSlotPlacement", {
 })
 
 AutoSlotPlacement:OnChanged(function(enabled)
-    if not isUiInitialized then return end
+    if not isUiInitialized or SaveManager.IsLoading then return end
     if enabled then
         runEquipBestSequence()
         Fluent:Notify({
@@ -3181,7 +3194,7 @@ local AutoStartFight = Tabs.AutoPlacement:AddToggle("AutoStartFight", {
 })
 
 AutoStartFight:OnChanged(function(enabled)
-    if not isUiInitialized then return end
+    if not isUiInitialized or SaveManager.IsLoading then return end
     if enabled then
         pcall(function()
             local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
@@ -3209,7 +3222,7 @@ local AutoPlayMode = Tabs.AutoPlacement:AddToggle("AutoPlayMode", {
 })
 
 AutoPlayMode:OnChanged(function(enabled)
-    if not isUiInitialized then return end
+    if not isUiInitialized or SaveManager.IsLoading then return end
     if enabled then
         pcall(function()
             local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
@@ -3253,6 +3266,118 @@ Tabs.AutoPlacement:AddButton({
             Content = "ส่งคำสั่งหยุดการต่อสู้ (Stop) เรียบร้อยแล้ว! 🛑",
             Duration = 3
         })
+    end
+})
+
+Tabs.Raid:AddSection("ระบบออโต้เรดบอส (Auto Raid System)")
+
+local AutoRaid = Tabs.Raid:AddToggle("AutoRaid", {
+    Title = "Auto Join & Battle Raid",
+    Description = "ออโต้ส่งคำสั่งสร้างปาร์ตี้/เข้าร่วมเรดบอส กด Ready และสั่งเริ่มสู้ให้อัตโนมัติ",
+    Default = false,
+})
+
+local RaidPartyType = Tabs.Raid:AddDropdown("RaidPartyType", {
+    Title = "ประเภทปาร์ตี้ (Party Type)",
+    Description = "เลือกประเภทปาร์ตี้เรดบอสที่ต้องการสร้าง",
+    Values = {"Private", "Public"},
+    Default = "Private",
+})
+
+local AutoReadyRaid = Tabs.Raid:AddToggle("AutoReadyRaid", {
+    Title = "Auto Ready in Raid Lobby",
+    Description = "ออโต้กด Ready อัตโนมัติเมื่ออยู่ในปาร์ตี้หรือล็อบบี้เรดบอส",
+    Default = true,
+})
+
+local AutoStartRaid = Tabs.Raid:AddToggle("AutoStartRaid", {
+    Title = "Auto Start Raid Battle",
+    Description = "ออโต้ส่งคำสั่งเริ่มสู้ (Start) เมื่อเข้าสู่ดันเจี้ยนเรดบอส",
+    Default = true,
+})
+
+Tabs.Raid:AddSection("คำสั่งควบคุมเรดบอสแบบกำหนดเอง (Manual Raid Actions)")
+
+Tabs.Raid:AddButton({
+    Title = "เช็ค/รีเฟรชสถานะเรดบอส (Refresh Raid Status)",
+    Description = "ส่งคำสั่ง Refresh เพื่ออัปเดตข้อมูลเรดบอสปัจจุบัน",
+    Callback = function()
+        local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
+        if raidRemote then
+            safeFireRemote(raidRemote, "Refresh")
+            Fluent:Notify({
+                Title = "Auto Raid ⚔️",
+                Content = "ส่งคำสั่ง Refresh สถานะเรดบอสเรียบร้อยแล้ว!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Raid:AddButton({
+    Title = "สร้างปาร์ตี้เรดบอสทันที (Create Party Now)",
+    Description = "สร้างปาร์ตี้เรดบอสทันทีตามประเภทที่เลือก (Private/Public)",
+    Callback = function()
+        local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
+        if raidRemote then
+            local pType = (Options.RaidPartyType and Options.RaidPartyType.Value) or "Private"
+            safeFireRemote(raidRemote, "Create", pType)
+            Fluent:Notify({
+                Title = "Auto Raid ⚔️",
+                Content = "ส่งคำสั่งสร้างปาร์ตี้ (" .. pType .. ") เรียบร้อยแล้ว!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Raid:AddButton({
+    Title = "กด Ready ทันที (Ready Now)",
+    Description = "ส่งคำสั่งพร้อมต่อสู้ (Ready) ในเรดบอสทันที 1 ครั้ง",
+    Callback = function()
+        local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
+        if raidRemote then
+            safeFireRemote(raidRemote, "Ready")
+            Fluent:Notify({
+                Title = "Auto Raid ⚔️",
+                Content = "ส่งคำสั่ง Ready เรียบร้อยแล้ว! ⚔️",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Raid:AddButton({
+    Title = "เริ่มการต่อสู้เรดบอสทันที (Start Raid Fight Now)",
+    Description = "ส่งคำสั่งเริ่มสู้ (Start / AutoPlay) ในเรดบอสทันที 1 ครั้ง",
+    Callback = function()
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        if fightStartRemote then
+            safeFireRemote(fightStartRemote, "Start")
+            task.wait(0.2)
+            safeFireRemote(fightStartRemote, "AutoPlay")
+            Fluent:Notify({
+                Title = "Auto Raid ⚔️",
+                Content = "ส่งคำสั่งเริ่มต่อสู้ในเรดบอสเรียบร้อยแล้ว!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+Tabs.Raid:AddButton({
+    Title = "ออกจากเรดบอส / ปาร์ตี้ (Leave Raid Now)",
+    Description = "ส่งคำสั่งออกจากปาร์ตี้หรือดันเจี้ยนเรดบอสทันที",
+    Callback = function()
+        local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
+        if raidRemote then
+            safeFireRemote(raidRemote, "Leave")
+            Fluent:Notify({
+                Title = "Auto Raid ⚔️",
+                Content = "ส่งคำสั่งออกจากเรดบอส (Leave) เรียบร้อยแล้ว!",
+                Duration = 3
+            })
+        end
     end
 })
 
@@ -3371,6 +3496,7 @@ local SelectCloneUnit = Tabs.Clone:AddDropdown("SelectCloneUnit", {
 })
 
 SelectCloneUnit:OnChanged(function(selected)
+    if not isUiInitialized or SaveManager.IsLoading then return end
     equipAndSelectCloneUnit(selected)
 end)
 
@@ -3486,6 +3612,7 @@ local SelectTraitUnit = Tabs.Trait:AddDropdown("SelectTraitUnit", {
 })
 
 SelectTraitUnit:OnChanged(function(selected)
+    if not isUiInitialized or SaveManager.IsLoading then return end
     equipAndSelectTraitUnit(selected)
 end)
 
@@ -3517,7 +3644,7 @@ local TargetTraitLocks = Tabs.Trait:AddDropdown("TargetTraitLocks", {
 })
 
 TargetTraitLocks:OnChanged(function(selected)
-    if not isUiInitialized then return end
+    if not isUiInitialized or SaveManager.IsLoading then return end
     pcall(function()
         local settingsRemote = safeFindPath(ReplicatedStorage, "Remotes", "Settings")
         if settingsRemote and type(selected) == "table" then
@@ -3537,6 +3664,7 @@ local AutoRollTrait = Tabs.Trait:AddToggle("AutoRollTrait", {
 })
 
 AutoRollTrait:OnChanged(function(enabled)
+    if not isUiInitialized or SaveManager.IsLoading then return end
     if enabled then
         pcall(function()
             local machine = safeFindPath(workspace, "Machines", "Trait")
@@ -3737,9 +3865,10 @@ Tabs.Settings:AddButton({
 
 Tabs.Settings:AddSection("ระบบ Anti-AFK & ความปลอดภัย (Security)")
 
-Tabs.Settings:AddParagraph({
-    Title = "🛡️ ระบบป้องกันหลุด AFK (Anti-AFK Active)",
-    Description = "ระบบจับการเคลื่อนไหวอัตโนมัติ ป้องกันเกมเตะออกเมื่อเปิดทิ้งไว้นานกว่า 20 นาที",
+local EnableAntiAFK = Tabs.Settings:AddToggle("EnableAntiAFK", {
+    Title = "เปิดใช้งานระบบ Anti-AFK (Anti-AFK System)",
+    Description = "ส่งสัญญาณขยับหน้าจออัตโนมัติ ป้องกันเกมเตะออกเมื่อเปิดทิ้งไว้นานกว่า 20 นาที",
+    Default = true,
 })
 
 Tabs.Settings:AddSection("ข้อมูลสคริปต์ (Script Information)")
@@ -3753,12 +3882,11 @@ Window:SelectTab(1)
 rebuildTargetLookup()
 
 task.delay(0.5, function()
-    isUiInitialized = true
     pcall(function()
-        if Options.AutoLoadConfig and Options.AutoLoadConfig.Value then
-            SaveManager.LoadAutoloadConfig()
-        end
+        SaveManager.LoadAutoloadConfig()
     end)
+    task.wait(0.2)
+    isUiInitialized = true
 end)
 
 Fluent:Notify({
@@ -4354,6 +4482,123 @@ task.spawn(function()
                 if Mutations4 then Mutations4:SetValues(MutationValues) end
             end)
             rebuildTargetLookup()
+        end
+    end
+end)
+
+-- Direct Remote Auto Raid Engine Thread
+task.spawn(function()
+    local lastRaidRefresh = 0
+    local lastCreateParty = 0
+    local lastReadyFire = 0
+    local lastStartFire = 0
+
+    while task.wait(3.0) do
+        local doRaid = Options.AutoRaid and Options.AutoRaid.Value
+        if not doRaid then continue end
+
+        local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+
+        -- 1. Check Raid Notifications / Frame visibility in PlayerGui
+        local raidsFrames = safeFindPath(playerGui, "MainUI", "Frames", "Raids")
+        local raidsNotif = raidsFrames and raidsFrames:FindFirstChild("RaidsNotif")
+        local raidSelection = raidsFrames and raidsFrames:FindFirstChild("RaidSelection")
+        local raidsReady = raidsFrames and raidsFrames:FindFirstChild("RaidsReady")
+
+        local isRaidOpen = false
+        pcall(function()
+            if raidsNotif then
+                local clientScript = raidsNotif:FindFirstChild("RaidsNotifClient")
+                if raidsNotif.Visible or (clientScript and clientScript.Enabled) then
+                    isRaidOpen = true
+                end
+                for _, textLabel in ipairs(raidsNotif:GetDescendants()) do
+                    if textLabel:IsA("TextLabel") and textLabel.Visible then
+                        local txt = textLabel.Text:lower()
+                        if txt:find("open") or txt:find("closes in") or txt:find("raid") then
+                            isRaidOpen = true
+                            break
+                        end
+                    end
+                end
+            end
+            if raidSelection and raidSelection.Visible then
+                isRaidOpen = true
+            end
+            if raidsReady and raidsReady.Visible then
+                isRaidOpen = true
+            end
+        end)
+
+        -- Periodic Refresh status
+        if tick() - lastRaidRefresh > 10 then
+            lastRaidRefresh = tick()
+            if raidRemote then
+                safeFireRemote(raidRemote, "Refresh")
+            end
+        end
+
+        -- 2. Auto Create Party / Join Raid when open
+        if isRaidOpen or (raidSelection and raidSelection.Visible) then
+            if tick() - lastCreateParty > 8 then
+                lastCreateParty = tick()
+                local partyType = (Options.RaidPartyType and Options.RaidPartyType.Value) or "Private"
+                if raidRemote then
+                    safeFireRemote(raidRemote, "Create", partyType)
+                end
+                pcall(function()
+                    if raidSelection then
+                        local createBtn = safeFindPath(raidSelection, "Frame", "Create", "Button")
+                                       or safeFindPath(raidSelection, "Create", "Button")
+                                       or raidSelection:FindFirstChild("Create", true)
+                        if createBtn then
+                            local clickable = createBtn:IsA("GuiButton") and createBtn or createBtn:FindFirstChildWhichIsA("GuiButton", true)
+                            if clickable then
+                                if firesignal then firesignal(clickable.MouseButton1Click)
+                                elseif firebutton then firebutton(clickable) end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+
+        -- 3. Auto Ready when in party/lobby
+        local doReady = (Options.AutoReadyRaid == nil) or Options.AutoReadyRaid.Value
+        if doReady and (isRaidOpen or raidsReady and raidsReady.Visible) then
+            if tick() - lastReadyFire > 5 then
+                lastReadyFire = tick()
+                if raidRemote then
+                    safeFireRemote(raidRemote, "Ready")
+                end
+                pcall(function()
+                    if raidsReady then
+                        local readyBtn = safeFindPath(raidsReady, "Frame", "Ready", "Button")
+                                      or raidsReady:FindFirstChild("Ready", true)
+                        if readyBtn then
+                            local clickable = readyBtn:IsA("GuiButton") and readyBtn or readyBtn:FindFirstChildWhichIsA("GuiButton", true)
+                            if clickable then
+                                if firesignal then firesignal(clickable.MouseButton1Click)
+                                elseif firebutton then firebutton(clickable) end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+
+        -- 4. Auto Start Fight inside Raid
+        local doStart = (Options.AutoStartRaid == nil) or Options.AutoStartRaid.Value
+        if doStart then
+            if tick() - lastStartFire > 6 then
+                lastStartFire = tick()
+                if fightStartRemote then
+                    safeFireRemote(fightStartRemote, "Start")
+                    task.wait(0.2)
+                    safeFireRemote(fightStartRemote, "AutoPlay")
+                end
+            end
         end
     end
 end)
