@@ -251,9 +251,9 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             if camera and camera.ViewportSize and camera.ViewportSize.X > 0 and camera.ViewportSize.Y > 0 then
                 local vp = camera.ViewportSize
                 local targetWidth, targetHeight = 920, 600
-                local scaleX = (vp.X - 20) / targetWidth
-                local scaleY = (vp.Y - 20) / targetHeight
-                local calcScale = math.clamp(math.min(scaleX, scaleY), 0.40, 1.0)
+                local scaleX = (vp.X - 40) / targetWidth
+                local scaleY = (vp.Y - 40) / targetHeight
+                local calcScale = math.clamp(math.min(scaleX, scaleY), 0.35, 0.85)
                 uiScale.Scale = calcScale
             end
         end)
@@ -1058,12 +1058,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
         local function updatePageCanvas()
             if pageScroll and pageLayout then
-                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 80)
+                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
             end
         end
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePageCanvas)
 
-        -- Mobile Touch Drag Scrolling Handler for Tab Content Pages
+        -- Mobile Touch Drag Scrolling Handler for Tab Content Pages (Scales with UIScale)
         local isPageDragging = false
         local pageTouchStartY = 0
         local pageStartCanvasY = 0
@@ -1079,12 +1079,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         local function onPageTouchChanged(input)
             if pageTouchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                 local deltaY = input.Position.Y - pageTouchStartY
-                if math.abs(deltaY) > 5 then
+                if math.abs(deltaY) > 4 then
                     isPageDragging = true
                 end
                 if isPageDragging then
-                    local maxCanvasY = math.max(0, (pageLayout.AbsoluteContentSize.Y + 80) - pageScroll.AbsoluteSize.Y)
-                    pageScroll.CanvasPosition = Vector2.new(0, math.clamp(pageStartCanvasY - deltaY, 0, maxCanvasY))
+                    local currentScale = (uiScale and uiScale.Scale > 0) and uiScale.Scale or 1
+                    local scaledDeltaY = deltaY / currentScale
+                    local maxCanvasY = math.max(0, (pageLayout.AbsoluteContentSize.Y + 20) - pageScroll.AbsoluteWindowSize.Y)
+                    pageScroll.CanvasPosition = Vector2.new(0, math.clamp(pageStartCanvasY - scaledDeltaY, 0, maxCanvasY))
                 end
             end
         end
@@ -1498,8 +1500,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.Parent = modalOverlay
 
                 local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-                local maxModalH = math.clamp(cameraVP.Y * 0.88, 280, 520)
-                local maxModalW = math.min(750, cameraVP.X - 20)
+                local maxModalH = math.clamp(cameraVP.Y * 0.70, 240, 420)
+                local maxModalW = math.min(680, cameraVP.X - 40)
 
                 local modalFrame = Instance.new("Frame")
                 modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
@@ -1508,6 +1510,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 modalFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 29)
                 modalFrame.BackgroundTransparency = 0
                 modalFrame.BorderSizePixel = 0
+                modalFrame.ClipsDescendants = true
                 modalFrame.ZIndex = 1000000
                 modalFrame.Parent = modalOverlay
 
@@ -1603,8 +1606,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 -- 📜 OPTION SCROLL CONTAINER (MAXIMIZED HEIGHT & GENEROUS BOTTOM PADDING)
                 local optScroll = Instance.new("ScrollingFrame")
-                optScroll.Size = UDim2.new(1, -28, 1, -94)
-                optScroll.Position = UDim2.new(0, 14, 0, 88)
+                optScroll.Size = UDim2.new(1, -28, 1, -96)
+                optScroll.Position = UDim2.new(0, 14, 0, 90)
                 optScroll.BackgroundTransparency = 1
                 optScroll.Active = true
                 optScroll.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -1614,11 +1617,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optScroll.ElasticBehavior = Enum.ElasticBehavior.Always
                 optScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+                optScroll.ClipsDescendants = true
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
 
                 local optPadding = Instance.new("UIPadding")
-                optPadding.PaddingBottom = UDim.new(0, 35)
+                optPadding.PaddingBottom = UDim.new(0, 15)
                 optPadding.PaddingTop = UDim.new(0, 2)
                 optPadding.PaddingLeft = UDim.new(0, 2)
                 optPadding.PaddingRight = UDim.new(0, 4)
@@ -1631,12 +1635,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
                 local function updateModalCanvas()
                     if optScroll and optLayout then
-                        optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 60)
+                        optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 20)
                     end
                 end
                 optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateModalCanvas)
 
-                -- Mobile & Touch Drag Scrolling Handler
+                -- Mobile & Touch Drag Scrolling Handler (UIScale Aware & Perfect Bound Clamping)
                 local isTouchDragging = false
                 local touchStartY = 0
                 local startCanvasY = 0
@@ -1652,12 +1656,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 local function onTouchChanged(input)
                     if touchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                         local deltaY = input.Position.Y - touchStartY
-                        if math.abs(deltaY) > 5 then
+                        if math.abs(deltaY) > 4 then
                             isTouchDragging = true
                         end
                         if isTouchDragging then
-                            local maxCanvasY = math.max(0, optLayout.AbsoluteContentSize.Y + 60 - optScroll.AbsoluteSize.Y)
-                            optScroll.CanvasPosition = Vector2.new(0, math.clamp(startCanvasY - deltaY, 0, maxCanvasY))
+                            local currentScale = (uiScale and uiScale.Scale > 0) and uiScale.Scale or 1
+                            local scaledDeltaY = deltaY / currentScale
+                            local maxCanvasY = math.max(0, (optLayout.AbsoluteContentSize.Y + 20) - optScroll.AbsoluteWindowSize.Y)
+                            optScroll.CanvasPosition = Vector2.new(0, math.clamp(startCanvasY - scaledDeltaY, 0, maxCanvasY))
                         end
                     end
                 end
@@ -4082,13 +4088,9 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat Instant Buy Loop (Throttled: max 12 executions/s)
-local _buyLoopLastRun = 0
+-- Heartbeat High-Frequency Instant Buy Loop (Unthrottled Zero-Delay Remote Trigger)
 local function instantBuyLoop()
-    if not getgenv().AutoBuyCards then return end  -- [OPT] exit immediately when off
-    local now = tick()
-    if now - _buyLoopLastRun < 0.08 then return end  -- [OPT] cap at ~12 runs/s
-    _buyLoopLastRun = now
+    if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
     if not getgenv().CardFolder then return end
 
@@ -4113,18 +4115,55 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 25 or (tick() - firstSeen > 20) then
+        if buyAttempts >= 40 or (tick() - firstSeen > 25) then
             model:SetAttribute("Rejected", true)
             continue
         end
 
         local cardRarity, cardMutation = getCardModelRarityAndMutation(model)
+        local cardRarityLower = string.lower(cardRarity or "")
+        local cardMutLower = string.lower(cardMutation or "")
+        local modelNameLower = string.lower(model.Name or "")
+        local templateNameLower = string.lower(tostring(model:GetAttribute("TemplateName") or model:GetAttribute("CardName") or ""))
 
         local hasRaritiesSelected = (getgenv().SelectedRarities and next(getgenv().SelectedRarities) ~= nil)
         local hasMutationsSelected = (getgenv().SelectedMutations and next(getgenv().SelectedMutations) ~= nil)
 
-        local matchRarity = not hasRaritiesSelected or (cardRarity ~= "" and getgenv().SelectedRarities[string.lower(cardRarity)] == true)
-        local matchMutation = not hasMutationsSelected or (cardMutation ~= "" and getgenv().SelectedMutations[string.lower(cardMutation)] == true)
+        local matchRarity = not hasRaritiesSelected
+        if hasRaritiesSelected then
+            if cardRarityLower ~= "" and getgenv().SelectedRarities[cardRarityLower] == true then
+                matchRarity = true
+            else
+                for selRarity, _ in pairs(getgenv().SelectedRarities or {}) do
+                    if selRarity ~= "" then
+                        if (cardRarityLower ~= "" and cardRarityLower:find(selRarity, 1, true))
+                           or selRarity:find(cardRarityLower, 1, true)
+                           or modelNameLower:find(selRarity, 1, true)
+                           or templateNameLower:find(selRarity, 1, true) then
+                            matchRarity = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        local matchMutation = not hasMutationsSelected
+        if hasMutationsSelected then
+            if cardMutLower ~= "" and getgenv().SelectedMutations[cardMutLower] == true then
+                matchMutation = true
+            else
+                for selMut, _ in pairs(getgenv().SelectedMutations or {}) do
+                    if selMut ~= "" then
+                        if (cardMutLower ~= "" and cardMutLower:find(selMut, 1, true))
+                           or selMut:find(cardMutLower, 1, true) then
+                            matchMutation = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
 
         if not hasRaritiesSelected and not hasMutationsSelected then
             matchRarity = true
@@ -4133,13 +4172,17 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] > 0.1 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] >= 0.01 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
                     prompt.RequiresLineOfSight = false
                     prompt.MaxActivationDistance = 99999
                     fireproximityprompt(prompt)
+                    task.defer(function() fireproximityprompt(prompt) end)
+                    if getconnections then
+                        for _, conn in ipairs(getconnections(prompt.Triggered)) do pcall(function() conn:Fire(LocalPlayer) end) end
+                    end
                 end)
 
                 -- Update AFK Stats & Log (Only once per card model)
@@ -4147,8 +4190,8 @@ local function instantBuyLoop()
                     model:SetAttribute("LoggedBuy", true)
                     if getgenv().AFKRuntime and getgenv().AFKRuntime.stats then
                         getgenv().AFKRuntime.stats.bought = (getgenv().AFKRuntime.stats.bought or 0) + 1
-                        local rLow = string.lower(cardRarity)
-                        if rLow:find("secret") or rLow:find("divine") or rLow:find("godly") or rLow:find("cosmic") or rLow:find("eternal") or rLow:find("transcendent") then
+                        local rLow = cardRarityLower
+                        if rLow:find("zenith") or rLow:find("secret") or rLow:find("divine") or rLow:find("godly") or rLow:find("cosmic") or rLow:find("eternal") or rLow:find("transcendent") then
                             getgenv().AFKRuntime.stats.secret = (getgenv().AFKRuntime.stats.secret or 0) + 1
                         end
                     end
@@ -4169,7 +4212,11 @@ local function instantBuyLoop()
                 end
             end
         else
-            model:SetAttribute("Rejected", true)
+            local scanCount = (tonumber(model:GetAttribute("ScanAttempts")) or 0) + 1
+            model:SetAttribute("ScanAttempts", scanCount)
+            if scanCount >= 4 then
+                model:SetAttribute("Rejected", true)
+            end
         end
     end
 end
@@ -4371,18 +4418,18 @@ local function GetInventoryCardsForReroll()
     return list
 end
 
-getgenv().RerollSpeed = 0.4
+getgenv().RerollSpeed = getgenv().RerollSpeed or 0.05
 Tabs.Reroll:AddSection("🔄 ตั้งค่าความเร็วการรีโรล")
 
 local RerollSpeedSlider = Tabs.Reroll:AddSlider("RerollSpeed", {
     Title = "⏱️ หน่วงเวลาในการรีโรล (วินาที)",
-    Description = "ปรับระยะเวลารอระหว่างการยิงรีโมทในแต่ละรอบ เพื่อป้องกันปิงสูงและข้อความซ้ำ",
-    Default = 0.4,
-    Min = 0.2,
+    Description = "ปรับระยะเวลารอระหว่างการยิงรีโมทในแต่ละรอบ",
+    Default = 0.05,
+    Min = 0.01,
     Max = 5.0,
-    Rounding = 1,
+    Rounding = 2,
     Callback = function(Value)
-        getgenv().RerollSpeed = tonumber(Value) or 0.4
+        getgenv().RerollSpeed = tonumber(Value) or 0.05
     end
 })
 
@@ -4671,7 +4718,7 @@ AutoRerollToggle:OnChanged(function(state)
                         end
                     end
 
-                    task.wait(math.max(0.2, tonumber(getgenv().RerollSpeed) or 0.4))
+                    task.wait(math.max(0.01, tonumber(getgenv().RerollSpeed) or 0.05))
                 end
             end
 
@@ -4892,7 +4939,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end
                     fireAllRank(cId)
 
-                    task.wait(math.max(0.2, tonumber(getgenv().RerollSpeed) or 0.4))
+                    task.wait(math.max(0.01, tonumber(getgenv().RerollSpeed) or 0.05))
                 end
             end
 
