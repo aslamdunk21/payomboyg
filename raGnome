@@ -1,0 +1,4592 @@
+--[[
+    rollgnome.lua - "Roll A Gnome"  (place 117539213094671, 8 Digit Bros)
+
+    Verified against server-side values on 2026-08-23, account polpne.
+
+    The loop the game wants: roll for a gnome, buy it off the podium, plant it
+    in your garden, and it plants crops by itself forever.  Crops grow, get
+    harvested into a 100-slot inventory and sold.  Cash buys the upgrade tree,
+    plot expansions and rebirths.
+
+    How this game is wired, and why the script looks the way it does:
+
+    * **EVERY REMOTE IN THIS GAME HAS AN EMPTY NAME.**  All 44 RemoteEvents and
+      27 RemoteFunctions under `ReplicatedStorage.Communication` report
+      `#Name == 0`, so no name scan finds anything.  The server creates them
+      named; `Library.Imported.Network` binds them by name on the client and
+      then *blanks the name locally* (`remote.Name = ""`).  The only way in is
+      the module itself, with the name as the first argument:
+          `Net:FireServer("Place", ...)` / `Net:InvokeServer("SellAll")`.
+      `require` needs `setthreadidentity(2)` first - the executor runs at 8 and
+      a plain require throws "Cannot require a non-RobloxScript module".
+    * **`require(ReplicatedStorage.Replication).Data` is the state oracle** and
+      it is complete: stats.money, farmers (placed), inventory (loose), plants,
+      upgrades, upgrade_tree, plot_expansions, max_inventory, boosts, autos.
+      **The table is REPLACED, not mutated** - the server ships a fresh one on
+      `UpdateFullData` - so every read goes through `data()` and nothing caches
+      the inner table.  Same trap as the Training To Climb currency store.
+    * **PLACING NEEDS THE GNOME EQUIPPED AS A TOOL.**  This is the one rule that
+      matters and it cost nine failed attempts.  `Place` takes exactly
+      `("Farmer", <FarmerName>, <CFrame>, <floorId>)`, the payload was captured
+      off a real manual placement and matched byte for byte - and the server
+      still refused it every time, from any distance, on any spot, including
+      the exact square a gnome had been standing on one second earlier.  What
+      the client does that a bare remote call does not is hold the item:
+      `Humanoid:EquipTool(tool)` first, then fire, and it works instantly.
+      The Tools live in the Backpack carrying `type` ("Farmer" / "Plant"),
+      `FarmerName`, `Id` and `Level` as attributes.  Same shape as the Logo
+      fuer Brainrots stands.
+    * **Everything else is position free.**  Measured: `CollectPlant` credited
+      from 49 studs, `SellAll` paid from the middle of the field with no walk to
+      the shop, `BuyFarmer` charged from 26 studs, `Upgrade` works from
+      anywhere.  Only `Place` needs the hand, and not the feet.
+    * **No collect throttle worth the name.**  25 `CollectPlant` calls at a 0.05s
+      gap credited 25 of 25 in 3.5s.  The client's own `CanCollect` attribute
+      read `false` during that and the server took every one of them, so it is a
+      client-side animation gate and nothing else.
+    * **Rolling is FREE.**  `Roll()` costs nothing at all (money unchanged over
+      a roll) and drops one gnome per podium into `Plot.RNG.Preview`, mirrored
+      in `Data.rng_preview`.  Buying is what costs: `BuyFarmer(previewModel)`
+      charged exactly the config price (Corn Gnome 10, Strawberry Gnome 25).
+      So the podium is rolled until something worth buying shows up.
+    * `SellAll()` sells **plants only** - 34 crops for $2,205 while the farmers
+      in the inventory were untouched.  Gnomes have their own `SellGnome` /
+      `SellAllGnomes`, which this script never calls.
+    * `Upgrade(branch, node)` is the hex tree: `("Main", "LuckI")` charged $500
+      and moved the player attribute `RollLuck` 1 -> 1.3.  Branches are Main,
+      Gnomes, Plants, Player, Pets; every node carries `Price` and `Requires`.
+
+    Never touched: Auto Roll is a **gamepass** (the client answers
+    `prompt("Auto Roll", "gamepass")`), `RequestLuckSpin` returns a product id
+    and opens a Robux window, and the Weekly Deal / gift products are all paid.
+
+    One thing worth knowing before "optimising" anything: this game **rolls
+    money back**.  `Data.economy_rollbacks` holds real entries with thresholds
+    (250 billion in the one on this account), so anything that inflates the
+    balance instead of producing it gets reverted by the developers later.
+    Only the honest loop is automated here.
+]]
+
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+
+----------------------------------------------------------------------------
+-- module access
+--
+-- The executor thread runs at identity 8 and every one of these modules is a
+-- plain ModuleScript, so `require` throws without the identity switch.  The
+-- switch is restored afterwards because leaving the thread at 2 changes how
+-- later calls behave.
+----------------------------------------------------------------------------
+
+local function requireIdent(inst)
+    if not inst then return {} end
+    local previous
+    pcall(function() previous = getthreadidentity and getthreadidentity() or nil end)
+    
+    local ok, result
+    for attempt = 1, 5 do
+        pcall(function() if setthreadidentity then setthreadidentity(2) end end)
+        ok, result = pcall(require, inst)
+        pcall(function() if setthreadidentity then setthreadidentity(previous or 8) end end)
+        if ok and type(result) == "table" then
+            return result
+        end
+        task.wait(0.5)
+    end
+    warn("[rollgnome] requireIdent failed to load module: " .. tostring(inst) .. " | Error: " .. tostring(result))
+    return type(result) == "table" and result or {}
+end
+
+repeat task.wait(0.2) until game:IsLoaded() and ReplicatedStorage:FindFirstChild("Library")
+
+local Library = ReplicatedStorage:WaitForChild("Library", 30)
+local Configs = Library and Library:WaitForChild("Configs", 30)
+
+local Net         = requireIdent(Library and Library:WaitForChild("Imported", 30):WaitForChild("Network", 30))
+local Replication = requireIdent(ReplicatedStorage:WaitForChild("Replication", 30))
+
+local CfgFarmers  = requireIdent(Configs and Configs:WaitForChild("Farmers", 30))
+local CfgPlants   = requireIdent(Configs and Configs:WaitForChild("Plants", 30))
+local CfgTree     = requireIdent(Configs and Configs:WaitForChild("Upgrade Tree", 30))
+local CfgRebirths = requireIdent(Configs and Configs:WaitForChild("Rebirths", 30))
+local CfgExpand   = requireIdent(Configs and Configs:WaitForChild("Expand", 30))
+
+----------------------------------------------------------------------------
+-- config / state
+----------------------------------------------------------------------------
+
+local CONFIG = {
+    auto          = true,   -- master switch (enabled by default)
+
+    autoCollect   = true,   -- harvest every READY plant
+    autoSell      = true,   -- SellAll once the inventory fills up
+    autoRoll      = true,   -- Roll costs nothing, so keep the podium stocked
+    autoBuy       = true,   -- buy a rolled gnome when it earns more than we have
+    autoPlace     = true,   -- equip + Place whatever is in the inventory
+    autoPets      = true,   -- same again for pets, capped by max_equipped_pets
+    autoUpgrade   = true,   -- the hex tree, cheapest useful node first
+    autoExpand    = true,   -- ExpandPlot when it is comfortably affordable
+    autoFreeGnome = true,   -- the free gnome timer
+    autoRebirth   = false,  -- UNVERIFIED, see rebirthOnce()
+
+    collectGap    = 0.06,   -- 25/25 credited at 0.05, this leaves headroom
+    collectBatch  = 40,     -- per pass, so the loop stays responsive
+    sellAt        = 0.85,   -- sell once the inventory is this full
+    placeClear    = 3.0,    -- studs a placement spot keeps from anything else
+    placeTries    = 6,      -- spots attempted per gnome per pass
+    buyMargin     = 1.0,    -- buy when income/s beats the weakest placed x this
+    expandKeep    = 3.0,    -- only expand while cash stays >= price * this
+    reserveWindow = 90,     -- seconds of income a reserved gnome may be away
+    autoLoadConfig  = true,
+    webhookUrl      = "",
+    webhookEnabled  = false,
+    webhookInterval = 5,
+}
+
+pcall(function()
+    local filesToCheck = { "default_rollagnome_config.json", "rollagnome_config.json" }
+    for _, cfgFile in ipairs(filesToCheck) do
+        if isfile and isfile(cfgFile) then
+            local raw = readfile(cfgFile)
+            local data = game:GetService("HttpService"):JSONDecode(raw)
+            if type(data) == "table" and data.autoLoadConfig ~= false then
+                for k, v in pairs(data) do
+                    CONFIG[k] = v
+                end
+                break
+            end
+        end
+    end
+end)
+
+local STATE = {
+    money = 0, rebirths = 0, phase = "starting", note = "",
+    collected = 0, sold = 0, earned = 0, lastSale = 0,
+    rolls = 0, bought = 0, placed = 0, upgrades = 0, expansions = 0,
+    gnomes = 0, invUsed = 0, invMax = 0, ready = 0, growing = 0,
+    rollLuck = 1, bestGnome = "-", weakest = "-", target = "-",
+    placeFails = 0, plotFull = false, gnomeCap = 0, swaps = 0,
+    rate = 0, reserve = 0, observed = 0,
+    pets = 0, petsPlaced = 0, petCap = 3,
+}
+
+_G.__ROLLGNOME = (_G.__ROLLGNOME or 0) + 1
+local GEN = _G.__ROLLGNOME
+local function alive() return _G.__ROLLGNOME == GEN end
+
+local function note(fmt, ...)
+    STATE.note = select("#", ...) > 0 and string.format(fmt, ...) or tostring(fmt)
+end
+
+----------------------------------------------------------------------------
+-- oracle helpers
+--
+-- Never hold on to Replication.Data: the server replaces the whole table on
+-- every full update, so a cached reference silently goes stale.
+----------------------------------------------------------------------------
+
+local function data()
+    local d = Replication and Replication.Data
+    return type(d) == "table" and d or {}
+end
+
+local function money()
+    local s = data().stats
+    return (type(s) == "table" and tonumber(s.money)) or 0
+end
+
+local function rebirths()
+    local s = data().stats
+    return (type(s) == "table" and tonumber(s.rebirths)) or 0
+end
+
+local function inventory()
+    local inv = data().inventory
+    return type(inv) == "table" and inv or {}
+end
+
+local function inventoryCounts()
+    local plants, farmers, total = 0, 0, 0
+    for _, item in pairs(inventory()) do
+        total = total + 1
+        if type(item) == "table" then
+            if item.type == "Farmer" then farmers = farmers + 1
+            elseif item.type == "Plant" then plants = plants + 1 end
+        end
+    end
+    return plants, farmers, total
+end
+
+local function inventoryMax()
+    return tonumber(data().max_inventory) or 100
+end
+
+local function placedFarmers()
+    local f = data().farmers
+    return type(f) == "table" and f or {}
+end
+
+local function placedCount()
+    local n = 0
+    for _ in pairs(placedFarmers()) do n = n + 1 end
+    return n
+end
+
+----------------------------------------------------------------------------
+-- remotes
+--
+-- Every RemoteFunction goes out inside a task.spawn behind a wall-clock cap.
+-- A RemoteFunction that never returns parks the caller for good, and in this
+-- project that has taken the bridge down twice.
+----------------------------------------------------------------------------
+
+local function fire(name, ...)
+    local args = table.pack(...)
+    local ok, err = pcall(function() Net:FireServer(name, table.unpack(args, 1, args.n)) end)
+    if not ok then note("%s: %s", name, tostring(err)) end
+    return ok
+end
+
+local function invoke(name, timeout, ...)
+    local args = table.pack(...)
+    local done, result = false, nil
+    task.spawn(function()
+        local ok, res = pcall(function() return Net:InvokeServer(name, table.unpack(args, 1, args.n)) end)
+        result = ok and res or nil
+        if not ok then note("%s: %s", name, tostring(res)) end
+        done = true
+    end)
+    local started = os.clock()
+    while not done and os.clock() - started < (timeout or 8) do
+        task.wait(0.05)
+    end
+    if not done then note("%s did not answer", name) end
+    return result, done
+end
+
+----------------------------------------------------------------------------
+-- the plot
+----------------------------------------------------------------------------
+
+local function plot()
+    local holder = LocalPlayer:FindFirstChild("Plot")
+    local value = holder and holder.Value
+    if value and value.Parent then return value end
+    return nil
+end
+
+local function folderOf(name)
+    local p = plot()
+    return p and p:FindFirstChild(name) or nil
+end
+
+-- Everything that already occupies ground: growing plants, ready plants and
+-- the gnomes themselves.  Used both for the census and for finding a spot.
+local function occupiedPoints()
+    local points = {}
+    for _, name in ipairs({ "Plants", "ReadyToCollect", "Workers" }) do
+        local folder = folderOf(name)
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("Model") then
+                    local ok, pivot = pcall(function() return child:GetPivot().Position end)
+                    if ok then points[#points + 1] = pivot end
+                end
+            end
+        end
+    end
+    return points
+end
+
+-- The garden floor.  Note that Floor1 covers the WHOLE 50x50 slab whether or
+-- not the expansions behind it are bought, so its bounding box is not the
+-- usable area - the area people actually farm on is where the plants are.
+local function gardenBounds()
+    local points = occupiedPoints()
+    if #points == 0 then
+        local p = plot()
+        local pivot = p and p:FindFirstChild("GardenPivot")
+        if pivot and pivot:IsA("BasePart") then
+            local pos = pivot.Position
+            return pos.X - 8, pos.X + 8, pos.Z - 8, pos.Z + 8, 2.0999982357025146
+        end
+        return nil
+    end
+    local minx, maxx, minz, maxz = math.huge, -math.huge, math.huge, -math.huge
+    local y = 2.0999982357025146
+    for _, point in ipairs(points) do
+        if point.X < minx then minx = point.X end
+        if point.X > maxx then maxx = point.X end
+        if point.Z < minz then minz = point.Z end
+        if point.Z > maxz then maxz = point.Z end
+    end
+    return minx, maxx, minz, maxz, y
+end
+
+-- Spots ranked by "just clear enough": the very emptiest square on the slab is
+-- usually outside the part of the garden that is actually unlocked, so a
+-- maximum-clearance pick walks straight off the useful area.
+local function placementSpots(count)
+    local minx, maxx, minz, maxz, y = gardenBounds()
+    if not minx then return {} end
+    local points = occupiedPoints()
+    local function clearance(x, z)
+        local nearest = math.huge
+        for _, point in ipairs(points) do
+            local dx, dz = point.X - x, point.Z - z
+            local d = math.sqrt(dx * dx + dz * dz)
+            if d < nearest then nearest = d end
+        end
+        return nearest
+    end
+    local candidates = {}
+    local step = 1
+    for x = minx - 2, maxx + 2, step do
+        for z = minz - 2, maxz + 2, step do
+            local c = clearance(x, z)
+            if c >= CONFIG.placeClear then
+                candidates[#candidates + 1] = { x = x, z = z, c = c }
+            end
+        end
+    end
+    table.sort(candidates, function(a, b) return a.c < b.c end)
+    local out = {}
+    for i = 1, math.min(count or CONFIG.placeTries, #candidates) do
+        local pick = candidates[i]
+        out[#out + 1] = Vector3.new(pick.x, y, pick.z)
+    end
+    return out
+end
+
+----------------------------------------------------------------------------
+-- valuing a gnome
+--
+-- A gnome plants one crop every `plant_duration` seconds and that crop sells
+-- for its plant's `sell_price`, so income per second is the honest comparison
+-- and it is what the buy decision ranks on.  Prices and durations both come
+-- out of the game's own config; nothing here is hand-written.
+----------------------------------------------------------------------------
+
+local function plantPrice(plantName)
+    local cfg = CfgPlants[plantName]
+    if type(cfg) ~= "table" then return 0 end
+    return tonumber(cfg.sell_price) or 0
+end
+
+local function gnomeRate(farmerName, model)
+    if type(CfgFarmers) ~= "table" then return 100 end
+
+    local cleanName = tostring(farmerName or "")
+    local cfg = CfgFarmers[cleanName]
+    
+    if type(cfg) ~= "table" then
+        pcall(function()
+            for _, mut in ipairs(getAvailableMutationNames()) do
+                local cleanM = mut:lower():gsub("%s+", "")
+                if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                    cleanName = cleanName:gsub("(?i)" .. mut, ""):gsub("^%s+", ""):gsub("%s+$", "")
+                end
+            end
+        end)
+        cfg = CfgFarmers[cleanName]
+    end
+
+    if type(cfg) ~= "table" then
+        local lowerRaw = tostring(farmerName or ""):lower():gsub("%s+", "")
+        for fName, fData in pairs(CfgFarmers) do
+            local lowerF = fName:lower():gsub("%s+", "")
+            if lowerRaw:find(lowerF, 1, true) or lowerF:find(lowerRaw, 1, true) then
+                cfg = fData
+                break
+            end
+        end
+    end
+
+    if type(cfg) ~= "table" then return 100 end
+
+    local duration = cfg.plant_duration
+    local seconds
+    if type(duration) == "table" then
+        local lo, hi = tonumber(duration[1]), tonumber(duration[2])
+        if lo and hi then seconds = (lo + hi) / 2 else seconds = lo or hi end
+    else
+        seconds = tonumber(duration)
+    end
+    if not seconds or seconds <= 0 then return 100 end
+    local r = plantPrice(cfg.plant) / seconds
+    return r > 0 and r or 100
+end
+
+local function gnomePrice(farmerName, model)
+    if model then
+        local p = model:GetAttribute("Price") or model:GetAttribute("Cost") or model:GetAttribute("BuyPrice") or model:GetAttribute("FarmerPrice")
+        if p and tonumber(p) and tonumber(p) > 0 then
+            return tonumber(p)
+        end
+    end
+
+    if type(CfgFarmers) ~= "table" then return 0 end
+
+    local cleanName = tostring(farmerName or "")
+    local cfg = CfgFarmers[cleanName]
+
+    if type(cfg) ~= "table" then
+        pcall(function()
+            for _, mut in ipairs(getAvailableMutationNames()) do
+                local cleanM = mut:lower():gsub("%s+", "")
+                if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                    cleanName = cleanName:gsub("(?i)" .. mut, ""):gsub("^%s+", ""):gsub("%s+$", "")
+                end
+            end
+        end)
+        cfg = CfgFarmers[cleanName]
+    end
+
+    if type(cfg) ~= "table" then
+        local lowerRaw = tostring(farmerName or ""):lower():gsub("%s+", "")
+        for fName, fData in pairs(CfgFarmers) do
+            local lowerF = fName:lower():gsub("%s+", "")
+            if lowerRaw:find(lowerF, 1, true) or lowerF:find(lowerRaw, 1, true) then
+                cfg = fData
+                break
+            end
+        end
+    end
+
+    if type(cfg) == "table" and cfg.price and tonumber(cfg.price) then
+        return tonumber(cfg.price)
+    end
+
+    return 0
+end
+
+-- The weakest gnome standing in the garden, which is what a candidate has to
+-- beat once the plot is full.  The key of the entry is the uid PickupFarmer
+-- wants, so it is returned alongside the name.
+local function weakestPlaced()
+    local worstName, worstRate, worstUid = nil, math.huge, nil
+    for uid, entry in pairs(placedFarmers()) do
+        if type(entry) == "table" and entry.name then
+            local rate = gnomeRate(entry.name)
+            if rate < worstRate then
+                worstRate, worstName, worstUid = rate, entry.name, uid
+            end
+        end
+    end
+    if not worstName then return nil, 0, nil end
+    return worstName, worstRate, worstUid
+end
+
+-- The garden holds a fixed number of gnomes and the game says so in red across
+-- the whole plot: "Buy more space to place gnome. (10 MAX)".  The number is
+-- not in any config the client can read, so it is LEARNED instead: the first
+-- placement refused while N gnomes are standing sets the cap to N.  Buying an
+-- expansion or rebirthing clears it so it is measured again rather than
+-- assumed - hardcoding 10 would go stale the moment the plot grows.
+local function gardenFull()
+    return STATE.gnomeCap > 0 and placedCount() >= STATE.gnomeCap
+end
+
+----------------------------------------------------------------------------
+-- actions
+----------------------------------------------------------------------------
+
+local function collectReady()
+    local folder = folderOf("ReadyToCollect")
+    if not folder then return 0 end
+    local _, _, used = inventoryCounts()
+    local room = inventoryMax() - used
+    if room <= 0 then return 0 end
+
+    local fired = 0
+    for _, model in ipairs(folder:GetChildren()) do
+        if not alive() or fired >= CONFIG.collectBatch or room <= 0 then break end
+        if model:IsA("Model")
+            and model:GetAttribute("READY") == true
+            and model:GetAttribute("FruitReady") ~= false then
+            -- Fire and forget: the reply is only the payout and the inventory
+            -- is the thing that proves a collect happened.
+            task.spawn(function()
+                pcall(function() Net:InvokeServer("CollectPlant", model) end)
+            end)
+            fired = fired + 1
+            room = room - 1
+            task.wait(CONFIG.collectGap)
+        end
+    end
+    if fired > 0 then STATE.collected = STATE.collected + fired end
+    return fired
+end
+
+local function sellPlants()
+    local plants = select(1, inventoryCounts())
+    if plants <= 0 then return 0 end
+    local before = money()
+    local result = invoke("SellAll", 8)
+    task.wait(0.4)
+    local gained = money() - before
+    if gained > 0 then
+        STATE.sold = STATE.sold + plants
+        STATE.earned = STATE.earned + gained
+        STATE.lastSale = gained
+    elseif result == "No Plants" then
+        note("sell: nothing to sell")
+    end
+    return gained
+end
+
+local function previewModels()
+    local p = plot()
+    local rng = p and p:FindFirstChild("RNG")
+    local preview = rng and rng:FindFirstChild("Preview")
+    if not preview then return {} end
+    local out = {}
+    for _, child in ipairs(preview:GetChildren()) do
+        if child:IsA("Model") then out[#out + 1] = child end
+    end
+    return out
+end
+
+local function rollOnce()
+    invoke("Roll", 8)
+    STATE.rolls = STATE.rolls + 1
+    task.wait(0.6)
+end
+
+local function getAllGnomeNames()
+    local namesSet = {}
+    pcall(function()
+        local assets = game:GetService("ReplicatedStorage"):FindFirstChild("Assets")
+        local farmers = assets and assets:FindFirstChild("Farmers")
+        if farmers then
+            for _, child in ipairs(farmers:GetChildren()) do
+                if child.Name and child.Name ~= "" then
+                    namesSet[child.Name] = true
+                end
+            end
+        end
+    end)
+
+    if type(CfgFarmers) == "table" then
+        for farmerName, _ in pairs(CfgFarmers) do
+            if type(farmerName) == "string" then
+                namesSet[farmerName] = true
+            end
+        end
+    end
+
+    local names = {}
+    for name, _ in pairs(namesSet) do
+        names[#names + 1] = { Title = name }
+    end
+
+    table.sort(names, function(a, b)
+        return gnomeRate(a.Title) > gnomeRate(b.Title)
+    end)
+
+    if #names == 0 then
+        names[1] = { Title = "Giant Peach Gnome" }
+    end
+    return names
+end
+
+local function getAvailableMutationNames()
+    local names = {}
+    pcall(function()
+        local assets = game:GetService("ReplicatedStorage"):FindFirstChild("Assets")
+        if assets then
+            local foldersToCheck = {
+                assets:FindFirstChild("Billboards") and assets.Billboards:FindFirstChild("MutationLabels"),
+                assets:FindFirstChild("MutationImages"),
+                assets:FindFirstChild("Mutations"),
+                assets:FindFirstChild("Mutation")
+            }
+            for _, folder in ipairs(foldersToCheck) do
+                if folder then
+                    for _, child in ipairs(folder:GetChildren()) do
+                        if child.Name and child.Name ~= "" then
+                            if not table.find(names, child.Name) then
+                                table.insert(names, child.Name)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    table.sort(names)
+    if #names == 0 then
+        names = { "Charged", "Cursed", "Diamond", "Frozen", "Golden", "Night", "Plus", "Shiny", "Solar", "Toxic", "Rainbow", "Dark", "Corrupted", "Galactic", "Void" }
+    end
+    table.insert(names, 1, "Normal (ไม่มีสถานะ)")
+    return names
+end
+
+local function extractStringVal(item, fallbackKey)
+    if type(item) == "boolean" and fallbackKey then
+        item = fallbackKey
+    end
+    if type(item) == "table" then
+        item = item.Title or item.Name or item.Value or item[1] or tostring(item)
+    end
+    return tostring(item or "")
+end
+
+local function getGnomeModelMutation(model)
+    if not model then return nil end
+
+    -- 1) Standard Attributes
+    local attrs = { "Mutation", "Mutated", "Variant", "MutationName", "MutationType", "Effect", "VariantName", "Status", "Tier", "Prefix", "Suffix" }
+    for _, attr in ipairs(attrs) do
+        local val = model:GetAttribute(attr)
+        if val and tostring(val) ~= "" then
+            return tostring(val)
+        end
+    end
+
+    -- 2) Dynamic Attributes scan
+    pcall(function()
+        for attrName, attrVal in pairs(model:GetAttributes()) do
+            if type(attrVal) == "string" and attrVal ~= "" then
+                local lowerVal = attrVal:lower()
+                for _, knownMut in ipairs(getAvailableMutationNames()) do
+                    local cleanM = knownMut:lower():gsub("%s+", "")
+                    if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                        if lowerVal:find(cleanM, 1, true) then
+                            return knownMut
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 3) Descendants (BillboardGui, TextLabel, StringValue, etc.)
+    local mutVal = nil
+    pcall(function()
+        local availableMutations = getAvailableMutationNames()
+        for _, desc in ipairs(model:GetDescendants()) do
+            if desc:IsA("BillboardGui") then
+                local bName = desc.Name:lower()
+                for _, knownMut in ipairs(availableMutations) do
+                    local cleanM = knownMut:lower():gsub("%s+", "")
+                    if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                        if bName == cleanM or bName:find(cleanM, 1, true) then
+                            mutVal = knownMut
+                            break
+                        end
+                    end
+                end
+                if mutVal then break end
+            elseif desc:IsA("StringValue") and desc.Value and desc.Value ~= "" then
+                mutVal = desc.Value
+                break
+            elseif desc:IsA("TextLabel") and desc.Text and desc.Text ~= "" then
+                local textLower = desc.Text:lower()
+                for _, knownMut in ipairs(availableMutations) do
+                    local cleanM = knownMut:lower():gsub("%s+", "")
+                    if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                        if textLower:find(cleanM, 1, true) then
+                            mutVal = knownMut
+                            break
+                        end
+                    end
+                end
+                if mutVal then break end
+            end
+        end
+    end)
+    if mutVal then return mutVal end
+
+    -- 4) Child names
+    pcall(function()
+        local availableMutations = getAvailableMutationNames()
+        for _, mut in ipairs(availableMutations) do
+            local cleanM = mut:lower():gsub("%s+", "")
+            if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                local found = model:FindFirstChild(mut) or model:FindFirstChild(mut:upper()) or model:FindFirstChild(mut:lower())
+                if found then
+                    mutVal = mut
+                    break
+                end
+            end
+        end
+    end)
+
+    return mutVal
+end
+
+local function isGnomeMutationAllowed(model)
+    local selectedMutations = CONFIG.selectedTargetMutations
+    local activeMutations = {}
+
+    if type(selectedMutations) == "table" then
+        for k, v in pairs(selectedMutations) do
+            if v ~= nil and v ~= false then
+                local str = extractStringVal(v, k)
+                if str ~= "" and str ~= "false" then
+                    table.insert(activeMutations, str)
+                end
+            end
+        end
+    end
+
+    -- ไม่เลือกดรอปดาวน์ Mutation = ซื้อทุก Mutation
+    if #activeMutations == 0 then
+        return true
+    end
+
+    local gnomeMut = getGnomeModelMutation(model)
+    
+    -- Check if user selected "Normal" or "Normal (ไม่มีสถานะ)"
+    local wantsNormal = false
+    for _, mutStr in ipairs(activeMutations) do
+        local strVal = string.lower(mutStr)
+        if strVal:find("normal") or strVal:find("ไม่มีสถานะ") or strVal:find("none") then
+            wantsNormal = true
+            break
+        end
+    end
+
+    -- Case 1: Gnome on podium has NO mutation detected
+    if not gnomeMut or gnomeMut == "" or string.lower(tostring(gnomeMut)) == "normal" or string.lower(tostring(gnomeMut)) == "none" then
+        if wantsNormal then
+            return true
+        end
+
+        local modelNameClean = string.lower(tostring(model and model.Name or "")):gsub("%s+", "")
+        for _, mutStr in ipairs(activeMutations) do
+            local cleanMut = string.lower(mutStr):gsub("%s+", "")
+            if cleanMut ~= "" and not cleanMut:find("normal") and not cleanMut:find("ไม่มีสถานะ") then
+                if modelNameClean:find(cleanMut, 1, true) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    -- Case 2: Gnome on podium HAS a detected mutation
+    local cleanGnomeMut = string.lower(tostring(gnomeMut)):gsub("%s+", "")
+    for _, mutStr in ipairs(activeMutations) do
+        local cleanMut = string.lower(mutStr):gsub("%s+", "")
+        if cleanMut ~= "" and not cleanMut:find("normal") and not cleanMut:find("ไม่มีสถานะ") then
+            if cleanGnomeMut == cleanMut or cleanGnomeMut:find(cleanMut, 1, true) or cleanMut:find(cleanGnomeMut, 1, true) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function getGnomeBaseName(modelOrName)
+    local rawName = ""
+    if typeof(modelOrName) == "Instance" then
+        rawName = modelOrName:GetAttribute("FarmerName")
+               or modelOrName:GetAttribute("CardName")
+               or modelOrName:GetAttribute("TemplateName")
+               or modelOrName:GetAttribute("Farmer")
+               or modelOrName:GetAttribute("Name")
+               or modelOrName.Name
+    else
+        rawName = tostring(modelOrName or "")
+    end
+
+    local farmersFolder = pcall(function()
+        return game:GetService("ReplicatedStorage").Assets.Farmers
+    end) and game:GetService("ReplicatedStorage").Assets.Farmers
+
+    if farmersFolder then
+        local lowerRaw = rawName:lower():gsub("%s+", "")
+        for _, farmer in ipairs(farmersFolder:GetChildren()) do
+            local fName = farmer.Name
+            local lowerF = fName:lower():gsub("%s+", "")
+            if lowerRaw == lowerF or lowerRaw:find(lowerF, 1, true) then
+                return fName
+            end
+        end
+    end
+
+    if type(CfgFarmers) == "table" then
+        local lowerRaw = rawName:lower():gsub("%s+", "")
+        for fName, _ in pairs(CfgFarmers) do
+            local lowerF = fName:lower():gsub("%s+", "")
+            if lowerRaw == lowerF or lowerRaw:find(lowerF, 1, true) then
+                return fName
+            end
+        end
+    end
+
+    local cleanName = rawName
+    pcall(function()
+        for _, mut in ipairs(getAvailableMutationNames()) do
+            local cleanM = mut:lower():gsub("%s+", "")
+            if cleanM ~= "" and not cleanM:find("normal") and not cleanM:find("ไม่มีสถานะ") then
+                cleanName = cleanName:gsub("(?i)" .. mut, ""):gsub("^%s+", ""):gsub("%s+$", "")
+            end
+        end
+    end)
+
+    return cleanName ~= "" and cleanName or rawName
+end
+
+local function isGnomeAllowedToBuy(name, model)
+    local selected = CONFIG.selectedTargetGnomes
+    local filterOn = CONFIG.targetBuyFilterEnabled
+
+    local activeGnomeSelections = {}
+    if type(selected) == "table" then
+        for k, v in pairs(selected) do
+            if v ~= nil and v ~= false then
+                local str = extractStringVal(v, k)
+                if str ~= "" and str ~= "false" then
+                    table.insert(activeGnomeSelections, str)
+                end
+            end
+        end
+    end
+
+    local nameAllowed = false
+    if not filterOn then
+        nameAllowed = true
+    elseif #activeGnomeSelections == 0 then
+        nameAllowed = true
+    else
+        local podiumBaseName = getGnomeBaseName(model or name)
+        local cleanPodiumBase = string.lower(podiumBaseName):gsub("%s+", "")
+        local cleanRawName = string.lower(tostring(name or (model and model.Name) or "")):gsub("%s+", "")
+
+        for _, selName in ipairs(activeGnomeSelections) do
+            local cleanSel = string.lower(selName):gsub("%s+", "")
+            if cleanSel ~= "" then
+                if cleanPodiumBase == cleanSel
+                or cleanPodiumBase:find(cleanSel, 1, true)
+                or cleanSel:find(cleanPodiumBase, 1, true)
+                or cleanRawName:find(cleanSel, 1, true) then
+                    nameAllowed = true
+                    break
+                end
+            end
+        end
+    end
+
+    if not nameAllowed then
+        return false
+    end
+
+    return isGnomeMutationAllowed(model)
+end
+
+-- Buy the podium gnome when it earns more per second than the weakest one we
+-- already have standing, or when the garden still has room for anything at
+-- all. Cheap gnomes are worth buying early exactly because the plot is empty.
+local function buyFromPodium()
+    local models = previewModels()
+    if #models == 0 then return "none" end
+
+    local _, worstRate = weakestPlaced()
+    local haveRoom = not gardenFull()
+    local bestModel, bestName, bestRate, bestPrice = nil, nil, -1, 0
+
+    local selected = CONFIG.selectedTargetGnomes
+    local hasSelections = false
+    if type(selected) == "table" then
+        for k, v in pairs(selected) do
+            if v ~= nil and v ~= false then
+                hasSelections = true
+                break
+            end
+        end
+    end
+    local selectedMut = CONFIG.selectedTargetMutations
+    local hasMutSelections = false
+    if type(selectedMut) == "table" then
+        for k, v in pairs(selectedMut) do
+            if v ~= nil and v ~= false then
+                hasMutSelections = true
+                break
+            end
+        end
+    end
+
+    local isTargetingActive = CONFIG.targetBuyFilterEnabled or hasSelections or hasMutSelections
+
+    local targetFoundOnPodium = false
+
+    for _, model in ipairs(models) do
+        local name = model:GetAttribute("FarmerName")
+                  or model:GetAttribute("CardName")
+                  or model:GetAttribute("TemplateName")
+                  or model:GetAttribute("Name")
+                  or model.Name
+
+        if isGnomeAllowedToBuy(name, model) then
+            targetFoundOnPodium = true
+            local rate = gnomeRate(name, model)
+            local price = gnomePrice(name, model)
+
+            local worthIt = isTargetingActive or haveRoom or rate > worstRate * CONFIG.buyMargin
+            if worthIt and rate > bestRate then
+                bestModel, bestName, bestRate, bestPrice = model, name, rate, price
+            end
+        end
+    end
+
+    if not targetFoundOnPodium or not bestModel then
+        return "none"
+    end
+
+    -- If target is present on podium but money is insufficient, stay on podium and try buying
+    if bestPrice > money() then
+        note("waiting for cash ($%s/$%s) to buy %s", tostring(math.floor(money())), tostring(bestPrice), tostring(bestName))
+        pcall(function() fire("BuyFarmer", bestModel) end)
+        return "waiting"
+    end
+
+    -- Money is sufficient: attempt purchase
+    local _, farmersBefore = inventoryCounts()
+    fire("BuyFarmer", bestModel)
+    task.wait(0.8)
+    local _, farmersAfter = inventoryCounts()
+    if farmersAfter > farmersBefore or bestModel.Parent == nil then
+        STATE.bought = STATE.bought + 1
+        STATE.bestGnome = bestName
+        note("bought %s ($%s, %.2f/s)", bestName, tostring(bestPrice), bestRate)
+        return "bought"
+    end
+
+    return "waiting"
+end
+
+-- The gnome Tools waiting in the backpack, best earner first.
+local function heldGnomeTools()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not backpack then return {} end
+    local tools = {}
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:GetAttribute("type") == "Farmer" then
+            tools[#tools + 1] = tool
+        end
+    end
+    table.sort(tools, function(a, b)
+        return gnomeRate(a:GetAttribute("FarmerName") or a.Name)
+             > gnomeRate(b:GetAttribute("FarmerName") or b.Name)
+    end)
+    return tools
+end
+
+-- Seat one gnome.  THE TOOL HAS TO BE IN THE HAND - see the header.  A refusal
+-- is completely silent, so success is read off the placed count and nothing
+-- else.
+local function seatTool(tool, humanoid)
+    local name = tool:GetAttribute("FarmerName") or tool.Name
+    local spots = placementSpots(CONFIG.placeTries)
+    if #spots == 0 then
+        note("place: no spot found")
+        return false
+    end
+
+    humanoid:EquipTool(tool)
+    task.wait(0.35)
+
+    for _, spot in ipairs(spots) do
+        local before = placedCount()
+        fire("Place", "Farmer", name, CFrame.new(spot), "1")
+        task.wait(0.8)
+        if placedCount() > before then
+            STATE.placed = STATE.placed + 1
+            STATE.plotFull = false
+            STATE.placeFails = 0
+            return true
+        end
+    end
+    return false
+end
+
+-- Placement, the one thing that needs the item in the character's hand.  Once
+-- the garden is full this turns into a swap: the weakest gnome standing is
+-- picked back up and the better one takes its square.  The evicted one stays
+-- in the inventory rather than being sold, because SellGnome has never been
+-- measured on this account.
+local function placeGnomes()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return 0 end
+
+    local tools = heldGnomeTools()
+    if #tools == 0 then return 0 end
+
+    local placed = 0
+    for _, tool in ipairs(tools) do
+        if not alive() then break end
+
+        if gardenFull() then
+            local worstName, worstRate, worstUid = weakestPlaced()
+            local mine = gnomeRate(tool:GetAttribute("FarmerName") or tool.Name)
+            if not worstUid or mine <= worstRate * CONFIG.buyMargin then
+                break
+            end
+            fire("PickupFarmer", worstUid)
+            task.wait(1.0)
+            if placedCount() >= STATE.gnomeCap then
+                note("swap: %s would not come off the plot", tostring(worstName))
+                break
+            end
+            STATE.swaps = STATE.swaps + 1
+            note("swapping out %s (%.2f/s) for %.2f/s", tostring(worstName), worstRate, mine)
+        end
+
+        if seatTool(tool, humanoid) then
+            placed = placed + 1
+        else
+            STATE.placeFails = STATE.placeFails + 1
+            if STATE.placeFails >= 2 then
+                -- Learn the cap from the refusal instead of guessing it.
+                STATE.gnomeCap = placedCount()
+                STATE.plotFull = true
+                note("garden is full at %d gnomes", STATE.gnomeCap)
+            end
+            break
+        end
+    end
+
+    -- Put the hand back to empty so nothing else trips over a held gnome.
+    pcall(function() humanoid:UnequipTools() end)
+    return placed
+end
+
+----------------------------------------------------------------------------
+-- pets
+--
+-- Pets follow the SAME rule as the gnomes: the Tool has to be in the hand.
+-- The client asks the server first with `CanPlacePet(tool)` and only fires
+-- `PlacePet(tool, cframe)` when that comes back true, which is worth copying -
+-- it turns a silent refusal into an answer.  Three may stand at once
+-- (`max_equipped_pets`), they sit in `Plot.ClientPets`, and `PickupPet(uid)`
+-- takes one back.
+--
+-- Where pets COME FROM is not verified.  The podium rolls out of `Farmer RNG`
+-- during the day, there is a matching `Pet RNG` and a `Night RNG`, and the RNG
+-- controller branches on `ReplicatedStorage.IsDay` - so the machine very
+-- likely hands out pets after dark.  This account has never owned one, so the
+-- script only places what turns up and claims nothing about how it got there.
+----------------------------------------------------------------------------
+
+local function maxPets()
+    return tonumber(data().max_equipped_pets) or 3
+end
+
+local function placedPets()
+    local folder = folderOf("ClientPets")
+    if not folder then return 0 end
+    local n = 0
+    for _, child in ipairs(folder:GetChildren()) do
+        if child:IsA("Model") then n = n + 1 end
+    end
+    return n
+end
+
+local function heldPetTools()
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not backpack then return {} end
+    local tools = {}
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:GetAttribute("type") == "Pet" then
+            tools[#tools + 1] = tool
+        end
+    end
+    return tools
+end
+
+local function placePets()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return 0 end
+
+    local tools = heldPetTools()
+    if #tools == 0 then return 0 end
+
+    local seated = 0
+    for _, tool in ipairs(tools) do
+        if not alive() or placedPets() >= maxPets() then break end
+
+        humanoid:EquipTool(tool)
+        task.wait(0.35)
+        -- The tool has to be in the character before the server will even
+        -- answer the question, which is why the equip comes first.
+        local allowed = invoke("CanPlacePet", 6, tool)
+        if not allowed then
+            note("pet %s: server says it cannot be placed", tool.Name)
+            break
+        end
+
+        local spots = placementSpots(CONFIG.placeTries)
+        local placedOne = false
+        for _, spot in ipairs(spots) do
+            local before = placedPets()
+            fire("PlacePet", tool, CFrame.new(spot))
+            task.wait(0.8)
+            if placedPets() > before then
+                placedOne = true
+                seated = seated + 1
+                STATE.petsPlaced = STATE.petsPlaced + 1
+                note("placed pet %s", tool.Name)
+                break
+            end
+        end
+        if not placedOne then break end
+    end
+
+    pcall(function() humanoid:UnequipTools() end)
+    return seated
+end
+
+----------------------------------------------------------------------------
+-- the upgrade tree
+--
+-- Every node carries Price and Requires; a node is buyable when it is not
+-- owned and every entry in Requires already is.  Cheapest buyable node first,
+-- which is what makes the early tree unfold quickly, with the money for a
+-- pending gnome purchase fenced off first.
+----------------------------------------------------------------------------
+
+local BRANCHES = { "Main", "Gnomes", "Plants", "Player", "Pets" }
+
+local function ownedNodes()
+    local owned = data().upgrade_tree
+    return type(owned) == "table" and owned or {}
+end
+
+local function requirementsMet(node, owned)
+    local requires = node.Requires
+    if type(requires) ~= "table" then return true end
+    for _, needed in pairs(requires) do
+        if not owned[needed] then return false end
+    end
+    return true
+end
+
+-- What the garden earns per second according to the CONFIG - base sell price
+-- over plant duration, summed across the gnomes standing in it.  It is only a
+-- floor: measured against real sales it read 148/s while the crops actually
+-- paid 367/s, because every crop carries its own `Multi` and the gnomes gain
+-- levels.  So it is used as a lower bound and the observed rate wins.
+local function plotRate()
+    local total = 0
+    for _, entry in pairs(placedFarmers()) do
+        if type(entry) == "table" and entry.name then
+            total = total + gnomeRate(entry.name)
+        end
+    end
+    return total
+end
+
+-- Income as actually banked, which is the number every payback decision needs.
+-- Sampled once a second from the running total of sales.
+local rateSamples = {}
+local function observedRate()
+    return STATE.observed or 0
+end
+
+local function sampleRate()
+    local now = os.clock()
+    rateSamples[#rateSamples + 1] = { t = now, v = STATE.earned }
+    while #rateSamples > 45 do table.remove(rateSamples, 1) end
+    local first = rateSamples[1]
+    if first and now - first.t >= 5 then
+        STATE.observed = (STATE.earned - first.v) / (now - first.t)
+    end
+end
+
+local function income()
+    return math.max(plotRate(), observedRate())
+end
+
+-- What a gnome purchase currently needs held back.  One reserve, asked by every
+-- other spender.
+--
+-- The first version reserved the most expensive gnome on the podium
+-- unconditionally and that froze the upgrade tree solid - zero nodes bought
+-- across two measured windows while an $18,500 gnome sat there as a permanent
+-- fence.  Two conditions fix it, and they are the same two that fixed Sell
+-- Ores: the target has to be worth buying at all, and it has to be REACHABLE
+-- from income inside a short window rather than merely expensive.
+local function gnomeReserve()
+    if not CONFIG.autoBuy then return 0 end
+    local _, worstRate = weakestPlaced()
+    local full = gardenFull()
+    local perSecond = income()
+    local cash = money()
+    local reserve = 0
+    for _, model in ipairs(previewModels()) do
+        local name = model.Name
+        local price = gnomePrice(name)
+        local worthIt = (not full) or gnomeRate(name) > worstRate * CONFIG.buyMargin
+        local reachable = price <= cash + perSecond * CONFIG.reserveWindow
+        if worthIt and reachable and price < math.huge and price > reserve then
+            reserve = price
+        end
+    end
+    return reserve
+end
+
+local function spendable()
+    return money() - gnomeReserve()
+end
+
+local function buyTreeNode()
+    local owned = ownedNodes()
+    local budget = spendable()
+    local bestBranch, bestKey, bestNode, bestPrice = nil, nil, nil, math.huge
+
+    for _, branch in ipairs(BRANCHES) do
+        local nodes = CfgTree[branch]
+        if type(nodes) == "table" then
+            for key, node in pairs(nodes) do
+                if type(node) == "table" and not owned[key] then
+                    local price = tonumber(node.Price)
+                    if price and price <= budget and price < bestPrice
+                        and requirementsMet(node, owned) then
+                        bestBranch, bestKey, bestNode, bestPrice = branch, key, node, price
+                    end
+                end
+            end
+        end
+    end
+
+    if not bestKey then return false end
+
+    local result = invoke("Upgrade", 8, bestBranch, bestKey)
+    task.wait(0.5)
+    -- The tree writes the node into upgrade_tree, which is a fact; the balance
+    -- is not, because income lands in it at the same time.
+    if ownedNodes()[bestKey] then
+        STATE.upgrades = STATE.upgrades + 1
+        note("upgrade %s ($%s)", bestNode.Name or bestKey, tostring(bestPrice))
+        return true
+    end
+    if result == "Not Enough" or result == "Maxed" or result == "Invalid" then
+        note("upgrade %s: %s", bestKey, tostring(result))
+    end
+    return false
+end
+
+----------------------------------------------------------------------------
+-- plot expansion, free gnome, rebirth
+----------------------------------------------------------------------------
+
+-- The expansion squares are NOT the children of Plot.ExpandPlot - that holds
+-- one wrapper model.  The client finds them by walking for a part called
+-- `BoundaryPart` and taking its PARENT, and that parent's name ("1", "2",
+-- "1_L", "4_R", ...) is the key into the Expand config.  Looking the price up
+-- under the wrapper's name returns nil, which reads as "no expansion for sale"
+-- and quietly skips every one of them - that is what the first version did
+-- while a $250 square sat there ready to buy.
+local function expansionSquares()
+    local p = plot()
+    local holder = p and p:FindFirstChild("ExpandPlot")
+    if not holder then return {} end
+    local seen, out = {}, {}
+    for _, descendant in ipairs(holder:GetDescendants()) do
+        if descendant.Name == "BoundaryPart" and descendant:IsA("BasePart") then
+            local parent = descendant.Parent
+            if parent and parent.Name ~= "Highlight" and not seen[parent] then
+                seen[parent] = true
+                local price = tonumber(CfgExpand[parent.Name])
+                if price then out[#out + 1] = { model = parent, price = price } end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.price < b.price end)
+    return out
+end
+
+local function expansionCount()
+    local owned = data().plot_expansions
+    local n = 0
+    if type(owned) == "table" then for _ in pairs(owned) do n = n + 1 end end
+    return n
+end
+
+local function expandPlot()
+    for _, square in ipairs(expansionSquares()) do
+        local model, price = square.model, square.price
+        if money() >= price * CONFIG.expandKeep and spendable() >= price then
+            local before = expansionCount()
+            fire("ExpandPlot", model)
+            task.wait(1.2)
+            if expansionCount() > before then
+                STATE.expansions = STATE.expansions + 1
+                -- More space means a bigger gnome cap, and the cap is
+                -- learned rather than known, so forget it and re-measure.
+                STATE.gnomeCap = 0
+                STATE.plotFull = false
+                STATE.placeFails = 0
+                note("expanded plot: %s ($%s)", model.Name, tostring(price))
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function claimFreeGnome()
+    local free = data().freeGnome
+    if type(free) == "table" and free.canClaim == true then
+        fire("ClaimFreeGnome")
+        task.wait(0.8)
+        note("claimed the free gnome")
+        return true
+    end
+    return false
+end
+
+-- UNVERIFIED.  `Rebirth()` takes no arguments and answers truthy on success,
+-- but it has never been fired on this account - the first requirement is
+-- $1,000,000 plus a gnome list out of Rebirths.Rebirth<n>.requirements, and a
+-- rebirth is not something to test blind on somebody's save.  It stays off by
+-- default and prints what it would do.
+local function rebirthOnce()
+    local tier = CfgRebirths["Rebirth" .. tostring(rebirths() + 1)]
+    if type(tier) ~= "table" then return false end
+    local requirement = tonumber(tier.requirements and tier.requirements.money) or math.huge
+    if money() < requirement then return false end
+    if not CONFIG.autoRebirth then
+        note("rebirth is affordable ($%d) - toggle it on to run it", requirement)
+        return false
+    end
+    local result = invoke("Rebirth", 10)
+    task.wait(1.5)
+    if result then
+        STATE.gnomeCap = 0
+        STATE.plotFull = false
+        STATE.placeFails = 0
+        note("rebirthed")
+    end
+    return result and true or false
+end
+
+----------------------------------------------------------------------------
+-- census
+----------------------------------------------------------------------------
+
+local function census()
+    STATE.money = money()
+    STATE.rebirths = rebirths()
+    STATE.rollLuck = tonumber(LocalPlayer:GetAttribute("RollLuck")) or 1
+    local plants, farmers, used = inventoryCounts()
+    STATE.invUsed = used
+    STATE.invMax = inventoryMax()
+    STATE.gnomes = placedCount()
+
+    local ready, growing = 0, 0
+    local folder = folderOf("ReadyToCollect")
+    if folder then
+        for _, model in ipairs(folder:GetChildren()) do
+            if model:IsA("Model") and model:GetAttribute("READY") == true then
+                ready = ready + 1
+            end
+        end
+    end
+    local plantFolder = folderOf("Plants")
+    if plantFolder then
+        for _, model in ipairs(plantFolder:GetChildren()) do
+            if model:IsA("Model") then growing = growing + 1 end
+        end
+    end
+    STATE.ready = ready
+    STATE.growing = growing
+
+    local worstName = weakestPlaced()
+    STATE.weakest = worstName or "-"
+    sampleRate()
+    STATE.rate = plotRate()
+    STATE.reserve = gnomeReserve()
+    STATE.pets = placedPets()
+    STATE.petCap = maxPets()
+    return plants, farmers
+end
+
+----------------------------------------------------------------------------
+-- loops
+----------------------------------------------------------------------------
+
+local function loop(name, gap, fn)
+    task.spawn(function()
+        while alive() do
+            local ok, err = pcall(fn)
+            if not ok then note("%s: %s", name, tostring(err)) end
+            task.wait(gap)
+        end
+    end)
+end
+
+-- The farm.  Every step runs on every pass rather than returning as soon as
+-- one of them did something: harvesting always has work, and an early return
+-- is what starved the spending half of the loop in Sell Ores.
+task.spawn(function()
+    while alive() do
+        if not CONFIG.auto then
+            STATE.phase = "idle"
+            task.wait(1)
+        else
+            local plants = census()
+
+            if CONFIG.autoCollect then
+                STATE.phase = "collecting"
+                collectReady()
+            end
+
+            plants = select(1, inventoryCounts())
+            if CONFIG.autoSell and plants > 0 then
+                local full = STATE.invUsed >= STATE.invMax * CONFIG.sellAt
+                local nothingReady = STATE.ready == 0
+                if full or nothingReady then
+                    STATE.phase = "selling"
+                    sellPlants()
+                end
+            end
+
+            if CONFIG.autoPlace then
+                STATE.phase = "placing"
+                placeGnomes()
+            end
+
+            if CONFIG.autoPets and placedPets() < maxPets() and #heldPetTools() > 0 then
+                STATE.phase = "pets"
+                placePets()
+            end
+
+            local buyStatus = "none"
+            if CONFIG.autoBuy then
+                STATE.phase = "buying"
+                buyStatus = buyFromPodium()
+            end
+
+            if CONFIG.autoRoll then
+                if buyStatus == "none" then
+                    STATE.phase = "rolling"
+                    rollOnce()
+                end
+            end
+
+            task.wait(0.3)
+        end
+    end
+end)
+
+-- Spending runs on its own timer so a slow purchase pass cannot hold up the
+-- harvest.
+loop("spend", 6, function()
+    if not CONFIG.auto then return end
+    if CONFIG.autoUpgrade then buyTreeNode() end
+    if CONFIG.autoExpand then expandPlot() end
+    rebirthOnce()
+end)
+
+loop("free", 30, function()
+    if not CONFIG.auto then return end
+    if CONFIG.autoFreeGnome then claimFreeGnome() end
+end)
+
+loop("census", 1, census)
+
+----------------------------------------------------------------------------
+-- panel (Obsidian Glassmorphic 2 UI Engine)
+----------------------------------------------------------------------------
+
+local ObsidianGlassEngine = (function()
+    local CoreGui = game:GetService("CoreGui")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+    local UserInputService = game:GetService("UserInputService")
+    local TweenService = game:GetService("TweenService")
+    local RunService = game:GetService("RunService")
+    local Stats = game:GetService("Stats")
+    local SoundService = game:GetService("SoundService")
+
+    local COLORS = {
+        backdrop = Color3.fromRGB(12, 5, 8),
+        shell = Color3.fromRGB(20, 10, 14),
+        glass = Color3.fromRGB(32, 14, 20),
+        glassDeep = Color3.fromRGB(25, 11, 16),
+        glassRaised = Color3.fromRGB(48, 18, 28),
+        userPanel = Color3.fromRGB(28, 12, 18),
+        surface = Color3.fromRGB(42, 18, 26),
+        surfaceRaised = Color3.fromRGB(58, 24, 34),
+        surfaceHover = Color3.fromRGB(78, 30, 44),
+        surfacePressed = Color3.fromRGB(34, 14, 20),
+        input = Color3.fromRGB(20, 9, 13),
+        inputFocus = Color3.fromRGB(36, 14, 22),
+        divider = Color3.fromRGB(140, 40, 60),
+        primary = Color3.fromRGB(255, 45, 85),
+        primaryHover = Color3.fromRGB(255, 75, 110),
+        primaryPressed = Color3.fromRGB(210, 30, 65),
+        secondary = Color3.fromRGB(52, 18, 28),
+        text = Color3.fromRGB(255, 255, 255),
+        textMuted = Color3.fromRGB(242, 218, 228),
+        textFaint = Color3.fromRGB(210, 168, 182),
+        cyan = Color3.fromRGB(255, 55, 85),
+        success = Color3.fromRGB(46, 224, 140),
+        warning = Color3.fromRGB(255, 185, 70),
+        danger = Color3.fromRGB(255, 60, 60),
+        disabled = Color3.fromRGB(50, 25, 32),
+    }
+
+    local Engine = { Options = {} }
+
+    local function playClickSound()
+        pcall(function()
+            local sound = Instance.new("Sound")
+            sound.SoundId = "rbxassetid://6895079853"
+            sound.Volume = 0.3
+            sound.Parent = SoundService
+            sound:Play()
+            sound.Ended:Connect(function() sound:Destroy() end)
+        end)
+    end
+
+    local customAvatarAsset = nil
+    local function loadCustomAvatarImage()
+        if customAvatarAsset then return customAvatarAsset end
+        local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+        local fileName = "payomboyz_avatar.jpg"
+        
+        pcall(function()
+            if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+                local getAsset = getcustomasset or getsynasset
+                local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+                if not isFileExist then
+                    local imageBytes = game:HttpGet(avatarUrl)
+                    if imageBytes and #imageBytes > 0 then
+                        writefile(fileName, imageBytes)
+                    end
+                end
+                if typeof(isfile) == "function" and isfile(fileName) then
+                    customAvatarAsset = getAsset(fileName)
+                end
+            end
+        end)
+
+        if not customAvatarAsset then
+            customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+        end
+        return customAvatarAsset
+    end
+
+    function Engine:Notify(cfg)
+        pcall(function()
+            local title = cfg.Title or "System"
+            local content = cfg.Content or ""
+            local duration = cfg.Duration or 4
+            
+            local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+            local notifHolder = parentGui:FindFirstChild("ObsidianGlass_NotifHolder")
+            if not notifHolder then
+                notifHolder = Instance.new("ScreenGui")
+                notifHolder.Name = "ObsidianGlass_NotifHolder"
+                notifHolder.ResetOnSpawn = false
+                notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                notifHolder.Parent = parentGui
+            end
+            
+            local toast = Instance.new("Frame")
+            toast.Size = UDim2.new(0, 300, 0, 65)
+            toast.Position = UDim2.new(1, 20, 1, -85)
+            toast.BackgroundColor3 = COLORS.glass
+            toast.BackgroundTransparency = 0.15
+            toast.BorderSizePixel = 0
+            toast.Parent = notifHolder
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 10)
+            corner.Parent = toast
+            
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = COLORS.cyan
+            stroke.Thickness = 1.5
+            stroke.Parent = toast
+            
+            local tTitle = Instance.new("TextLabel")
+            tTitle.Size = UDim2.new(1, -20, 0, 22)
+            tTitle.Position = UDim2.new(0, 10, 0, 6)
+            tTitle.BackgroundTransparency = 1
+            tTitle.Text = title
+            tTitle.TextColor3 = COLORS.cyan
+            tTitle.Font = Enum.Font.GothamBold
+            tTitle.TextSize = 13
+            tTitle.TextXAlignment = Enum.TextXAlignment.Left
+            tTitle.Parent = toast
+            
+            local tDesc = Instance.new("TextLabel")
+            tDesc.Size = UDim2.new(1, -20, 0, 32)
+            tDesc.Position = UDim2.new(0, 10, 0, 26)
+            tDesc.BackgroundTransparency = 1
+            tDesc.Text = content
+            tDesc.TextColor3 = COLORS.text
+            tDesc.Font = Enum.Font.Gotham
+            tDesc.TextSize = 11
+            tDesc.TextWrapped = true
+            tDesc.TextXAlignment = Enum.TextXAlignment.Left
+            tDesc.Parent = toast
+            
+            playClickSound()
+            TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -320, 1, -85) }):Play()
+            task.delay(duration, function()
+                if toast and toast.Parent then
+                    local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
+                    tw:Play()
+                    tw.Completed:Connect(function() toast:Destroy() end)
+                end
+            end)
+        end)
+    end
+
+    function Engine:CreateWindow(cfg)
+        local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        if parentGui:FindFirstChild("ObsidianGlass2_UI") then
+            parentGui.ObsidianGlass2_UI:Destroy()
+        end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "ObsidianGlass2_UI"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        gui.DisplayOrder = 99999
+        gui.Parent = parentGui
+
+        local uiScale = Instance.new("UIScale")
+        
+        local camera = workspace.CurrentCamera
+        local function updateScale()
+            if camera and camera.ViewportSize then
+                local vp = camera.ViewportSize
+                local targetWidth, targetHeight = 920, 600
+                local scaleX = (vp.X - 24) / targetWidth
+                local scaleY = (vp.Y - 24) / targetHeight
+                local calcScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
+                uiScale.Scale = calcScale
+            end
+        end
+        updateScale()
+        if camera then
+            camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+        end
+        uiScale.Parent = gui
+
+        local shell = Instance.new("Frame")
+        shell.Name = "MainShell"
+        shell.Size = UDim2.fromOffset(920, 600)
+        shell.AnchorPoint = Vector2.new(0.5, 0.5)
+        shell.Position = UDim2.new(0.5, 0, 0.5, 0)
+        shell.BackgroundColor3 = COLORS.shell
+        shell.BackgroundTransparency = 0.20
+        shell.BorderSizePixel = 0
+        shell.ClipsDescendants = true
+        shell.Parent = gui
+
+        local shellCorner = Instance.new("UICorner")
+        shellCorner.CornerRadius = UDim.new(0, 18)
+        shellCorner.Parent = shell
+
+        local shellStroke = Instance.new("UIStroke")
+        shellStroke.Color = COLORS.cyan
+        shellStroke.Thickness = 1.5
+        shellStroke.Transparency = 0.3
+        shellStroke.Parent = shell
+
+        local snowLayer = Instance.new("Frame")
+        snowLayer.Name = "SnowLayer"
+        snowLayer.Size = UDim2.fromScale(1, 1)
+        snowLayer.BackgroundTransparency = 1
+        snowLayer.ZIndex = 2
+        snowLayer.Parent = shell
+
+        task.spawn(function()
+            local dots = {}
+            for i = 1, 35 do
+                local dot = Instance.new("Frame")
+                dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+                dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+                dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+                dot.BackgroundTransparency = math.random(30, 70) / 100
+                dot.BorderSizePixel = 0
+                dot.Parent = snowLayer
+
+                local dCorner = Instance.new("UICorner")
+                dCorner.CornerRadius = UDim.new(1, 0)
+                dCorner.Parent = dot
+
+                dots[#dots + 1] = {
+                    frame = dot,
+                    speed = math.random(15, 40) / 10000,
+                    drift = math.random(-10, 10) / 10000,
+                    pos = dot.Position.Y.Scale
+                }
+            end
+
+            while task.wait(0.03) do
+                if not gui or not gui.Parent then break end
+                for _, data in ipairs(dots) do
+                    data.pos = data.pos + data.speed
+                    if data.pos > 1.05 then data.pos = -0.05 end
+                    local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                    data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+                end
+            end
+        end)
+
+        local toggleCapsule = Instance.new("Frame")
+        toggleCapsule.Name = "ObsidianToggleCapsule"
+        toggleCapsule.Size = UDim2.fromOffset(230, 58)
+        toggleCapsule.Position = UDim2.new(0, 15, 0.5, -29)
+        toggleCapsule.BackgroundColor3 = COLORS.shell
+        toggleCapsule.BackgroundTransparency = 0.18
+        toggleCapsule.BorderSizePixel = 0
+        toggleCapsule.ClipsDescendants = true
+        toggleCapsule.ZIndex = 99999
+        toggleCapsule.Parent = gui
+
+        local tcCorner = Instance.new("UICorner")
+        tcCorner.CornerRadius = UDim.new(0, 16)
+        tcCorner.Parent = toggleCapsule
+
+        local tcStroke = Instance.new("UIStroke")
+        tcStroke.Color = COLORS.cyan
+        tcStroke.Thickness = 1.5
+        tcStroke.Transparency = 0.2
+        tcStroke.Parent = toggleCapsule
+
+        local capsuleSnowLayer = Instance.new("Frame")
+        capsuleSnowLayer.Name = "CapsuleSnowLayer"
+        capsuleSnowLayer.Size = UDim2.fromScale(1, 1)
+        capsuleSnowLayer.BackgroundTransparency = 1
+        capsuleSnowLayer.ZIndex = 1
+        capsuleSnowLayer.Parent = toggleCapsule
+
+        task.spawn(function()
+            local dots = {}
+            for i = 1, 12 do
+                local dot = Instance.new("Frame")
+                dot.Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3))
+                dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+                dot.BackgroundColor3 = Color3.fromRGB(220, 240, 255)
+                dot.BackgroundTransparency = math.random(30, 70) / 100
+                dot.BorderSizePixel = 0
+                dot.ZIndex = 1
+                dot.Parent = capsuleSnowLayer
+
+                local dCorner = Instance.new("UICorner")
+                dCorner.CornerRadius = UDim.new(1, 0)
+                dCorner.Parent = dot
+
+                dots[#dots + 1] = {
+                    frame = dot,
+                    speed = math.random(15, 35) / 10000,
+                    drift = math.random(-10, 10) / 10000,
+                    pos = dot.Position.Y.Scale
+                }
+            end
+
+            while task.wait(0.03) do
+                if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
+                for _, data in ipairs(dots) do
+                    data.pos = data.pos + data.speed
+                    if data.pos > 1.05 then data.pos = -0.05 end
+                    local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                    data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+                end
+            end
+        end)
+
+        local capAvatarFrame = Instance.new("Frame")
+        capAvatarFrame.Size = UDim2.fromOffset(42, 42)
+        capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
+        capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+        capAvatarFrame.BorderSizePixel = 0
+        capAvatarFrame.ZIndex = 3
+        capAvatarFrame.Parent = toggleCapsule
+
+        local caCorner = Instance.new("UICorner")
+        caCorner.CornerRadius = UDim.new(1, 0)
+        caCorner.Parent = capAvatarFrame
+
+        local caStroke = Instance.new("UIStroke")
+        caStroke.Color = COLORS.primary
+        caStroke.Thickness = 1.5
+        caStroke.Parent = capAvatarFrame
+
+        local capAvatarImg = Instance.new("ImageLabel")
+        capAvatarImg.Size = UDim2.fromScale(1, 1)
+        capAvatarImg.BackgroundTransparency = 1
+        capAvatarImg.Image = loadCustomAvatarImage()
+        capAvatarImg.ZIndex = 4
+        capAvatarImg.Parent = capAvatarFrame
+
+        local caiCorner = Instance.new("UICorner")
+        caiCorner.CornerRadius = UDim.new(1, 0)
+        caiCorner.Parent = capAvatarImg
+
+        local capUserLabel = Instance.new("TextLabel")
+        capUserLabel.Size = UDim2.new(1, -58, 0, 18)
+        capUserLabel.Position = UDim2.new(0, 56, 0, 10)
+        capUserLabel.BackgroundTransparency = 1
+        capUserLabel.Text = "@" .. LocalPlayer.Name
+        capUserLabel.TextColor3 = COLORS.text
+        capUserLabel.Font = Enum.Font.GothamBold
+        capUserLabel.TextSize = 12
+        capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+        capUserLabel.ZIndex = 3
+        capUserLabel.Parent = toggleCapsule
+
+        local capMetricsLabel = Instance.new("TextLabel")
+        capMetricsLabel.Size = UDim2.new(1, -58, 0, 16)
+        capMetricsLabel.Position = UDim2.new(0, 56, 0, 28)
+        capMetricsLabel.BackgroundTransparency = 1
+        capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
+        capMetricsLabel.TextColor3 = COLORS.cyan
+        capMetricsLabel.Font = Enum.Font.GothamBold
+        capMetricsLabel.TextSize = 10
+        capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+        capMetricsLabel.ZIndex = 3
+        capMetricsLabel.Parent = toggleCapsule
+
+        task.spawn(function()
+            local frameCount = 0
+            local lastFpsTime = tick()
+            local fpsVal = 60
+
+            local renderConn
+            renderConn = RunService.RenderStepped:Connect(function()
+                frameCount = frameCount + 1
+                local now = tick()
+                if now - lastFpsTime >= 1 then
+                    fpsVal = frameCount
+                    frameCount = 0
+                    lastFpsTime = now
+                end
+            end)
+
+            while task.wait(0.8) do
+                if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
+                    if renderConn then renderConn:Disconnect() end
+                    break
+                end
+                local pingVal = 0
+                pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+                capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+            end
+        end)
+
+        local capBtn = Instance.new("TextButton")
+        capBtn.Size = UDim2.fromScale(1, 1)
+        capBtn.BackgroundTransparency = 1
+        capBtn.Text = ""
+        capBtn.ZIndex = 10
+        capBtn.Parent = toggleCapsule
+
+        local tDragging, tDragInput, tDragStart, tStartPos
+        local hasDragged = false
+
+        capBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                tDragging = true
+                hasDragged = false
+                tDragStart = input.Position
+                tStartPos = toggleCapsule.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        tDragging = false
+                    end
+                end)
+            end
+        end)
+
+        capBtn.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                tDragInput = input
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if input == tDragInput and tDragging then
+                local delta = input.Position - tDragStart
+                if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
+                    hasDragged = true
+                end
+                toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+            end
+        end)
+
+        capBtn.MouseButton1Click:Connect(function()
+            if not hasDragged then
+                playClickSound()
+                shell.Visible = not shell.Visible
+            end
+        end)
+
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+                shell.Visible = not shell.Visible
+            end
+        end)
+
+        local userPanel = Instance.new("Frame")
+        userPanel.Name = "UserPanel"
+        userPanel.Size = UDim2.new(0, 240, 1, 0)
+        userPanel.BackgroundColor3 = COLORS.userPanel
+        userPanel.BackgroundTransparency = 0.20
+        userPanel.BorderSizePixel = 0
+        userPanel.ZIndex = 5
+        userPanel.Parent = shell
+
+        local userDiv = Instance.new("Frame")
+        userDiv.Size = UDim2.new(0, 1, 1, 0)
+        userDiv.Position = UDim2.new(1, -1, 0, 0)
+        userDiv.BackgroundColor3 = COLORS.glassRaised
+        userDiv.BorderSizePixel = 0
+        userDiv.ZIndex = 10
+        userDiv.Parent = userPanel
+
+        local avatarFrame = Instance.new("Frame")
+        avatarFrame.Size = UDim2.fromOffset(44, 44)
+        avatarFrame.Position = UDim2.new(0, 14, 0, 14)
+        avatarFrame.BackgroundColor3 = COLORS.glassDeep
+        avatarFrame.BorderSizePixel = 0
+        avatarFrame.ZIndex = 10
+        avatarFrame.Parent = userPanel
+
+        local avCorner = Instance.new("UICorner")
+        avCorner.CornerRadius = UDim.new(1, 0)
+        avCorner.Parent = avatarFrame
+
+        local avStroke = Instance.new("UIStroke")
+        avStroke.Color = COLORS.cyan
+        avStroke.Thickness = 1.5
+        avStroke.Parent = avatarFrame
+
+        local avatarImg = Instance.new("ImageLabel")
+        avatarImg.Size = UDim2.fromScale(1, 1)
+        avatarImg.BackgroundTransparency = 1
+        avatarImg.Image = loadCustomAvatarImage()
+        avatarImg.ZIndex = 11
+        avatarImg.Parent = avatarFrame
+
+        local avImgCorner = Instance.new("UICorner")
+        avImgCorner.CornerRadius = UDim.new(1, 0)
+        avImgCorner.Parent = avatarImg
+
+        local onlineDot = Instance.new("Frame")
+        onlineDot.Size = UDim2.fromOffset(10, 10)
+        onlineDot.Position = UDim2.new(1, -8, 1, -8)
+        onlineDot.BackgroundColor3 = COLORS.success
+        onlineDot.BorderSizePixel = 0
+        onlineDot.ZIndex = 12
+        onlineDot.Parent = avatarFrame
+
+        local onlineCorner = Instance.new("UICorner")
+        onlineCorner.CornerRadius = UDim.new(1, 0)
+        onlineCorner.Parent = onlineDot
+
+        local displayNameLabel = Instance.new("TextLabel")
+        displayNameLabel.Size = UDim2.new(1, -145, 0, 18)
+        displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
+        displayNameLabel.BackgroundTransparency = 1
+        displayNameLabel.Text = LocalPlayer.DisplayName
+        displayNameLabel.TextColor3 = COLORS.text
+        displayNameLabel.Font = Enum.Font.GothamBold
+        displayNameLabel.TextSize = 13
+        displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        displayNameLabel.ZIndex = 10
+        displayNameLabel.Parent = userPanel
+
+        local usernameLabel = Instance.new("TextLabel")
+        usernameLabel.Size = UDim2.new(1, -145, 0, 14)
+        usernameLabel.Position = UDim2.new(0, 66, 0, 33)
+        usernameLabel.BackgroundTransparency = 1
+        usernameLabel.Text = "@" .. LocalPlayer.Name
+        usernameLabel.TextColor3 = COLORS.textMuted
+        usernameLabel.Font = Enum.Font.Gotham
+        usernameLabel.TextSize = 10
+        usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        usernameLabel.ZIndex = 10
+        usernameLabel.Parent = userPanel
+
+        -- [[ LOGOUT SYSTEM ]]
+        local function performLogoutKeyClear()
+            pcall(function()
+                local filesToDelete = {
+                    "PayomboyZ_LuarmorKey.txt",
+                    "PayomboyZ_VVIPKey.txt",
+                    "PayomboyZ_SavedKey.txt"
+                }
+                if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+                    table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+                end
+
+                local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+                for _, file in ipairs(filesToDelete) do
+                    pcall(function()
+                        if isfile and isfile(file) then
+                            if del then
+                                del(file)
+                            elseif type(writefile) == "function" then
+                                writefile(file, "")
+                            end
+                        end
+                    end)
+                end
+            end)
+
+            pcall(function()
+                if getgenv then
+                    getgenv().script_key = nil
+                    getgenv().PayomboyZ_InputKey = nil
+                    getgenv().PayomboyZ_LoggedOut = true
+                end
+                if getrenv then pcall(function() getrenv().script_key = nil end) end
+                if getfenv then pcall(function() getfenv().script_key = nil end) end
+                if _G then _G.script_key = nil end
+                if shared then shared.script_key = nil end
+                script_key = nil
+            end)
+        end
+
+        local function stopAllScriptOperations()
+            if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+            if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+            if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+
+            CONFIG.auto = false
+            CONFIG.autoRoll = false
+            CONFIG.autoBuy = false
+            CONFIG.autoCollect = false
+            CONFIG.autoSell = false
+
+            if ObsidianGlassEngine and ObsidianGlassEngine.Options then
+                for _, option in pairs(ObsidianGlassEngine.Options) do
+                    if type(option) == "table" and option.SetValue then
+                        pcall(function() option:SetValue(false) end)
+                    end
+                end
+            end
+        end
+
+        local logoutBtn = Instance.new("TextButton")
+        logoutBtn.Name = "LogoutButton"
+        logoutBtn.Size = UDim2.fromOffset(62, 24)
+        logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+        logoutBtn.BackgroundColor3 = COLORS.surfacePressed
+        logoutBtn.BackgroundTransparency = 0.20
+        logoutBtn.Text = "Log out"
+        logoutBtn.TextColor3 = COLORS.danger
+        logoutBtn.Font = Enum.Font.GothamBold
+        logoutBtn.TextSize = 11
+        logoutBtn.ZIndex = 12
+        logoutBtn.Parent = userPanel
+
+        local loCorner = Instance.new("UICorner")
+        loCorner.CornerRadius = UDim.new(0, 6)
+        loCorner.Parent = logoutBtn
+
+        local loStroke = Instance.new("UIStroke")
+        loStroke.Color = COLORS.danger
+        loStroke.Thickness = 1
+        loStroke.Transparency = 0.4
+        loStroke.Parent = logoutBtn
+
+        logoutBtn.MouseEnter:Connect(function()
+            TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = COLORS.danger,
+                BackgroundTransparency = 0.15
+            }):Play()
+            TweenService:Create(loStroke, TweenInfo.new(0.2), {
+                Transparency = 0
+            }):Play()
+            logoutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end)
+
+        logoutBtn.MouseLeave:Connect(function()
+            TweenService:Create(logoutBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = COLORS.surfacePressed,
+                BackgroundTransparency = 0.20
+            }):Play()
+            TweenService:Create(loStroke, TweenInfo.new(0.2), {
+                Transparency = 0.4
+            }):Play()
+            logoutBtn.TextColor3 = COLORS.danger
+        end)
+
+        logoutBtn.MouseButton1Click:Connect(function()
+            playClickSound()
+            stopAllScriptOperations()
+            performLogoutKeyClear()
+            if gui then
+                pcall(function() gui:Destroy() end)
+            end
+            pcall(function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+            end)
+        end)
+
+        local metricsBox = Instance.new("Frame")
+        metricsBox.Size = UDim2.new(1, -28, 0, 24)
+        metricsBox.Position = UDim2.new(0, 14, 0, 64)
+        metricsBox.BackgroundColor3 = COLORS.glassDeep
+        metricsBox.BorderSizePixel = 0
+        metricsBox.ZIndex = 10
+        metricsBox.Parent = userPanel
+
+        local mCorner = Instance.new("UICorner")
+        mCorner.CornerRadius = UDim.new(0, 6)
+        mCorner.Parent = metricsBox
+
+        local metricsLabel = Instance.new("TextLabel")
+        metricsLabel.Size = UDim2.fromScale(1, 1)
+        metricsLabel.BackgroundTransparency = 1
+        metricsLabel.Text = "⏱️ 00:00  •  📡 0 ms"
+        metricsLabel.TextColor3 = COLORS.cyan
+        metricsLabel.Font = Enum.Font.GothamBold
+        metricsLabel.TextSize = 10
+        metricsLabel.ZIndex = 11
+        metricsLabel.Parent = metricsBox
+
+        task.spawn(function()
+            local startTime = os.time()
+            while task.wait(1) do
+                if not gui or not gui.Parent then break end
+                local elapsed = os.time() - startTime
+                local mins = math.floor(elapsed / 60)
+                local secs = elapsed % 60
+                local ping = 0
+                pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+                metricsLabel.Text = string.format("⏱️ %02d:%02d  •  📡 %d ms", mins, secs, ping)
+            end
+        end)
+
+        local sideDiv = Instance.new("Frame")
+        sideDiv.Size = UDim2.new(1, -28, 0, 1)
+        sideDiv.Position = UDim2.new(0, 14, 0, 96)
+        sideDiv.BackgroundColor3 = COLORS.glassRaised
+        sideDiv.BorderSizePixel = 0
+        sideDiv.ZIndex = 10
+        sideDiv.Parent = userPanel
+
+        local navHeader = Instance.new("TextLabel")
+        navHeader.Size = UDim2.new(1, -28, 0, 18)
+        navHeader.Position = UDim2.new(0, 16, 0, 104)
+        navHeader.BackgroundTransparency = 1
+        navHeader.Text = "SYSTEM MODULES"
+        navHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
+        navHeader.Font = Enum.Font.GothamBold
+        navHeader.TextSize = 11
+        navHeader.TextXAlignment = Enum.TextXAlignment.Left
+        navHeader.ZIndex = 10
+        navHeader.Parent = userPanel
+
+        local tabScroll = Instance.new("ScrollingFrame")
+        tabScroll.Name = "VerticalTabScroll"
+        tabScroll.Size = UDim2.new(1, -20, 1, -178)
+        tabScroll.Position = UDim2.new(0, 10, 0, 126)
+        tabScroll.BackgroundTransparency = 1
+        tabScroll.ScrollBarThickness = 3
+        tabScroll.ScrollBarImageColor3 = COLORS.cyan
+        tabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        tabScroll.ZIndex = 10
+        tabScroll.Parent = userPanel
+
+        local tabLayout = Instance.new("UIListLayout")
+        tabLayout.FillDirection = Enum.FillDirection.Vertical
+        tabLayout.Padding = UDim.new(0, 5)
+        tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        tabLayout.Parent = tabScroll
+
+        tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        end)
+
+        local statusCard = Instance.new("Frame")
+        statusCard.Size = UDim2.new(1, -24, 0, 36)
+        statusCard.Position = UDim2.new(0, 12, 1, -44)
+        statusCard.BackgroundColor3 = COLORS.glassDeep
+        statusCard.BorderSizePixel = 0
+        statusCard.ZIndex = 10
+        statusCard.Parent = userPanel
+
+        local stCorner = Instance.new("UICorner")
+        stCorner.CornerRadius = UDim.new(0, 8)
+        stCorner.Parent = statusCard
+
+        local stTitle = Instance.new("TextLabel")
+        stTitle.Size = UDim2.fromScale(1, 1)
+        stTitle.BackgroundTransparency = 1
+        stTitle.Text = "✅ Connected & Active"
+        stTitle.TextColor3 = COLORS.success
+        stTitle.Font = Enum.Font.GothamBold
+        stTitle.TextSize = 12
+        stTitle.Parent = statusCard
+
+        local mainPanel = Instance.new("Frame")
+        mainPanel.Name = "MainPanel"
+        mainPanel.Size = UDim2.new(1, -240, 1, 0)
+        mainPanel.Position = UDim2.new(0, 240, 0, 0)
+        mainPanel.BackgroundTransparency = 1
+        mainPanel.ZIndex = 5
+        mainPanel.Parent = shell
+
+        local headerBar = Instance.new("Frame")
+        headerBar.Size = UDim2.new(1, 0, 0, 48)
+        headerBar.BackgroundTransparency = 1
+        headerBar.Parent = mainPanel
+
+        local mainTitle = Instance.new("TextLabel")
+        mainTitle.Size = UDim2.new(0, 300, 0, 22)
+        mainTitle.Position = UDim2.new(0, 20, 0, 8)
+        mainTitle.BackgroundTransparency = 1
+        mainTitle.Text = cfg.Title or "Obsidian Glass Hub"
+        mainTitle.TextColor3 = COLORS.text
+        mainTitle.Font = Enum.Font.GothamBold
+        mainTitle.TextSize = 18
+        mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+        mainTitle.Parent = headerBar
+
+        local mainSubTitle = Instance.new("TextLabel")
+        mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
+        mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
+        mainSubTitle.BackgroundTransparency = 1
+        mainSubTitle.Text = cfg.SubTitle or "Obsidian Glassmorphic 2 Engine"
+        mainSubTitle.TextColor3 = COLORS.textMuted
+        mainSubTitle.Font = Enum.Font.Gotham
+        mainSubTitle.TextSize = 11
+        mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
+        mainSubTitle.Parent = headerBar
+
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Size = UDim2.fromOffset(28, 28)
+        closeBtn.Position = UDim2.new(1, -38, 0, 10)
+        closeBtn.BackgroundColor3 = COLORS.glass
+        closeBtn.BackgroundTransparency = 0.20
+        closeBtn.Text = "X"
+        closeBtn.TextColor3 = COLORS.textMuted
+        closeBtn.Font = Enum.Font.GothamBold
+        closeBtn.TextSize = 14
+        closeBtn.Parent = headerBar
+
+        local closeCorner = Instance.new("UICorner")
+        closeCorner.CornerRadius = UDim.new(0, 8)
+        closeCorner.Parent = closeBtn
+
+        closeBtn.MouseButton1Click:Connect(function()
+            playClickSound()
+            shell.Visible = not shell.Visible
+        end)
+
+        local minBtn = Instance.new("TextButton")
+        minBtn.Size = UDim2.fromOffset(28, 28)
+        minBtn.Position = UDim2.new(1, -72, 0, 10)
+        minBtn.BackgroundColor3 = COLORS.glass
+        minBtn.BackgroundTransparency = 0.20
+        minBtn.Text = "─"
+        minBtn.TextColor3 = COLORS.textMuted
+        minBtn.Font = Enum.Font.GothamBold
+        minBtn.TextSize = 13
+        minBtn.Parent = headerBar
+
+        local minCorner = Instance.new("UICorner")
+        minCorner.CornerRadius = UDim.new(0, 8)
+        minCorner.Parent = minBtn
+
+        minBtn.MouseButton1Click:Connect(function()
+            playClickSound()
+            shell.Visible = not shell.Visible
+        end)
+
+        local dragging, dragInput, dragStart, startPos
+        headerBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = shell.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+
+        headerBar.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                shell.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+
+        local serviceBanner = Instance.new("Frame")
+        serviceBanner.Size = UDim2.new(1, -40, 0, 65)
+        serviceBanner.Position = UDim2.new(0, 20, 0, 48)
+        serviceBanner.BackgroundColor3 = COLORS.glassDeep
+        serviceBanner.BackgroundTransparency = 0.18
+        serviceBanner.BorderSizePixel = 0
+        serviceBanner.Parent = mainPanel
+
+        local sCorner = Instance.new("UICorner")
+        sCorner.CornerRadius = UDim.new(0, 10)
+        sCorner.Parent = serviceBanner
+
+        local sStroke = Instance.new("UIStroke")
+        sStroke.Color = COLORS.glassRaised
+        sStroke.Thickness = 1
+        sStroke.Parent = serviceBanner
+
+        local sBadge = Instance.new("TextLabel")
+        sBadge.Size = UDim2.new(0, 120, 0, 16)
+        sBadge.Position = UDim2.new(0, 14, 0, 10)
+        sBadge.BackgroundTransparency = 1
+        sBadge.Text = "ACTIVE SERVICE"
+        sBadge.TextColor3 = COLORS.success
+        sBadge.Font = Enum.Font.GothamBold
+        sBadge.TextSize = 10
+        sBadge.TextXAlignment = Enum.TextXAlignment.Left
+        sBadge.Parent = serviceBanner
+
+        local sTitle = Instance.new("TextLabel")
+        sTitle.Size = UDim2.new(0, 250, 0, 20)
+        sTitle.Position = UDim2.new(0, 14, 0, 26)
+        sTitle.BackgroundTransparency = 1
+        sTitle.Text = cfg.Title or "Hub Studios"
+        sTitle.TextColor3 = COLORS.text
+        sTitle.Font = Enum.Font.GothamBold
+        sTitle.TextSize = 14
+        sTitle.TextXAlignment = Enum.TextXAlignment.Left
+        sTitle.Parent = serviceBanner
+
+        local sSub = Instance.new("TextLabel")
+        sSub.Size = UDim2.new(0, 250, 0, 14)
+        sSub.Position = UDim2.new(0, 14, 0, 44)
+        sSub.BackgroundTransparency = 1
+        sSub.Text = "Verified client delivery • Premium Automation"
+        sSub.TextColor3 = COLORS.textMuted
+        sSub.Font = Enum.Font.Gotham
+        sSub.TextSize = 10
+        sSub.TextXAlignment = Enum.TextXAlignment.Left
+        sSub.Parent = serviceBanner
+
+        local vBadge = Instance.new("Frame")
+        vBadge.Size = UDim2.fromOffset(150, 32)
+        vBadge.Position = UDim2.new(1, -160, 0.5, -16)
+        vBadge.BackgroundColor3 = COLORS.userPanel
+        vBadge.BackgroundTransparency = 0.20
+        vBadge.BorderSizePixel = 0
+        vBadge.Parent = serviceBanner
+
+        local vCorner = Instance.new("UICorner")
+        vCorner.CornerRadius = UDim.new(0, 8)
+        vCorner.Parent = vBadge
+
+        local vStroke = Instance.new("UIStroke")
+        vStroke.Color = COLORS.success
+        vStroke.Thickness = 1
+        vStroke.Parent = vBadge
+
+        local vText = Instance.new("TextLabel")
+        vText.Size = UDim2.fromScale(1, 1)
+        vText.BackgroundTransparency = 1
+        vText.Text = "🛡️ SYSTEM VERIFIED"
+        vText.TextColor3 = COLORS.success
+        vText.Font = Enum.Font.GothamBold
+        vText.TextSize = 10
+        vText.Parent = vBadge
+
+        local pagesFolder = Instance.new("Frame")
+        pagesFolder.Name = "PagesFolder"
+        pagesFolder.Size = UDim2.new(1, -40, 1, -128)
+        pagesFolder.Position = UDim2.new(0, 20, 0, 120)
+        pagesFolder.BackgroundTransparency = 1
+        pagesFolder.Parent = mainPanel
+
+        local WindowObj = { Tabs = {}, CurrentTab = nil, Gui = gui }
+
+        function WindowObj:Destroy()
+            pcall(function() gui:Destroy() end)
+        end
+
+        function WindowObj:AddTab(tabCfg)
+            local tabTitle = tabCfg.Title or "Tab"
+            local tabIndex = #WindowObj.Tabs + 1
+
+            local tabBtn = Instance.new("TextButton")
+            tabBtn.Size = UDim2.new(1, -6, 0, 40)
+            tabBtn.Position = UDim2.new(0, 3, 0, 0)
+            tabBtn.BackgroundColor3 = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(38, 16, 24)
+            tabBtn.BackgroundTransparency = (tabIndex == 1) and 0.15 or 0.22
+            tabBtn.Text = "    " .. tabTitle
+            tabBtn.TextColor3 = (tabIndex == 1) and Color3.fromRGB(255, 255, 255) or COLORS.textMuted
+            tabBtn.Font = Enum.Font.GothamBold
+            tabBtn.TextSize = 14
+            tabBtn.TextXAlignment = Enum.TextXAlignment.Left
+            tabBtn.AutoButtonColor = false
+            tabBtn.ZIndex = 12
+            tabBtn.Parent = tabScroll
+
+            local tbCorner = Instance.new("UICorner")
+            tbCorner.CornerRadius = UDim.new(0, 8)
+            tbCorner.Parent = tabBtn
+
+            local tbStroke = Instance.new("UIStroke")
+            tbStroke.Color = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(70, 30, 45)
+            tbStroke.Thickness = 1
+            tbStroke.Transparency = (tabIndex == 1) and 0 or 0.3
+            tbStroke.Parent = tabBtn
+
+            local activeIndicator = Instance.new("Frame")
+            activeIndicator.Size = UDim2.new(0, 4, 0, 20)
+            activeIndicator.Position = UDim2.new(0, 4, 0.5, -10)
+            activeIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            activeIndicator.BorderSizePixel = 0
+            activeIndicator.Visible = (tabIndex == 1)
+            activeIndicator.Parent = tabBtn
+
+            local indCorner = Instance.new("UICorner")
+            indCorner.CornerRadius = UDim.new(1, 0)
+            indCorner.Parent = activeIndicator
+
+            local pageScroll = Instance.new("ScrollingFrame")
+            pageScroll.Name = "Page_" .. tabTitle
+            pageScroll.Size = UDim2.fromScale(1, 1)
+            pageScroll.BackgroundTransparency = 1
+            pageScroll.ScrollBarThickness = 4
+            pageScroll.ScrollBarImageColor3 = COLORS.primary
+            pageScroll.Visible = (tabIndex == 1)
+            pageScroll.Parent = pagesFolder
+
+            local pageLayout = Instance.new("UIListLayout")
+            pageLayout.Padding = UDim.new(0, 8)
+            pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            pageLayout.Parent = pageScroll
+
+            pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+            end)
+
+            local function activateTab()
+                playClickSound()
+                for _, t in ipairs(WindowObj.Tabs) do
+                    t.btn.BackgroundColor3 = Color3.fromRGB(38, 16, 24)
+                    t.btn.BackgroundTransparency = 0.22
+                    t.btn.TextColor3 = COLORS.textMuted
+                    t.stroke.Color = Color3.fromRGB(70, 30, 45)
+                    t.stroke.Transparency = 0.3
+                    if t.indicator then t.indicator.Visible = false end
+                    t.page.Visible = false
+                end
+                tabBtn.BackgroundColor3 = COLORS.primary
+                tabBtn.BackgroundTransparency = 0.15
+                tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                tbStroke.Color = COLORS.primary
+                tbStroke.Transparency = 0
+                activeIndicator.Visible = true
+                pageScroll.Visible = true
+            end
+
+            tabBtn.MouseButton1Click:Connect(activateTab)
+
+            local TabObj = {
+                btn = tabBtn,
+                stroke = tbStroke,
+                indicator = activeIndicator,
+                page = pageScroll,
+                Select = activateTab
+            }
+
+            function TabObj:AddToggle(id, tCfg)
+                local title = tCfg.Title or id
+                local desc = tCfg.Desc or ""
+                local defaultVal = (tCfg.Default ~= nil) and tCfg.Default or false
+
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 55 or 44)
+                frame.BackgroundColor3 = COLORS.glassDeep
+                frame.BackgroundTransparency = 0.18
+                frame.BorderSizePixel = 0
+                frame.Parent = pageScroll
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(0, 8)
+                fCorner.Parent = frame
+
+                local fStroke = Instance.new("UIStroke")
+                fStroke.Color = COLORS.surface
+                fStroke.Thickness = 1
+                fStroke.Parent = frame
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(1, -70, 0, 22)
+                lbl.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 11)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = title
+                lbl.TextColor3 = COLORS.text
+                lbl.Font = Enum.Font.GothamBold
+                lbl.TextSize = 14
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = frame
+
+                if desc ~= "" then
+                    local dLbl = Instance.new("TextLabel")
+                    dLbl.Size = UDim2.new(1, -70, 0, 18)
+                    dLbl.Position = UDim2.new(0, 12, 0, 30)
+                    dLbl.BackgroundTransparency = 1
+                    dLbl.Text = desc
+                    dLbl.TextColor3 = COLORS.textMuted
+                    dLbl.Font = Enum.Font.Gotham
+                    dLbl.TextSize = 11
+                    dLbl.TextXAlignment = Enum.TextXAlignment.Left
+                    dLbl.Parent = frame
+                end
+
+                local switch = Instance.new("TextButton")
+                switch.Size = UDim2.fromOffset(46, 24)
+                switch.Position = UDim2.new(1, -56, 0.5, -12)
+                switch.BackgroundColor3 = defaultVal and COLORS.cyan or COLORS.surface
+                switch.Text = ""
+                switch.Parent = frame
+
+                local swCorner = Instance.new("UICorner")
+                swCorner.CornerRadius = UDim.new(1, 0)
+                swCorner.Parent = switch
+
+                local knob = Instance.new("Frame")
+                knob.Size = UDim2.fromOffset(20, 20)
+                knob.Position = defaultVal and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+                knob.BackgroundColor3 = COLORS.text
+                knob.BorderSizePixel = 0
+                knob.Parent = switch
+
+                local kCorner = Instance.new("UICorner")
+                kCorner.CornerRadius = UDim.new(1, 0)
+                kCorner.Parent = knob
+
+                local OptionObj = {
+                    Value = defaultVal,
+                    Callback = tCfg.Callback or function() end,
+                    ChangedCallbacks = {}
+                }
+
+                local function updateToggle(val)
+                    playClickSound()
+                    OptionObj.Value = val
+                    switch.BackgroundColor3 = val and COLORS.cyan or COLORS.surface
+                    knob.Position = val and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+                    pcall(function() OptionObj.Callback(val) end)
+                    for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+                end
+
+                function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+                function OptionObj:SetValue(val) updateToggle(val == true) end
+
+                switch.MouseButton1Click:Connect(function() updateToggle(not OptionObj.Value) end)
+                Engine.Options[id] = OptionObj
+                return OptionObj
+            end
+
+            function TabObj:AddSlider(id, sCfg)
+                local title = sCfg.Title or id
+                local minVal = sCfg.Min or 0
+                local maxVal = sCfg.Max or 100
+                local defaultVal = sCfg.Default or minVal
+
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, -10, 0, 52)
+                frame.BackgroundColor3 = COLORS.glassDeep
+                frame.BackgroundTransparency = 0.18
+                frame.BorderSizePixel = 0
+                frame.Parent = pageScroll
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(0, 8)
+                fCorner.Parent = frame
+
+                local fStroke = Instance.new("UIStroke")
+                fStroke.Color = COLORS.surface
+                fStroke.Thickness = 1
+                fStroke.Parent = frame
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(0.7, 0, 0, 22)
+                lbl.Position = UDim2.new(0, 12, 0, 6)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = title
+                lbl.TextColor3 = COLORS.text
+                lbl.Font = Enum.Font.GothamBold
+                lbl.TextSize = 14
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = frame
+
+                local valLbl = Instance.new("TextLabel")
+                valLbl.Size = UDim2.new(0.3, -12, 0, 22)
+                valLbl.Position = UDim2.new(0.7, 0, 0, 6)
+                valLbl.BackgroundTransparency = 1
+                valLbl.Text = tostring(defaultVal)
+                valLbl.TextColor3 = COLORS.cyan
+                valLbl.Font = Enum.Font.GothamBold
+                valLbl.TextSize = 14
+                valLbl.TextXAlignment = Enum.TextXAlignment.Right
+                valLbl.Parent = frame
+
+                local bar = Instance.new("TextButton")
+                bar.Size = UDim2.new(1, -24, 0, 8)
+                bar.Position = UDim2.new(0, 12, 0, 34)
+                bar.BackgroundColor3 = COLORS.surface
+                bar.Text = ""
+                bar.Parent = frame
+
+                local bCorner = Instance.new("UICorner")
+                bCorner.CornerRadius = UDim.new(1, 0)
+                bCorner.Parent = bar
+
+                local fill = Instance.new("Frame")
+                local pct = (defaultVal - minVal) / math.max(maxVal - minVal, 1)
+                fill.Size = UDim2.new(pct, 0, 1, 0)
+                fill.BackgroundColor3 = COLORS.cyan
+                fill.BorderSizePixel = 0
+                fill.Parent = bar
+
+                local fillCorner = Instance.new("UICorner")
+                fillCorner.CornerRadius = UDim.new(1, 0)
+                fillCorner.Parent = fill
+
+                local OptionObj = {
+                    Value = defaultVal,
+                    Callback = sCfg.Callback or function() end,
+                    ChangedCallbacks = {}
+                }
+
+                local function updateSlider(val)
+                    val = math.clamp(val, minVal, maxVal)
+                    if sCfg.Rounding then val = math.floor(val * (10 ^ sCfg.Rounding) + 0.5) / (10 ^ sCfg.Rounding) else val = math.floor(val + 0.5) end
+                    OptionObj.Value = val
+                    valLbl.Text = tostring(val)
+                    local newPct = (val - minVal) / math.max(maxVal - minVal, 1)
+                    fill.Size = UDim2.new(newPct, 0, 1, 0)
+                    pcall(function() OptionObj.Callback(val) end)
+                    for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+                end
+
+                function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+                function OptionObj:SetValue(val) updateSlider(val) end
+
+                local isDragging = false
+                bar.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        isDragging = true
+                        local relX = input.Position.X - bar.AbsolutePosition.X
+                        updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                    end
+                end)
+
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        isDragging = false
+                    end
+                end)
+
+                UserInputService.InputChanged:Connect(function(input)
+                    if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        local relX = input.Position.X - bar.AbsolutePosition.X
+                        updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                    end
+                end)
+
+                Engine.Options[id] = OptionObj
+                return OptionObj
+            end
+
+            function TabObj:AddButton(bCfg)
+                local title = bCfg.Title or "Button"
+                local cb = bCfg.Callback or function() end
+
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -10, 0, 40)
+                btn.BackgroundColor3 = COLORS.surfaceRaised
+                btn.BackgroundTransparency = 0.18
+                btn.Text = title
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.Font = Enum.Font.GothamBold
+                btn.TextSize = 14
+                btn.Parent = pageScroll
+
+                local bCorner = Instance.new("UICorner")
+                bCorner.CornerRadius = UDim.new(0, 8)
+                bCorner.Parent = btn
+
+                local bStroke = Instance.new("UIStroke")
+                bStroke.Color = COLORS.primary
+                bStroke.Thickness = 1
+                bStroke.Parent = btn
+
+                btn.MouseButton1Click:Connect(function()
+                    playClickSound()
+                    pcall(cb)
+                end)
+                return btn
+            end
+
+            function TabObj:AddSection(title)
+                local sec = Instance.new("TextLabel")
+                sec.Size = UDim2.new(1, -10, 0, 30)
+                sec.BackgroundTransparency = 1
+                sec.Text = "──  " .. title .. "  ──"
+                sec.TextColor3 = COLORS.cyan
+                sec.Font = Enum.Font.GothamBold
+                sec.TextSize = 14
+                sec.Parent = pageScroll
+                return sec
+            end
+
+            function TabObj:AddParagraph(pCfg)
+                local title = pCfg.Title or ""
+                local desc = pCfg.Desc or ""
+
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, -10, 0, 72)
+                frame.BackgroundColor3 = COLORS.glassDeep
+                frame.BackgroundTransparency = 0.18
+                frame.BorderSizePixel = 0
+                frame.Parent = pageScroll
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(0, 8)
+                fCorner.Parent = frame
+
+                local fStroke = Instance.new("UIStroke")
+                fStroke.Color = COLORS.surface
+                fStroke.Thickness = 1
+                fStroke.Parent = frame
+
+                local pTitle = Instance.new("TextLabel")
+                pTitle.Size = UDim2.new(1, -20, 0, 22)
+                pTitle.Position = UDim2.new(0, 10, 0, 6)
+                pTitle.BackgroundTransparency = 1
+                pTitle.Text = title
+                pTitle.TextColor3 = COLORS.cyan
+                pTitle.Font = Enum.Font.GothamBold
+                pTitle.TextSize = 13
+                pTitle.TextXAlignment = Enum.TextXAlignment.Left
+                pTitle.Parent = frame
+
+                local pDesc = Instance.new("TextLabel")
+                pDesc.Size = UDim2.new(1, -20, 0, 42)
+                pDesc.Position = UDim2.new(0, 10, 0, 26)
+                pDesc.BackgroundTransparency = 1
+                pDesc.Text = desc
+                pDesc.TextColor3 = COLORS.textMuted
+                pDesc.Font = Enum.Font.Gotham
+                pDesc.TextSize = 11
+                pDesc.TextWrapped = true
+                pDesc.TextXAlignment = Enum.TextXAlignment.Left
+                pDesc.Parent = frame
+
+                local pObj = {
+                    Frame = frame,
+                    SetTitle = function(self, t) pTitle.Text = tostring(t) end,
+                    SetDesc = function(self, d) pDesc.Text = tostring(d) end,
+                    Set = function(self, t, d)
+                        pTitle.Text = tostring(t)
+                        pDesc.Text = tostring(d)
+                    end
+                }
+                return pObj
+            end
+
+            function TabObj:AddDropdown(id, dCfg)
+                local title = dCfg.Title or id
+                local values = dCfg.Values or {}
+                local defaultVal = dCfg.Value or (values[1] or "")
+                local isMulti = dCfg.Multi == true
+
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, -10, 0, 52)
+                frame.BackgroundColor3 = COLORS.glassDeep
+                frame.BackgroundTransparency = 0.18
+                frame.BorderSizePixel = 0
+                frame.Parent = pageScroll
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(0, 8)
+                fCorner.Parent = frame
+
+                local fStroke = Instance.new("UIStroke")
+                fStroke.Color = COLORS.surface
+                fStroke.Thickness = 1
+                fStroke.Parent = frame
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(0.5, 0, 1, 0)
+                lbl.Position = UDim2.new(0, 12, 0, 0)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = title
+                lbl.TextColor3 = COLORS.text
+                lbl.Font = Enum.Font.GothamBold
+                lbl.TextSize = 14
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = frame
+
+                local dBtn = Instance.new("TextButton")
+                dBtn.Size = UDim2.new(0.46, 0, 0, 34)
+                dBtn.Position = UDim2.new(0.52, 0, 0.5, -17)
+                dBtn.BackgroundColor3 = COLORS.surface
+                dBtn.BackgroundTransparency = 0.20
+
+                local function formatValText(val)
+                    if type(val) == "table" then
+                        if val.Title then return tostring(val.Title) end
+                        local names = {}
+                        for k, v in pairs(val) do
+                            if v ~= nil and v ~= false then
+                                local itemVal = (type(v) == "boolean" and k) or v
+                                local str = extractStringVal(itemVal, k)
+                                if str ~= "" and str ~= "false" and not table.find(names, str) then
+                                    table.insert(names, str)
+                                end
+                            end
+                        end
+                        if #names == 0 then return "[ Select... ]" end
+                        return table.concat(names, ", ")
+                    end
+                    return tostring(val or "")
+                end
+
+                dBtn.Text = formatValText(defaultVal)
+                dBtn.TextColor3 = COLORS.text
+                dBtn.Font = Enum.Font.GothamBold
+                dBtn.TextSize = 13
+                dBtn.TextTruncate = Enum.TextTruncate.AtEnd
+                dBtn.Parent = frame
+
+                local dbCorner = Instance.new("UICorner")
+                dbCorner.CornerRadius = UDim.new(0, 6)
+                dbCorner.Parent = dBtn
+
+                local dbStroke = Instance.new("UIStroke")
+                dbStroke.Color = COLORS.cyan
+                dbStroke.Thickness = 1
+                dbStroke.Transparency = 0.4
+                dbStroke.Parent = dBtn
+
+                local OptionObj = {
+                    Value = defaultVal,
+                    Values = values,
+                    Callback = dCfg.Callback or function() end,
+                    ChangedCallbacks = {}
+                }
+
+                local function updateDropdown(val)
+                    OptionObj.Value = val
+                    dBtn.Text = formatValText(val)
+                    pcall(function() OptionObj.Callback(val) end)
+                    for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+                end
+
+                function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+                function OptionObj:SetValue(val) updateDropdown(val) end
+                function OptionObj:SetValues(newVals) OptionObj.Values = newVals end
+
+                dBtn.MouseButton1Click:Connect(function()
+                    playClickSound()
+                    local gui = shell.Parent
+                    if not gui then return end
+
+                    local existingModal = gui:FindFirstChild("DropdownModalOverlay")
+                    if existingModal then
+                        local isSameDropdown = (existingModal:GetAttribute("DropdownId") == id)
+                        existingModal:Destroy()
+                        if isSameDropdown then return end
+                    end
+
+                    local modalOverlay = Instance.new("Frame")
+                    modalOverlay.Name = "DropdownModalOverlay"
+                    modalOverlay:SetAttribute("DropdownId", id)
+                    modalOverlay.Size = UDim2.fromScale(1, 1)
+                    modalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                    modalOverlay.BackgroundTransparency = 0.55
+                    modalOverlay.ZIndex = 999999
+                    modalOverlay.Parent = gui
+
+                    local bgDismissBtn = Instance.new("TextButton")
+                    bgDismissBtn.Size = UDim2.fromScale(1, 1)
+                    bgDismissBtn.BackgroundTransparency = 1
+                    bgDismissBtn.Text = ""
+                    bgDismissBtn.ZIndex = 999999
+                    bgDismissBtn.Parent = modalOverlay
+
+                    local modalFrame = Instance.new("Frame")
+                    modalFrame.Size = UDim2.fromOffset(380, 440)
+                    modalFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+                    modalFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    modalFrame.BackgroundColor3 = COLORS.shell
+                    modalFrame.BackgroundTransparency = 0.15
+                    modalFrame.BorderSizePixel = 0
+                    modalFrame.ZIndex = 1000000
+                    modalFrame.Parent = modalOverlay
+
+                    local mCorner = Instance.new("UICorner")
+                    mCorner.CornerRadius = UDim.new(0, 14)
+                    mCorner.Parent = modalFrame
+
+                    local mStroke = Instance.new("UIStroke")
+                    mStroke.Color = COLORS.primary
+                    mStroke.Thickness = 2
+                    mStroke.Parent = modalFrame
+
+                    local mHeader = Instance.new("TextLabel")
+                    mHeader.Size = UDim2.new(1, -50, 0, 24)
+                    mHeader.Position = UDim2.new(0, 16, 0, 14)
+                    mHeader.BackgroundTransparency = 1
+                    mHeader.Text = "📌 " .. title
+                    mHeader.TextColor3 = COLORS.text
+                    mHeader.Font = Enum.Font.GothamBold
+                    mHeader.TextSize = 15
+                    mHeader.TextXAlignment = Enum.TextXAlignment.Left
+                    mHeader.ZIndex = 1000001
+                    mHeader.Parent = modalFrame
+
+                    local mSub = Instance.new("TextLabel")
+                    mSub.Size = UDim2.new(1, -50, 0, 18)
+                    mSub.Position = UDim2.new(0, 16, 0, 38)
+                    mSub.BackgroundTransparency = 1
+                    mSub.Text = isMulti and "คำแนะนำ: คลิกเลือก/ยกเลิกได้หลายรายการ" or "คำแนะนำ: คลิก 1 รายการเพื่อเลือก"
+                    mSub.TextColor3 = COLORS.textMuted
+                    mSub.Font = Enum.Font.Gotham
+                    mSub.TextSize = 11
+                    mSub.TextXAlignment = Enum.TextXAlignment.Left
+                    mSub.ZIndex = 1000001
+                    mSub.Parent = modalFrame
+
+                    local closeModBtn = Instance.new("TextButton")
+                    closeModBtn.Size = UDim2.fromOffset(26, 26)
+                    closeModBtn.Position = UDim2.new(1, -36, 0, 14)
+                    closeModBtn.BackgroundColor3 = COLORS.glass
+                    closeModBtn.Text = "✕"
+                    closeModBtn.TextColor3 = COLORS.textMuted
+                    closeModBtn.Font = Enum.Font.GothamBold
+                    closeModBtn.TextSize = 13
+                    closeModBtn.ZIndex = 1000002
+                    closeModBtn.Parent = modalFrame
+
+                    local cmCorner = Instance.new("UICorner")
+                    cmCorner.CornerRadius = UDim.new(0, 6)
+                    cmCorner.Parent = closeModBtn
+
+                    closeModBtn.MouseButton1Click:Connect(function()
+                        playClickSound()
+                        modalOverlay:Destroy()
+                    end)
+                    bgDismissBtn.MouseButton1Click:Connect(function() modalOverlay:Destroy() end)
+
+                    local optScroll = Instance.new("ScrollingFrame")
+                    optScroll.Size = UDim2.new(1, -28, 1, -124)
+                    optScroll.Position = UDim2.new(0, 14, 0, 64)
+                    optScroll.BackgroundTransparency = 1
+                    optScroll.ScrollBarThickness = 4
+                    optScroll.ScrollBarImageColor3 = COLORS.primary
+                    optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+                    optScroll.ZIndex = 1000001
+                    optScroll.Parent = modalFrame
+
+                    local optLayout = Instance.new("UIListLayout")
+                    optLayout.Padding = UDim.new(0, 5)
+                    optLayout.SortOrder = Enum.SortOrder.LayoutOrder
+                    optLayout.Parent = optScroll
+
+                    optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                        optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 10)
+                    end)
+
+                    local currentSelected = {}
+                    if isMulti then
+                        if type(OptionObj.Value) == "table" then
+                            for k, v in pairs(OptionObj.Value) do
+                                if v ~= nil and v ~= false then
+                                    local itemVal = (type(v) == "boolean" and k) or v
+                                    local str = extractStringVal(itemVal, k)
+                                    if str ~= "" and str ~= "false" and not table.find(currentSelected, str) then
+                                        table.insert(currentSelected, str)
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        table.insert(currentSelected, OptionObj.Value)
+                    end
+
+                    local optionButtons = {}
+                    local function getItemName(v)
+                        if type(v) == "table" and v.Title then return tostring(v.Title) end
+                        return tostring(v or "")
+                    end
+
+                    local function renderOptions()
+                        for _, btnObj in ipairs(optionButtons) do btnObj:Destroy() end
+                        optionButtons = {}
+
+                        local currentValues = (type(OptionObj.Values) == "function" and OptionObj.Values()) or OptionObj.Values or values
+                        if type(currentValues) ~= "table" then currentValues = {} end
+
+                        for _, optVal in ipairs(currentValues) do
+                            local optLabel = formatValText(optVal)
+                            local optRawName = getItemName(optVal)
+                            local isSelected = false
+
+                            if isMulti then
+                                for _, sel in ipairs(currentSelected) do
+                                    local selName = getItemName(sel)
+                                    if selName == optRawName or selName == optLabel or tostring(sel) == optRawName or tostring(sel) == optLabel then
+                                        isSelected = true
+                                        break
+                                    end
+                                end
+                            else
+                                isSelected = (formatValText(currentSelected[1]) == optLabel)
+                            end
+
+                            local itemBtn = Instance.new("TextButton")
+                            itemBtn.Size = UDim2.new(1, -6, 0, 38)
+                            itemBtn.BackgroundColor3 = isSelected and COLORS.primary or COLORS.glassDeep
+                            itemBtn.BackgroundTransparency = isSelected and 0.1 or 0.2
+                            itemBtn.Text = (isSelected and "   ✓  " or "       ") .. optLabel
+                            itemBtn.TextColor3 = isSelected and Color3.fromRGB(255, 255, 255) or COLORS.text
+                            itemBtn.Font = Enum.Font.GothamBold
+                            itemBtn.TextSize = 13
+                            itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+                            itemBtn.ZIndex = 1000002
+                            itemBtn.Parent = optScroll
+
+                            local ibCorner = Instance.new("UICorner")
+                            ibCorner.CornerRadius = UDim.new(0, 8)
+                            ibCorner.Parent = itemBtn
+
+                            local ibStroke = Instance.new("UIStroke")
+                            ibStroke.Color = isSelected and COLORS.primary or COLORS.surfaceRaised
+                            ibStroke.Thickness = 1
+                            ibStroke.Parent = itemBtn
+
+                            itemBtn.MouseButton1Click:Connect(function()
+                                playClickSound()
+                                if isMulti then
+                                    local optRawName = getItemName(optVal)
+                                    local targetStr = optRawName ~= "" and optRawName or optLabel
+                                    local foundIdx = nil
+                                    for idx, sel in ipairs(currentSelected) do
+                                        local selName = getItemName(sel)
+                                        if selName == targetStr or selName == optLabel or tostring(sel) == targetStr then
+                                            foundIdx = idx
+                                            break
+                                        end
+                                    end
+                                    if foundIdx then
+                                        table.remove(currentSelected, foundIdx)
+                                    else
+                                        table.insert(currentSelected, targetStr)
+                                    end
+                                    updateDropdown(currentSelected)
+                                    renderOptions()
+                                else
+                                    currentSelected = { optVal }
+                                    updateDropdown(optVal)
+                                    modalOverlay:Destroy()
+                                end
+                            end)
+
+                            table.insert(optionButtons, itemBtn)
+                        end
+                    end
+
+                    renderOptions()
+
+                    local confirmBtn = Instance.new("TextButton")
+                    confirmBtn.Size = UDim2.new(1, -28, 0, 40)
+                    confirmBtn.Position = UDim2.new(0, 14, 1, -50)
+                    confirmBtn.BackgroundColor3 = COLORS.primary
+                    confirmBtn.BackgroundTransparency = 0.15
+                    confirmBtn.Text = "✓ Confirm Selection"
+                    confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    confirmBtn.Font = Enum.Font.GothamBold
+                    confirmBtn.TextSize = 13
+                    confirmBtn.ZIndex = 10001
+                    confirmBtn.Parent = modalFrame
+
+                    local cfCorner = Instance.new("UICorner")
+                    cfCorner.CornerRadius = UDim.new(0, 8)
+                    cfCorner.Parent = confirmBtn
+
+                    confirmBtn.MouseButton1Click:Connect(function()
+                        playClickSound()
+                        if isMulti then updateDropdown(currentSelected) end
+                        modalOverlay:Destroy()
+                    end)
+                end)
+
+                Engine.Options[id] = OptionObj
+                return OptionObj
+            end
+
+            function TabObj:AddInput(id, iCfg)
+                local title = iCfg.Title or id
+                local defaultVal = iCfg.Default or ""
+                local placeholder = iCfg.Placeholder or "Type here..."
+
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, -10, 0, 48)
+                frame.BackgroundColor3 = COLORS.glassDeep
+                frame.BackgroundTransparency = 0.18
+                frame.BorderSizePixel = 0
+                frame.Parent = pageScroll
+
+                local fCorner = Instance.new("UICorner")
+                fCorner.CornerRadius = UDim.new(0, 8)
+                fCorner.Parent = frame
+
+                local lbl = Instance.new("TextLabel")
+                lbl.Size = UDim2.new(0.5, 0, 1, 0)
+                lbl.Position = UDim2.new(0, 12, 0, 0)
+                lbl.BackgroundTransparency = 1
+                lbl.Text = title
+                lbl.TextColor3 = COLORS.text
+                lbl.Font = Enum.Font.GothamBold
+                lbl.TextSize = 14
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.Parent = frame
+
+                local box = Instance.new("TextBox")
+                box.Size = UDim2.new(0.45, 0, 0, 30)
+                box.Position = UDim2.new(0.52, 0, 0.5, -15)
+                box.BackgroundColor3 = COLORS.input
+                box.BackgroundTransparency = 0.20
+                box.Text = tostring(defaultVal)
+                box.PlaceholderText = placeholder
+                box.TextColor3 = COLORS.cyan
+                box.Font = Enum.Font.Gotham
+                box.TextSize = 13
+                box.Parent = frame
+
+                local bxCorner = Instance.new("UICorner")
+                bxCorner.CornerRadius = UDim.new(0, 6)
+                bxCorner.Parent = box
+
+                local OptionObj = {
+                    Value = defaultVal,
+                    Callback = iCfg.Callback or function() end,
+                    ChangedCallbacks = {}
+                }
+
+                box.FocusLost:Connect(function(enterPressed)
+                    OptionObj.Value = box.Text
+                    pcall(function() OptionObj.Callback(box.Text) end)
+                    for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(box.Text) end) end
+                end)
+
+                function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+                function OptionObj:SetValue(val)
+                    OptionObj.Value = val
+                    box.Text = tostring(val)
+                end
+
+                Engine.Options[id] = OptionObj
+                return OptionObj
+            end
+
+            function TabObj:Dropdown(cfg) return self:AddDropdown(cfg.Flag or cfg.Title or "Dropdown", cfg) end
+            function TabObj:Input(cfg) return self:AddInput(cfg.Flag or cfg.Title or "Input", cfg) end
+            function TabObj:Button(cfg) return self:AddButton(cfg) end
+            function TabObj:Toggle(cfg) return self:AddToggle(cfg.Flag or cfg.Title or "Toggle", cfg) end
+            function TabObj:Slider(cfg) return self:AddSlider(cfg.Flag or cfg.Title or "Slider", cfg) end
+            function TabObj:Paragraph(cfg) return self:AddParagraph(cfg) end
+            function TabObj:Section(title) return self:AddSection(title) end
+            function TabObj:Space()
+                local sp = Instance.new("Frame")
+                sp.Size = UDim2.new(1, -10, 0, 8)
+                sp.BackgroundTransparency = 1
+                sp.Parent = pageScroll
+                return sp
+            end
+
+            table.insert(WindowObj.Tabs, TabObj)
+            return TabObj
+        end
+
+        return WindowObj
+    end
+
+    function Engine:Notify(nCfg)
+        local title = nCfg.Title or "Notification"
+        local content = nCfg.Content or nCfg.Desc or ""
+        local duration = nCfg.Duration or 4
+
+        local gui = _G.__ROLLGNOME_WIN and _G.__ROLLGNOME_WIN.Gui
+        if not gui then return end
+
+        local notifHolder = gui:FindFirstChild("NotifHolder")
+        if not notifHolder then
+            notifHolder = Instance.new("Frame")
+            notifHolder.Name = "NotifHolder"
+            notifHolder.Size = UDim2.new(0, 300, 1, -40)
+            notifHolder.Position = UDim2.new(1, -315, 0, 20)
+            notifHolder.BackgroundTransparency = 1
+            notifHolder.ZIndex = 999999
+            notifHolder.Parent = gui
+
+            local nLayout = Instance.new("UIListLayout")
+            nLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+            nLayout.Padding = UDim.new(0, 8)
+            nLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            nLayout.Parent = notifHolder
+        end
+
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(1, 0, 0, 60)
+        card.BackgroundColor3 = COLORS.shell
+        card.BackgroundTransparency = 0.15
+        card.BorderSizePixel = 0
+        card.Parent = notifHolder
+
+        local cCorner = Instance.new("UICorner")
+        cCorner.CornerRadius = UDim.new(0, 10)
+        cCorner.Parent = card
+
+        local cStroke = Instance.new("UIStroke")
+        cStroke.Color = COLORS.cyan
+        cStroke.Thickness = 1.5
+        cStroke.Parent = card
+
+        local cTitle = Instance.new("TextLabel")
+        cTitle.Size = UDim2.new(1, -20, 0, 20)
+        cTitle.Position = UDim2.new(0, 10, 0, 6)
+        cTitle.BackgroundTransparency = 1
+        cTitle.Text = title
+        cTitle.TextColor3 = COLORS.text
+        cTitle.Font = Enum.Font.GothamBold
+        cTitle.TextSize = 13
+        cTitle.TextXAlignment = Enum.TextXAlignment.Left
+        cTitle.Parent = card
+
+        local cDesc = Instance.new("TextLabel")
+        cDesc.Size = UDim2.new(1, -20, 0, 28)
+        cDesc.Position = UDim2.new(0, 10, 0, 26)
+        cDesc.BackgroundTransparency = 1
+        cDesc.Text = content
+        cDesc.TextColor3 = COLORS.textMuted
+        cDesc.Font = Enum.Font.Gotham
+        cDesc.TextSize = 11
+        cDesc.TextWrapped = true
+        cDesc.TextXAlignment = Enum.TextXAlignment.Left
+        cDesc.Parent = card
+
+        task.spawn(function()
+            task.wait(duration)
+            if card and card.Parent then
+                local tw = TweenService:Create(card, TweenInfo.new(0.3), { BackgroundTransparency = 1 })
+                tw:Play()
+                tw.Completed:Connect(function() card:Destroy() end)
+            end
+        end)
+    end
+
+    return Engine
+end)()
+
+if _G.__ROLLGNOME_WIN then pcall(function() _G.__ROLLGNOME_WIN:Destroy() end) end
+if _G.__ROLLGNOME_CLEANUP then pcall(_G.__ROLLGNOME_CLEANUP) end
+
+for _, gui in ipairs(game:GetService("CoreGui"):GetChildren()) do
+    if gui.Name == "ObsidianGlass2_UI" or gui.Name == "ROLLGNOME" then
+        pcall(function() gui:Destroy() end)
+    end
+end
+
+-----------------------------------------------------------------------------------------
+-- 🔑 LOGOUT & KEY CLEARING & SCRIPT TERMINATION SYSTEM (from logout.txt)
+-----------------------------------------------------------------------------------------
+local function performLogoutKeyClear()
+    pcall(function()
+        local filesToDelete = {
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        if LuarmorConfig and type(LuarmorConfig) == "table" and LuarmorConfig.SavedKeyFile then
+            table.insert(filesToDelete, LuarmorConfig.SavedKeyFile)
+        end
+
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+            getgenv().PayomboyZ_LoggedOut = true
+            getgenv().AutoGiftCards = false
+            getgenv().AutoAcceptTrade = false
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
+    end)
+end
+
+local function stopAllScriptOperations()
+    CONFIG.auto = false
+    CONFIG.autoCollect = false
+    CONFIG.autoSell = false
+    CONFIG.autoPlace = false
+    CONFIG.autoPets = false
+    CONFIG.autoRoll = false
+    CONFIG.autoBuy = false
+    CONFIG.autoUpgTree = false
+    CONFIG.autoExpandPlot = false
+    CONFIG.autoRebirth = false
+    if getgenv then
+        getgenv().AutoGiftCards = false
+        getgenv().AutoAcceptTrade = false
+    end
+
+    if _G.GakuranCleanup then pcall(_G.GakuranCleanup) end
+    if _G.ScriptCleanup then pcall(_G.ScriptCleanup) end
+    if _G.PayomboyZCleanup then pcall(_G.PayomboyZCleanup) end
+    if _G.__ROLLGNOME_CLEANUP_FN then pcall(_G.__ROLLGNOME_CLEANUP_FN) end
+end
+
+_G.__ROLLGNOME_CLEANUP = function()
+    stopAllScriptOperations()
+    performLogoutKeyClear()
+end
+
+local Window = ObsidianGlassEngine:CreateWindow({
+    Title = "ROLL A GNOME",
+    SubTitle = "seltonmt • Obsidian Glassmorphic 2 Engine",
+})
+_G.__ROLLGNOME_WIN = Window
+
+----------------------------------------------------------------------------
+-- LOCALIZATION ENGINE (TH / EN) - Default: TH (ภาษาไทย)
+----------------------------------------------------------------------------
+----------------------------------------------------------------------------
+-- LOCALIZATION ENGINE (TH / EN) - Default: TH (ภาษาไทย)
+----------------------------------------------------------------------------
+local CurrentLang = "TH"
+
+local Translations = {
+    TH = {
+        LanguageSection = "🌐 ตั้งค่าภาษา / Language Settings",
+        SelectLang = "เลือกภาษาการแสดงผล (Select Language)",
+        LangChangedNotif = "เปลี่ยนภาษาเป็น ภาษาไทย เรียบร้อยแล้ว!",
+
+        -- Tab Titles
+        TabFarming = "🌾 ฟาร์มอัตโนมัติ",
+        TabRolling = "🎲 สุ่มโนม (Roll)",
+        TabSpending = "💰 อัปเกรด & ขยายสวน",
+        TabTuning = "⚙️ ปรับแต่งระบบ",
+        TabStatus = "📊 สถานะระบบ",
+        TabTrade = "🤝 แลกเปลี่ยน (Trade)",
+
+        -- Farming Tab
+        MasterSection = "⚡ สวิตช์หลักควบคุมระบบฟาร์ม",
+        MasterAutoTitle = "เปิดใช้งานระบบฟาร์มอัตโนมัติ",
+        MasterAutoDesc = "เปิด/ปิด การทำงานของระบบฟาร์มทั้งหมด",
+        GardenSection = "🌱 ระบบสวนและเก็บเกี่ยวพืช",
+        AutoHarvestTitle = "เก็บเกี่ยวพืชอัตโนมัติ",
+        AutoHarvestDesc = "เก็บเกี่ยวพืชสุกในสวนเข้ากระเป๋าอัตโนมัติ",
+        AutoSellTitle = "ขายพืชอัตโนมัติ",
+        AutoSellDesc = "ขายพืชเมื่อความจุกระเป๋าถึงระดับที่กำหนด",
+        AutoPlaceTitle = "วางโนมอัตโนมัติ",
+        AutoPlaceDesc = "สวมใส่และวางโนมผลผลิตสูงในสวนอัตโนมัติ",
+        AutoPetsTitle = "วางสัตว์เลี้ยงอัตโนมัติ",
+        AutoPetsDesc = "วางสัตว์เลี้ยงในสวนสูงสุด 3 ตัวอัตโนมัติ",
+
+        -- Rolling Tab
+        RollingSection = "🎲 ระบบสุ่มและซื้อ Gnome",
+        AutoRollTitle = "สุ่ม Gnome อัตโนมัติ",
+        AutoRollDesc = "หมุนสุ่ม Gnome ฟรีให้อัตโนมัติตลอดเวลา",
+        AutoBuyTitle = "ซื้อ Gnome อัตโนมัติ",
+        AutoBuyDesc = "ซื้อ Gnome จากแท่นเมื่อค่าพลังสูงกว่าตัวที่วางอยู่",
+        TargetFilterTitle = "กรองซื้อเฉพาะ Gnome ที่เลือก",
+        TargetFilterDesc = "เปิดเพื่อกรองซื้อเฉพาะ Gnome ที่เลือกไว้ด้านล่างเท่านั้น",
+        TargetGnomesTitle = "เลือก Gnome ที่ต้องการซื้ออัตโนมัติ",
+        TargetMutationsTitle = "🧬 เลือก Mutation ที่ต้องการซื้อ (ไม่เลือก = ซื้อทุก Mutation)",
+        BuyMarginTitle = "ส่วนต่างราคาซื้อ (%)",
+
+        -- Spending Tab
+        SpendingSection = "💰 ระบบอัปเกรดและขยายสวน",
+        AutoUpgradeTitle = "อัปเกรดต้นไม้อัตโนมัติ",
+        AutoUpgradeDesc = "ซื้ออัปเกรดในสายการพัฒนาที่ถูกที่สุดอัตโนมัติ",
+        AutoExpandTitle = "ขยายพื้นที่สวนอัตโนมัติ",
+        AutoExpandDesc = "ขยายพื้นที่สวนเมื่อมีเงินเพียงพอ",
+        AutoFreeTitle = "รับ Gnome ฟรีอัตโนมัติ",
+        AutoFreeDesc = "กดรับ Gnome ฟรีทันทีเมื่อถึงเวลา",
+        AutoRebirthTitle = "จุติอัตโนมัติ (Rebirth)",
+        AutoRebirthDesc = "กด Rebirth อัตโนมัติเมื่อผ่านเงื่อนไข",
+
+        -- Tuning Tab
+        TuningSection = "⚙️ ตั้งค่าความเร็วและระยะห่าง",
+        HarvestGapTitle = "ดีเลย์การเก็บเกี่ยว (ms)",
+        SellAtTitle = "ระดับความจุกระเป๋าที่จะขาย (%)",
+        PlaceClearTitle = "ระยะห่างการวาง Gnome (Studs)",
+        ConfigSection = "💾 ระบบบันทึกการตั้งค่า (Config Manager)",
+        SaveConfigBtn = "💾 บันทึกการตั้งค่า (Save Config)",
+        LoadConfigBtn = "📂 โหลดการตั้งค่า (Load Config)",
+        AutoLoadToggle = "⚡ โหลด Config อัตโนมัติเมื่อเปิดสคริปต์",
+        WebhookSection = "🔔 แจ้งเตือนผ่าน Discord Webhook",
+        WebhookUrlTitle = "URL ของ Discord Webhook",
+        WebhookUrlPlaceholder = "วาง URL Webhook ที่นี่...",
+        WebhookToggle = "เปิดการแจ้งเตือน Discord Webhook",
+        WebhookIntervalTitle = "ความถี่การส่งรายงาน (นาที)",
+        TestWebhookBtn = "🚀 ทดสอบส่งข้อความเข้า Discord",
+        CapFpsTitle = "⚡ จำกัด 30 FPS (ลดภาระเครื่อง)",
+        CapFpsDesc = "ช่วยลดความร้อนและการทำงานของ GPU/CPU ขณะฟาร์ม",
+
+        -- Status Tab
+        StatusSection = "📊 แดชบอร์ดสถานะระบบแบบ Realtime",
+        RunStatusTitle = "สถานะการทำงานระบบ",
+        EconomyTitle = "สถิติระบบการเงิน",
+        OperationsTitle = "ตัวนับการทำงานของระบบ",
+        SystemLogTitle = "บันทึกระบบ",
+
+        -- Trade Tab
+        SelectPlayerTitle = "👤 เลือกผู้เล่นที่จะแลกเปลี่ยน",
+        NoOtherPlayers = "ไม่มีผู้เล่นอื่น",
+        RefreshPlayerBtn = "🔄 รีเฟรชรายชื่อผู้เล่น",
+        WarpToTargetBtn = "🚀 วาร์ปไปหาผู้เล่นเป้าหมาย",
+        SelectGnomesTitle = "🎅 เลือก Gnome ที่จะส่ง (Trade)",
+        SelectFruitsTitle = "🍎 เลือกผลไม้ / พืชที่จะส่ง (Trade)",
+        NoGnomesFound = "ไม่พบ Gnome ในกระเป๋า",
+        NoFruitsFound = "ไม่พบผลไม้/พืชในกระเป๋า",
+        RefreshItemsBtn = "🔄 รีเฟรชรายการ Gnome & ผลไม้",
+        AutoGiftToggle = "🎁 ส่ง Gnome / ผลไม้อัตโนมัติ (Auto Gift)",
+        AutoAcceptToggle = "✅ ยอมรับการเทรดอัตโนมัติ",
+        WarpSuccess = "วาร์ปไปหา ",
+        TargetNotFound = "ไม่พบตัวละครของผู้เล่นเป้าหมาย!",
+        RefreshPlayerSuccess = "รีเฟรชรายชื่อผู้เล่นสำเร็จ!",
+        RefreshItemSuccess = "รีเฟรชรายการ Gnome และผลไม้เรียบร้อย!",
+        TradeTitle = "แลกเปลี่ยน",
+        ErrorTitle = "ข้อผิดพลาด",
+    },
+    EN = {
+        LanguageSection = "🌐 Language Settings / ภาษา",
+        SelectLang = "Select Display Language",
+        LangChangedNotif = "Language set to English successfully!",
+
+        -- Tab Titles
+        TabFarming = "🌾 Auto Farming",
+        TabRolling = "🎲 Gnome Rolling",
+        TabSpending = "💰 Upgrades & Expansion",
+        TabTuning = "⚙️ System Tuning",
+        TabStatus = "📊 System Status",
+        TabTrade = "🤝 Trade System",
+
+        -- Farming Tab
+        MasterSection = "⚡ Master Controls",
+        MasterAutoTitle = "Auto Farm Master Switch",
+        MasterAutoDesc = "Enables or disables all automatic farming routines",
+        GardenSection = "🌱 Garden & Harvest Automation",
+        AutoHarvestTitle = "Auto Harvest Crops",
+        AutoHarvestDesc = "Collects every ready crop from across the garden plot",
+        AutoSellTitle = "Auto Sell Crops",
+        AutoSellDesc = "Sells accumulated crops when inventory reaches threshold",
+        AutoPlaceTitle = "Auto Place Gnomes",
+        AutoPlaceDesc = "Equips bought gnomes and seats them in the garden",
+        AutoPetsTitle = "Auto Place Pets",
+        AutoPetsDesc = "Seats pets up to the maximum limit of 3 pets",
+
+        -- Rolling Tab
+        RollingSection = "🎲 Podium & Roll Settings",
+        AutoRollTitle = "Auto Roll Gnome",
+        AutoRollDesc = "Rolling is free; automatically spins for new gnomes",
+        AutoBuyTitle = "Auto Buy Gnome",
+        AutoBuyDesc = "Buys podium gnomes that outperform your weakest placed gnome",
+        TargetFilterTitle = "Target Gnome Filter Only",
+        TargetFilterDesc = "Enable to only auto buy gnomes selected in list below",
+        TargetGnomesTitle = "Select Target Gnomes to Buy",
+        TargetMutationsTitle = "🧬 Select Target Mutations (Empty = All Mutations)",
+        BuyMarginTitle = "Buy Margin (%)",
+
+        -- Spending Tab
+        SpendingSection = "💰 Upgrades & Expansion",
+        AutoUpgradeTitle = "Auto Upgrades",
+        AutoUpgradeDesc = "Buys the cheapest available node in the upgrade tree",
+        AutoExpandTitle = "Auto Expand Plot",
+        AutoExpandDesc = "Expands plot area when cash balance is sufficient",
+        AutoFreeTitle = "Auto Free Gnome",
+        AutoFreeDesc = "Claims the free gnome reward as soon as available",
+        AutoRebirthTitle = "Auto Rebirth (Unverified)",
+        AutoRebirthDesc = "Automatically rebirths when requirement is met",
+
+        -- Tuning Tab
+        TuningSection = "⚙️ Timing & Clearance Settings",
+        HarvestGapTitle = "Harvest Delay (ms)",
+        SellAtTitle = "Sell At Inventory (%)",
+        PlaceClearTitle = "Placement Clearance (Studs)",
+        ConfigSection = "💾 Configuration Management",
+        SaveConfigBtn = "💾 Save Settings (Save Config)",
+        LoadConfigBtn = "📂 Load Settings (Load Config)",
+        AutoLoadToggle = "⚡ Auto Load Config on Execution",
+        WebhookSection = "🔔 Discord Webhook Notifications",
+        WebhookUrlTitle = "Discord Webhook URL",
+        WebhookUrlPlaceholder = "Paste Webhook URL here...",
+        WebhookToggle = "Enable Discord Webhook Notifications",
+        WebhookIntervalTitle = "Report Interval (Minutes)",
+        TestWebhookBtn = "🚀 Send Test Webhook Message",
+        CapFpsTitle = "⚡ Cap 30 FPS (Resource Saver)",
+        CapFpsDesc = "Reduces GPU & CPU temperature during farming",
+
+        -- Status Tab
+        StatusSection = "📊 Live System Dashboard",
+        RunStatusTitle = "RUN STATUS",
+        EconomyTitle = "ECONOMY STATS",
+        OperationsTitle = "OPERATION COUNTERS",
+        SystemLogTitle = "SYSTEM LOG",
+
+        -- Trade Tab
+        SelectPlayerTitle = "👤 Select Player to Trade",
+        NoOtherPlayers = "No other players",
+        RefreshPlayerBtn = "🔄 Refresh Player List",
+        WarpToTargetBtn = "🚀 Teleport to Target Player",
+        SelectGnomesTitle = "🎅 Select Gnomes to Trade",
+        SelectFruitsTitle = "🍎 Select Fruits / Crops to Trade",
+        NoGnomesFound = "No Gnomes found in inventory",
+        NoFruitsFound = "No Fruits/Crops found in inventory",
+        RefreshItemsBtn = "🔄 Refresh Gnomes & Fruits List",
+        AutoGiftToggle = "🎁 Auto Gift Gnomes / Fruits",
+        AutoAcceptToggle = "✅ Auto Accept Trades",
+        WarpSuccess = "Teleported to ",
+        TargetNotFound = "Target player character not found!",
+        RefreshPlayerSuccess = "Refreshed player list successfully!",
+        RefreshItemSuccess = "Refreshed Gnomes and Fruits successfully!",
+        TradeTitle = "Trade",
+        ErrorTitle = "Error",
+    }
+}
+
+local function L(key)
+    local langTable = Translations[CurrentLang] or Translations.TH
+    return langTable[key] or Translations.TH[key] or key
+end
+
+-- 1. FARMING TAB
+local farmTab = Window:AddTab({ Title = L("TabFarming") })
+
+farmTab:AddSection(L("LanguageSection"))
+local LangDropdown = farmTab:AddDropdown("SystemLanguage", {
+    Title = L("SelectLang"),
+    Values = { "🇹🇭 ภาษาไทย (TH)", "🇺🇸 English (EN)" },
+    Multi = false,
+    Default = "🇹🇭 ภาษาไทย (TH)"
+})
+LangDropdown:OnChanged(function(val)
+    if tostring(val):find("English") or tostring(val):find("EN") then
+        CurrentLang = "EN"
+    else
+        CurrentLang = "TH"
+    end
+    ObsidianGlassEngine:Notify({
+        Title = CurrentLang == "TH" and "ภาษา / Language" or "Language",
+        Content = L("LangChangedNotif"),
+        Duration = 3
+    })
+end)
+
+farmTab:AddSection(L("MasterSection"))
+farmTab:AddToggle("master_auto", {
+    Title = L("MasterAutoTitle"),
+    Desc = L("MasterAutoDesc"),
+    Default = CONFIG.auto,
+    Callback = function(v) CONFIG.auto = v end,
+})
+
+farmTab:AddSection(L("GardenSection"))
+farmTab:AddToggle("auto_harvest", {
+    Title = L("AutoHarvestTitle"),
+    Desc = L("AutoHarvestDesc"),
+    Default = CONFIG.autoCollect,
+    Callback = function(v) CONFIG.autoCollect = v end,
+})
+farmTab:AddToggle("auto_sell", {
+    Title = L("AutoSellTitle"),
+    Desc = L("AutoSellDesc"),
+    Default = CONFIG.autoSell,
+    Callback = function(v) CONFIG.autoSell = v end,
+})
+farmTab:AddToggle("auto_place", {
+    Title = L("AutoPlaceTitle"),
+    Desc = L("AutoPlaceDesc"),
+    Default = CONFIG.autoPlace,
+    Callback = function(v) CONFIG.autoPlace = v end,
+})
+farmTab:AddToggle("auto_pets", {
+    Title = L("AutoPetsTitle"),
+    Desc = L("AutoPetsDesc"),
+    Default = CONFIG.autoPets,
+    Callback = function(v) CONFIG.autoPets = v end,
+})
+
+-- 2. ROLLING TAB
+local rollTab = Window:AddTab({ Title = L("TabRolling") })
+rollTab:AddSection(L("RollingSection"))
+rollTab:AddToggle("auto_roll", {
+    Title = L("AutoRollTitle"),
+    Desc = L("AutoRollDesc"),
+    Default = CONFIG.autoRoll,
+    Callback = function(v)
+        CONFIG.autoRoll = v
+        if v then CONFIG.auto = true end
+    end,
+})
+rollTab:AddToggle("auto_buy", {
+    Title = L("AutoBuyTitle"),
+    Desc = L("AutoBuyDesc"),
+    Default = CONFIG.autoBuy,
+    Callback = function(v)
+        CONFIG.autoBuy = v
+        if v then CONFIG.auto = true end
+    end,
+})
+rollTab:AddToggle("target_buy_filter", {
+    Title = L("TargetFilterTitle"),
+    Desc = L("TargetFilterDesc"),
+    Default = CONFIG.targetBuyFilterEnabled or false,
+    Callback = function(v) CONFIG.targetBuyFilterEnabled = v end,
+})
+rollTab:AddDropdown("target_buy_gnomes", {
+    Title = L("TargetGnomesTitle"),
+    Values = getAllGnomeNames(),
+    Multi = true,
+    Default = {},
+    Callback = function(values)
+        CONFIG.selectedTargetGnomes = values
+    end,
+})
+rollTab:AddDropdown("target_buy_mutations", {
+    Title = L("TargetMutationsTitle"),
+    Values = getAvailableMutationNames(),
+    Multi = true,
+    Default = {},
+    Callback = function(values)
+        CONFIG.selectedTargetMutations = values
+    end,
+})
+rollTab:AddSlider("buy_margin", {
+    Title = L("BuyMarginTitle"),
+    Min = 100,
+    Max = 300,
+    Default = math.floor(CONFIG.buyMargin * 100),
+    Rounding = 0,
+    Callback = function(v) CONFIG.buyMargin = v / 100 end,
+})
+
+-- 3. SPENDING TAB
+local spendTab = Window:AddTab({ Title = L("TabSpending") })
+spendTab:AddSection(L("SpendingSection"))
+spendTab:AddToggle("auto_upgrade", {
+    Title = L("AutoUpgradeTitle"),
+    Desc = L("AutoUpgradeDesc"),
+    Default = CONFIG.autoUpgrade,
+    Callback = function(v) CONFIG.autoUpgrade = v end,
+})
+spendTab:AddToggle("auto_expand", {
+    Title = L("AutoExpandTitle"),
+    Desc = L("AutoExpandDesc"),
+    Default = CONFIG.autoExpand,
+    Callback = function(v) CONFIG.autoExpand = v end,
+})
+spendTab:AddToggle("auto_free", {
+    Title = L("AutoFreeTitle"),
+    Desc = L("AutoFreeDesc"),
+    Default = CONFIG.autoFreeGnome,
+    Callback = function(v) CONFIG.autoFreeGnome = v end,
+})
+spendTab:AddToggle("auto_rebirth", {
+    Title = L("AutoRebirthTitle"),
+    Desc = L("AutoRebirthDesc"),
+    Default = CONFIG.autoRebirth,
+    Callback = function(v) CONFIG.autoRebirth = v end,
+})
+
+-- 4. STATUS TAB (สถานะระบบ)
+local statusTab = Window:AddTab({ Title = L("TabStatus") })
+statusTab:AddSection(L("StatusSection"))
+
+statusTab:AddToggle("cap_fps_30", {
+    Title = L("CapFpsTitle"),
+    Desc = L("CapFpsDesc"),
+    Default = false,
+    Callback = function(state)
+        if setfpscap then
+            setfpscap(state and 30 or 60)
+        end
+    end
+})
+
+local pRun = statusTab:AddParagraph({ Title = L("RunStatusTitle"), Desc = "Loading..." })
+local pEco = statusTab:AddParagraph({ Title = L("EconomyTitle"), Desc = "Loading..." })
+local pOps = statusTab:AddParagraph({ Title = L("OperationsTitle"), Desc = "Loading..." })
+local pNote = statusTab:AddParagraph({ Title = L("SystemLogTitle"), Desc = "Loading..." })
+
+local function abbreviate(n)
+    n = tonumber(n) or 0
+    local units = { "", "K", "M", "B", "T", "Qd", "Qn" }
+    local index = 1
+    while math.abs(n) >= 1000 and index < #units do
+        n = n / 1000
+        index = index + 1
+    end
+    if index == 1 then return string.format("%d", n) end
+    return string.format("%.2f%s", n, units[index])
+end
+
+task.spawn(function()
+    while alive() do
+        local plants, farmers = inventoryCounts()
+        
+        pRun:SetDesc(string.format(
+            "Phase: %s  |  Gnomes: %d/%s  |  Pets: %d/%d  |  Luck: x%.2f\n" ..
+            "Ready: %d  |  Growing: %d  |  Bag: %d/%d (Crops: %d, Gnomes: %d)",
+            STATE.phase, STATE.gnomes,
+            STATE.gnomeCap > 0 and tostring(STATE.gnomeCap) or "?",
+            STATE.pets, STATE.petCap, STATE.rollLuck,
+            STATE.ready, STATE.growing, STATE.invUsed, STATE.invMax, plants, farmers
+        ))
+
+        pEco:SetDesc(string.format(
+            "Cash: $%s  |  Earned: $%s  |  Last Sale: $%s\n" ..
+            "Income: $%s/s (Measured)  |  $%.0f/s (Config)  |  Reserved: $%s",
+            abbreviate(STATE.money), abbreviate(STATE.earned), abbreviate(STATE.lastSale),
+            abbreviate(STATE.observed), STATE.rate, abbreviate(STATE.reserve)
+        ))
+
+        pOps:SetDesc(string.format(
+            "Harvested: %d  |  Sold: %d  |  Rolls: %d  |  Bought: %d\n" ..
+            "Placed: %d  |  Swaps: %d  |  Upgrades: %d  |  Expansions: %d  |  Rebirths: %d\n" ..
+            "Last Gnome: %s  |  Weakest Placed: %s",
+            STATE.collected, STATE.sold, STATE.rolls, STATE.bought,
+            STATE.placed, STATE.swaps, STATE.upgrades, STATE.expansions, STATE.rebirths,
+            tostring(STATE.bestGnome), tostring(STATE.weakest)
+        ))
+
+        pNote:SetDesc(tostring(STATE.note or "System running smooth"))
+
+        task.wait(0.5)
+    end
+end)
+
+----------------------------------------------------------------------------
+-- 5. TRADE TAB (ระบบเทรดอัตโนมัติ)
+----------------------------------------------------------------------------
+local TradeTab = Window:AddTab({ Title = L("TabTrade") })
+local Tabs = { Trade = TradeTab }
+
+local WindUI = {
+    Notify = function(self, cfg)
+        ObsidianGlassEngine:Notify({
+            Title = cfg.Title or L("TradeTitle"),
+            Content = cfg.Content or cfg.Desc or "",
+            Duration = cfg.Duration or 3,
+        })
+    end
+}
+local Fluent = WindUI
+
+local function GetPlayerNames()
+    local names = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(names, player.Name)
+        end
+    end
+    if #names == 0 then table.insert(names, L("NoOtherPlayers")) end
+    return names
+end
+
+local function findTargetPlayer(name)
+    if not name or name == "" or name == L("NoOtherPlayers") then return nil end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Name == name or player.DisplayName == name then
+            return player
+        end
+    end
+    return nil
+end
+
+local function getCardRank(item)
+    if not item then return "-" end
+    return item:GetAttribute("Rarity") or item:GetAttribute("Rank") or item:GetAttribute("Tier") or "-"
+end
+
+local function getCardMutation(item)
+    if not item then return "-" end
+    return item:GetAttribute("Mutation") or item:GetAttribute("Mutated") or "-"
+end
+
+local TradePlayerDropdown = Tabs.Trade:AddDropdown("SelectedTradePlayer", {
+    Title = L("SelectPlayerTitle"),
+    Values = GetPlayerNames(),
+    Multi = false,
+    Default = L("NoOtherPlayers")
+})
+TradePlayerDropdown:OnChanged(function(Value)
+    getgenv().SelectedTradePlayer = tostring(Value or "")
+end)
+
+Tabs.Trade:AddButton({
+    Title = L("RefreshPlayerBtn"),
+    Callback = function()
+        TradePlayerDropdown:SetValues(GetPlayerNames())
+        Fluent:Notify({ Title = L("TradeTitle"), Content = L("RefreshPlayerSuccess"), Duration = 3 })
+    end
+})
+
+Tabs.Trade:AddButton({
+    Title = L("WarpToTargetBtn"),
+    Callback = function()
+        local targetPlayer = findTargetPlayer(getgenv().SelectedTradePlayer)
+        if targetPlayer and targetPlayer.Character then
+            local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local localHrp = LocalPlayer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if localHrp and targetHrp then
+                localHrp.CFrame = targetHrp.CFrame + Vector3.new(0, 3, 0)
+                Fluent:Notify({ Title = L("TradeTitle"), Content = L("WarpSuccess") .. targetPlayer.Name, Duration = 3 })
+            end
+        else
+            Fluent:Notify({ Title = L("ErrorTitle"), Content = L("TargetNotFound"), Duration = 3 })
+        end
+    end
+})
+
+local function isToolGnome(item)
+    if not item or not item:IsA("Tool") then return false end
+    if item:GetAttribute("FarmerName") then return true end
+    local itemType = tostring(item:GetAttribute("type") or ""):lower()
+    if itemType == "farmer" or itemType == "gnome" then return true end
+    if CfgFarmers and type(CfgFarmers) == "table" and CfgFarmers[item.Name] then return true end
+    if string.find(string.lower(item.Name), "gnome") then return true end
+    return false
+end
+
+local function GetInventoryGnomesForTrade()
+    local inventory = {}
+    local function scanFolder(folder)
+        if not folder then return end
+        for _, item in ipairs(folder:GetChildren()) do
+            if item:IsA("Tool") and isToolGnome(item) then
+                local displayName = tostring(
+                    item:GetAttribute("FarmerName")
+                    or item:GetAttribute("TemplateName")
+                    or item.Name
+                )
+                local rarityAttr = getCardRank(item)
+                local mutation = getCardMutation(item)
+                local key = displayName
+                if tostring(rarityAttr) ~= "-" then key = key .. " | " .. tostring(rarityAttr) end
+                if tostring(mutation) ~= "-" then key = key .. " | " .. tostring(mutation) end
+                inventory[key] = (inventory[key] or 0) + 1
+            end
+        end
+    end
+    pcall(function()
+        if LocalPlayer then
+            scanFolder(LocalPlayer:FindFirstChild("Backpack") or LocalPlayer.Backpack)
+            if LocalPlayer.Character then scanFolder(LocalPlayer.Character) end
+        end
+    end)
+    local list = {}
+    for key, count in pairs(inventory) do
+        table.insert(list, key .. " (x" .. tostring(count) .. ")")
+    end
+    if #list == 0 then table.insert(list, L("NoGnomesFound")) end
+    return list
+end
+
+local function GetInventoryFruitsForTrade()
+    local inventory = {}
+    local function scanFolder(folder)
+        if not folder then return end
+        for _, item in ipairs(folder:GetChildren()) do
+            if item:IsA("Tool") and not isToolGnome(item) then
+                local displayName = tostring(
+                    item:GetAttribute("PlantName")
+                    or item:GetAttribute("CardName")
+                    or item:GetAttribute("TemplateName")
+                    or item.Name
+                )
+                local rarityAttr = getCardRank(item)
+                local mutation = getCardMutation(item)
+                local key = displayName
+                if tostring(rarityAttr) ~= "-" then key = key .. " | " .. tostring(rarityAttr) end
+                if tostring(mutation) ~= "-" then key = key .. " | " .. tostring(mutation) end
+                inventory[key] = (inventory[key] or 0) + 1
+            end
+        end
+    end
+    pcall(function()
+        if LocalPlayer then
+            scanFolder(LocalPlayer:FindFirstChild("Backpack") or LocalPlayer.Backpack)
+            if LocalPlayer.Character then scanFolder(LocalPlayer.Character) end
+        end
+    end)
+    local list = {}
+    for key, count in pairs(inventory) do
+        table.insert(list, key .. " (x" .. tostring(count) .. ")")
+    end
+    if #list == 0 then table.insert(list, L("NoFruitsFound")) end
+    return list
+end
+
+local TradeGnomesDropdown = Tabs.Trade:AddDropdown("SelectedTradeGnomes", {
+    Title = L("SelectGnomesTitle"),
+    Values = GetInventoryGnomesForTrade(),
+    Multi = true,
+    Default = {}
+})
+TradeGnomesDropdown:OnChanged(function(Value)
+    getgenv().SelectedTradeGnomes = {}
+    if type(Value) == "table" then
+        for k, v in pairs(Value) do
+            if v == true or type(k) == "number" then
+                local name = (type(k) == "number") and tostring(v) or tostring(k)
+                getgenv().SelectedTradeGnomes[name] = true
+            end
+        end
+    end
+end)
+
+local TradeFruitsDropdown = Tabs.Trade:AddDropdown("SelectedTradeFruits", {
+    Title = L("SelectFruitsTitle"),
+    Values = GetInventoryFruitsForTrade(),
+    Multi = true,
+    Default = {}
+})
+TradeFruitsDropdown:OnChanged(function(Value)
+    getgenv().SelectedTradeFruits = {}
+    if type(Value) == "table" then
+        for k, v in pairs(Value) do
+            if v == true or type(k) == "number" then
+                local name = (type(k) == "number") and tostring(v) or tostring(k)
+                getgenv().SelectedTradeFruits[name] = true
+            end
+        end
+    end
+end)
+
+Tabs.Trade:AddButton({
+    Title = L("RefreshItemsBtn"),
+    Callback = function()
+        TradeGnomesDropdown:SetValues(GetInventoryGnomesForTrade())
+        TradeFruitsDropdown:SetValues(GetInventoryFruitsForTrade())
+        Fluent:Notify({ Title = L("TradeTitle"), Content = L("RefreshItemSuccess"), Duration = 3 })
+    end
+})
+
+local AutoGiftToggle = Tabs.Trade:AddToggle("AutoGiftCards", { Title = L("AutoGiftToggle"), Default = false })
+AutoGiftToggle:OnChanged(function(state)
+    getgenv().AutoGiftCards = state
+    if state then
+        task.spawn(function()
+            while getgenv().AutoGiftCards do
+                local targetPlayer = findTargetPlayer(getgenv().SelectedTradePlayer)
+                if targetPlayer and targetPlayer.Character then
+                    local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    local localChar = LocalPlayer and LocalPlayer.Character
+                    if targetHrp and localChar and localChar:FindFirstChild("Humanoid") then
+                        
+                        local function getGiftableTool()
+                            local hasGnomeSel = getgenv().SelectedTradeGnomes and next(getgenv().SelectedTradeGnomes) ~= nil
+                            local hasFruitSel = getgenv().SelectedTradeFruits and next(getgenv().SelectedTradeFruits) ~= nil
+
+                            local function isSelected(t)
+                                if not t:IsA("Tool") then return false end
+                                local isGnome = isToolGnome(t)
+
+                                if isGnome and hasGnomeSel then
+                                    local displayName = tostring(t:GetAttribute("FarmerName") or t:GetAttribute("TemplateName") or t.Name)
+                                    local key = displayName
+                                    local r = getCardRank(t)
+                                    local m = getCardMutation(t)
+                                    if tostring(r) ~= "-" then key = key .. " | " .. tostring(r) end
+                                    if tostring(m) ~= "-" then key = key .. " | " .. tostring(m) end
+                                    for sel, _ in pairs(getgenv().SelectedTradeGnomes) do
+                                        if sel:find(displayName, 1, true) or sel:find(t.Name, 1, true) or sel:find(key, 1, true) then return true end
+                                    end
+                                    return false
+                                elseif not isGnome and hasFruitSel then
+                                    local displayName = tostring(t:GetAttribute("PlantName") or t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
+                                    local key = displayName
+                                    local r = getCardRank(t)
+                                    local m = getCardMutation(t)
+                                    if tostring(r) ~= "-" then key = key .. " | " .. tostring(r) end
+                                    if tostring(m) ~= "-" then key = key .. " | " .. tostring(m) end
+                                    for sel, _ in pairs(getgenv().SelectedTradeFruits) do
+                                        if sel:find(displayName, 1, true) or sel:find(t.Name, 1, true) or sel:find(key, 1, true) then return true end
+                                    end
+                                    return false
+                                elseif not hasGnomeSel and not hasFruitSel then
+                                    return true
+                                end
+                                return false
+                            end
+
+                            local backpack = LocalPlayer and (LocalPlayer:FindFirstChild("Backpack") or LocalPlayer.Backpack)
+                            if backpack then
+                                for _, t in ipairs(backpack:GetChildren()) do
+                                    if isSelected(t) then return t end
+                                end
+                            end
+                            if localChar then
+                                for _, t in ipairs(localChar:GetChildren()) do
+                                    if isSelected(t) then return t end
+                                end
+                            end
+                            return nil
+                        end
+
+                        local tool = getGiftableTool()
+                        if tool then
+                            if tool.Parent ~= localChar then
+                                localChar.Humanoid:EquipTool(tool)
+                                task.wait(0.1)
+                            end
+                            local localHrp = localChar:FindFirstChild("HumanoidRootPart")
+                            if localHrp then localHrp.CFrame = targetHrp.CFrame + Vector3.new(0, 3, 0) end
+                            task.wait(0.1)
+
+                            local function tryFireGiftPrompts()
+                                local targetPos = targetHrp.Position
+                                local toolUid = tool:GetAttribute("uuid") or tool:GetAttribute("UUID") or tool:GetAttribute("uid") or tool:GetAttribute("UID") or tool:GetAttribute("id") or tool.Name
+
+                                -- 1. Fire RemoteEvent directly if present in Communication.Events
+                                pcall(function()
+                                    local comm = game:GetService("ReplicatedStorage"):FindFirstChild("Communication")
+                                    local events = comm and comm:FindFirstChild("Events")
+                                    if events then
+                                        for _, child in ipairs(events:GetChildren()) do
+                                            if child:IsA("RemoteEvent") then
+                                                pcall(function()
+                                                    child:FireServer(targetPlayer, toolUid)
+                                                end)
+                                            end
+                                        end
+                                    end
+                                end)
+
+                                -- 2. Fire ProximityPrompts
+                                local function checkPrompt(desc)
+                                    if not desc:IsA("ProximityPrompt") then return end
+                                    local action = string.lower(desc.ActionText or "")
+                                    local obj = string.lower(desc.ObjectText or "")
+                                    local name = string.lower(desc.Name or "")
+                                    if action:find("gift") or obj:find("gift") or name:find("gift")
+                                        or action:find("ส่ง") or action:find("trade") or action:find("แลก")
+                                        or action:find("give") or obj:find("give") then
+                                        desc.RequiresLineOfSight = false
+                                        desc.MaxActivationDistance = 99999
+                                        fireproximityprompt(desc)
+                                    end
+                                end
+                                for _, desc in ipairs(targetPlayer.Character:GetDescendants()) do
+                                    checkPrompt(desc)
+                                end
+                                for _, desc in ipairs(workspace:GetDescendants()) do
+                                    if desc:IsA("ProximityPrompt") then
+                                        local pPos
+                                        pcall(function()
+                                            if desc.Parent:IsA("BasePart") then pPos = desc.Parent.Position
+                                            elseif desc.Parent:IsA("Attachment") then pPos = desc.Parent.WorldPosition
+                                            elseif desc.Parent and desc.Parent.Parent and desc.Parent.Parent:IsA("Model") and desc.Parent.Parent.PrimaryPart then
+                                                pPos = desc.Parent.Parent.PrimaryPart.Position
+                                            end
+                                        end)
+                                        if pPos and (pPos - targetPos).Magnitude <= 20 then
+                                            checkPrompt(desc)
+                                        end
+                                    end
+                                end
+                            end
+
+                            local function autoConfirmGiftSender()
+                                for i = 1, 8 do
+                                    pcall(function()
+                                        local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                                        if playerGui then
+                                            for _, descendant in ipairs(playerGui:GetDescendants()) do
+                                                if (descendant:IsA("TextButton") or descendant:IsA("ImageButton")) and descendant.Visible then
+                                                    local btnText = ""
+                                                    if descendant:IsA("TextButton") then
+                                                        btnText = string.upper(string.match(descendant.Text or "", "^%s*(.-)%s*$") or "")
+                                                    else
+                                                        local lbl = descendant:FindFirstChildOfClass("TextLabel")
+                                                        if lbl then btnText = string.upper(string.match(lbl.Text or "", "^%s*(.-)%s*$") or "") end
+                                                    end
+
+                                                    if btnText == "YES" or btnText == "YES!" or btnText == "GIVE" or btnText == "CONFIRM" or btnText == "ตกลง" or btnText == "ส่ง" then
+                                                        local parentModal = descendant.Parent
+                                                        local isGivePrompt = false
+                                                        pcall(function()
+                                                            if parentModal then
+                                                                for _, sub in ipairs(parentModal:GetDescendants()) do
+                                                                    if sub:IsA("TextLabel") and sub.Text then
+                                                                        local txt = string.lower(sub.Text)
+                                                                        if txt:find("give") or txt:find("want to give") or txt:find("hey") or txt:find("ส่ง") then
+                                                                            isGivePrompt = true
+                                                                            break
+                                                                        end
+                                                                    end
+                                                                end
+                                                            end
+                                                        end)
+
+                                                        if isGivePrompt or btnText == "YES" then
+                                                            local fired = false
+                                                            if getconnections then
+                                                                for _, conn in pairs(getconnections(descendant.MouseButton1Click)) do conn:Fire() fired = true end
+                                                                for _, conn in pairs(getconnections(descendant.Activated)) do conn:Fire() fired = true end
+                                                            end
+                                                            if not fired then
+                                                                local vim = game:GetService("VirtualInputManager")
+                                                                local center = descendant.AbsolutePosition + (descendant.AbsoluteSize / 2)
+                                                                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+                                                                task.wait(0.05)
+                                                                vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+                                                            end
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end)
+                                    task.wait(0.1)
+                                end
+                            end
+
+                            tryFireGiftPrompts()
+                            autoConfirmGiftSender()
+                            task.wait(0.5)
+                        else
+                            task.wait(1)
+                        end
+                    end
+                end
+                task.wait(0.5)
+            end
+        end)
+    end
+end)
+
+local AutoAcceptToggle = Tabs.Trade:AddToggle("AutoAcceptTrade", { Title = L("AutoAcceptToggle"), Default = CONFIG.autoAcceptTrade or false })
+AutoAcceptToggle:OnChanged(function(state)
+    getgenv().AutoAcceptTrade = state
+    CONFIG.autoAcceptTrade = state
+    if state then
+        task.spawn(function()
+            while getgenv().AutoAcceptTrade do
+                pcall(function()
+                    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+                    if playerGui then
+                        for _, v in ipairs(playerGui:GetDescendants()) do
+                            if v:IsA("TextButton") and v.Visible and v.Text then
+                                local text = string.upper(string.match(v.Text or "", "^%s*(.-)%s*$") or "")
+                                if text == "ACCEPT" or text == "YES" or text == "รับ" or text == "ยอมรับ" or text == "ตกลง" then
+                                    local fired = false
+                                    if getconnections then
+                                        for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire() fired = true end
+                                        for _, conn in pairs(getconnections(v.Activated)) do conn:Fire() fired = true end
+                                    end
+                                    if not fired then
+                                        local vim = game:GetService("VirtualInputManager")
+                                        local center = v.AbsolutePosition + (v.AbsoluteSize / 2)
+                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
+                                        task.wait(0.1)
+                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+                task.wait(1.5)
+            end
+        end)
+    end
+end)
+----------------------------------------------------------------------------
+-- 6. TUNING & CONFIG & WEBHOOK TAB (ปรับแต่งระบบ - คำสั่งล่างสุด)
+----------------------------------------------------------------------------
+local tuneTab = Window:AddTab({ Title = L("TabTuning") })
+
+-- 1) System Tuning
+tuneTab:AddSection(L("TuningSection"))
+tuneTab:AddSlider("harvest_gap", {
+    Title = L("HarvestGapTitle"),
+    Min = 40,
+    Max = 300,
+    Default = math.floor(CONFIG.collectGap * 1000),
+    Rounding = 0,
+    Callback = function(v) CONFIG.collectGap = v / 1000 end,
+})
+tuneTab:AddSlider("sell_at", {
+    Title = L("SellAtTitle"),
+    Min = 40,
+    Max = 100,
+    Default = math.floor(CONFIG.sellAt * 100),
+    Rounding = 0,
+    Callback = function(v) CONFIG.sellAt = v / 100 end,
+})
+tuneTab:AddSlider("place_clear", {
+    Title = L("PlaceClearTitle"),
+    Min = 2,
+    Max = 8,
+    Default = math.floor(CONFIG.placeClear),
+    Rounding = 0,
+    Callback = function(v) CONFIG.placeClear = v end,
+})
+
+-- 2) Config Management (Save Config / Load Config / Auto Load)
+tuneTab:AddSection(L("ConfigSection"))
+
+local SelectedConfigName = "default"
+
+local function getConfigFilePath(name)
+    local clean = tostring(name or "default"):gsub("[%s/\\%?%%%*:%|\"<>]", "")
+    if clean == "" then clean = "default" end
+    return clean .. "_rollagnome_config.json"
+end
+
+local function getSavedConfigFiles()
+    local files = { "default" }
+    pcall(function()
+        if type(listfiles) == "function" then
+            for _, path in ipairs(listfiles("")) do
+                local filename = path:match("([^/\\]+)$")
+                if filename and filename:find("_rollagnome_config%.json$") then
+                    local cfgName = filename:gsub("_rollagnome_config%.json", "")
+                    if cfgName ~= "" and not table.find(files, cfgName) then
+                        table.insert(files, cfgName)
+                    end
+                end
+            end
+        end
+    end)
+    return files
+end
+
+local function SaveConfigFile(name)
+    pcall(function()
+        local cfgName = (name and tostring(name) ~= "") and name or SelectedConfigName
+        local filePath = getConfigFilePath(cfgName)
+        local dataToSave = {}
+        for k, v in pairs(CONFIG) do
+            if type(v) ~= "function" then
+                dataToSave[k] = v
+            end
+        end
+        local json = game:GetService("HttpService"):JSONEncode(dataToSave)
+        writefile(filePath, json)
+        ObsidianGlassEngine:Notify({
+            Title = L("ConfigSection"),
+            Content = (CurrentLang == "TH" and "บันทึก Config (" .. cfgName .. ") เรียบร้อย!" or "Config (" .. cfgName .. ") saved!"),
+            Duration = 3
+        })
+    end)
+end
+
+local function syncAllUIFromConfig()
+    pcall(function()
+        local Opts = ObsidianGlassEngine and ObsidianGlassEngine.Options
+        if not Opts then return end
+
+        if Opts["master_auto"] then Opts["master_auto"]:SetValue(CONFIG.auto == true) end
+        if Opts["auto_harvest"] then Opts["auto_harvest"]:SetValue(CONFIG.autoCollect == true) end
+        if Opts["auto_sell"] then Opts["auto_sell"]:SetValue(CONFIG.autoSell == true) end
+        if Opts["auto_place"] then Opts["auto_place"]:SetValue(CONFIG.autoPlace == true) end
+        if Opts["auto_pets"] then Opts["auto_pets"]:SetValue(CONFIG.autoPets == true) end
+        if Opts["auto_roll"] then Opts["auto_roll"]:SetValue(CONFIG.autoRoll == true) end
+        if Opts["auto_buy"] then Opts["auto_buy"]:SetValue(CONFIG.autoBuy == true) end
+        if Opts["target_buy_filter"] then Opts["target_buy_filter"]:SetValue(CONFIG.targetBuyFilterEnabled == true) end
+
+        if Opts["target_buy_gnomes"] then
+            Opts["target_buy_gnomes"]:SetValue(CONFIG.selectedTargetGnomes or {})
+        end
+        if Opts["target_buy_mutations"] then
+            Opts["target_buy_mutations"]:SetValue(CONFIG.selectedTargetMutations or {})
+        end
+
+        if Opts["buy_margin"] then Opts["buy_margin"]:SetValue(math.floor((CONFIG.buyMargin or 1) * 100)) end
+        if Opts["auto_upgrade"] then Opts["auto_upgrade"]:SetValue(CONFIG.autoUpgrade == true) end
+        if Opts["auto_expand"] then Opts["auto_expand"]:SetValue(CONFIG.autoExpand == true) end
+        if Opts["auto_free"] then Opts["auto_free"]:SetValue(CONFIG.autoFreeGnome == true) end
+        if Opts["auto_rebirth"] then Opts["auto_rebirth"]:SetValue(CONFIG.autoRebirth == true) end
+        if Opts["harvest_gap"] then Opts["harvest_gap"]:SetValue(math.floor((CONFIG.collectGap or 0.1) * 1000)) end
+        if Opts["sell_at"] then Opts["sell_at"]:SetValue(math.floor((CONFIG.sellAt or 0.8) * 100)) end
+        if Opts["place_clear"] then Opts["place_clear"]:SetValue(math.floor(CONFIG.placeClear or 4)) end
+        if Opts["auto_accept_trade"] then Opts["auto_accept_trade"]:SetValue(CONFIG.autoAcceptTrade == true) end
+    end)
+end
+
+local function LoadConfigFile(name)
+    pcall(function()
+        local cfgName = (name and tostring(name) ~= "") and name or SelectedConfigName
+        local filePath = getConfigFilePath(cfgName)
+        if isfile and isfile(filePath) then
+            local jsonStr = readfile(filePath)
+            local data = game:GetService("HttpService"):JSONDecode(jsonStr)
+            if type(data) == "table" then
+                for k, v in pairs(data) do
+                    CONFIG[k] = v
+                end
+                syncAllUIFromConfig()
+                ObsidianGlassEngine:Notify({
+                    Title = L("ConfigSection"),
+                    Content = (CurrentLang == "TH" and "โหลด Config (" .. cfgName .. ") เรียบร้อย!" or "Config (" .. cfgName .. ") loaded!"),
+                    Duration = 3
+                })
+            end
+        else
+            ObsidianGlassEngine:Notify({
+                Title = L("ConfigSection"),
+                Content = (CurrentLang == "TH" and "ไม่พบไฟล์ Config: " .. tostring(filePath) or "Config file not found: " .. tostring(filePath)),
+                Duration = 3
+            })
+        end
+    end)
+end
+
+local function DeleteConfigFile(name)
+    pcall(function()
+        local cfgName = (name and tostring(name) ~= "") and name or SelectedConfigName
+        local filePath = getConfigFilePath(cfgName)
+        if isfile and isfile(filePath) then
+            local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+            if del then del(filePath) end
+            ObsidianGlassEngine:Notify({
+                Title = L("ConfigSection"),
+                Content = (CurrentLang == "TH" and "ลบไฟล์ Config เรียบร้อย!" or "Config deleted!"),
+                Duration = 3
+            })
+        end
+    end)
+end
+
+tuneTab:AddInput("config_name_input", {
+    Title = CurrentLang == "TH" and "📝 ตั้งชื่อไฟล์ Config (Config Name)" or "📝 Config File Name",
+    Placeholder = CurrentLang == "TH" and "พิมพ์ชื่อ Config เช่น farm1..." or "Enter config name...",
+    Default = SelectedConfigName,
+    Callback = function(val)
+        if val and tostring(val) ~= "" then
+            SelectedConfigName = tostring(val)
+        end
+    end
+})
+
+local configDropdown = tuneTab:AddDropdown("config_file_dropdown", {
+    Title = CurrentLang == "TH" and "📂 เลือกไฟล์ Config ที่บันทึกไว้ (Select Saved Config)" or "📂 Select Saved Config",
+    Values = getSavedConfigFiles(),
+    Default = SelectedConfigName,
+    Callback = function(val)
+        local str = (type(val) == "table" and (val.Title or val.Name)) or tostring(val or "")
+        if str ~= "" then
+            SelectedConfigName = str
+        end
+    end
+})
+
+tuneTab:AddButton({
+    Title = CurrentLang == "TH" and "💾 บันทึก Config (Save Config)" or "💾 Save Config",
+    Callback = function()
+        SaveConfigFile(SelectedConfigName)
+        if configDropdown and configDropdown.SetValues then
+            pcall(function() configDropdown:SetValues(getSavedConfigFiles()) end)
+        end
+    end
+})
+
+tuneTab:AddButton({
+    Title = CurrentLang == "TH" and "📂 โหลด Config (Load Config)" or "📂 Load Config",
+    Callback = function()
+        LoadConfigFile(SelectedConfigName)
+    end
+})
+
+tuneTab:AddButton({
+    Title = CurrentLang == "TH" and "🗑️ ลบไฟล์ Config (Delete Config)" or "🗑️ Delete Config",
+    Callback = function()
+        DeleteConfigFile(SelectedConfigName)
+        if configDropdown and configDropdown.SetValues then
+            pcall(function() configDropdown:SetValues(getSavedConfigFiles()) end)
+        end
+    end
+})
+
+tuneTab:AddButton({
+    Title = CurrentLang == "TH" and "🔄 รีเฟรชรายการ Config (Refresh List)" or "🔄 Refresh Config List",
+    Callback = function()
+        if configDropdown and configDropdown.SetValues then
+            pcall(function() configDropdown:SetValues(getSavedConfigFiles()) end)
+        end
+    end
+})
+
+tuneTab:AddToggle("auto_load_config", {
+    Title = L("AutoLoadToggle"),
+    Default = CONFIG.autoLoadConfig or false,
+    Callback = function(state)
+        CONFIG.autoLoadConfig = state
+    end
+})
+
+-- 3) Discord Webhook
+tuneTab:AddSection(L("WebhookSection"))
+
+tuneTab:AddInput("webhook_url", {
+    Title = L("WebhookUrlTitle"),
+    Placeholder = L("WebhookUrlPlaceholder"),
+    Default = CONFIG.webhookUrl or "",
+    Callback = function(val)
+        CONFIG.webhookUrl = tostring(val or "")
+    end
+})
+
+tuneTab:AddToggle("webhook_enabled", {
+    Title = L("WebhookToggle"),
+    Default = CONFIG.webhookEnabled or false,
+    Callback = function(state)
+        CONFIG.webhookEnabled = state
+    end
+})
+
+tuneTab:AddSlider("webhook_interval", {
+    Title = L("WebhookIntervalTitle"),
+    Min = 1,
+    Max = 60,
+    Default = CONFIG.webhookInterval or 5,
+    Rounding = 0,
+    Callback = function(v)
+        CONFIG.webhookInterval = v
+    end
+})
+
+local function sendDiscordWebhookReport(isTest)
+    local url = CONFIG.webhookUrl
+    if not url or url == "" or not url:find("https://") then
+        if isTest then
+            ObsidianGlassEngine:Notify({ Title = "Webhook Error", Content = CurrentLang == "TH" and "กรุณากรอก Discord Webhook URL ให้ถูกต้อง" or "Invalid Webhook URL!", Duration = 3 })
+        end
+        return
+    end
+
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    if not requestFunc then
+        if isTest then
+            ObsidianGlassEngine:Notify({ Title = "Webhook Error", Content = "Executor ไม่รองรับ HTTP Request", Duration = 3 })
+        end
+        return
+    end
+
+    pcall(function()
+        local playerName = LocalPlayer and LocalPlayer.Name or "Unknown"
+        local plants, farmers = inventoryCounts()
+        local embed = {
+            title = "🤖 Roll A Gnome - Status Report",
+            color = 65280,
+            fields = {
+                { name = "👤 Player", value = playerName, inline = true },
+                { name = "💰 Cash", value = "$" .. abbreviate(STATE.money), inline = true },
+                { name = "📈 Income", value = "$" .. abbreviate(STATE.observed) .. "/s", inline = true },
+                { name = "🎅 Gnomes Placed", value = tostring(STATE.gnomes) .. "/" .. tostring(STATE.gnomeCap > 0 and STATE.gnomeCap or "?"), inline = true },
+                { name = "🌾 Harvested Crops", value = tostring(STATE.collected), inline = true },
+                { name = "🎲 Rolls / Bought", value = tostring(STATE.rolls) .. " / " .. tostring(STATE.bought), inline = true },
+            },
+            footer = { text = "PayomboyZ Hub • " .. os.date("%X") }
+        }
+
+        local payload = game:GetService("HttpService"):JSONEncode({
+            username = "PayomboyZ Gnome Bot",
+            avatar_url = "https://i.imgur.com/8N4M9e7.png",
+            embeds = { embed }
+        })
+
+        requestFunc({
+            Url = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = payload
+        })
+
+        if isTest then
+            ObsidianGlassEngine:Notify({ Title = "Webhook Success", Content = CurrentLang == "TH" and "ส่งรายงานเข้า Discord เรียบร้อย!" or "Webhook sent successfully!", Duration = 3 })
+        end
+    end)
+end
+
+tuneTab:AddButton({
+    Title = L("TestWebhookBtn"),
+    Callback = function()
+        sendDiscordWebhookReport(true)
+    end
+})
+
+-- Background Webhook Sender Loop
+task.spawn(function()
+    while alive() do
+        task.wait(60)
+        if CONFIG.webhookEnabled and CONFIG.webhookUrl and CONFIG.webhookUrl ~= "" then
+            local interval = math.max(1, tonumber(CONFIG.webhookInterval) or 5)
+            task.wait((interval * 60) - 60)
+            if CONFIG.webhookEnabled then
+                sendDiscordWebhookReport(false)
+            end
+        end
+    end
+end)
+
+
+_G.__ROLLGNOME_DBG = {
+    CONFIG = CONFIG, STATE = STATE,
+    Net = Net, Replication = Replication,
+    data = data, money = money, inventoryCounts = inventoryCounts,
+    plot = plot, occupiedPoints = occupiedPoints, placementSpots = placementSpots,
+    collectReady = collectReady, sellPlants = sellPlants,
+    rollOnce = rollOnce, buyFromPodium = buyFromPodium, placeGnomes = placeGnomes,
+    buyTreeNode = buyTreeNode, expandPlot = expandPlot,
+    expansionSquares = expansionSquares, placePets = placePets,
+    heldPetTools = heldPetTools, placedPets = placedPets, maxPets = maxPets,
+    plotRate = plotRate, observedRate = observedRate, income = income,
+    claimFreeGnome = claimFreeGnome, rebirthOnce = rebirthOnce,
+    gnomeRate = gnomeRate, gnomePrice = gnomePrice, weakestPlaced = weakestPlaced,
+    gardenFull = gardenFull, heldGnomeTools = heldGnomeTools, seatTool = seatTool,
+    placedCount = placedCount, placedFarmers = placedFarmers,
+    previewModels = previewModels, census = census,
+    fire = fire, invoke = invoke,
+}
+
+pcall(function() syncAllUIFromConfig() end)
+print("[rollgnome] running with Obsidian Glassmorphic 2 UI - Key [K] toggles panel")
