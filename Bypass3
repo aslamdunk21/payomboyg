@@ -1,218 +1,482 @@
--- ─── Crazy Hub AC Bypass (Standalone) ───
--- เปิดแค่ Anti-Cheat โดยไม่ง้อ UI ของ Crazy Hub
--- ใช้งาน: loadstring(game:HttpGet("url"))() หรือ paste ลง executor
+-- ─── Crazy Hub AC Bypass — Full Multi-Layer ───
+-- Bypass ทุกชั้นของ Crazy Hub AC
+-- วางโค้ดนี้ก่อนโหลด Crazy Hub หรือใช้แทน AC เดิมของ Hub
 
 local ACBypass = {}
-ACBypass.__index = ACBypass
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
 
--- Configuration
+-- ─── Config ───
 local Config = {
     Debug = false,
-    BlockPatterns = {
-        -- Anti-cheat remote patterns (case-insensitive matching)
-        "anticheat", "anti_cheat", "detection", "detect",
-        "integrity", "verify", "verification", "check",
-        "report", "suspicious", "exploit", "bypass",
-        "security", "monitor", "log", "flag",
-        "position", "speed", "teleport", "correction",
-        "physics", "raycast", "hitbox", "distance",
-        -- Common Roblox AC remotes
-        "anticheat", "serverinfo", "clientcheck",
-        "validate", "sanity", "heartbeat_check"
-    },
-    -- Additional safety: block by remote type
-    BlockRemoteEvents = true,
-    BlockRemoteFunctions = false, -- usually safe to leave false
-    -- Logging
-    LogBlocked = false,
-    LogFormat = "[AC-Bypass] Blocked %s:%s"
+    -- Layer 1: Namecall blocking
+    BlockNamecall = true,
+    -- Layer 2: Character integrity
+    ProtectCharacter = true,
+    -- Layer 3: Position anti-correction
+    AntiCorrection = true,
+    -- Layer 4: Speed validation bypass
+    AntiSpeedCheck = true,
+    -- Layer 5: Script detection
+    HideScripts = true,
+    -- Layer 6: Remote blocking (extended)
+    ExtendedBlock = true
 }
 
--- Blocked counter for debug
 local blockedCount = 0
-local blockedRemotes = {}
+local bypassedCount = 0
+local activeLayers = {}
 
--- Check if a remote name should be blocked
-local function shouldBlock(remoteName)
-    if not remoteName or type(remoteName) ~= "string" then
-        return false
-    end
-    local lowerName = remoteName:lower()
-    for _, pattern in ipairs(Config.BlockPatterns) do
-        if lowerName:find(pattern:lower(), 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
--- Main bypass function
-function ACBypass:Enable()
-    if self._enabled then
-        warn("[AC-Bypass] Already enabled!")
-        return false
-    end
-
-    -- Check if hookmetamethod is available
+-- ─── Layer 1: Namecall Hook (Extended) ───
+local function setupNamecallBypass()
     if type(hookmetamethod) ~= "function" then
-        warn("[AC-Bypass] hookmetamethod not found — check your executor")
+        warn("[AC] hookmetamethod not available")
         return false
     end
 
-    if type(getnamecallmethod) ~= "function" then
-        warn("[AC-Bypass] getnamecallmethod not found")
-        return false
-    end
-
-    -- Store original
     local originalNamecall = nil
+    local blockedPatterns = {
+        -- Anti-cheat
+        "anticheat", "anti_cheat", "anti-cheat", "ac_", "_ac",
+        "detection", "detect", "integrity", "verify", "verification",
+        "check", "report", "suspicious", "exploit", "bypass",
+        "security", "monitor", "log", "flag", "alert",
+        -- Position/Physics
+        "position", "physics", "raycast", "hitbox", "distance",
+        "correction", "validate", "sanity", "heartbeat",
+        -- Crazy Hub specific
+        "crazy", "hub", "ch_", "hub_", "guard",
+        -- Common Roblox AC
+        "serverinfo", "clientcheck", "clientcheck", "anticheatv2",
+        -- Additional patterns from Crazy Hub file
+        "corridor", "gameplay", "zone", "area", "egg",
+        "steal", "carry", "placement", "treadmill",
+        -- Teleport detection
+        "teleport", "tp", "warp", "blink",
+        -- Speed
+        "speed", "walkspeed", "velocity", "movement"
+    }
 
-    -- Create the hook closure
-    local function hookClosure(self_obj, ...)
+    local function shouldBlock(remoteName)
+        if not remoteName then return false end
+        local lower = tostring(remoteName):lower()
+        for _, pattern in ipairs(blockedPatterns) do
+            if lower:find(pattern:lower(), 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function hookFunc(self, ...)
         local args = { ... }
         local method = nil
         pcall(function() method = getnamecallmethod() end)
 
-        -- Only intercept FireServer/InvokeServer
         if method == "FireServer" or method == "InvokeServer" then
-            -- Get remote name safely
             local remoteName = nil
-            pcall(function() remoteName = self_obj.Name end)
+            pcall(function() remoteName = self.Name end)
+            local parentName = nil
+            pcall(function() parentName = self.Parent.Name end)
 
             if remoteName and shouldBlock(remoteName) then
                 blockedCount += 1
-                blockedRemotes[remoteName] = (blockedRemotes[remoteName] or 0) + 1
-
-                if Config.LogBlocked then
-                    print(Config.LogFormat:format(
-                        method,
-                        remoteName
-                    ))
-                end
-
                 if Config.Debug then
                     print(string.format(
-                        "[AC-Bypass] #%d blocked: %s:%s (total: %d)",
-                        blockedCount,
-                        method,
-                        remoteName,
-                        blockedRemotes[remoteName]
+                        "[AC-L1] Blocked FireServer/InvokeServer: %s (parent: %s)",
+                        remoteName, parentName or "?"
                     ))
                 end
+                return nil
+            end
 
-                return nil -- Block the call
+            -- Block by parent folder name too
+            if parentName and shouldBlock(parentName) then
+                blockedCount += 1
+                if Config.Debug then
+                    print(string.format(
+                        "[AC-L1] Blocked by parent: %s > %s",
+                        parentName, remoteName
+                    ))
+                end
+                return nil
             end
         end
 
-        -- Pass through legitimate calls
         if type(originalNamecall) == "function" then
-            return originalNamecall(self_obj, unpack(args))
+            return originalNamecall(self, unpack(args))
         end
         return nil
     end
 
-    -- Wrap in newcclosure if available (better anti-detection)
-    local closure = hookClosure
+    -- Wrap in newcclosure
+    local closure = hookFunc
     if type(newcclosure) == "function" then
-        local ok, result = pcall(newcclosure, hookClosure)
-        if ok and type(result) == "function" then
-            closure = result
-        end
+        local ok, result = pcall(newcclosure, hookFunc)
+        if ok then closure = result end
     end
 
-    -- Apply the hook
     local ok = pcall(function()
         originalNamecall = hookmetamethod(game, "__namecall", closure)
     end)
 
-    if not ok then
-        warn("[AC-Bypass] Failed to apply hookmetamethod")
-        return false
-    end
-
-    self._enabled = true
-    self._originalNamecall = originalNamecall
-
-    print(string.format(
-        "[AC-Bypass] Enabled successfully — blocking %d patterns",
-        #Config.BlockPatterns
-    ))
-    return true
-end
-
--- Disable the bypass
-function ACBypass:Disable()
-    if not self._enabled then
-        return false
-    end
-
-    -- Remove hook by restoring original
-    if type(self._originalNamecall) == "function" then
-        pcall(function()
-            hookmetamethod(game, "__namecall", self._originalNamecall)
-        end)
-    end
-
-    self._enabled = false
-    print("[AC-Bypass] Disabled")
-    return true
-end
-
--- Get statistics
-function ACBypass:GetStats()
-    return {
-        Enabled = self._enabled or false,
-        TotalBlocked = blockedCount,
-        UniqueRemotes = #blockedRemotes,
-        BlockedDetails = blockedRemotes
-    }
-end
-
--- Add custom pattern to block
-function ACBypass:AddPattern(pattern)
-    if type(pattern) == "string" and not table.find(Config.BlockPatterns, pattern) then
-        table.insert(Config.BlockPatterns, pattern)
-        print(string.format("[AC-Bypass] Added pattern: '%s'", pattern))
+    if ok then
+        activeLayers["Namecall"] = true
+        print("[AC-L1] Namecall bypass enabled")
         return true
     end
     return false
 end
 
--- Remove pattern
-function ACBypass:RemovePattern(pattern)
-    for i, p in ipairs(Config.BlockPatterns) do
-        if p:lower() == pattern:lower() then
-            table.remove(Config.BlockPatterns, i)
-            print(string.format("[AC-Bypass] Removed pattern: '%s'", pattern))
-            return true
+-- ─── Layer 2: Character Integrity Protection ───
+local function setupCharacterProtection()
+    local function protectChar(char)
+        if not char then return end
+
+        -- Remove/Disable AC-related scripts
+        local acScripts = {}
+        for _, child in ipairs(char:GetChildren()) do
+            local name = child.Name:lower()
+            if name:find("anticheat") or name:find("integrity")
+                or name:find("detect") or name:find("verify")
+                or name:find("guard") or name:find("check")
+                or name:find("monitor") or name:find("security")
+            then
+                table.insert(acScripts, child)
+            end
+        end
+
+        for _, script in ipairs(acScripts) do
+            pcall(function() script:Destroy() end)
+            if Config.Debug then
+                print("[AC-L2] Removed script: " .. script.Name)
+            end
+        end
+
+        -- Disable ragdoll states (often used by AC)
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            pcall(function()
+                humanoid.BreakJointsOnDeath = false
+                humanoid.RequiresNeck = false
+                -- Disable falling/ragdoll
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStand, false)
+            end)
+
+            -- Keep health max
+            if Config.ProtectCharacter then
+                humanoid.Health = humanoid.MaxHealth
+            end
+        end
+
+        bypassedCount += 1
+    end
+
+    -- Protect current character
+    if LocalPlayer.Character then
+        protectChar(LocalPlayer.Character)
+    end
+
+    -- Protect future characters
+    local conn
+    conn = LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.5) -- Wait for character to load
+        protectChar(char)
+        activeLayers["Character"] = true
+        if Config.Debug then
+            print("[AC-L2] Character protection applied")
+        end
+    end)
+
+    activeLayers["Character"] = true
+    print("[AC-L2] Character protection enabled")
+    return true
+end
+
+-- ─── Layer 3: Anti-Correction (Position) ───
+local function setupAntiCorrection()
+    local Player = Players.LocalPlayer
+    local character = Player.Character
+    if not character then return false end
+
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local lastValidPosition = hrp.Position
+    local correctionDetected = 0
+    local connection
+
+    connection = RunService.Heartbeat:Connect(function()
+        if not hrp or not hrp.Parent then
+            character = Player.Character
+            if character then
+                hrp = character:FindFirstChild("HumanoidRootPart")
+            end
+            return
+        end
+
+        local currentPos = hrp.Position
+        local delta = (currentPos - lastValidPosition).Magnitude
+
+        -- Detect server correction (sudden position change)
+        if delta > 5 and delta < 200 then
+            correctionDetected += 1
+
+            -- Counteract by restoring position
+            if Config.AntiCorrection then
+                hrp.CFrame = CFrame.new(lastValidPosition)
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end
+
+            if Config.Debug and correctionDetected % 10 == 0 then
+                print(string.format(
+                    "[AC-L3] Correction detected #%d (delta: %.1f studs)",
+                    correctionDetected, delta
+                ))
+            end
+        end
+
+        lastValidPosition = currentPos
+    end)
+
+    activeLayers["AntiCorrection"] = true
+    print("[AC-L3] Anti-correction enabled")
+    return true
+end
+
+-- ─── Layer 4: Speed Validation Bypass ───
+local function setupSpeedBypass()
+    local function updateSpeed()
+        local character = Players.LocalPlayer.Character
+        if not character then return end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+
+        -- Set high walkspeed to bypass speed checks
+        -- (Some ACs check if speed is "reasonable")
+        if Config.AntiSpeedCheck then
+            humanoid.WalkSpeed = math.max(humanoid.WalkSpeed, 200)
+        end
+
+        -- Disable jump power (prevents jump detection)
+        humanoid.JumpPower = 0
+        humanoid.UseJumpPower = false
+    end
+
+    -- Run periodically
+    local conn
+    conn = RunService.Heartbeat:Connect(updateSpeed)
+
+    -- Also on CharacterAdded
+    Players.LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.3)
+        updateSpeed()
+    end)
+
+    updateSpeed()
+    activeLayers["Speed"] = true
+    print("[AC-L4] Speed bypass enabled")
+    return true
+end
+
+-- ─── Layer 5: Script Detection Hiding ───
+local function setupScriptHiding()
+    -- Hide from getscripts (basic)
+    if type(getscripts) == "function" then
+        -- Some executors allow hiding
+        pcall(function()
+            if type(identifyexecutor) == "function" then
+                local executor = identifyexecutor()
+                if executor == "Synapse" or executor == "ScriptWare" then
+                    -- These have built-in hiding
+                end
+            end
+        end)
+    end
+
+    -- Remove common detection scripts from PlayerGui/CoreGui
+    local function cleanGui()
+        local guiServices = {
+            game:GetService("CoreGui"),
+            game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        }
+
+        for _, gui in ipairs(guiServices) do
+            if gui then
+                for _, child in ipairs(gui:GetChildren()) do
+                    local name = child.Name:lower()
+                    if name:find("anticheat") or name:find("detection")
+                        or name:find("integrity") or name:find("report")
+                        or name:find("crazy") or name:find("hub")
+                    then
+                        pcall(function() child:Destroy() end)
+                        if Config.Debug then
+                            print("[AC-L5] Cleaned GUI: " .. child.Name)
+                        end
+                    end
+                end
+            end
         end
     end
-    return false
+
+    -- Run cleanup periodically
+    task.spawn(function()
+        while true do
+            cleanGui()
+            task.wait(5)
+        end
+    end)
+
+    activeLayers["ScriptHide"] = true
+    print("[AC-L5] Script hiding enabled")
+    return true
 end
 
--- Quick one-liner enable
-local function EnableAC()
-    return ACBypass:Enable()
+-- ─── Layer 6: Extended Remote Blocking ───
+local function setupExtendedBlocking()
+    -- Block specific known AC remotes by path
+    local acRemotePaths = {
+        -- Crazy Hub specific (from the file analysis)
+        "ReplicatedStorage.Network.ClientCharacter: CorrectionStarted",
+        "ReplicatedStorage.Network.ClientCharacter: IntegrityViolation",
+        "ReplicatedStorage.Network.ClientCharacter: IntegrityHeartbeat",
+        -- Generic paths
+        "ReplicatedStorage.AntiCheat",
+        "ReplicatedStorage.Security",
+        "ReplicatedStorage.Detection",
+        "Players.LocalPlayer.PlayerScripts.AntiCheat",
+    }
+
+    for _, path in ipairs(acRemotePaths) do
+        local ok, obj = pcall(function()
+            local parts = path:split(".")
+            local current = game
+            for _, part in ipairs(parts) do
+                if part == "Players" then
+                    current = game:GetService("Players")
+                elseif part == "LocalPlayer" then
+                    current = Players.LocalPlayer
+                elseif part == "ReplicatedStorage" then
+                    current = game:GetService("ReplicatedStorage")
+                else
+                    current = current:FindFirstChild(part)
+                end
+                if not current then return nil end
+            end
+            return current
+        end)
+
+        if ok and obj then
+            -- Disconnect any connections
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                if Config.ExtendedBlock then
+                    pcall(function() obj:Destroy() end)
+                    if Config.Debug then
+                        print("[AC-L6] Destroyed: " .. path)
+                    end
+                end
+            end
+        end
+    end
+
+    activeLayers["Extended"] = true
+    print("[AC-L6] Extended blocking enabled")
+    return true
 end
 
--- Quick stats
+-- ─── Main Enable Function ───
+function ACBypass:Enable(layers)
+    layers = layers or {"all"}
+
+    local function shouldRun(layerName)
+        if layers[1] == "all" then return true end
+        return table.find(layers, layerName) ~= nil
+    end
+
+    print("[AC] Starting Crazy Hub AC Bypass...")
+    print("[AC] =================================")
+
+    if shouldRun("namecall") or shouldRun("all") then
+        setupNamecallBypass()
+    end
+
+    if shouldRun("character") or shouldRun("all") then
+        setupCharacterProtection()
+    end
+
+    if shouldRun("correction") or shouldRun("all") then
+        setupAntiCorrection()
+    end
+
+    if shouldRun("speed") or shouldRun("all") then
+        setupSpeedBypass()
+    end
+
+    if shouldRun("hide") or shouldRun("all") then
+        setupScriptHiding()
+    end
+
+    if shouldRun("extended") or shouldRun("all") then
+        setupExtendedBlocking()
+    end
+
+    print("[AC] =================================")
+    print("[AC] Active layers: " .. table.concat(
+        (function()
+            local t = {}
+            for k, v in pairs(activeLayers) do
+                if v then table.insert(t, k) end
+            end
+            return t
+        end)(), ", "
+    ))
+    print("[AC] Bypass complete!")
+
+    return true
+end
+
+-- ─── Stats Function ───
+function ACBypass:GetStats()
+    return {
+        Blocked = blockedCount,
+        Bypassed = bypassedCount,
+        ActiveLayers = activeLayers
+    }
+end
+
+-- ─── Quick Commands ───
+local function EnableAll()
+    ACBypass:Enable({"all"})
+end
+
+local function EnableLayer(layer)
+    ACBypass:Enable({layer})
+end
+
 local function ACStats()
     local s = ACBypass:GetStats()
     print(string.format(
-        "AC Bypass: %s | Blocked: %d | Unique: %d",
-        s.Enabled and "ON" or "OFF",
-        s.TotalBlocked,
-        s.UniqueRemotes
+        "[AC Stats] Blocked: %d | Bypassed: %d | Layers: %s",
+        s.Blocked, s.Bypassed,
+        table.concat(
+            (function()
+                local t = {}
+                for k, v in pairs(s.ActiveLayers) do
+                    if v then table.insert(t, k) end
+                end
+                return #t > 0 and t or {"none"}
+            end)(), ", "
+        )
     ))
-    if s.UniqueRemotes > 0 and Config.Debug then
-        print("Blocked remotes:")
-        for name, count in pairs(s.BlockedDetails) do
-            print(string.format("  %s: %d times", name, count))
-        end
-    end
 end
 
--- Auto-execute on load (optional — comment out if you want manual control)
--- EnableAC()
+-- ─── Auto-execute (optional) ───
+-- EnableAll()
 
 return ACBypass
