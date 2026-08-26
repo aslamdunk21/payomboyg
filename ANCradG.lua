@@ -4248,6 +4248,21 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
+    if mutation == "" or mutation == "Normal" or mutation == "nil" then
+        for _, desc in ipairs(model:GetDescendants()) do
+            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text and desc.Text ~= "" then
+                local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
+                for _, mName in ipairs(MutationsList or {"Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy", "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin"}) do
+                    if mName ~= "Normal" and string.find(cl, string.lower(mName), 1, true) then
+                        mutation = mName
+                        break
+                    end
+                end
+                if mutation ~= "" and mutation ~= "Normal" and mutation ~= "nil" then break end
+            end
+        end
+    end
+
     if rarity == "" then
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
@@ -4300,8 +4315,33 @@ local function instantBuyLoop()
 
         local cardRarity, cardMutation = getCardModelRarityAndMutation(model)
 
-        local matchRarity = (next(getgenv().SelectedRarities) == nil) or (cardRarity ~= "" and getgenv().SelectedRarities[string.lower(cardRarity)] == true)
-        local matchMutation = (next(getgenv().SelectedMutations) == nil) or (cardMutation ~= "" and getgenv().SelectedMutations[string.lower(cardMutation)] == true)
+        local matchRarity = false
+        if next(getgenv().SelectedRarities) == nil then
+            matchRarity = true
+        else
+            local cleanRar = string.lower(string.gsub(tostring(cardRarity), "<[^>]+>", ""))
+            for selRar, _ in pairs(getgenv().SelectedRarities) do
+                local selClean = string.lower(tostring(selRar))
+                if string.find(cleanRar, selClean, 1, true) or string.find(selClean, cleanRar, 1, true) then
+                    matchRarity = true
+                    break
+                end
+            end
+        end
+
+        local matchMutation = false
+        if next(getgenv().SelectedMutations) == nil then
+            matchMutation = true
+        else
+            local cleanMut = string.lower(string.gsub(tostring(cardMutation), "<[^>]+>", ""))
+            for selMut, _ in pairs(getgenv().SelectedMutations) do
+                local selClean = string.lower(tostring(selMut))
+                if string.find(cleanMut, selClean, 1, true) or string.find(selClean, cleanMut, 1, true) then
+                    matchMutation = true
+                    break
+                end
+            end
+        end
 
         if next(getgenv().SelectedRarities) == nil and next(getgenv().SelectedMutations) == nil then
             matchRarity = true
@@ -5875,6 +5915,279 @@ AutoUpgradeToggle:OnChanged(function(state)
     end
 end)
 
+-- Helper to check if a model/prompt is a Raid Card, Boss Card, Artifact, Album, Pack, Ticket, or non-unit object
+local function isSpecialNonUnitItem(model, promptText)
+    if not model then return true end
+
+    if model:GetAttribute("BoxValue") ~= nil 
+        or model:GetAttribute("IsPack") == true 
+        or model:GetAttribute("PackName") ~= nil
+        or model:GetAttribute("IsBossCard") == true
+        or model:GetAttribute("IsBossSlot") == true
+        or model:GetAttribute("IsRaidCard") == true
+        or model:GetAttribute("IsTitanCard") == true
+        or model:GetAttribute("IsArtifact") == true
+        or model:GetAttribute("IsArtifactSlot") == true
+        or model:GetAttribute("ArtifactName") ~= nil
+        or model:GetAttribute("IsAlbum") == true
+        or model:GetAttribute("IsAlbumSlot") == true
+        or model:GetAttribute("AlbumName") ~= nil
+    then
+        return true
+    end
+
+    local modelName = string.upper(model.Name or "")
+    local cardNameAttr = string.upper(tostring(model:GetAttribute("CardName") or model:GetAttribute("TemplateName") or model:GetAttribute("Name") or ""))
+    local promptUpper = string.upper(promptText or "")
+
+    local nonUnitKeywords = {
+        "RAID", "BOSS", "TITAN", "EVENT", "PASS", "TICKET", "KEY",
+        "PACK", "BOX", "CHEST", "BAG", "CONVEYOR",
+        "ARTIFACT", "ARTIFACTS", "ARTIFACTSLOT", "BOSSSLOT", "BOSSCARD",
+        "ALBUM", "ALBUMS", "ALBUMSLOT", "OPEN ALBUM",
+        "เรด", "บอส", "ไททัน", "แพ็ค", "แพ็ก", "กล่อง", "ตั๋ว", "บัตร", "กุญแจ", "ถุง", "อีเวนต์", "กิจกรรม", "อาร์ติแฟกต์", "อาติแฟกต์", "อัลบั้ม", "สมุดภาพ"
+    }
+
+    for _, kw in ipairs(nonUnitKeywords) do
+        if string.find(modelName, kw) or string.find(cardNameAttr, kw) or string.find(promptUpper, kw) then
+            return true
+        end
+    end
+
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+            local txtUpper = string.upper(desc.Text or "")
+            for _, kw in ipairs(nonUnitKeywords) do
+                if string.find(txtUpper, kw) then
+                    return true
+                end
+            end
+        elseif desc:IsA("ProximityPrompt") then
+            local promptTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or ""))
+            for _, kw in ipairs(nonUnitKeywords) do
+                if string.find(promptTxt, kw) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+-- Helper to check a card's current level (0..50) safely from its model
+local function getCardLevel(model)
+    if not model then return 50 end
+
+    -- 1. Check Attributes on model directly
+    local lvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel") or model:GetAttribute("Lvl")
+    if lvl and tonumber(lvl) then 
+        return tonumber(lvl) 
+    end
+
+    if model:GetAttribute("IsMax") == true or model:GetAttribute("MaxLevel") == true then
+        return 50
+    end
+
+    -- 2. Scan Text objects ONLY within this specific card model (do NOT scan parent plot folder!)
+    for _, desc in ipairs(model:GetDescendants()) do
+        if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text and desc.Text ~= "" then
+            local txtUpper = string.upper(desc.Text)
+            
+            -- Check for MAX indicator on this card
+            if string.find(txtUpper, "MAX") 
+                or string.find(txtUpper, "LEVEL 50") 
+                or string.find(txtUpper, "LV.50") 
+                or string.find(txtUpper, "LVL 50") 
+                or string.find(txtUpper, "LV 50") 
+                or string.find(txtUpper, "50/50") 
+            then
+                return 50
+            end
+
+            -- Parse numerical level (e.g., "Level 11", "Lv: 12", "Lvl 35")
+            local lvlNum = string.match(txtUpper, "LEVEL%s*:%s*(%d+)")
+                        or string.match(txtUpper, "LEVEL%s*(%d+)")
+                        or string.match(txtUpper, "LVL%s*:%s*(%d+)") 
+                        or string.match(txtUpper, "LV%s*:%s*(%d+)")
+                        or string.match(txtUpper, "LVL%s*(%d+)")
+                        or string.match(txtUpper, "LV%s*(%d+)")
+                        or string.match(txtUpper, "(%d+)%s*/%s*50")
+            if lvlNum and tonumber(lvlNum) then 
+                return tonumber(lvlNum) 
+            end
+        end
+    end
+
+    return 0
+end
+
+-- Helper to scan plot, exclude artifacts/bosses, and resolve exact SlotIndexes (using Attributes + Spatial Order)
+local function resolvePlotCardsWithSlots(plotFolder)
+    if not plotFolder then return {} end
+
+    local plotCFrame = CFrame.new()
+    if plotFolder:IsA("Model") and plotFolder.PrimaryPart then
+        plotCFrame = plotFolder.PrimaryPart.CFrame
+    else
+        local basePart = plotFolder:FindFirstChildWhichIsA("BasePart", true)
+        if basePart then plotCFrame = basePart.CFrame end
+    end
+
+    local validCards = {}
+    local processed = {}
+
+    for _, desc in ipairs(plotFolder:GetDescendants()) do
+        if desc:IsA("Model") and desc ~= plotFolder and desc.Name ~= "SellPart" and not desc:FindFirstChildOfClass("Humanoid") then
+            if not processed[desc] and not isSpecialNonUnitItem(desc) then
+                local hasPrompt = desc:FindFirstChildWhichIsA("ProximityPrompt", true) or desc:FindFirstChildWhichIsA("ClickDetector", true)
+                local hasVisual = desc:FindFirstChildWhichIsA("BasePart", true)
+                
+                if (hasPrompt or hasVisual) then
+                    processed[desc] = true
+
+                    local pos
+                    if desc.PrimaryPart then pos = desc.PrimaryPart.Position
+                    elseif hasVisual then pos = hasVisual.Position end
+
+                    if pos then
+                        local slotAttr = desc:GetAttribute("SlotIndex") 
+                                      or desc:GetAttribute("Slot") 
+                                      or desc:GetAttribute("Index")
+                                      or (desc.Parent and desc.Parent:GetAttribute("SlotIndex"))
+                                      or (desc.Parent and desc.Parent:GetAttribute("Slot"))
+
+                        local slotFromNum = nil
+                        if not slotAttr then
+                            local numStr = string.match(desc.Name, "%d+") or (desc.Parent and string.match(desc.Parent.Name, "%d+"))
+                            if numStr then slotFromNum = tonumber(numStr) end
+                        end
+
+                        local relPos = plotCFrame:PointToObjectSpace(pos)
+
+                        table.insert(validCards, {
+                            model = desc,
+                            pos = pos,
+                            relX = relPos.X,
+                            relZ = relPos.Z,
+                            explicitSlot = tonumber(slotAttr) or slotFromNum,
+                            interact = desc:FindFirstChildWhichIsA("ProximityPrompt", true) or desc:FindFirstChildWhichIsA("ClickDetector", true)
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    -- Sort cards: prioritize explicit slot attributes if available; otherwise sort spatially by relative X coordinate (left-to-right)
+    table.sort(validCards, function(a, b)
+        if a.explicitSlot and b.explicitSlot then
+            return a.explicitSlot < b.explicitSlot
+        elseif a.explicitSlot then
+            return true
+        elseif b.explicitSlot then
+            return false
+        else
+            return a.relX < b.relX
+        end
+    end)
+
+    -- Assign final slot indices 1..N
+    for idx, item in ipairs(validCards) do
+        if not item.explicitSlot or item.explicitSlot <= 0 then
+            item.slot = idx
+        else
+            item.slot = item.explicitSlot
+        end
+    end
+
+    return validCards
+end
+
+Tabs.Manage:AddSection("🎴 อัปเกรดการ์ดบนฐานอัตโนมัติ (Auto Upgrade Cards)")
+
+Tabs.Manage:AddButton({
+    Title = "🔍 สแกนแสดง Slot การ์ดบนฐาน (Print Slot Telemetry)",
+    Description = "สแกนหาตำแหน่งการ์ดและ SlotIndex บนฐานปัจจุบัน (ข้าม Artifact & Boss) และพิมพ์รายงานใน Console (กด F9)",
+    Callback = function()
+        local plotFolder = findPlayerPlot()
+        if not plotFolder then
+            Window:Notify({ Title = "Plot Error", Content = "ไม่พบ Plot ของคุณในขณะนี้", Duration = 3 })
+            return
+        end
+        local cards = resolvePlotCardsWithSlots(plotFolder)
+        print("=== [PLOT CARD SLOT TELEMETRY SCAN] ===")
+        print("พบการ์ดบนฐานทั้งหมด:", #cards, "ใบ (ไม่รวม Artifact & Boss)")
+        for _, card in ipairs(cards) do
+            local lvl = getCardLevel(card.model)
+            print(string.format("Slot %d -> Model: %s | Level: %s | Pos: (%.1f, %.1f, %.1f)", card.slot, card.model.Name, tostring(lvl), card.pos.X, card.pos.Y, card.pos.Z))
+        end
+        Window:Notify({ Title = "สแกนสำเร็จ", Content = string.format("พบการ์ด %d ใบบนฐาน! ดูรายละเอียด Slot ได้ในกด F9 (Console)", #cards), Duration = 4 })
+    end
+})
+
+local AutoUpgradeCardsToggle = Tabs.Manage:AddToggle("AutoUpgradeCardLevel", { 
+    Title = "อัปเกรดการ์ดบนฐานเป็น Lv.50 อัตโนมัติ", 
+    Description = "สแกนหาการ์ดบนฐาน (Slot 1-30) ที่เลเวลยังไม่ถึง 50 แล้วทำการยิงคำสั่งอัปเกรดจนเต็ม (ข้าม Artifact และ Boss Slot)", 
+    Default = false 
+})
+
+AutoUpgradeCardsToggle:OnChanged(function(state)
+    getgenv().AutoUpgradeCardLevel = state
+    if state then
+        task.spawn(function()
+            local CardSlotRE = game:GetService("ReplicatedStorage"):WaitForChild("CardSlotRE", 5)
+            if not CardSlotRE then return end
+
+            local function isOtherSystemBusy()
+                if getgenv().AutoReroll or getgenv().AutoRankReroll then return true end
+                if getgenv().InventoryBalancing then return true end
+                if getgenv().IsRaidActive or getgenv().IsTowerActive then return true end
+                if getgenv().AutoSellBox then return true end
+                return false
+            end
+
+            while getgenv().AutoUpgradeCardLevel do
+                pcall(function()
+                    if isOtherSystemBusy() then
+                        task.wait(2)
+                        return
+                    end
+
+                    local plotFolder = findPlayerPlot()
+                    if not plotFolder then return end
+
+                    -- สแกนหาโมเดลการ์ดบนฐานพร้อมระบุ SlotIndex ผ่านระบบ Spatial Resolver
+                    local allCards = resolvePlotCardsWithSlots(plotFolder)
+                    local upgradedAny = false
+
+                    for _, item in ipairs(allCards) do
+                        if not getgenv().AutoUpgradeCardLevel then break end
+                        if isOtherSystemBusy() then break end
+
+                        if item.slot and item.slot >= 1 and item.slot <= 30 then
+                            local currentLvl = getCardLevel(item.model)
+                            if currentLvl < 50 then
+                                pcall(function()
+                                    CardSlotRE:FireServer("UpgradeCard", { SlotIndex = item.slot })
+                                end)
+                                upgradedAny = true
+                                task.wait(0.15)
+                            end
+                        end
+                    end
+
+                    if not upgradedAny then
+                        task.wait(2)
+                    end
+                end)
+                task.wait(0.5)
+            end
+        end)
+    end
+end)
+
+
 ---------------------------------------------------------
 -- 4. RAID & TOWER TAB (เรด & ทาวเวอร์)
 ---------------------------------------------------------
@@ -5968,51 +6281,6 @@ local function getRarityScore(rarityText)
     return 0
 end
 
--- Helper to check if a model/prompt is a Raid Card, Boss Card, Pack, Ticket, or non-unit object
-local function isSpecialNonUnitItem(model, promptText)
-    if not model then return true end
-
-    if model:GetAttribute("BoxValue") ~= nil 
-        or model:GetAttribute("IsPack") == true 
-        or model:GetAttribute("PackName") ~= nil
-        or model:GetAttribute("IsBossCard") == true
-        or model:GetAttribute("IsRaidCard") == true
-        or model:GetAttribute("IsTitanCard") == true
-    then
-        return true
-    end
-
-    local modelName = string.upper(model.Name or "")
-    local cardNameAttr = string.upper(tostring(model:GetAttribute("CardName") or model:GetAttribute("TemplateName") or model:GetAttribute("Name") or ""))
-    local promptUpper = string.upper(promptText or "")
-
-    local nonUnitKeywords = {
-        "RAID", "BOSS", "TITAN", "EVENT", "PASS", "TICKET", "KEY",
-        "PACK", "BOX", "CHEST", "BAG", "SELL", "BUY", "SPAWN",
-        "UPGRADE", "CLAIM", "REBIRTH", "JOIN", "ENTER", "CONVEYOR",
-        "เรด", "บอส", "ไททัน", "แพ็ค", "แพ็ก", "กล่อง", "ตั๋ว", "บัตร", "กุญแจ", "ถุง", "อีเวนต์", "กิจกรรม"
-    }
-
-    for _, kw in ipairs(nonUnitKeywords) do
-        if string.find(modelName, kw) or string.find(cardNameAttr, kw) or string.find(promptUpper, kw) then
-            return true
-        end
-    end
-
-    for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-            local txtUpper = string.upper(desc.Text or "")
-            for _, kw in ipairs(nonUnitKeywords) do
-                if string.find(txtUpper, kw) then
-                    return true
-                end
-            end
-        end
-    end
-
-    return false
-end
-
 local function collect4BestBaseCards(cardSource)
     pcall(function()
         local source = cardSource or getgenv().TowerCardSource or "จากในกระเป๋า (Inventory)"
@@ -6028,121 +6296,80 @@ local function collect4BestBaseCards(cardSource)
         if not plotFolder then return end
 
         local cardList = {}
-        local processedModels = {}
+        local allBaseCards = resolvePlotCardsWithSlots(plotFolder)
 
-        -- สแกนทุก Plot_N0 ถึง Plot_N4 (Plot 1-4 ที่มีการ์ดวางอยู่)
-        local plotsToScan = { plotFolder }
-        -- หาก plotFolder มี parent ที่เป็น Plots folder ให้สแกนทุก plot ภายใน
-        local plotsParent = plotFolder.Parent
-        if plotsParent and plotsParent.Name == "Plots" then
-            for _, sibling in ipairs(plotsParent:GetChildren()) do
-                local sibOwner = sibling:GetAttribute("Owner")
-                if sibling ~= plotFolder and (sibOwner == LocalPlayer.Name or sibOwner == nil) then
-                    -- ดึงเฉพาะ plots ของตัวเอง หรือ plots ว่าง
-                    -- ไม่ใส่ plots คนอื่นเข้า
+        for _, item in ipairs(allBaseCards) do
+            -- [RULE] เลือกเฉพาะการ์ดที่อยู่บน SlotIndex 1-4 เท่านั้น (ตามลำดับฐานจากซ้ายไปขวา)
+            if item.slot >= 1 and item.slot <= 4 then
+                local model = item.model
+                local interact = item.interact or model:FindFirstChildWhichIsA("ProximityPrompt", true) or model:FindFirstChildWhichIsA("ClickDetector", true)
+                
+                local cashScore, rarityScore, mutationScore, levelScore = 0, 0, 0, 0
+                
+                local attrRarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
+                if attrRarity then
+                    local s = getRarityScore(attrRarity)
+                    if s > rarityScore then rarityScore = s end
                 end
-            end
-        end
-        -- ขยายไปยัง sub-plot folders ภายใน plotFolder (Plot_N0, Plot_N1, Plot_N2...)
-        local additionalFolders = {}
-        for i = 0, 4 do
-            local subPlot = plotFolder:FindFirstChild("Plot_N" .. tostring(i))
-            if subPlot then table.insert(additionalFolders, subPlot) end
-        end
-        -- รวมทุก folder
-        for _, f in ipairs(additionalFolders) do
-            table.insert(plotsToScan, f)
-        end
-
-        -- สแกนการ์ดจากทุก folder ที่รวบรวมไว้
-        for _, scanTarget in ipairs(plotsToScan) do
-        for _, desc in ipairs(scanTarget:GetDescendants()) do
-            if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
                 
-                local isIgnoredAction = string.find(pText, "BUY") or string.find(pText, "ซื้อ")
-                    or string.find(pText, "SPAWN") or string.find(pText, "สุ่ม")
-                    or string.find(pText, "OPEN") or string.find(pText, "เปิด")
-                    or string.find(pText, "TOWER") or string.find(pText, "ทาวเวอร์")
-                    or string.find(pText, "UPGRADE") or string.find(pText, "อัปเกรด")
-                    or string.find(pText, "CLAIM") or string.find(pText, "รับ")
-                    or string.find(pText, "SELL") or string.find(pText, "ขาย")
-                    or string.find(pText, "REBIRTH") or string.find(pText, "จุติ")
-                    or string.find(pText, "JOIN") or string.find(pText, "ENTER")
-                
-                if not isIgnoredAction then
-                    local model = desc:FindFirstAncestorOfClass("Model")
-                    if model and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") and not processedModels[model] then
-                        if isSpecialNonUnitItem(model, pText) or isPackCard(model) then
-                            continue
-                        end
-                        
-                        processedModels[model] = true
-                        
-                        local cashScore, rarityScore, mutationScore, levelScore = 0, 0, 0, 0
-                        
-                        local attrRarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
-                        if attrRarity then
-                            local s = getRarityScore(attrRarity)
-                            if s > rarityScore then rarityScore = s end
-                        end
-                        
-                        local attrMut = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
-                        if attrMut then
-                            local cleanMut = string.lower(tostring(attrMut))
-                            for mName, mScore in pairs(MutationScores) do
-                                if string.find(cleanMut, mName) and mScore > mutationScore then
-                                    mutationScore = mScore
-                                end
-                            end
-                        end
-
-                        local attrLvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel")
-                        if attrLvl and tonumber(attrLvl) then
-                            levelScore = tonumber(attrLvl)
-                        end
-
-                        local attrMult = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier") or model:GetAttribute("Damage") or model:GetAttribute("Power")
-                        if attrMult and tonumber(attrMult) then
-                            cashScore = tonumber(attrMult)
-                        end
-                        
-                        for _, txtObj in ipairs(model:GetDescendants()) do
-                            if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
-                                local txt = txtObj.Text or ""
-                                local val = parseSuffixValue(txt)
-                                if val > cashScore then cashScore = val end
-                                
-                                local s = getRarityScore(txt)
-                                if s > rarityScore then rarityScore = s end
-                                
-                                local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
-                                cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
-                                for mName, mScore in pairs(MutationScores) do
-                                    if string.find(cleanMut, mName) and mScore > mutationScore then
-                                        mutationScore = mScore
-                                    end
-                                end
-
-                                if levelScore == 0 then
-                                    local lvlNum = string.match(txt, "[L|l][V|v][L|l]%s*:%s*(%d+)") or string.match(txt, "[L|l][V|v]%s*:%s*(%d+)")
-                                    if lvlNum then levelScore = tonumber(lvlNum) or 0 end
-                                end
-                            end
-                        end
-                        
-                        local totalScore = (rarityScore * 10000000) + (mutationScore * 100000) + (levelScore * 1000) + math.min(cashScore, 999)
-                        if totalScore > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
-                            table.insert(cardList, { interact = desc, score = totalScore, model = model })
+                local attrMut = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
+                if attrMut then
+                    local cleanMut = string.lower(tostring(attrMut))
+                    for mName, mScore in pairs(MutationScores) do
+                        if string.find(cleanMut, mName) and mScore > mutationScore then
+                            mutationScore = mScore
                         end
                     end
                 end
+
+                local attrLvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel")
+                if attrLvl and tonumber(attrLvl) then
+                    levelScore = tonumber(attrLvl)
+                end
+
+                local attrMult = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier") or model:GetAttribute("Damage") or model:GetAttribute("Power")
+                if attrMult and tonumber(attrMult) then
+                    cashScore = tonumber(attrMult)
+                end
+                
+                for _, txtObj in ipairs(model:GetDescendants()) do
+                    if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
+                        local txt = txtObj.Text or ""
+                        local val = parseSuffixValue(txt)
+                        if val > cashScore then cashScore = val end
+                        
+                        local s = getRarityScore(txt)
+                        if s > rarityScore then rarityScore = s end
+                        
+                        local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
+                        cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
+                        for mName, mScore in pairs(MutationScores) do
+                            if string.find(cleanMut, mName) and mScore > mutationScore then
+                                mutationScore = mScore
+                            end
+                        end
+
+                        if levelScore == 0 then
+                            local lvlNum = string.match(txt, "[L|l][V|v][L|l]%s*:%s*(%d+)") or string.match(txt, "[L|l][V|v]%s*:%s*(%d+)")
+                            if lvlNum then levelScore = tonumber(lvlNum) or 0 end
+                        end
+                    end
+                end
+                
+                local totalScore = (rarityScore * 10000000) + (mutationScore * 100000) + (levelScore * 1000) + math.min(cashScore, 999)
+                if totalScore > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
+                    table.insert(cardList, { interact = interact, score = totalScore, model = model, slot = item.slot, pos = item.pos })
+                end
             end
-        end  -- end for _, desc
-        end  -- end for _, scanTarget in plotsToScan
+        end
 
         if #cardList == 0 then return end
-        table.sort(cardList, function(a, b) return a.score > b.score end)
+        table.sort(cardList, function(a, b) 
+            if a.slot ~= b.slot and a.slot <= 4 and b.slot <= 4 then
+                return a.slot < b.slot
+            end
+            return a.score > b.score 
+        end)
 
         local originalCFrame = hrp.CFrame
         getgenv().CollectedCardPositions = {}
