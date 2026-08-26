@@ -166,14 +166,27 @@ end
 local SUPPORTED_GAMES = {
     [13379208636] = "Attack On Titan Revolution",
     [14916516914] = "Attack On Titan Revolution",
+    [14932214603] = "Attack On Titan Revolution",
     [125039473548047] = "Anime Card Farm",
     [122446657157717] = "Arena Sniper",
     [126042865144779] = "Arena Sniper",
+    [119259569670784] = "Arena Sniper",
+    [90165746516953] = "Arena Sniper",
     [107653945083776] = "Roll Anime To Fight",
+    [133623616308412] = "Roll Anime To Fight",
+    [128736949265057] = "Gakuran",
+    [126509999114328] = "99 Nights",
+    [79546208627805] = "99 Nights",
+    [2753915549] = "Blox Fruit",
+    [117539213094671] = "Roll a Gnome",
     [125927821145949] = "Mine a Mountain (VVIP)",
     [142823291] = "Murder Mystery 2 (VVIP)",
     [104973076655377] = "Capybara Vs Plant (VVIP)",
-    [2753915549] = "Blox Fruit",
+    [107778070777162] = "Steal An Egg (VVIP)",
+    [84515722934860] = "Anime Expedition (VVIP)",
+    [117533937949084] = "Iron Soul (VVIP)",
+    [116456628154258] = "Iron Soul (VVIP)",
+    [132445869992129] = "Iron Soul (VVIP)",
 }
 
 local function resolveGameName()
