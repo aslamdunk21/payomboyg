@@ -170,51 +170,37 @@ end
 local function GetDynamicSupportedGames()
     local games = {}
 
-    -- 1. ดึงจาก Memory หาก loader เคยถูกรันมาก่อนแล้ว
-    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
-    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
-
-    if type(nRouter) == "table" and type(vRouter) == "table" and next(nRouter) then
-        for id, data in pairs(nRouter) do
-            games[id] = data.Name
-        end
-        for id, data in pairs(vRouter) do
-            games[id] = data.Name .. " (VVIP)"
-        end
-        return games
-    end
-
-    -- 2. อ่านไฟล์ loader.txt จากเครื่องสดๆ หรือดึงจาก GitHub
+    -- 1. อ่านตรงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (ป้องกัน Cache ด้วย ?t=tick())
     local loaderCode = ""
     pcall(function()
-        local paths = {
-            "loader.txt",
-            "Loader.txt",
-            "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
-        }
-        if isfile and readfile then
+        loaderCode = game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
+    end)
+
+    -- หาก HttpGet ไม่สำเร็จ (เน็ตหลุด) ค่อยดึงจาก Memory หรือไฟล์ในเครื่องเป็น Fallback
+    if loaderCode == "" and isfile and readfile then
+        pcall(function()
+            local paths = {
+                "loader.txt",
+                "Loader.txt",
+                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+            }
             for _, p in ipairs(paths) do
                 if isfile(p) then
                     local code = readfile(p)
                     if code and #code > 0 then loaderCode = code; break end
                 end
             end
-        end
-    end)
-    if loaderCode == "" then
-        pcall(function()
-            loaderCode = game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
         end)
     end
 
-    -- 3. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    -- 2. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
     if loaderCode ~= "" then
         local normalStart = loaderCode:find("NormalRouter%s*=")
         local vvipStart = loaderCode:find("VVIPRouter%s*=")
-        local placeIdStart = loaderCode:find("local%s+placeId") or #loaderCode
+        local pcallStart = loaderCode:find("pcall%s*%(") or #loaderCode
 
         local normalSection = (normalStart and vvipStart) and loaderCode:sub(normalStart, vvipStart - 1) or loaderCode
-        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, placeIdStart - 1) or loaderCode
+        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, pcallStart) or loaderCode
 
         for placeIdStr, name in normalSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
             local pid = tonumber(placeIdStr)
@@ -224,6 +210,20 @@ local function GetDynamicSupportedGames()
         for placeIdStr, name in vvipSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
             local pid = tonumber(placeIdStr)
             if pid then games[pid] = name .. " (VVIP)" end
+        end
+    end
+
+    -- 3. รวมข้อมูลจาก Memory (_G / getgenv) เผื่อมีแมพที่พึ่งโหลดเข้า Memory
+    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
+    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+    if type(nRouter) == "table" then
+        for id, data in pairs(nRouter) do
+            if data and data.Name then games[id] = data.Name end
+        end
+    end
+    if type(vRouter) == "table" then
+        for id, data in pairs(vRouter) do
+            if data and data.Name then games[id] = data.Name .. " (VVIP)" end
         end
     end
 
@@ -1654,6 +1654,15 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Type = "FREE",
             Keywords = "BF • Auto Farm",
         },
+        {
+            Name = "Roll a Gnome",
+            FullName = "Roll a Gnome",
+            PlaceId = 117539213094671,
+            AltPlaceIds = {},
+            IconId = 117539213094671,
+            Type = "FREE",
+            Keywords = "Gnome • Auto Roll",
+        },
 
         -- VVIP GAMES
         {
@@ -1701,7 +1710,43 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             Type = "VVIP",
             Keywords = "AE • Auto Expedition",
         },
+        {
+            Name = "Iron Soul",
+            FullName = "Iron Soul",
+            PlaceId = 117533937949084,
+            AltPlaceIds = { 116456628154258, 132445869992129 },
+            IconId = 117533937949084,
+            Type = "VVIP",
+            Keywords = "IRS • Auto Boss",
+        },
     }
+
+    pcall(function()
+        local dynamicMapData = GetDynamicSupportedGames()
+        local existingPlaceIds = {}
+        for _, g in ipairs(supportedGamesList) do
+            existingPlaceIds[g.PlaceId] = true
+            if g.AltPlaceIds then
+                for _, alt in ipairs(g.AltPlaceIds) do existingPlaceIds[alt] = true end
+            end
+        end
+        for pid, gName in pairs(dynamicMapData) do
+            if not existingPlaceIds[pid] then
+                existingPlaceIds[pid] = true
+                local isVvip = gName:find("%(VVIP%)")
+                local cleanName = gName:gsub("%s*%(VVIP%)", "")
+                table.insert(supportedGamesList, {
+                    Name = cleanName,
+                    FullName = cleanName,
+                    PlaceId = pid,
+                    AltPlaceIds = {},
+                    IconId = pid,
+                    Type = isVvip and "VVIP" or "FREE",
+                    Keywords = (isVvip and "VVIP" or "FREE") .. " • Auto Farm",
+                })
+            end
+        end
+    end)
 
     local currentPlaceId = game.PlaceId
     for index, gameData in ipairs(supportedGamesList) do
@@ -2226,7 +2271,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     premiumButton.Activated:Connect(function()
         local vvipUrl = LuarmorConfig.VVIPURL or "https://payomboyz.rexzy.xyz/"
         if copyText(vvipUrl) then
-            setStatus("คัดลอกลิงก์เว็บสั่งซื้อเรียบร้อยแล้ว!", COLORS.success)
+            setStatus("คัดลอกลิงก์เว็บ VVIP เรียบร้อยแล้ว!", COLORS.success)
         else
             setStatus(vvipUrl, COLORS.warning)
         end
