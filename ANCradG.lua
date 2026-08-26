@@ -6343,36 +6343,39 @@ local function collect4BestBaseCards(cardSource)
                             end
                         end
 
-                        hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
-                        task.wait(0.15)
+                        hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2.5, 0)
+                        task.wait(0.8)
                         
-                        if item.interact:IsA("ProximityPrompt") then
-                            item.interact.RequiresLineOfSight = false
-                            item.interact.MaxActivationDistance = 99999
-                            item.interact.HoldDuration = 0
-                            for _ = 1, 2 do
-                                if not item.interact or not item.interact.Parent then break end
-                                fireproximityprompt(item.interact)
-                                task.wait(0.08)
-                            end
-                        elseif item.interact:IsA("ClickDetector") then
-                            for _ = 1, 2 do
-                                fireclickdetector(item.interact)
-                                task.wait(0.08)
-                            end
-                        end
-                        task.wait(0.2)
-
-                        -- ตรวจหา Tool ใหม่ที่เพิ่งเข้ากระเป๋าจากการหยิบ Slot นี้
                         local newTool = nil
-                        if bp then
-                            for _, t in ipairs(bp:GetChildren()) do
-                                if t:IsA("Tool") and not initialTools[t] and not isPackCard(t) then
-                                    newTool = t
-                                    break
+                        for attempt = 1, 5 do
+                            if item.interact and item.interact.Parent then
+                                if item.interact:IsA("ProximityPrompt") then
+                                    item.interact.RequiresLineOfSight = false
+                                    item.interact.MaxActivationDistance = 99999
+                                    item.interact.HoldDuration = 0
+                                    fireproximityprompt(item.interact)
+                                elseif item.interact:IsA("ClickDetector") then
+                                    fireclickdetector(item.interact)
                                 end
                             end
+
+                            task.wait(0.6)
+
+                            -- ตรวจหา Tool ใหม่ที่เพิ่งเข้ากระเป๋าจากการหยิบ Slot นี้
+                            if bp then
+                                for _, t in ipairs(bp:GetChildren()) do
+                                    if t:IsA("Tool") and not initialTools[t] and not isPackCard(t) then
+                                        newTool = t
+                                        break
+                                    end
+                                end
+                            end
+
+                            if newTool or not (item.interact and item.interact.Parent) then
+                                break
+                            end
                         end
+                        task.wait(0.5)
 
                         table.insert(getgenv().CollectedCardsData, {
                             slot = item.slot,
@@ -6387,7 +6390,7 @@ local function collect4BestBaseCards(cardSource)
 
         if originalCFrame and hrp then
             hrp.CFrame = originalCFrame
-            task.wait(0.1)
+            task.wait(0.5)
         end
     end)
 end
@@ -6434,14 +6437,14 @@ local function placeCollectedCardsBack()
 
                 if tool and tool.Parent then
                     humanoid:EquipTool(tool)
-                    task.wait(0.15)
+                    task.wait(0.5)
                 else
                     return
                 end
 
                 if saved.pos then
-                    hrp.CFrame = CFrame.new(saved.pos) + Vector3.new(0, 2, 0)
-                    task.wait(0.15)
+                    hrp.CFrame = CFrame.new(saved.pos) + Vector3.new(0, 2.5, 0)
+                    task.wait(0.6)
                 end
 
                 -- สแกนหา Prompt คืนการ์ดที่มีระยะห่าง "น้อยที่สุด" (Closest Prompt) ป้องกันไปกดใส่ Slot ข้างๆ
@@ -6477,13 +6480,13 @@ local function placeCollectedCardsBack()
                             bestPrompt.RequiresLineOfSight = false
                             bestPrompt.MaxActivationDistance = 99999
                             bestPrompt.HoldDuration = 0
-                            for _ = 1, 2 do fireproximityprompt(bestPrompt) task.wait(0.05) end
+                            for _ = 1, 2 do fireproximityprompt(bestPrompt) task.wait(0.2) end
                         elseif bestPrompt:IsA("ClickDetector") then
-                            for _ = 1, 2 do fireclickdetector(bestPrompt) task.wait(0.05) end
+                            for _ = 1, 2 do fireclickdetector(bestPrompt) task.wait(0.2) end
                         end
                     end
                 end
-                task.wait(0.15)
+                task.wait(0.6)
             end)
         end
 
