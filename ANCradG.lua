@@ -2420,12 +2420,20 @@ local function getSpawnPackClickDetector()
 end
 
 local function findCardFolder()
+    if getgenv().CardFolder and getgenv().CardFolder.Parent then return true end
     local plot = findPlayerPlot()
     if plot then
+        for _, childName in ipairs({"Cards", "Spawns", "Plot_N0", "CardFolder", "SpawnedCards"}) do
+            local f = plot:FindFirstChild(childName)
+            if f and #f:GetChildren() > 0 then
+                getgenv().CardFolder = f
+                return true
+            end
+        end
         for _, desc in ipairs(plot:GetDescendants()) do
             if desc:IsA("ProximityPrompt") then
                 local model = desc:FindFirstAncestorOfClass("Model")
-                if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
+                if model and model.Parent and model.Parent ~= plot then
                     getgenv().CardFolder = model.Parent
                     return true
                 end
@@ -2435,7 +2443,7 @@ local function findCardFolder()
     for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("ProximityPrompt") then
             local model = desc:FindFirstAncestorOfClass("Model")
-            if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
+            if model and model.Parent then
                 getgenv().CardFolder = model.Parent
                 return true
             end
@@ -4049,11 +4057,9 @@ do
 
     local function _cleanDisplayName(raw)
         if not raw or type(raw) ~= "string" then return nil end
-        local clean = string.gsub(raw, "%s*[Pp][Aa][Cc][Kk]%s*$", "")
-        clean = string.gsub(clean, "%s*[Cc][Aa][Rr][Dd]%s*$", "")
-        clean = string.match(clean, "^%s*(.-)%s*$") or clean
-        if #clean >= 2 and #clean <= 40 and not string.match(clean, "[%d%$%%#@!&%*%(%)%+%=]") then
-            return string.upper(string.sub(clean, 1, 1)) .. string.sub(clean, 2)
+        local clean = string.match(raw, "^%s*(.-)%s*$") or raw
+        if #clean >= 2 and #clean <= 50 and not string.match(clean, "[%$%%#@!&%*%(%)%+%=]") then
+            return clean
         end
         return nil
     end
@@ -4108,13 +4114,24 @@ do
         end)
     end
 
-    -- ฟังก์ชันสแกนหลักจาก ReplicatedStorage.Tools.Packs และ ReplicatedStorage.VFX.Mutation
+    -- ฟังก์ชันสแกนหลักจาก ReplicatedStorage.Models.Packs และ ReplicatedStorage.VFX.Mutation
     local function _scanAllGameData()
         local changed = false
         pcall(function()
             local rep = game:GetService("ReplicatedStorage")
 
-            -- 1. สแกนเฉพาะ Packs จาก ReplicatedStorage.Tools.Packs เท่านั้น (ไม่ดึงการ์ดย่อย)
+            -- 1. ดึงข้อมูล Packs จาก ReplicatedStorage.Models.Packs (อิงจาก Explorer ของเกม)
+            local modelsFolder = rep:FindFirstChild("Models")
+            if modelsFolder then
+                local packsFolder = modelsFolder:FindFirstChild("Packs")
+                if packsFolder then
+                    for _, packObj in ipairs(packsFolder:GetChildren()) do
+                        if _liveAddRarity(packObj.Name) then changed = true end
+                    end
+                end
+            end
+
+            -- สำรอง: สแกน ReplicatedStorage.Tools.Packs
             local toolsFolder = rep:FindFirstChild("Tools")
             if toolsFolder then
                 local packsFolder = toolsFolder:FindFirstChild("Packs")
@@ -4152,7 +4169,7 @@ do
     -- ปุ่มกดสแกนด้วยตนเอง
     Tabs.Main:AddButton({
         Title = "🔍 สแกน Pack & Mutation ใหม่ในเกมทันที",
-        Description = "ดึงข้อมูล Pack จาก ReplicatedStorage.Tools.Packs และ Mutation จาก VFX ทันที",
+        Description = "ดึงข้อมูล Pack จาก ReplicatedStorage.Models.Packs และ Mutation จาก VFX ทันที",
         Callback = function()
             local foundNew = _scanAllGameData()
             Fluent:Notify({
@@ -4168,14 +4185,14 @@ end
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
 
-    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
+    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity") or model:GetAttribute("TemplateName") or model:GetAttribute("CardName")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
 
     rarity = rarity and tostring(rarity) or ""
     mutation = mutation and tostring(mutation) or "Normal"
 
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel"}) do
+        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "CardName", "TemplateName"}) do
             local obj = model:FindFirstChild(childName, true)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
@@ -4191,6 +4208,21 @@ local function getCardModelRarityAndMutation(model)
                 end
             end
         end
+    end
+
+    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        local pObj = prompt.ObjectText ~= "" and prompt.ObjectText or prompt.ActionText
+        if pObj and pObj ~= "" then
+            pObj = string.gsub(pObj, "<[^>]+>", "")
+            if rarity == "" or rarity == "nil" then
+                rarity = pObj
+            end
+        end
+    end
+
+    if (rarity == "" or rarity == "nil") and model.Name then
+        rarity = model.Name
     end
 
     if mutation == "" or mutation == "Normal" or mutation == "nil" then
@@ -4230,15 +4262,47 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- Heartbeat High-Frequency Instant Buy Loop (Unthrottled Zero-Delay Remote Trigger)
+-- High-Speed Instant Buy Loop (Signal-Aware Conveyor Purchase Engine)
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
-    if not getgenv().CardFolder then return end
 
-    for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-        if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
+    local cardFolder = getgenv().CardFolder
+    local searchModels = {}
+    if cardFolder and cardFolder.Parent then
+        searchModels = cardFolder:GetChildren()
+    else
+        local plot = findPlayerPlot()
+        if plot then
+            for _, desc in ipairs(plot:GetDescendants()) do
+                if desc:IsA("ProximityPrompt") then
+                    local m = desc:FindFirstAncestorOfClass("Model")
+                    if m then table.insert(searchModels, m) end
+                end
+            end
+        end
+    end
+
+    for _, model in ipairs(searchModels) do
+        if not model:IsA("Model") then continue end
         if model:GetAttribute("Rejected") == true then continue end
+
+        -- Fast Conveyor Arrival Signal (Crucial for game server to register card on conveyor!)
+        if not model:GetAttribute("SignalSent") then
+            model:SetAttribute("SignalSent", true)
+            pcall(function()
+                local rs = game:GetService("ReplicatedStorage")
+                local cBoxRE = rs:FindFirstChild("CardBoxRE")
+                local conveyorRE = (rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("ConveyorRE")) or rs:FindFirstChild("ConveyorRE")
+                if cBoxRE then
+                    cBoxRE:FireServer("CardReachedArrival", model)
+                end
+                if conveyorRE then
+                    conveyorRE:FireServer("ReachedB", model)
+                    conveyorRE:FireServer("ReachedC", model)
+                end
+            end)
+        end
 
         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
         if not prompt then continue end
@@ -4257,7 +4321,7 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 40 or (tick() - firstSeen > 25) then
+        if buyAttempts >= 50 or (tick() - firstSeen > 30) then
             model:SetAttribute("Rejected", true)
             continue
         end
@@ -4314,14 +4378,14 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] >= 0.01 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] >= 0.05 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
                     prompt.RequiresLineOfSight = false
                     prompt.MaxActivationDistance = 99999
+                    prompt.HoldDuration = 0
                     fireproximityprompt(prompt)
-                    task.defer(function() fireproximityprompt(prompt) end)
                     if getconnections then
                         for _, conn in ipairs(getconnections(prompt.Triggered)) do pcall(function() conn:Fire(LocalPlayer) end) end
                     end
@@ -4354,21 +4418,34 @@ local function instantBuyLoop()
                 end
             end
         else
-            local scanCount = (tonumber(model:GetAttribute("ScanAttempts")) or 0) + 1
-            model:SetAttribute("ScanAttempts", scanCount)
-            if scanCount >= 4 then
-                model:SetAttribute("Rejected", true)
+            local timeAlive = tick() - firstSeen
+            if timeAlive > 15 then
+                local scanCount = (tonumber(model:GetAttribute("ScanAttempts")) or 0) + 1
+                model:SetAttribute("ScanAttempts", scanCount)
+                if scanCount >= 100 then
+                    model:SetAttribute("Rejected", true)
+                end
             end
         end
     end
 end
 
-if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
-getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
+if getgenv().BruteForceLoop then
+    getgenv().BruteForceLoop:Disconnect()
+    getgenv().BruteForceLoop = nil
+end
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
+    if state then
+        task.spawn(function()
+            while getgenv().AutoBuyCards do
+                pcall(instantBuyLoop)
+                task.wait(0.08)
+            end
+        end)
+    end
 end)
 
 
