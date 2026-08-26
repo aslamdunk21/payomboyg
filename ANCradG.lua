@@ -1039,7 +1039,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageScroll.ScrollBarImageColor3 = COLORS.primary
         pageScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
         pageScroll.ElasticBehavior = Enum.ElasticBehavior.Always
-        pageScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        pageScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
         pageScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
         pageScroll.Visible = (tabIndex == 1)
         pageScroll.Parent = pagesFolder
@@ -1058,18 +1058,18 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
         local function updatePageCanvas()
             if pageScroll and pageLayout then
-                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 160)
+                pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
             end
         end
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePageCanvas)
 
-        -- Mobile Touch Drag Scrolling Handler for Tab Content Pages (Touch Only - PC uses native mouse wheel)
+        -- Mobile Touch Drag Scrolling Handler for Tab Content Pages (Scales with UIScale)
         local isPageDragging = false
         local pageTouchStartY = 0
         local pageStartCanvasY = 0
 
         local function onPageTouchBegan(input)
-            if input.UserInputType == Enum.UserInputType.Touch then
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 isPageDragging = false
                 pageTouchStartY = input.Position.Y
                 pageStartCanvasY = pageScroll.CanvasPosition.Y
@@ -1077,7 +1077,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
 
         local function onPageTouchChanged(input)
-            if pageTouchStartY > 0 and input.UserInputType == Enum.UserInputType.Touch then
+            if pageTouchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                 local deltaY = input.Position.Y - pageTouchStartY
                 if math.abs(deltaY) > 4 then
                     isPageDragging = true
@@ -1085,14 +1085,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 if isPageDragging then
                     local currentScale = (uiScale and uiScale.Scale > 0) and uiScale.Scale or 1
                     local scaledDeltaY = deltaY / currentScale
-                    local maxCanvasY = math.max(0, (pageLayout.AbsoluteContentSize.Y + 160) - pageScroll.AbsoluteWindowSize.Y)
+                    local maxCanvasY = math.max(0, (pageLayout.AbsoluteContentSize.Y + 20) - pageScroll.AbsoluteWindowSize.Y)
                     pageScroll.CanvasPosition = Vector2.new(0, math.clamp(pageStartCanvasY - scaledDeltaY, 0, maxCanvasY))
                 end
             end
         end
 
         local function onPageTouchEnded(input)
-            if input.UserInputType == Enum.UserInputType.Touch then
+            if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                 pageTouchStartY = 0
                 task.delay(0.05, function()
                     isPageDragging = false
@@ -1500,14 +1500,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 bgDismissBtn.Parent = modalOverlay
 
                 local cameraVP = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-                -- คำนวณ effective scale จาก viewport จริงเพื่อปรับขนาด modal บนมือถือ
-                local _modalTargetW, _modalTargetH = 920, 600
-                local _scaleX = (cameraVP.X - 40) / _modalTargetW
-                local _scaleY = (cameraVP.Y - 40) / _modalTargetH
-                local _effectiveScale = math.clamp(math.min(_scaleX, _scaleY), 0.35, 0.85)
-                -- ใช้ viewport โดยตรง (modal ไม่ถูก scale โดย UIScale ของ shell)
-                local maxModalH = math.clamp(cameraVP.Y * 0.75, 280, 520)
-                local maxModalW = math.min(700, cameraVP.X - 20)
+                local maxModalH = math.clamp(cameraVP.Y * 0.70, 240, 420)
+                local maxModalW = math.min(680, cameraVP.X - 40)
 
                 local modalFrame = Instance.new("Frame")
                 modalFrame.Size = UDim2.fromOffset(maxModalW, maxModalH)
@@ -1621,14 +1615,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optScroll.ScrollBarImageColor3 = COLORS.primary
                 optScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
                 optScroll.ElasticBehavior = Enum.ElasticBehavior.Always
-                optScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+                optScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
                 optScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
                 optScroll.ClipsDescendants = true
                 optScroll.ZIndex = 1000001
                 optScroll.Parent = modalFrame
 
                 local optPadding = Instance.new("UIPadding")
-                optPadding.PaddingBottom = UDim.new(0, 20)
+                optPadding.PaddingBottom = UDim.new(0, 15)
                 optPadding.PaddingTop = UDim.new(0, 2)
                 optPadding.PaddingLeft = UDim.new(0, 2)
                 optPadding.PaddingRight = UDim.new(0, 4)
@@ -1639,25 +1633,20 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optLayout.SortOrder = Enum.SortOrder.LayoutOrder
                 optLayout.Parent = optScroll
 
-                local optionButtons = {}
-
                 local function updateModalCanvas()
                     if optScroll and optLayout then
-                        local itemsCount = #optionButtons
-                        local computedH = (itemsCount > 0) and (itemsCount * 43 + 80) or (optLayout.AbsoluteContentSize.Y + 80)
-                        local finalH = math.max(computedH, optLayout.AbsoluteContentSize.Y + 80)
-                        optScroll.CanvasSize = UDim2.new(0, 0, 0, finalH)
+                        optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 20)
                     end
                 end
                 optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateModalCanvas)
 
-                -- Mobile & Touch Drag Scrolling Handler (Touch Only - PC uses native mouse wheel & scrollbar)
+                -- Mobile & Touch Drag Scrolling Handler (UIScale Aware & Perfect Bound Clamping)
                 local isTouchDragging = false
                 local touchStartY = 0
                 local startCanvasY = 0
 
                 local function onTouchBegan(input)
-                    if input.UserInputType == Enum.UserInputType.Touch then
+                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                         isTouchDragging = false
                         touchStartY = input.Position.Y
                         startCanvasY = optScroll.CanvasPosition.Y
@@ -1665,24 +1654,22 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 end
 
                 local function onTouchChanged(input)
-                    if touchStartY > 0 and input.UserInputType == Enum.UserInputType.Touch then
+                    if touchStartY > 0 and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                         local deltaY = input.Position.Y - touchStartY
                         if math.abs(deltaY) > 4 then
                             isTouchDragging = true
                         end
                         if isTouchDragging then
-                            local currentScale = _effectiveScale or 1
+                            local currentScale = (uiScale and uiScale.Scale > 0) and uiScale.Scale or 1
                             local scaledDeltaY = deltaY / currentScale
-                            local itemsCount = #optionButtons
-                            local totalH = (itemsCount > 0) and (itemsCount * 43 + 80) or (optLayout.AbsoluteContentSize.Y + 80)
-                            local maxCanvasY = math.max(0, totalH - optScroll.AbsoluteWindowSize.Y)
+                            local maxCanvasY = math.max(0, (optLayout.AbsoluteContentSize.Y + 20) - optScroll.AbsoluteWindowSize.Y)
                             optScroll.CanvasPosition = Vector2.new(0, math.clamp(startCanvasY - scaledDeltaY, 0, maxCanvasY))
                         end
                     end
                 end
 
                 local function onTouchEnded(input)
-                    if input.UserInputType == Enum.UserInputType.Touch then
+                    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                         touchStartY = 0
                         task.delay(0.05, function()
                             isTouchDragging = false
@@ -1706,7 +1693,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     end
                 end
 
-                optionButtons = {}
+                local optionButtons = {}
                 local function renderOptions(filterText)
                     filterText = filterText and string.lower(string.gsub(filterText, "^%s*(.-)%s*$", "%1")) or ""
                     for _, btnObj in ipairs(optionButtons) do btnObj:Destroy() end
@@ -2420,20 +2407,12 @@ local function getSpawnPackClickDetector()
 end
 
 local function findCardFolder()
-    if getgenv().CardFolder and getgenv().CardFolder.Parent then return true end
     local plot = findPlayerPlot()
     if plot then
-        for _, childName in ipairs({"Cards", "Spawns", "Plot_N0", "CardFolder", "SpawnedCards"}) do
-            local f = plot:FindFirstChild(childName)
-            if f and #f:GetChildren() > 0 then
-                getgenv().CardFolder = f
-                return true
-            end
-        end
         for _, desc in ipairs(plot:GetDescendants()) do
             if desc:IsA("ProximityPrompt") then
                 local model = desc:FindFirstAncestorOfClass("Model")
-                if model and model.Parent and model.Parent ~= plot then
+                if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
                     getgenv().CardFolder = model.Parent
                     return true
                 end
@@ -2443,7 +2422,7 @@ local function findCardFolder()
     for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("ProximityPrompt") then
             local model = desc:FindFirstAncestorOfClass("Model")
-            if model and model.Parent then
+            if model and model:GetAttribute("IgnoreTutoBeam") ~= nil then
                 getgenv().CardFolder = model.Parent
                 return true
             end
@@ -4044,155 +4023,17 @@ MutationDropdown:OnChanged(function(Value)
     end
 end)
 
----------------------------------------------------------
--- 🔄 LIVE DROPDOWN AUTO-SCANNER (Packs & Mutations)
--- สแกน ReplicatedStorage.Tools.Packs & ReplicatedStorage.VFX.Mutation อัตโนมัติ
--- เมื่อเกมอัพเดท Pack หรือ Mutation ใหม่ Dropdown จะอัพเดทรายการทันทีโดยไม่ต้องแก้โค้ด
----------------------------------------------------------
-do
-    local _liveKnownRarities = {}
-    local _liveKnownMutations = {}
-    local _liveRarityList = {}
-    local _liveMutationList = {}
-
-    local function _cleanDisplayName(raw)
-        if not raw or type(raw) ~= "string" then return nil end
-        local clean = string.match(raw, "^%s*(.-)%s*$") or raw
-        if #clean >= 2 and #clean <= 50 and not string.match(clean, "[%$%%#@!&%*%(%)%+%=]") then
-            return clean
-        end
-        return nil
-    end
-
-    local function _liveAddRarity(rawRarity)
-        local display = _cleanDisplayName(rawRarity)
-        if display then
-            local key = string.lower(display)
-            if not _liveKnownRarities[key] then
-                _liveKnownRarities[key] = true
-                table.insert(_liveRarityList, display)
-                return true
-            end
-        end
-        return false
-    end
-
-    local function _liveAddMutation(rawMutation)
-        local display = _cleanDisplayName(rawMutation)
-        if display and string.lower(display) ~= "normal" then
-            local key = string.lower(display)
-            if not _liveKnownMutations[key] then
-                _liveKnownMutations[key] = true
-                table.insert(_liveMutationList, display)
-                return true
-            end
-        end
-        return false
-    end
-
-    -- Seed จากรายการเดิมเพื่อรักษาค่าคงที่
-    for _, r in ipairs(RaritiesList) do _liveAddRarity(r) end
-    for _, m in ipairs(MutationsList) do _liveAddMutation(m) end
-
-    -- ฟังก์ชัน Flush อัพเดท UI Dropdown
-    local _updatePending = false
-    local function _flushDropdowns()
-        if _updatePending then return end
-        _updatePending = true
-        task.defer(function()
-            _updatePending = false
-            pcall(function()
-                if RarityDropdown and RarityDropdown.SetValues then
-                    RarityDropdown:SetValues(_liveRarityList)
-                end
-            end)
-            pcall(function()
-                if MutationDropdown and MutationDropdown.SetValues then
-                    MutationDropdown:SetValues(_liveMutationList)
-                end
-            end)
-        end)
-    end
-
-    -- ฟังก์ชันสแกนหลักจาก ReplicatedStorage.Models.Packs และ ReplicatedStorage.VFX.Mutation
-    local function _scanAllGameData()
-        local changed = false
-        pcall(function()
-            local rep = game:GetService("ReplicatedStorage")
-
-            -- 1. ดึงข้อมูล Packs จาก ReplicatedStorage.Models.Packs (อิงจาก Explorer ของเกม)
-            local modelsFolder = rep:FindFirstChild("Models")
-            if modelsFolder then
-                local packsFolder = modelsFolder:FindFirstChild("Packs")
-                if packsFolder then
-                    for _, packObj in ipairs(packsFolder:GetChildren()) do
-                        if _liveAddRarity(packObj.Name) then changed = true end
-                    end
-                end
-            end
-
-            -- สำรอง: สแกน ReplicatedStorage.Tools.Packs
-            local toolsFolder = rep:FindFirstChild("Tools")
-            if toolsFolder then
-                local packsFolder = toolsFolder:FindFirstChild("Packs")
-                if packsFolder then
-                    for _, packObj in ipairs(packsFolder:GetChildren()) do
-                        if _liveAddRarity(packObj.Name) then changed = true end
-                    end
-                end
-            end
-
-            -- 2. สแกน Mutations จาก ReplicatedStorage.VFX.Mutation
-            local vfxFolder = rep:FindFirstChild("VFX") or rep:FindFirstChild("Vfx")
-            if vfxFolder then
-                local mutFolder = vfxFolder:FindFirstChild("Mutation") or vfxFolder:FindFirstChild("Mutations")
-                if mutFolder then
-                    for _, mutObj in ipairs(mutFolder:GetChildren()) do
-                        if _liveAddMutation(mutObj.Name) then changed = true end
-                    end
-                end
-            end
-        end)
-
-        if changed then
-            _flushDropdowns()
-        end
-        return changed
-    end
-
-    -- สแกนครั้งเดียวทันทีเมื่อเข้าเกม / สคริปต์เริ่มทำงาน
-    task.spawn(function()
-        task.wait(0.5)
-        _scanAllGameData()
-    end)
-
-    -- ปุ่มกดสแกนด้วยตนเอง
-    Tabs.Main:AddButton({
-        Title = "🔍 สแกน Pack & Mutation ใหม่ในเกมทันที",
-        Description = "ดึงข้อมูล Pack จาก ReplicatedStorage.Models.Packs และ Mutation จาก VFX ทันที",
-        Callback = function()
-            local foundNew = _scanAllGameData()
-            Fluent:Notify({
-                Title = "Auto Dropdown Scanner",
-                Content = foundNew and "อัพเดทพบ Pack/Mutation ใหม่เข้าใน Dropdown แล้ว! ✅" or "สแกนสมบูรณ์ (รายการล่าสุดครบถ้วนแล้ว) ✅",
-                Duration = 3
-            })
-        end
-    })
-end
----------------------------------------------------------
-
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
 
-    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity") or model:GetAttribute("TemplateName") or model:GetAttribute("CardName")
+    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
     local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
 
     rarity = rarity and tostring(rarity) or ""
     mutation = mutation and tostring(mutation) or "Normal"
 
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "CardName", "TemplateName"}) do
+        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel"}) do
             local obj = model:FindFirstChild(childName, true)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
@@ -4208,21 +4049,6 @@ local function getCardModelRarityAndMutation(model)
                 end
             end
         end
-    end
-
-    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        local pObj = prompt.ObjectText ~= "" and prompt.ObjectText or prompt.ActionText
-        if pObj and pObj ~= "" then
-            pObj = string.gsub(pObj, "<[^>]+>", "")
-            if rarity == "" or rarity == "nil" then
-                rarity = pObj
-            end
-        end
-    end
-
-    if (rarity == "" or rarity == "nil") and model.Name then
-        rarity = model.Name
     end
 
     if mutation == "" or mutation == "Normal" or mutation == "nil" then
@@ -4262,47 +4088,15 @@ local function getCardModelRarityAndMutation(model)
     return rarity, mutation
 end
 
--- High-Speed Instant Buy Loop (Signal-Aware Conveyor Purchase Engine)
+-- Heartbeat High-Frequency Instant Buy Loop (Unthrottled Zero-Delay Remote Trigger)
 local function instantBuyLoop()
     if not getgenv().AutoBuyCards then return end
     if not getgenv().CardFolder then findCardFolder() end
+    if not getgenv().CardFolder then return end
 
-    local cardFolder = getgenv().CardFolder
-    local searchModels = {}
-    if cardFolder and cardFolder.Parent then
-        searchModels = cardFolder:GetChildren()
-    else
-        local plot = findPlayerPlot()
-        if plot then
-            for _, desc in ipairs(plot:GetDescendants()) do
-                if desc:IsA("ProximityPrompt") then
-                    local m = desc:FindFirstAncestorOfClass("Model")
-                    if m then table.insert(searchModels, m) end
-                end
-            end
-        end
-    end
-
-    for _, model in ipairs(searchModels) do
-        if not model:IsA("Model") then continue end
+    for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
+        if not model:IsA("Model") or model:GetAttribute("IgnoreTutoBeam") == nil then continue end
         if model:GetAttribute("Rejected") == true then continue end
-
-        -- Fast Conveyor Arrival Signal (Crucial for game server to register card on conveyor!)
-        if not model:GetAttribute("SignalSent") then
-            model:SetAttribute("SignalSent", true)
-            pcall(function()
-                local rs = game:GetService("ReplicatedStorage")
-                local cBoxRE = rs:FindFirstChild("CardBoxRE")
-                local conveyorRE = (rs:FindFirstChild("Remotes") and rs.Remotes:FindFirstChild("ConveyorRE")) or rs:FindFirstChild("ConveyorRE")
-                if cBoxRE then
-                    cBoxRE:FireServer("CardReachedArrival", model)
-                end
-                if conveyorRE then
-                    conveyorRE:FireServer("ReachedB", model)
-                    conveyorRE:FireServer("ReachedC", model)
-                end
-            end)
-        end
 
         local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
         if not prompt then continue end
@@ -4321,7 +4115,7 @@ local function instantBuyLoop()
         end
 
         local buyAttempts = tonumber(model:GetAttribute("BuyAttempts")) or 0
-        if buyAttempts >= 50 or (tick() - firstSeen > 30) then
+        if buyAttempts >= 40 or (tick() - firstSeen > 25) then
             model:SetAttribute("Rejected", true)
             continue
         end
@@ -4378,14 +4172,14 @@ local function instantBuyLoop()
 
         if matchRarity and matchMutation then
             local now = tick()
-            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] >= 0.05 then
+            if not getgenv().PromptCooldowns[prompt] or now - getgenv().PromptCooldowns[prompt] >= 0.01 then
                 getgenv().PromptCooldowns[prompt] = now
                 model:SetAttribute("BuyAttempts", buyAttempts + 1)
                 pcall(function()
                     prompt.RequiresLineOfSight = false
                     prompt.MaxActivationDistance = 99999
-                    prompt.HoldDuration = 0
                     fireproximityprompt(prompt)
+                    task.defer(function() fireproximityprompt(prompt) end)
                     if getconnections then
                         for _, conn in ipairs(getconnections(prompt.Triggered)) do pcall(function() conn:Fire(LocalPlayer) end) end
                     end
@@ -4418,34 +4212,21 @@ local function instantBuyLoop()
                 end
             end
         else
-            local timeAlive = tick() - firstSeen
-            if timeAlive > 15 then
-                local scanCount = (tonumber(model:GetAttribute("ScanAttempts")) or 0) + 1
-                model:SetAttribute("ScanAttempts", scanCount)
-                if scanCount >= 100 then
-                    model:SetAttribute("Rejected", true)
-                end
+            local scanCount = (tonumber(model:GetAttribute("ScanAttempts")) or 0) + 1
+            model:SetAttribute("ScanAttempts", scanCount)
+            if scanCount >= 4 then
+                model:SetAttribute("Rejected", true)
             end
         end
     end
 end
 
-if getgenv().BruteForceLoop then
-    getgenv().BruteForceLoop:Disconnect()
-    getgenv().BruteForceLoop = nil
-end
+if getgenv().BruteForceLoop then getgenv().BruteForceLoop:Disconnect() end
+getgenv().BruteForceLoop = RunService.Heartbeat:Connect(instantBuyLoop)
 
 local AutoBuyToggle = Tabs.Main:AddToggle("AutoBuyCards", { Title = "⚡ ซื้อการ์ดที่เลือกทันที (Auto Buy)", Default = false })
 AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
-    if state then
-        task.spawn(function()
-            while getgenv().AutoBuyCards do
-                pcall(instantBuyLoop)
-                task.wait(0.08)
-            end
-        end)
-    end
 end)
 
 
@@ -4477,17 +4258,13 @@ AutoCarryToggle:OnChanged(function(state)
                                 if hrp and targetPos then
                                     originalCFrame = hrp.CFrame
                                     hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 3, 0)
-                                    task.wait(0.4)
+                                    task.wait(0.2)
                                 end
                                 prompt.RequiresLineOfSight = false
                                 prompt.MaxActivationDistance = 99999
-                                prompt.HoldDuration = 0
                                 fireproximityprompt(prompt)
-                                task.wait(0.3)
-                                fireproximityprompt(prompt)
-                                task.wait(0.5)
+                                task.wait(0.1)
                                 if originalCFrame and hrp then hrp.CFrame = originalCFrame end
-                                task.wait(0.3)
                             end)
                         end
                     end
@@ -6083,33 +5860,7 @@ local function collect4BestBaseCards(cardSource)
         local cardList = {}
         local processedModels = {}
 
-        -- สแกนทุก Plot_N0 ถึง Plot_N4 (Plot 1-4 ที่มีการ์ดวางอยู่)
-        local plotsToScan = { plotFolder }
-        -- หาก plotFolder มี parent ที่เป็น Plots folder ให้สแกนทุก plot ภายใน
-        local plotsParent = plotFolder.Parent
-        if plotsParent and plotsParent.Name == "Plots" then
-            for _, sibling in ipairs(plotsParent:GetChildren()) do
-                local sibOwner = sibling:GetAttribute("Owner")
-                if sibling ~= plotFolder and (sibOwner == LocalPlayer.Name or sibOwner == nil) then
-                    -- ดึงเฉพาะ plots ของตัวเอง หรือ plots ว่าง
-                    -- ไม่ใส่ plots คนอื่นเข้า
-                end
-            end
-        end
-        -- ขยายไปยัง sub-plot folders ภายใน plotFolder (Plot_N0, Plot_N1, Plot_N2...)
-        local additionalFolders = {}
-        for i = 0, 4 do
-            local subPlot = plotFolder:FindFirstChild("Plot_N" .. tostring(i))
-            if subPlot then table.insert(additionalFolders, subPlot) end
-        end
-        -- รวมทุก folder
-        for _, f in ipairs(additionalFolders) do
-            table.insert(plotsToScan, f)
-        end
-
-        -- สแกนการ์ดจากทุก folder ที่รวบรวมไว้
-        for _, scanTarget in ipairs(plotsToScan) do
-        for _, desc in ipairs(scanTarget:GetDescendants()) do
+        for _, desc in ipairs(plotFolder:GetDescendants()) do
             if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
                 local pText = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "")) or ""
                 
@@ -6191,8 +5942,7 @@ local function collect4BestBaseCards(cardSource)
                     end
                 end
             end
-        end  -- end for _, desc
-        end  -- end for _, scanTarget in plotsToScan
+        end
 
         if #cardList == 0 then return end
         table.sort(cardList, function(a, b) return a.score > b.score end)
@@ -6475,22 +6225,11 @@ local function startRaidTowerManagerLoop()
     isRaidTowerLoopRunning = true
 
     task.spawn(function()
-        local _lastBossAttemptTick = 0  -- throttle: ป้องกันกด boss ซ้ำเร็วเกินไป
-        local _bossCompletedThisWindow = false  -- flag รอบ boss window นี้จบแล้ว
-        local _prevBossTimeWindow = false  -- detect เปลี่ยน window
         while getgenv().AutoTower or getgenv().AutoBossRaid do
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             local isBossTime = isBossTimeWindow()
             local bossAlreadyDone = hasFoughtBossThisHour()
-
-            -- Reset per-window completed flag เมื่อออกจาก boss window
-            if not isBossTime and _prevBossTimeWindow then
-                _bossCompletedThisWindow = false
-            end
-            _prevBossTimeWindow = isBossTime
-
-            -- shouldDoBoss: เปิดให้ลงบอสได้เฉพาะเมื่อ boss window เปิดอยู่ และยังไม่ได้ลงรอบนี้
-            local shouldDoBoss = getgenv().AutoBossRaid and isBossTime and not bossAlreadyDone and not _bossCompletedThisWindow
+            local shouldDoBoss = getgenv().AutoBossRaid and isBossTime and not bossAlreadyDone
 
             if playerGui then
                 local function isGuiVisible(gui)
@@ -6505,23 +6244,12 @@ local function startRaidTowerManagerLoop()
 
                 if shouldDoBoss then
                     -- 1. Execute Boss Raid Logic
-                    -- Priority Guard: ออกจากหอคอยเฉพาะเมื่อ boss window เปิดจริง
-                    -- ป้องกันสลับออกจากหอคอยกลางคัน แล้วพลาดรางวัล
+                    -- Priority Guard: Exit Tower if player is currently in Tower match or AutoReplay is active
                     if getgenv().AutoReplayToggled or getgenv().TowerHasCollected then
-                        if logLine then pcall(function() logLine("RAID", "🐉 ถึงเวลาบอสเรด! รอจบ auto replay แล้วออก...") end) end
-                        -- รอให้ auto replay จบก่อน (ไม่ exit กลางคัน) โดยรออีก 3 วินาที
-                        -- ถ้าเกิน 5 นาทีใน boss window แล้วยังไม่จบ ค่อย force exit
-                        local waitedSec = 0
-                        while (getgenv().AutoReplayToggled or getgenv().TowerHasCollected) and isBossTimeWindow() and waitedSec < 180 do
-                            task.wait(3)
-                            waitedSec = waitedSec + 3
-                        end
-                        if getgenv().AutoReplayToggled or getgenv().TowerHasCollected then
-                            if logLine then pcall(function() logLine("RAID", "🐉 รอนานเกินไป! ออกจากหอคอยเพื่อลงบอส...") end) end
-                            Fluent:Notify({ Title = "บอสเรด", Content = "ถึงเวลาบอสเรด! กำลังออกจากหอคอย...", Duration = 4 })
-                            exitTowerNow()
-                            task.wait(1.5)
-                        end
+                        if logLine then pcall(function() logLine("RAID", "🐉 ถึงเวลาบอสเรด! กำลังกดออกจากหอคอยเพื่อลงบอส...") end) end
+                        Fluent:Notify({ Title = "บอสเรด", Content = "ถึงเวลาบอสเรด! กำลังกดออกจากหอคอย...", Duration = 4 })
+                        exitTowerNow()
+                        task.wait(1.5)
                     end
 
                     local equipBtn, battleBtn, diffBtn, autoReplayBtn, showBattleBtn, hideBattleBtn
@@ -6627,11 +6355,8 @@ local function startRaidTowerManagerLoop()
                         if battleBtn then
                             if logLine then pcall(function() logLine("RAID", "🐉 เริ่มเข้าต่อสู้บอสเรด (Boss Raid)") end) end
                             fireButton(battleBtn)
-                            task.wait(1.5)  -- รอให้ battle เริ่มก่อน
-                            -- Set BossFoughtHourKey หลัง battle เริ่มจริงแล้ว ป้องกัน race condition
                             getgenv().BossFoughtHourKey = getCurrentHourKey()
-                            _bossCompletedThisWindow = true  -- mark รอบนี้ลงแล้ว
-                            _lastBossAttemptTick = tick()
+                            task.wait(0.5)
                             local character = LocalPlayer.Character
                             if getgenv().BossOriginalCFrame and character then
                                 character:PivotTo(getgenv().BossOriginalCFrame)
@@ -6640,7 +6365,6 @@ local function startRaidTowerManagerLoop()
                             end
                             getgenv().BossHasCollected = false
                             getgenv().AutoReplayToggledBoss = false
-                            getgenv().AutoReplayToggled = false  -- reset tower replay เพื่อให้กลับไปลงหอได้ใหม่
                             pcall(closeBossRaidUI)
                         end
 
@@ -6776,12 +6500,9 @@ local function startRaidTowerManagerLoop()
                         getgenv().TowerHasCollected = false
                     end
                     if autoReplayBtn and not getgenv().AutoReplayToggled then
-                        -- ป้องกันกด auto replay ในขณะที่กำลังจะลงบอส (ใน boss window)
-                        if not (getgenv().AutoBossRaid and isBossTimeWindow() and not hasFoughtBossThisHour()) then
-                            fireButton(autoReplayBtn)
-                            getgenv().AutoReplayToggled = true
-                            task.wait(0.3)
-                        end
+                        fireButton(autoReplayBtn)
+                        getgenv().AutoReplayToggled = true
+                        task.wait(0.3)
                     end
                     if nextBtn then fireButton(nextBtn) task.wait(0.2) end
                     if playBtn then fireButton(playBtn) task.wait(0.2) end
@@ -7638,72 +7359,70 @@ end
 ---------------------------------------------------------
 -- UI SCALE & MOBILE POPUP DRAGGABLE BUTTON
 ---------------------------------------------------------
-do
-    Tabs.Dashboard:AddSection("📱 การปรับขนาด UI (Mobile Scale)")
+Tabs.Dashboard:AddSection("📱 การปรับขนาด UI (Mobile Scale)")
 
-    local isMobile = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
-    local initialScale = isMobile and 0.80 or 1.0
-    local currentUIScale = initialScale
+local isMobile = UserInputService.TouchEnabled or not UserInputService.KeyboardEnabled
+local initialScale = isMobile and 0.80 or 1.0
+local currentUIScale = initialScale
 
-    local function setUIScale(scaleVal)
-        currentUIScale = scaleVal
-        pcall(function()
-            local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
-            for _, guiParent in ipairs(containers) do
-                if guiParent then
-                    for _, child in ipairs(guiParent:GetChildren()) do
-                        local cname = string.lower(child.Name)
-                        if child:IsA("ScreenGui") and (
-                            string.find(cname, "fluent") or
-                            string.find(cname, "payomboy") or
-                            string.find(cname, "dexq") or
-                            child.Name == "PayomboyZ_UI"
-                        ) then
-                            local uiScale = child:FindFirstChildOfClass("UIScale")
-                            if not uiScale then
-                                uiScale = Instance.new("UIScale")
-                                uiScale.Parent = child
-                            end
-                            uiScale.Scale = currentUIScale
+local function setUIScale(scaleVal)
+    currentUIScale = scaleVal
+    pcall(function()
+        local containers = {CoreGui, LocalPlayer:FindFirstChild("PlayerGui")}
+        for _, guiParent in ipairs(containers) do
+            if guiParent then
+                for _, child in ipairs(guiParent:GetChildren()) do
+                    local cname = string.lower(child.Name)
+                    if child:IsA("ScreenGui") and (
+                        string.find(cname, "fluent") or
+                        string.find(cname, "payomboy") or
+                        string.find(cname, "dexq") or
+                        child.Name == "PayomboyZ_UI"
+                    ) then
+                        local uiScale = child:FindFirstChildOfClass("UIScale")
+                        if not uiScale then
+                            uiScale = Instance.new("UIScale")
+                            uiScale.Parent = child
                         end
+                        uiScale.Scale = currentUIScale
                     end
                 end
             end
-        end)
-    end
-
-    local UIScaleSlider = Tabs.Dashboard:AddSlider("UIScaleSlider", {
-        Title = "🔍 ขนาด UI (UI Scale)",
-        Description = "ปรับขนาดเมนูให้พอดีกับหน้าจอมือถือ/แท็บเล็ต",
-        Default = initialScale,
-        Min = 0.5,
-        Max = 1.2,
-        Rounding = 2
-    })
-    UIScaleSlider:OnChanged(function(val)
-        setUIScale(val)
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if UserInputService:GetFocusedTextBox() then return end
-        if input.KeyCode == Enum.KeyCode.F then
-            local newScale = (currentUIScale == 1.0 and 0.75 or 1.0)
-            UIScaleSlider:SetValue(newScale)
-            Fluent:Notify({ Title = "UI Scale", Content = "ปรับขนาด UI เป็น: " .. tostring(newScale), Duration = 2 })
         end
     end)
-
-    -- Initial Auto-Scale apply
-    task.spawn(function()
-        task.wait(0.6)
-        setUIScale(initialScale)
-    end)
-
-    Fluent:Notify({
-        Title = "PayomboyZ",
-        Content = "ปรับแต่งหน้าจอสำหรับมือถือสมบูรณ์! ✅\nปรับ UIScale = " .. tostring(initialScale),
-        Duration = 6
-    })
 end
+
+local UIScaleSlider = Tabs.Dashboard:AddSlider("UIScaleSlider", {
+    Title = "🔍 ขนาด UI (UI Scale)",
+    Description = "ปรับขนาดเมนูให้พอดีกับหน้าจอมือถือ/แท็บเล็ต",
+    Default = initialScale,
+    Min = 0.5,
+    Max = 1.2,
+    Rounding = 2
+})
+UIScaleSlider:OnChanged(function(val)
+    setUIScale(val)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if UserInputService:GetFocusedTextBox() then return end
+    if input.KeyCode == Enum.KeyCode.F then
+        local newScale = (currentUIScale == 1.0 and 0.75 or 1.0)
+        UIScaleSlider:SetValue(newScale)
+        Fluent:Notify({ Title = "UI Scale", Content = "ปรับขนาด UI เป็น: " .. tostring(newScale), Duration = 2 })
+    end
+end)
+
+-- Initial Auto-Scale apply
+task.spawn(function()
+    task.wait(0.6)
+    setUIScale(initialScale)
+end)
+
+Fluent:Notify({
+    Title = "PayomboyZ",
+    Content = "ปรับแต่งหน้าจอสำหรับมือถือสมบูรณ์! ✅\nปรับ UIScale = " .. tostring(initialScale),
+    Duration = 6
+})
 
 Window:SelectTab(1)
