@@ -13,6 +13,7 @@ local LuarmorConfig = {
     SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
     GetKeyURL = "https://ads.luarmor.net/get_key?for=PBG-fVUxHRHebIHz",
     DiscordURL = "https://discord.gg/GBKDAe23C",
+    VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
@@ -2223,10 +2224,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     end)
 
     premiumButton.Activated:Connect(function()
-        if copyText(LuarmorConfig.DiscordURL) then
-            setStatus("คัดลอกลิงก์ Discord VVIP เรียบร้อยแล้ว!", COLORS.success)
+        local vvipUrl = LuarmorConfig.VVIPURL or "https://payomboyz.rexzy.xyz/"
+        if copyText(vvipUrl) then
+            setStatus("คัดลอกลิงก์เว็บสั่งซื้อเรียบร้อยแล้ว!", COLORS.success)
         else
-            setStatus(LuarmorConfig.DiscordURL, COLORS.warning)
+            setStatus(vvipUrl, COLORS.warning)
         end
     end)
 
