@@ -147,9 +147,8 @@ local NormalRouter = {
     [119259569670784] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
     [90165746516953] = { Name = "Arena Sniper", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ARNSniper.lua", Keywords = {"arena sniper", "sniper arena"} },
 
-    -- 4. Roll Anime To Fight (RATF)
-    [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
-    [133623616308412] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
+    -- 4. Capybara Vs Plant (CvsP)
+    [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua", Keywords = {"capybara"} },
 
     -- 5. Gakuran (GKR)
     [128736949265057] = { Name = "Gakuran", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Gakuran", Keywords = {"Gakuran"} },
@@ -173,8 +172,9 @@ local VVIPRouter = {
     -- 2. Murder Mystery 2 (MM2)
     [142823291] = { Name = "Murder Mystery 2", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/MM2.lua", Keywords = {"murder mystery", "mm2"} },
 
-    -- 3. Capybara Vs Plant (CvsP)
-    [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/CvsP.lua", Keywords = {"capybara"} },
+    -- 3. Roll Anime To Fight (RATF)
+    [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
+    [133623616308412] = { Name = "Roll Anime To Fight", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/RNTFight.lua", Keywords = {"roll anime"} },
 
     -- 4. Steal An Egg (SaE)
     [107778070777162] = { Name = "Steal An Egg", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/StealAnEggPBG", Keywords = {"StealAnEggPBG"} },
