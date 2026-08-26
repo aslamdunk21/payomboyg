@@ -208,25 +208,115 @@ end
 -- ==============================================================================
 -- 🎮 DATABASE OF ALL SUPPORTED GAMES IN PAYOMBOYZ HUB
 -- ==============================================================================
-local GAME_DATABASE = {
-    -- Normal VIP Games
-    { Name = "Attack On Titan Revolution", Category = "VIP", PlaceId = 13379208636, Description = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible", IconPlaceId = 13379208636 },
-    { Name = "Anime Card Farm", Category = "VIP", PlaceId = 125039473548047, Description = "Auto Card Roll, Pack Opener, Card Fusion & Farm", IconPlaceId = 125039473548047 },
-    { Name = "Arena Sniper", Category = "VIP", PlaceId = 122446657157717, Description = "Silent Aim, Hitbox Expander, Auto Shoot & Kill", IconPlaceId = 122446657157717 },
-    { Name = "Roll Anime To Fight", Category = "VIP", PlaceId = 107653945083776, Description = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units", IconPlaceId = 107653945083776 },
-    { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed", IconPlaceId = 128736949265057 },
-    { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard", IconPlaceId = 126509999114328 },
-    { Name = "Blox Fruit", Category = "VIP", PlaceId = 2753915549, Description = "Auto Farm, Sea Events, Quest & Raid", IconPlaceId = 2753915549 },
-    { Name = "Roll a Gnome", Category = "VIP", PlaceId = 117539213094671, Description = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm", IconPlaceId = 117539213094671 },
+-- ==============================================================================
+-- 🎮 DATABASE OF ALL SUPPORTED GAMES IN PAYOMBOYZ HUB (DYNAMIC AUTO-SYNC)
+-- ==============================================================================
+local function GetDynamicGameDatabase()
+    local db = {}
+    local addedGames = {}
 
-    -- VVIP Exclusive Games
-    { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan", IconPlaceId = 125927821145949 },
-    { Name = "Murder Mystery 2", Category = "VVIP", PlaceId = 142823291, Description = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun", IconPlaceId = 142823291 },
-    { Name = "Capybara Vs Plant", Category = "VVIP", PlaceId = 104973076655377, Description = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle", IconPlaceId = 104973076655377 },
-    { Name = "Steal An Egg", Category = "VVIP", PlaceId = 107778070777162, Description = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch", IconPlaceId = 107778070777162 },
-    { Name = "Anime Expedition", Category = "VVIP", PlaceId = 84515722934860, Description = "Auto Expedition, Dungeon Clear, Card Reroll & AFK", IconPlaceId = 84515722934860 },
-    { Name = "Iron Soul", Category = "VVIP", PlaceId = 117533937949084, Description = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill", IconPlaceId = 117533937949084 },
-}
+    local function addGame(name, category, placeId, description)
+        if not addedGames[name] then
+            addedGames[name] = true
+            table.insert(db, {
+                Name = name,
+                Category = category,
+                PlaceId = placeId,
+                Description = description or (category == "VVIP" and "Exclusive VVIP Map Script" or "Auto Farm & Game Automation"),
+                IconPlaceId = placeId
+            })
+        end
+    end
+
+    -- รายละเอียดเกม (หากเป็นแมพใหม่ที่เพิ่มใน loader.txt จะใช้ค่า Default ให้อัตโนมัติ)
+    local customDescs = {
+        ["Attack On Titan Revolution"] = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible",
+        ["Anime Card Farm"] = "Auto Card Roll, Pack Opener, Card Fusion & Farm",
+        ["Arena Sniper"] = "Silent Aim, Hitbox Expander, Auto Shoot & Kill",
+        ["Roll Anime To Fight"] = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units",
+        ["Gakuran"] = "Auto Combat, Auto Quest, Skill Spam & Speed",
+        ["99 Nights"] = "Auto Survive, Wood/Scrap Farm, AFK Dashboard",
+        ["Blox Fruit"] = "Auto Farm, Sea Events, Quest & Raid",
+        ["Roll a Gnome"] = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm",
+        ["Mine a Mountain"] = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan",
+        ["Murder Mystery 2"] = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun",
+        ["Capybara Vs Plant"] = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle",
+        ["Steal An Egg"] = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch",
+        ["Anime Expedition"] = "Auto Expedition, Dungeon Clear, Card Reroll & AFK",
+        ["Iron Soul"] = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill",
+    }
+
+    -- 1. ดึงจาก Memory หาก loader เคยถูกรันมาก่อนแล้ว
+    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
+    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+
+    if type(nRouter) == "table" and type(vRouter) == "table" and next(nRouter) then
+        for placeId, data in pairs(nRouter) do
+            local name = data.Name
+            local desc = customDescs[name] or "Auto Farm & Game Automation"
+            addGame(name, "VIP", placeId, desc)
+        end
+        for placeId, data in pairs(vRouter) do
+            local name = data.Name
+            local desc = customDescs[name] or "Exclusive VVIP Map Script"
+            addGame(name, "VVIP", placeId, desc)
+        end
+        return db
+    end
+
+    -- 2. อ่านไฟล์ loader.txt จากเครื่องสดๆ หรือดึงจาก GitHub
+    local loaderCode = ""
+    pcall(function()
+        local paths = {
+            "loader.txt",
+            "Loader.txt",
+            "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+        }
+        if isfile and readfile then
+            for _, p in ipairs(paths) do
+                if isfile(p) then
+                    local code = readfile(p)
+                    if code and #code > 0 then loaderCode = code; break end
+                end
+            end
+        end
+    end)
+    if loaderCode == "" then
+        pcall(function()
+            loaderCode = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
+        end)
+    end
+
+    -- 3. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    if loaderCode ~= "" then
+        local normalStart = loaderCode:find("NormalRouter%s*=")
+        local vvipStart = loaderCode:find("VVIPRouter%s*=")
+        local placeIdStart = loaderCode:find("local%s+placeId") or #loaderCode
+
+        local normalSection = (normalStart and vvipStart) and loaderCode:sub(normalStart, vvipStart - 1) or loaderCode
+        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, placeIdStart - 1) or loaderCode
+
+        for placeIdStr, name in normalSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
+            local pid = tonumber(placeIdStr)
+            if pid then
+                local desc = customDescs[name] or "Auto Farm & Game Automation"
+                addGame(name, "VIP", pid, desc)
+            end
+        end
+
+        for placeIdStr, name in vvipSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
+            local pid = tonumber(placeIdStr)
+            if pid then
+                local desc = customDescs[name] or "Exclusive VVIP Map Script"
+                addGame(name, "VVIP", pid, desc)
+            end
+        end
+    end
+
+    return db
+end
+
+local GAME_DATABASE = GetDynamicGameDatabase()
 
 -- ==============================================================================
 -- 🔑 LOGOUT SYSTEM IMPLEMENTATION (ข้อกำหนดตาม logout.txt)
