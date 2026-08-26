@@ -6304,93 +6304,47 @@ local function collect4BestBaseCards(cardSource)
                 local model = item.model
                 local interact = item.interact or model:FindFirstChildWhichIsA("ProximityPrompt", true) or model:FindFirstChildWhichIsA("ClickDetector", true)
                 
-                local cashScore, rarityScore, mutationScore, levelScore = 0, 0, 0, 0
-                
-                local attrRarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity")
-                if attrRarity then
-                    local s = getRarityScore(attrRarity)
-                    if s > rarityScore then rarityScore = s end
-                end
-                
-                local attrMut = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
-                if attrMut then
-                    local cleanMut = string.lower(tostring(attrMut))
-                    for mName, mScore in pairs(MutationScores) do
-                        if string.find(cleanMut, mName) and mScore > mutationScore then
-                            mutationScore = mScore
-                        end
-                    end
-                end
-
-                local attrLvl = model:GetAttribute("Level") or model:GetAttribute("CardLevel")
-                if attrLvl and tonumber(attrLvl) then
-                    levelScore = tonumber(attrLvl)
-                end
-
-                local attrMult = model:GetAttribute("CashMultiplier") or model:GetAttribute("Multiplier") or model:GetAttribute("Damage") or model:GetAttribute("Power")
-                if attrMult and tonumber(attrMult) then
-                    cashScore = tonumber(attrMult)
-                end
-                
-                for _, txtObj in ipairs(model:GetDescendants()) do
-                    if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
-                        local txt = txtObj.Text or ""
-                        local val = parseSuffixValue(txt)
-                        if val > cashScore then cashScore = val end
-                        
-                        local s = getRarityScore(txt)
-                        if s > rarityScore then rarityScore = s end
-                        
-                        local cleanMut = string.lower(string.gsub(txt, "<[^>]+>", ""))
-                        cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
-                        for mName, mScore in pairs(MutationScores) do
-                            if string.find(cleanMut, mName) and mScore > mutationScore then
-                                mutationScore = mScore
-                            end
-                        end
-
-                        if levelScore == 0 then
-                            local lvlNum = string.match(txt, "[L|l][V|v][L|l]%s*:%s*(%d+)") or string.match(txt, "[L|l][V|v]%s*:%s*(%d+)")
-                            if lvlNum then levelScore = tonumber(lvlNum) or 0 end
-                        end
-                    end
-                end
-                
-                local totalScore = (rarityScore * 10000000) + (mutationScore * 100000) + (levelScore * 1000) + math.min(cashScore, 999)
-                if totalScore > 0 and not string.find(string.upper(model.Name or ""), "PLOT") then
-                    table.insert(cardList, { interact = interact, score = totalScore, model = model, slot = item.slot, pos = item.pos })
+                if interact and not string.find(string.upper(model.Name or ""), "PLOT") then
+                    table.insert(cardList, {
+                        interact = interact,
+                        model = model,
+                        slot = item.slot,
+                        pos = item.pos
+                    })
                 end
             end
         end
 
         if #cardList == 0 then return end
-        table.sort(cardList, function(a, b) 
-            if a.slot ~= b.slot and a.slot <= 4 and b.slot <= 4 then
-                return a.slot < b.slot
-            end
-            return a.score > b.score 
-        end)
+        
+        -- เรียงตาม SlotIndex 1 -> 2 -> 3 -> 4
+        table.sort(cardList, function(a, b) return a.slot < b.slot end)
 
         local originalCFrame = hrp.CFrame
-        getgenv().CollectedCardPositions = {}
+        getgenv().CollectedCardsData = {}
 
         for i = 1, math.min(4, #cardList) do
             local item = cardList[i]
             if item and item.interact and item.interact.Parent then
                 pcall(function()
-                    local targetPos
-                    if item.interact.Parent:IsA("BasePart") then
-                        targetPos = item.interact.Parent.Position
-                    elseif item.interact.Parent:IsA("Attachment") then
-                        targetPos = item.interact.Parent.WorldPosition
-                    elseif item.model and item.model.PrimaryPart then
-                        targetPos = item.model.PrimaryPart.Position
+                    local targetPos = item.pos
+                    if not targetPos then
+                        if item.interact.Parent:IsA("BasePart") then targetPos = item.interact.Parent.Position
+                        elseif item.model and item.model.PrimaryPart then targetPos = item.model.PrimaryPart.Position end
                     end
                     
                     if targetPos and hrp then
-                        table.insert(getgenv().CollectedCardPositions, targetPos)
+                        -- บันทึกรายการ Tool ที่มีอยู่เดิมในกระเป๋า
+                        local bp = LocalPlayer:FindFirstChild("Backpack")
+                        local initialTools = {}
+                        if bp then
+                            for _, t in ipairs(bp:GetChildren()) do
+                                if t:IsA("Tool") then initialTools[t] = true end
+                            end
+                        end
+
                         hrp.CFrame = CFrame.new(targetPos) + Vector3.new(0, 2, 0)
-                        task.wait(0.12)
+                        task.wait(0.15)
                         
                         if item.interact:IsA("ProximityPrompt") then
                             item.interact.RequiresLineOfSight = false
@@ -6399,15 +6353,33 @@ local function collect4BestBaseCards(cardSource)
                             for _ = 1, 2 do
                                 if not item.interact or not item.interact.Parent then break end
                                 fireproximityprompt(item.interact)
-                                task.wait(0.05)
+                                task.wait(0.08)
                             end
                         elseif item.interact:IsA("ClickDetector") then
                             for _ = 1, 2 do
                                 fireclickdetector(item.interact)
-                                task.wait(0.05)
+                                task.wait(0.08)
                             end
                         end
-                        task.wait(0.08)
+                        task.wait(0.2)
+
+                        -- ตรวจหา Tool ใหม่ที่เพิ่งเข้ากระเป๋าจากการหยิบ Slot นี้
+                        local newTool = nil
+                        if bp then
+                            for _, t in ipairs(bp:GetChildren()) do
+                                if t:IsA("Tool") and not initialTools[t] and not isPackCard(t) then
+                                    newTool = t
+                                    break
+                                end
+                            end
+                        end
+
+                        table.insert(getgenv().CollectedCardsData, {
+                            slot = item.slot,
+                            pos = targetPos,
+                            tool = newTool,
+                            toolUUID = newTool and (newTool:GetAttribute("UUID") or newTool:GetAttribute("Id") or newTool.Name) or nil
+                        })
                     end
                 end)
             end
@@ -6422,67 +6394,100 @@ end
 
 local function placeCollectedCardsBack()
     pcall(function()
-        local positions = getgenv().CollectedCardPositions
-        if not positions or #positions == 0 then return end
+        local cardsData = getgenv().CollectedCardsData
+        if not cardsData or #cardsData == 0 then return end
 
         local startCF = LocalPlayer.Character and LocalPlayer.Character:GetPivot()
+        local plotFolder = findPlayerPlot()
 
-        for _, pos in ipairs(positions) do
+        for _, saved in ipairs(cardsData) do
             pcall(function()
                 local character = LocalPlayer.Character
                 local hrp = character and character:FindFirstChild("HumanoidRootPart")
                 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
                 if not hrp or not humanoid then return end
 
-                local tool
-                local backpack = LocalPlayer:FindFirstChild("Backpack")
-                if backpack then
-                    for _, t in ipairs(backpack:GetChildren()) do
-                        if t:IsA("Tool") and not isPackCard(t) then tool = t break end
-                    end
-                end
-                if not tool and character then
-                    for _, t in ipairs(character:GetChildren()) do
-                        if t:IsA("Tool") and not isPackCard(t) then tool = t break end
-                    end
-                end
-
-                if tool then
-                    humanoid:EquipTool(tool)
-                    task.wait(0.12)
-                else
-                    return
-                end
-
-                hrp.CFrame = CFrame.new(pos) + Vector3.new(0, 2, 0)
-                task.wait(0.12)
-
-                local plotFolder = findPlayerPlot()
-                if plotFolder then
-                    for _, desc in ipairs(plotFolder:GetDescendants()) do
-                        if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                            local descPos
-                            if desc.Parent:IsA("BasePart") then descPos = desc.Parent.Position
-                            elseif desc.Parent:IsA("Attachment") then descPos = desc.Parent.WorldPosition end
-                            
-                            if descPos and (descPos - pos).Magnitude < 5 then
-                                if desc:IsA("ProximityPrompt") then
-                                    desc.RequiresLineOfSight = false
-                                    desc.MaxActivationDistance = 99999
-                                    desc.HoldDuration = 0
-                                    for _ = 1, 2 do fireproximityprompt(desc) task.wait(0.05) end
-                                elseif desc:IsA("ClickDetector") then
-                                    for _ = 1, 2 do fireclickdetector(desc) task.wait(0.05) end
+                -- หา Tool ที่ตรงกับการ์ด Slot นี้โดยเฉพาะ
+                local tool = saved.tool
+                if not (tool and tool.Parent) then
+                    local bp = LocalPlayer:FindFirstChild("Backpack")
+                    if bp then
+                        for _, t in ipairs(bp:GetChildren()) do
+                            if t:IsA("Tool") and not isPackCard(t) then
+                                local uid = t:GetAttribute("UUID") or t:GetAttribute("Id") or t.Name
+                                if saved.toolUUID and uid == saved.toolUUID then
+                                    tool = t
+                                    break
                                 end
-                                break
+                            end
+                        end
+                        if not tool then
+                            for _, t in ipairs(bp:GetChildren()) do
+                                if t:IsA("Tool") and not isPackCard(t) then
+                                    tool = t
+                                    break
+                                end
                             end
                         end
                     end
                 end
-                task.wait(0.1)
+
+                if tool and tool.Parent then
+                    humanoid:EquipTool(tool)
+                    task.wait(0.15)
+                else
+                    return
+                end
+
+                if saved.pos then
+                    hrp.CFrame = CFrame.new(saved.pos) + Vector3.new(0, 2, 0)
+                    task.wait(0.15)
+                end
+
+                -- สแกนหา Prompt คืนการ์ดที่มีระยะห่าง "น้อยที่สุด" (Closest Prompt) ป้องกันไปกดใส่ Slot ข้างๆ
+                if plotFolder and saved.pos then
+                    local bestPrompt = nil
+                    local minDistance = 999
+
+                    for _, desc in ipairs(plotFolder:GetDescendants()) do
+                        if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                            local actTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name)
+                            
+                            -- ต้องเป็น Prompt วางการ์ด ไม่ใช่ปุ่มขาย/ปุ่มอัปเกรด/ปุ่มสุ่ม
+                            local isPlacePrompt = actTxt:find("PLACE") or actTxt:find("วาง") or actTxt:find("EQUIP") or actTxt:find("SET") or actTxt:find("PUT") or actTxt:find("SLOT") or not desc:FindFirstAncestorOfClass("Model")
+                            
+                            if isPlacePrompt then
+                                local descPos
+                                if desc.Parent and desc.Parent:IsA("BasePart") then descPos = desc.Parent.Position
+                                elseif desc.Parent and desc.Parent:IsA("Attachment") then descPos = desc.Parent.WorldPosition end
+                                
+                                if descPos then
+                                    local dist = (descPos - saved.pos).Magnitude
+                                    if dist < 6 and dist < minDistance then
+                                        minDistance = dist
+                                        bestPrompt = desc
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    if bestPrompt then
+                        if bestPrompt:IsA("ProximityPrompt") then
+                            bestPrompt.RequiresLineOfSight = false
+                            bestPrompt.MaxActivationDistance = 99999
+                            bestPrompt.HoldDuration = 0
+                            for _ = 1, 2 do fireproximityprompt(bestPrompt) task.wait(0.05) end
+                        elseif bestPrompt:IsA("ClickDetector") then
+                            for _ = 1, 2 do fireclickdetector(bestPrompt) task.wait(0.05) end
+                        end
+                    end
+                end
+                task.wait(0.15)
             end)
         end
 
+        getgenv().CollectedCardsData = nil
         getgenv().CollectedCardPositions = nil
         if LocalPlayer.Character and startCF then
             LocalPlayer.Character:PivotTo(startCF)
