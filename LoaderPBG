@@ -188,6 +188,16 @@ local VVIPRouter = {
     [132445869992129] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
 }
 
+-- ส่งออกข้อมูล Router ไปยัง Global Environment เพื่อให้ Start.txt และ Waiting.txt ดึงข้อมูลได้ทันที
+pcall(function()
+    if getgenv then
+        getgenv().PayomboyZ_NormalRouter = NormalRouter
+        getgenv().PayomboyZ_VVIPRouter = VVIPRouter
+    end
+    _G.PayomboyZ_NormalRouter = NormalRouter
+    _G.PayomboyZ_VVIPRouter = VVIPRouter
+end)
+
 -- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
 local placeId = game.PlaceId
 local scriptTarget = NormalRouter[placeId]
