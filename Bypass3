@@ -1,148 +1,218 @@
--- CrazyHub Anti-Cheat Bypass - FINAL
--- สเตเบิล ไม่พังเกม ไม่เบลอจอ
+-- ─── Crazy Hub AC Bypass (Standalone) ───
+-- เปิดแค่ Anti-Cheat โดยไม่ง้อ UI ของ Crazy Hub
+-- ใช้งาน: loadstring(game:HttpGet("url"))() หรือ paste ลง executor
 
-local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
+local ACBypass = {}
+ACBypass.__index = ACBypass
 
-local BLOCK_LIST = {
-    "X-34", "X-33", "X-35", "X-36",
-    "AntiCheat", "Detect", "Report",
-    "Check", "Verify", "Pulse",
-    "Flag", "AC", "Ban", "Kick"
+-- Configuration
+local Config = {
+    Debug = false,
+    BlockPatterns = {
+        -- Anti-cheat remote patterns (case-insensitive matching)
+        "anticheat", "anti_cheat", "detection", "detect",
+        "integrity", "verify", "verification", "check",
+        "report", "suspicious", "exploit", "bypass",
+        "security", "monitor", "log", "flag",
+        "position", "speed", "teleport", "correction",
+        "physics", "raycast", "hitbox", "distance",
+        -- Common Roblox AC remotes
+        "anticheat", "serverinfo", "clientcheck",
+        "validate", "sanity", "heartbeat_check"
+    },
+    -- Additional safety: block by remote type
+    BlockRemoteEvents = true,
+    BlockRemoteFunctions = false, -- usually safe to leave false
+    -- Logging
+    LogBlocked = false,
+    LogFormat = "[AC-Bypass] Blocked %s:%s"
 }
 
-local function shouldBlockName(name)
-    if not name then return false end
-    local lowered = name:lower()
-    for _, entry in ipairs(BLOCK_LIST) do
-        if lowered == entry:lower() then
+-- Blocked counter for debug
+local blockedCount = 0
+local blockedRemotes = {}
+
+-- Check if a remote name should be blocked
+local function shouldBlock(remoteName)
+    if not remoteName or type(remoteName) ~= "string" then
+        return false
+    end
+    local lowerName = remoteName:lower()
+    for _, pattern in ipairs(Config.BlockPatterns) do
+        if lowerName:find(pattern:lower(), 1, true) then
             return true
         end
     end
     return false
 end
 
-local function isRemoteObject(obj)
-    local ok1, r1 = pcall(function() return obj:IsA("RemoteEvent") end)
-    if ok1 and r1 then return true end
-    local ok2, r2 = pcall(function() return obj:IsA("RemoteFunction") end)
-    if ok2 and r2 then return true end
-    local ok3, r3 = pcall(function() return obj:IsA("UnreliableRemoteEvent") end)
-    if ok3 and r3 then return true end
-    return false
-end
-
--- 1) GC Patch
-local function patchGc()
-    if type(getgc) ~= "function" then return false end
-    if type(hookfunction) ~= "function" then return false end
-    local getconstants = getconstants or debug.getconstants
-    if type(getconstants) ~= "function" then return false end
-
-    local objs = getgc(true)
-    if type(objs) ~= "table" then return false end
-
-    local patched = 0
-    for _, fn in pairs(objs) do
-        if type(fn) == "function" then
-            local consts = {}
-            pcall(function() consts = getconstants(fn) end)
-            local susp = false
-            for _, c in pairs(consts) do
-                if type(c) == "string" then
-                    local lower = c:lower()
-                    if lower:find("anticheat", 1, true) or lower:find("detect", 1, true) or
-                       lower:find("suspicious", 1, true) or lower:find("cheater", 1, true) then
-                        susp = true
-                        break
-                    end
-                    if shouldBlockName(c) then susp = true break end
-                end
-            end
-            if susp then
-                pcall(function()
-                    hookfunction(fn, function() return nil end)
-                    patched = patched + 1
-                end)
-            end
-        end
+-- Main bypass function
+function ACBypass:Enable()
+    if self._enabled then
+        warn("[AC-Bypass] Already enabled!")
+        return false
     end
-    return patched > 0
-end
 
--- 2) Namecall Hook
-local function installNamecallHook()
-    if type(hookmetamethod) ~= "function" then return false end
-    if type(getnamecallmethod) ~= "function" then return false end
+    -- Check if hookmetamethod is available
+    if type(hookmetamethod) ~= "function" then
+        warn("[AC-Bypass] hookmetamethod not found — check your executor")
+        return false
+    end
 
-    local newcclosureFn = type(newcclosure) == "function" and newcclosure or function(f) return f end
-    local old = nil
+    if type(getnamecallmethod) ~= "function" then
+        warn("[AC-Bypass] getnamecallmethod not found")
+        return false
+    end
 
-    local body = function(self, ...)
-        local method = getnamecallmethod()
-        if (method == "FireServer" or method == "InvokeServer") and isRemoteObject(self) then
-            local name = pcall(function() return self.Name end) and self.Name or ""
-            if shouldBlockName(name) then
-                return nil
+    -- Store original
+    local originalNamecall = nil
+
+    -- Create the hook closure
+    local function hookClosure(self_obj, ...)
+        local args = { ... }
+        local method = nil
+        pcall(function() method = getnamecallmethod() end)
+
+        -- Only intercept FireServer/InvokeServer
+        if method == "FireServer" or method == "InvokeServer" then
+            -- Get remote name safely
+            local remoteName = nil
+            pcall(function() remoteName = self_obj.Name end)
+
+            if remoteName and shouldBlock(remoteName) then
+                blockedCount += 1
+                blockedRemotes[remoteName] = (blockedRemotes[remoteName] or 0) + 1
+
+                if Config.LogBlocked then
+                    print(Config.LogFormat:format(
+                        method,
+                        remoteName
+                    ))
+                end
+
+                if Config.Debug then
+                    print(string.format(
+                        "[AC-Bypass] #%d blocked: %s:%s (total: %d)",
+                        blockedCount,
+                        method,
+                        remoteName,
+                        blockedRemotes[remoteName]
+                    ))
+                end
+
+                return nil -- Block the call
             end
         end
-        if type(old) == "function" then
-            return old(self, ...)
+
+        -- Pass through legitimate calls
+        if type(originalNamecall) == "function" then
+            return originalNamecall(self_obj, unpack(args))
         end
         return nil
     end
 
-    local wrapped = newcclosureFn(body)
-    local ok = pcall(function() old = hookmetamethod(game, "__namecall", wrapped) end)
-    if not ok or type(old) ~= "function" then return false end
+    -- Wrap in newcclosure if available (better anti-detection)
+    local closure = hookClosure
+    if type(newcclosure) == "function" then
+        local ok, result = pcall(newcclosure, hookClosure)
+        if ok and type(result) == "function" then
+            closure = result
+        end
+    end
+
+    -- Apply the hook
+    local ok = pcall(function()
+        originalNamecall = hookmetamethod(game, "__namecall", closure)
+    end)
+
+    if not ok then
+        warn("[AC-Bypass] Failed to apply hookmetamethod")
+        return false
+    end
+
+    self._enabled = true
+    self._originalNamecall = originalNamecall
+
+    print(string.format(
+        "[AC-Bypass] Enabled successfully — blocking %d patterns",
+        #Config.BlockPatterns
+    ))
     return true
 end
 
--- 3) Clear Blur (กันจอเบลอค้าง)
-local function clearBlur()
-    for _, v in ipairs(Lighting:GetChildren()) do
-        if v:IsA("BlurEffect") then
-            v.Enabled = false
-            v:Destroy()
-        end
-    end
-    Lighting.Blur = 0
-end
-
--- 4) Disable Scripts
-local function disableScripts()
-    local count = 0
-    for _, v in ipairs(game:GetDescendants()) do
-        if (v:IsA("LocalScript") or v:IsA("ModuleScript")) and not v.Disabled then
-            local name = v.Name:lower()
-            if name:find("anticheat", 1, true) or name:find("detect", 1, true) or name:find("cheat", 1, true) then
-                v.Disabled = true
-                count = count + 1
-            end
-        end
-    end
-    return count > 0
-end
-
--- MAIN
-local function main()
-    disableScripts()
-    local gc = patchGc()
-    local hook = installNamecallHook()
-
-    if gc or hook then
-        print("[CrazyHub] Anti-Cheat Bypassed successfully!")
-    else
-        print("[CrazyHub] Anti-Cheat Bypass Failed.")
+-- Disable the bypass
+function ACBypass:Disable()
+    if not self._enabled then
+        return false
     end
 
-    -- loop ล้างเบลอ
-    spawn(function()
-        while true do
-            wait(1)
-            clearBlur()
-        end
-    end)
+    -- Remove hook by restoring original
+    if type(self._originalNamecall) == "function" then
+        pcall(function()
+            hookmetamethod(game, "__namecall", self._originalNamecall)
+        end)
+    end
+
+    self._enabled = false
+    print("[AC-Bypass] Disabled")
+    return true
 end
 
-main()
+-- Get statistics
+function ACBypass:GetStats()
+    return {
+        Enabled = self._enabled or false,
+        TotalBlocked = blockedCount,
+        UniqueRemotes = #blockedRemotes,
+        BlockedDetails = blockedRemotes
+    }
+end
+
+-- Add custom pattern to block
+function ACBypass:AddPattern(pattern)
+    if type(pattern) == "string" and not table.find(Config.BlockPatterns, pattern) then
+        table.insert(Config.BlockPatterns, pattern)
+        print(string.format("[AC-Bypass] Added pattern: '%s'", pattern))
+        return true
+    end
+    return false
+end
+
+-- Remove pattern
+function ACBypass:RemovePattern(pattern)
+    for i, p in ipairs(Config.BlockPatterns) do
+        if p:lower() == pattern:lower() then
+            table.remove(Config.BlockPatterns, i)
+            print(string.format("[AC-Bypass] Removed pattern: '%s'", pattern))
+            return true
+        end
+    end
+    return false
+end
+
+-- Quick one-liner enable
+local function EnableAC()
+    return ACBypass:Enable()
+end
+
+-- Quick stats
+local function ACStats()
+    local s = ACBypass:GetStats()
+    print(string.format(
+        "AC Bypass: %s | Blocked: %d | Unique: %d",
+        s.Enabled and "ON" or "OFF",
+        s.TotalBlocked,
+        s.UniqueRemotes
+    ))
+    if s.UniqueRemotes > 0 and Config.Debug then
+        print("Blocked remotes:")
+        for name, count in pairs(s.BlockedDetails) do
+            print(string.format("  %s: %d times", name, count))
+        end
+    end
+end
+
+-- Auto-execute on load (optional — comment out if you want manual control)
+-- EnableAC()
+
+return ACBypass
