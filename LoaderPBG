@@ -161,10 +161,8 @@ local NormalRouter = {
     -- 7. Blox Fruit (BF)
     [2753915549] = { Name = "Blox Fruit", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BFGood", Keywords = {"Blox Fruit"} },
 
-    -- 8. Iron Soul (IRS)
-    [117533937949084] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/IronSoul", Keywords = {"Iron Soul"} },
-    [116456628154258] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
-    [132445869992129] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
+    -- 8. Roll a Gnome(GNOME)
+    [117539213094671] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/raGnome", Keywords = {"Roll a Gnome"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
@@ -183,6 +181,11 @@ local VVIPRouter = {
 
     -- 5. Anime Expedition (AE)
     [84515722934860] = { Name = "Anime Expedition", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/AEae", Keywords = {"AE"} },
+
+    -- 6. Iron Soul (IRS)
+    [117533937949084] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/IronSoul", Keywords = {"Iron Soul"} },
+    [116456628154258] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
+    [132445869992129] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
 }
 
 -- 6. ตรวจสอบแมพจากในเกม (PlaceId + GameId + Marketplace In-Game Name Inspection)
