@@ -217,6 +217,7 @@ local GAME_DATABASE = {
     { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed", IconPlaceId = 128736949265057 },
     { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard", IconPlaceId = 126509999114328 },
     { Name = "Blox Fruit", Category = "VIP", PlaceId = 2753915549, Description = "Auto Farm, Sea Events, Quest & Raid", IconPlaceId = 2753915549 },
+    { Name = "Roll a Gnome", Category = "VIP", PlaceId = 117539213094671, Description = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm", IconPlaceId = 117539213094671 },
 
     -- VVIP Exclusive Games
     { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan", IconPlaceId = 125927821145949 },
@@ -224,6 +225,7 @@ local GAME_DATABASE = {
     { Name = "Capybara Vs Plant", Category = "VVIP", PlaceId = 104973076655377, Description = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle", IconPlaceId = 104973076655377 },
     { Name = "Steal An Egg", Category = "VVIP", PlaceId = 107778070777162, Description = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch", IconPlaceId = 107778070777162 },
     { Name = "Anime Expedition", Category = "VVIP", PlaceId = 84515722934860, Description = "Auto Expedition, Dungeon Clear, Card Reroll & AFK", IconPlaceId = 84515722934860 },
+    { Name = "Iron Soul", Category = "VVIP", PlaceId = 117533937949084, Description = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill", IconPlaceId = 117533937949084 },
 }
 
 -- ==============================================================================
