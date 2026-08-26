@@ -246,55 +246,59 @@ local function GetDynamicGameDatabase()
         ["Iron Soul"] = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill",
     }
 
-    -- 1. ดึงจาก Memory หาก loader เคยถูกรันมาก่อนแล้ว
-    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
-    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+    -- Default 14 Supported Games (เน็ตหลุดหรือเข้าครั้งแรกก็ขึ้นครบแน่นอน)
+    local defaultGames = {
+        { Name = "Attack On Titan Revolution", Category = "VIP", PlaceId = 13379208636, Description = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible" },
+        { Name = "Anime Card Farm", Category = "VIP", PlaceId = 125039473548047, Description = "Auto Card Roll, Pack Opener, Card Fusion & Farm" },
+        { Name = "Arena Sniper", Category = "VIP", PlaceId = 122446657157717, Description = "Silent Aim, Hitbox Expander, Auto Shoot & Kill" },
+        { Name = "Roll Anime To Fight", Category = "VIP", PlaceId = 107653945083776, Description = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units" },
+        { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed" },
+        { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard" },
+        { Name = "Blox Fruit", Category = "VIP", PlaceId = 2753915549, Description = "Auto Farm, Sea Events, Quest & Raid" },
+        { Name = "Roll a Gnome", Category = "VIP", PlaceId = 117539213094671, Description = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm" },
 
-    if type(nRouter) == "table" and type(vRouter) == "table" and next(nRouter) then
-        for placeId, data in pairs(nRouter) do
-            local name = data.Name
-            local desc = customDescs[name] or "Auto Farm & Game Automation"
-            addGame(name, "VIP", placeId, desc)
-        end
-        for placeId, data in pairs(vRouter) do
-            local name = data.Name
-            local desc = customDescs[name] or "Exclusive VVIP Map Script"
-            addGame(name, "VVIP", placeId, desc)
-        end
-        return db
+        { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan" },
+        { Name = "Murder Mystery 2", Category = "VVIP", PlaceId = 142823291, Description = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun" },
+        { Name = "Capybara Vs Plant", Category = "VVIP", PlaceId = 104973076655377, Description = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle" },
+        { Name = "Steal An Egg", Category = "VVIP", PlaceId = 107778070777162, Description = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch" },
+        { Name = "Anime Expedition", Category = "VVIP", PlaceId = 84515722934860, Description = "Auto Expedition, Dungeon Clear, Card Reroll & AFK" },
+        { Name = "Iron Soul", Category = "VVIP", PlaceId = 117533937949084, Description = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill" },
+    }
+
+    for _, g in ipairs(defaultGames) do
+        addGame(g.Name, g.Category, g.PlaceId, g.Description)
     end
 
-    -- 2. อ่านไฟล์ loader.txt จากเครื่องสดๆ หรือดึงจาก GitHub
+    -- 1. ดึงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (บังคับสดใหม่ทุกครั้งด้วย ?t=tick())
     local loaderCode = ""
     pcall(function()
-        local paths = {
-            "loader.txt",
-            "Loader.txt",
-            "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
-        }
-        if isfile and readfile then
+        loaderCode = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
+    end)
+
+    if loaderCode == "" and isfile and readfile then
+        pcall(function()
+            local paths = {
+                "loader.txt",
+                "Loader.txt",
+                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+            }
             for _, p in ipairs(paths) do
                 if isfile(p) then
                     local code = readfile(p)
                     if code and #code > 0 then loaderCode = code; break end
                 end
             end
-        end
-    end)
-    if loaderCode == "" then
-        pcall(function()
-            loaderCode = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
         end)
     end
 
-    -- 3. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    -- 2. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
     if loaderCode ~= "" then
         local normalStart = loaderCode:find("NormalRouter%s*=")
         local vvipStart = loaderCode:find("VVIPRouter%s*=")
-        local placeIdStart = loaderCode:find("local%s+placeId") or #loaderCode
+        local pcallStart = loaderCode:find("pcall%s*%(") or #loaderCode
 
         local normalSection = (normalStart and vvipStart) and loaderCode:sub(normalStart, vvipStart - 1) or loaderCode
-        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, placeIdStart - 1) or loaderCode
+        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, pcallStart) or loaderCode
 
         for placeIdStr, name in normalSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
             local pid = tonumber(placeIdStr)
@@ -309,6 +313,28 @@ local function GetDynamicGameDatabase()
             if pid then
                 local desc = customDescs[name] or "Exclusive VVIP Map Script"
                 addGame(name, "VVIP", pid, desc)
+            end
+        end
+    end
+
+    -- 3. เติม Memory router สมทบหากมีข้อมูลในระบบ
+    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
+    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+    if type(nRouter) == "table" then
+        for placeId, data in pairs(nRouter) do
+            if data and data.Name then
+                local name = data.Name
+                local desc = customDescs[name] or "Auto Farm & Game Automation"
+                addGame(name, "VIP", placeId, desc)
+            end
+        end
+    end
+    if type(vRouter) == "table" then
+        for placeId, data in pairs(vRouter) do
+            if data and data.Name then
+                local name = data.Name
+                local desc = customDescs[name] or "Exclusive VVIP Map Script"
+                addGame(name, "VVIP", placeId, desc)
             end
         end
     end
@@ -1796,14 +1822,23 @@ perksLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     perksListScroll.CanvasSize = UDim2.new(0, 0, 0, perksLayout.AbsoluteContentSize.Y + 10)
 end)
 
-local VVIP_PERKS = {
-    "⛏️ Mine a Mountain - สแกนแร่ คริสตัลหายากแบบอัตโนมัติ (Recursive ESP)",
-    "🗡️ Murder Mystery 2 - ปลดล็อก Coin Farm, Sheriff ESP & Auto Grab Gun",
-    "🦙 Capybara Vs Plant - ระบบ Auto Place Egg & Sync Dropdown อัตโนมัติ",
-    "🥚 Steal An Egg - ระบบเดินขโมยไข่ปลอดภัย ป้องกันการตรวจจับ BAC Anti-Cheat",
-    "⚔️ Anime Expedition - ออโต้ลงดันเจี้ยน, Auto Reroll & AFK Card Farm",
-    "⚡ Priority VIP Access - ได้รับการอัปเดตสคริปต์ก่อนใคร และการซัพพอร์ตระดับพรีเมียม",
+local vvipCustomPerks = {
+    ["Mine a Mountain"] = "⛏️ Mine a Mountain - สแกนแร่ คริสตัลหายากแบบอัตโนมัติ (Recursive ESP)",
+    ["Murder Mystery 2"] = "🗡️ Murder Mystery 2 - ปลดล็อก Coin Farm, Sheriff ESP & Auto Grab Gun",
+    ["Capybara Vs Plant"] = "🦙 Capybara Vs Plant - ระบบ Auto Place Egg & Sync Dropdown อัตโนมัติ",
+    ["Steal An Egg"] = "🥚 Steal An Egg - ระบบเดินขโมยไข่ปลอดภัย ป้องกันการตรวจจับ BAC Anti-Cheat",
+    ["Anime Expedition"] = "⚔️ Anime Expedition - ออโต้ลงดันเจี้ยน, Auto Reroll & AFK Card Farm",
+    ["Iron Soul"] = "🔥 Iron Soul - ออโต้ฟาร์มบอส, Auto Skill, Dungeon Clear & Instant Kill",
 }
+
+local VVIP_PERKS = {}
+for _, g in ipairs(GAME_DATABASE) do
+    if g.Category == "VVIP" then
+        local perkStr = vvipCustomPerks[g.Name] or ("👑 " .. g.Name .. " - " .. g.Description)
+        table.insert(VVIP_PERKS, perkStr)
+    end
+end
+table.insert(VVIP_PERKS, "⚡ Priority VIP Access - ได้รับการอัปเดตสคริปต์ก่อนใคร และการซัพพอร์ตระดับพรีเมียม")
 
 for _, perkText in ipairs(VVIP_PERKS) do
     local pCard = Instance.new("Frame")
