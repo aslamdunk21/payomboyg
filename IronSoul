@@ -1461,6 +1461,7 @@ local Config = {
     AutoBuyShopItem      = false,
     AutoPlayAgain        = true,
     AutoQuest            = false, -- ออโต้ทำเควสประจำวัน
+    AutoRaceReroll       = false, -- ออโต้สุ่มเผ่า (Race Reroll)
     ChickenMode          = false, -- ไก่ตัน: เปิดทุกระบบพร้อมกัน
     _ChickenPrevState    = {},    -- เก็บ state ก่อนเปิดไก่ตัน
 
@@ -1468,6 +1469,7 @@ local Config = {
     Crystals_Value       = {},
     Ores_Value           = {},
     Equipment_Value      = {},
+    SelectedTargetRaces  = { "Demon", "Lucifer", "Night Elf" },
     ShopItemToBuy        = "GoldShop_17",
     TaskNpcTarget        = "EquipmentEnchantNpc2|0",
     SelectedCaveId       = "Cave1",
@@ -1492,6 +1494,8 @@ local function getSaveData()
         AutoSell               = Config.AutoSell,
         AutoSelectBest         = Config.AutoSelectBest,
         AutoUpgradeAttribute   = Config.AutoUpgradeAttribute,
+        AutoRaceReroll         = Config.AutoRaceReroll,
+        SelectedTargetRaces    = Config.SelectedTargetRaces,
     }
 end
 
@@ -1696,11 +1700,109 @@ local function FortifyEquipment(equipUUID)
     end)
 end
 
-local function OpenForgeGUI()
+local function teleportWithPhysicsNudge(targetCF)
     pcall(function()
-        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge") end
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
+
+        if hrp then
+            -- 1. Server SafeTeleport
+            if safeTeleport then pcall(function() safeTeleport:InvokeServer(targetCF) end) end
+            
+            -- 2. Direct Teleport Position
+            hrp.CFrame = targetCF
+            task.wait(0.05)
+
+            -- 3. Trigger TouchTransmitters (หากมี Portal Zone ในระยะ 15 Studs)
+            pcall(function()
+                if type(firetouchinterest) == "function" then
+                    for _, v in ipairs(workspace:GetDescendants()) do
+                        if v:IsA("TouchTransmitter") and v.Parent then
+                            if (v.Parent.Position - hrp.Position).Magnitude < 15 then
+                                firetouchinterest(hrp, v.Parent, 0)
+                                task.wait(0.02)
+                                firetouchinterest(hrp, v.Parent, 1)
+                            end
+                        end
+                    end
+                end
+            end)
+
+            -- 4. Physics Impulse & Jump Nudge (ส่งสัญญาณ Physics กระตุ้น Zone Client/Server)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 8, 0)
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+
+            -- 5. Micro Movement Offset (ขยับเล็กน้อยเพื่อกระตุ้น Physics Stepped)
+            hrp.CFrame = targetCF * CFrame.new(0, 0.15, -0.15)
+            task.wait(0.08)
+            hrp.CFrame = targetCF
+            task.wait(0.05)
+        end
     end)
+end
+
+local function OpenForgeGUI()
+    teleportWithPhysicsNudge(FORGE_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge")
+    end
+end
+
+local function OpenPetHatchGUI()
+    teleportWithPhysicsNudge(PET_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsHatch")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsHatch")
+    end
+end
+
+local function OpenPetUpgradeGUI()
+    teleportWithPhysicsNudge(PET_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsFortifyAndUpgrade")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsFortifyAndUpgrade")
+    end
+end
+
+local function OpenMiloEnchantGUI()
+    teleportWithPhysicsNudge(MILO_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantment")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantment")
+    end
+end
+
+local function OpenMiloFuseRuneGUI()
+    teleportWithPhysicsNudge(MILO_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantmentFuse")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantmentFuse")
+    end
+end
+
+local function OpenEnhanceEquipmentGUI()
+    teleportWithPhysicsNudge(FORTIFY_PORTAL_CF)
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    if taskRE then
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
+        task.wait(0.1)
+        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
+    end
 end
 
 local function DropForgeOres(oresTable, forgeType)
@@ -1793,6 +1895,182 @@ local function GetEquipment()
     return result
 end
 
+-- ════════════════════════════════════════════════════
+-- 5.1 RACE AUTO-REROLL ENGINE (ระบบรีเผ่า)
+-- ════════════════════════════════════════════════════
+local KNOWN_RACES = {
+    "Demon",
+    "Lucifer",
+    "Night Elf",
+    "Angel",
+    "Vampire",
+    "Fairy",
+    "Sorcerer",
+    "Dragonkin",
+    "Undead",
+    "Goblin",
+    "Orc",
+    "Human",
+}
+
+local function detectCurrentRace()
+    local foundRace = nil
+
+    -- 1. Scan Character Head & BillboardGuis (Overhead text)
+    pcall(function()
+        local char = player.Character
+        if char then
+            local head = char:FindFirstChild("Head")
+            if head then
+                for _, desc in ipairs(head:GetDescendants()) do
+                    if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                        local txt = desc.Text or ""
+                        for _, rName in ipairs(KNOWN_RACES) do
+                            if string.find(txt, rName) then
+                                foundRace = rName
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+            for _, desc in ipairs(char:GetDescendants()) do
+                if desc:IsA("BillboardGui") or desc:IsA("SurfaceGui") then
+                    for _, txtLabel in ipairs(desc:GetDescendants()) do
+                        if txtLabel:IsA("TextLabel") then
+                            local txt = txtLabel.Text or ""
+                            for _, rName in ipairs(KNOWN_RACES) do
+                                if string.find(txt, rName) then
+                                    foundRace = rName
+                                    return
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if foundRace then return foundRace end
+
+    -- 2. Scan PlayerGui descendants for Race UI / HUD
+    pcall(function()
+        local pg = player:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    for _, desc in ipairs(gui:GetDescendants()) do
+                        if desc:IsA("TextLabel") and desc.Visible then
+                            local txt = desc.Text or ""
+                            if string.find(txt, "★") or string.find(txt, "Race") or string.find(txt, "Human") or string.find(txt, "Demon") then
+                                for _, rName in ipairs(KNOWN_RACES) do
+                                    if string.find(txt, rName) then
+                                        foundRace = rName
+                                        return
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if foundRace then return foundRace end
+
+    -- 3. Check DataUtil or Player attributes / values
+    pcall(function()
+        if DataUtil then
+            local pd = DataUtil:GetPlayerData(player)
+            if pd and pd.Race then
+                local rName = tostring(pd.Race)
+                for _, r in ipairs(KNOWN_RACES) do
+                    if string.find(rName, r) then foundRace = r return end
+                end
+                foundRace = rName
+                return
+            end
+        end
+        local rAttr = player:GetAttribute("Race") or player:GetAttribute("CurrentRace")
+        if rAttr then foundRace = tostring(rAttr) return end
+        local rVal = player:FindFirstChild("Race") or player:FindFirstChild("RaceValue")
+        if rVal and rVal:IsA("StringValue") then foundRace = rVal.Value return end
+    end)
+
+    return foundRace or "Unknown"
+end
+
+local function OpenRaceGUI()
+    pcall(function()
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenRace")
+        end
+    end)
+end
+
+local function RollRaceOnce()
+    pcall(function()
+        -- 0. Open Race GUI Window
+        OpenRaceGUI()
+        task.wait(0.2)
+
+        -- 1. Clear RedPoint indicator
+        local redPointRE = getRemote("ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil.RemoteEvent")
+        if redPointRE then redPointRE:FireServer("Clear", "Race", "RaceSpin") end
+
+        -- 2. Roll Race 1 time
+        local raceRE = getRemote("ReplicatedStorage.Framework.Gameplay.RaceSystem.RaceRE")
+        if raceRE then raceRE:FireServer("Rolling", "1") end
+
+        -- 3. Wait 2 seconds for server spin process
+        task.wait(2)
+
+        -- 4. GetLootItems sync
+        local raceRF = getRemote("ReplicatedStorage.Framework.Gameplay.RaceSystem.RaceRF")
+        if raceRF then raceRF:InvokeServer("GetLootItems") end
+    end)
+end
+
+local _isRollingRace = false
+local function startAutoRaceRerollLoop()
+    if _isRollingRace then return end
+    _isRollingRace = true
+    task.spawn(function()
+        while Config.AutoRaceReroll and not State.Unloaded do
+            local currentRace = detectCurrentRace()
+            
+            -- Check if current race matches selected target races
+            local isTarget = false
+            for _, target in ipairs(Config.SelectedTargetRaces or {}) do
+                if target == currentRace or string.find(currentRace, target) then
+                    isTarget = true
+                    break
+                end
+            end
+
+            if isTarget and currentRace ~= "Unknown" then
+                Config.AutoRaceReroll = false
+                saveSettings()
+                ObsidianGlassEngine:Notify({
+                    Title = "🎉 ได้รับเผ่าเป้าหมายแล้ว!",
+                    Content = "สุ่มได้เผ่า " .. tostring(currentRace) .. " ตรงตามเป้าหมาย! หยุดระบบรีเผ่าอัตโนมัติเรียบร้อย",
+                    Duration = 8
+                })
+                break
+            end
+
+            -- Roll Race 1 time
+            RollRaceOnce()
+
+            local newRace = detectCurrentRace()
+            print("[PayomboyZ HUB] สุ่มได้เผ่า: " .. tostring(newRace))
+            task.wait(0.5)
+        end
+        _isRollingRace = false
+    end)
+end
+
 local WorldMapData = {
     ["ป่าไร้ดาว (World1)"]          = "World1",
     ["หุบเขาเยือกเย็น (World2)"]     = "World2",
@@ -1807,6 +2085,16 @@ local WorldMapData = {
 }
 
 local DifficultyData = {
+    ["ระดับที่ 1 Trial"]      = 1,
+    ["ระดับที่ 2 Challenge"]  = 2,
+    ["ระดับที่ 3 Penitent"]   = 3,
+    ["ระดับที่ 4 Torment"]    = 4,
+    ["ระดับที่ 5 Inferno"]    = 5,
+    ["ระดับ 1 (Trial - Diff 1)"]        = 1,
+    ["ระดับ 2 (Challenge - Diff 2)"]    = 2,
+    ["ระดับ 3 (Penitent - Diff 3)"]     = 3,
+    ["ระดับ 4 (Torment - Diff 4)"]      = 4,
+    ["ระดับ 5 (Inferno - Diff 5)"]      = 5,
     ["ระดับทดสอบ (Diff 1)"]  = 1,
     ["ระดับท้าทาย (Diff 2)"]  = 2,
     ["ระดับลงทัณฑ์ (Diff 3)"] = 3,
@@ -1822,34 +2110,34 @@ local PartySizeData = {
 }
 
 local StandardDiffData = {
-    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
-    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
-    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
-    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
-    ["ระดับนรกขุมลึก (Inferno - Diff 5)"]    = 5,
+    ["ระดับที่ 1 Trial"]      = 1,
+    ["ระดับที่ 2 Challenge"]  = 2,
+    ["ระดับที่ 3 Penitent"]   = 3,
+    ["ระดับที่ 4 Torment"]    = 4,
+    ["ระดับที่ 5 Inferno"]    = 5,
 }
 
 local Cave1DiffData = {
-    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
-    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
-    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
-    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
-    ["ระดับนรกขุมลึก (Inferno - Diff 5)"]    = 5,
+    ["ระดับที่ 1 Trial"]      = 1,
+    ["ระดับที่ 2 Challenge"]  = 2,
+    ["ระดับที่ 3 Penitent"]   = 3,
+    ["ระดับที่ 4 Torment"]    = 4,
+    ["ระดับที่ 5 Inferno"]    = 5,
 }
 
 local Cave23DiffData = {
-    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
-    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
-    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
-    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
+    ["ระดับที่ 1 Trial"]      = 1,
+    ["ระดับที่ 2 Challenge"]  = 2,
+    ["ระดับที่ 3 Penitent"]   = 3,
+    ["ระดับที่ 4 Torment"]    = 4,
 }
 
 local CircusDiffData = {
-    ["ระดับ 1 (Level 1)"]               = 1,
-    ["ระดับ 2 (Level 2)"]               = 2,
-    ["ระดับ 3 (Level 3)"]               = 3,
-    ["ระดับ 4 (Level 4)"]               = 4,
-    ["ระดับ 5 (Inferno - Level 5)"]        = 5,
+    ["ระดับที่ 1 Trial"]      = 1,
+    ["ระดับที่ 2 Challenge"]  = 2,
+    ["ระดับที่ 3 Penitent"]   = 3,
+    ["ระดับที่ 4 Torment"]    = 4,
+    ["ระดับที่ 5 Inferno"]    = 5,
 }
 
 local EndlessFloorOptions = {}
@@ -1874,30 +2162,30 @@ local function getDifficultyOptionsForWorld(worldId)
     elseif worldId == "SeasonResource1" then
         return {
             Title = "เลือกระดับถ้ำวัตถุดิบ (Season Resource Level)",
-            Options = { "ระดับ 1 (Level 1)", "ระดับ 2 (Level 2)", "ระดับ 3 (Level 3)", "ระดับ 4 (Level 4)", "ระดับ 5 (Inferno - Level 5)" },
+            Options = { "ระดับที่ 1 Trial", "ระดับที่ 2 Challenge", "ระดับที่ 3 Penitent", "ระดับที่ 4 Torment", "ระดับที่ 5 Inferno" },
             DataMap = CircusDiffData,
-            Default = "ระดับ 1 (Level 1)"
+            Default = "ระดับที่ 1 Trial"
         }
     elseif worldId == "Cave1" then
         return {
             Title = "เลือกระดับความยากถ้ำคริสตัล (Cave 1 Difficulty)",
-            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)", "ระดับนรกขุมลึก (Inferno - Diff 5)" },
+            Options = { "ระดับที่ 1 Trial", "ระดับที่ 2 Challenge", "ระดับที่ 3 Penitent", "ระดับที่ 4 Torment", "ระดับที่ 5 Inferno" },
             DataMap = Cave1DiffData,
-            Default = "ระดับทดสอบ (Trial - Diff 1)"
+            Default = "ระดับที่ 1 Trial"
         }
     elseif worldId == "Cave2" or worldId == "Cave3" then
         return {
             Title = "เลือกระดับความยากถ้ำ (Cave Difficulty)",
-            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)" },
+            Options = { "ระดับที่ 1 Trial", "ระดับที่ 2 Challenge", "ระดับที่ 3 Penitent", "ระดับที่ 4 Torment" },
             DataMap = Cave23DiffData,
-            Default = "ระดับทดสอบ (Trial - Diff 1)"
+            Default = "ระดับที่ 1 Trial"
         }
     else
         return {
             Title = "เลือกระดับความยากดันเจี้ยน (Difficulty)",
-            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)", "ระดับนรกขุมลึก (Inferno - Diff 5)" },
+            Options = { "ระดับที่ 1 Trial", "ระดับที่ 2 Challenge", "ระดับที่ 3 Penitent", "ระดับที่ 4 Torment", "ระดับที่ 5 Inferno" },
             DataMap = StandardDiffData,
-            Default = "ระดับทดสอบ (Trial - Diff 1)"
+            Default = "ระดับที่ 1 Trial"
         }
     end
 end
@@ -1906,6 +2194,10 @@ local DUNGEON_PORTAL_CF = CFrame.new(59.13860321044922, 27.21690559387207, 226.8
 local CAVE_PORTAL_CF    = CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703)
 local TOWER_PORTAL_CF   = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094)
 local CIRCUS_PORTAL_CF  = CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562)
+local FORGE_PORTAL_CF   = CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042)
+local PET_PORTAL_CF     = CFrame.new(-73.71713256835938, 34.35190963745117, -16.689453125)
+local MILO_PORTAL_CF    = CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469)
+local FORTIFY_PORTAL_CF = CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484)
 
 local function runLobbyDungeonSelect()
     local worldId = Config.SelectedWorldId or "World1"
@@ -1916,33 +2208,29 @@ local function runLobbyDungeonSelect()
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         local worldUtilRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
         local gameMatchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
-        local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
-
-        local char = player.Character or player.CharacterAdded:Wait()
-        local hrp = char:FindFirstChild("HumanoidRootPart")
 
         if worldId == "EndlessTower" or worldId == "Endless1" then
-            -- วาร์ปไปพิกัดหอคอย
-            if hrp then
-                if safeTeleport then pcall(function() safeTeleport:InvokeServer(TOWER_PORTAL_CF) end) end
-                hrp.CFrame = TOWER_PORTAL_CF
+            -- วาร์ปไปพิกัดหอคอย พร้อมส่งสัญญาณ Physics Nudge
+            teleportWithPhysicsNudge(TOWER_PORTAL_CF)
+            if taskRE then
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless")
+                task.wait(0.1)
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless")
             end
-            task.wait(0.2)
-            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless") end
-            task.wait(0.1)
+            task.wait(0.15)
             local endlessFloor = Config.SelectedEndlessStage or Config.SelectedEndlessFloor or diffNum or 1
             if gameMatchRE then
                 gameMatchRE:FireServer("CreatRoom", "Endless1", 1, partySize, endlessFloor)
             end
         elseif worldId == "SeasonResource1" then
             -- วาร์ปไปพิกัด Royal Circus
-            if hrp then
-                if safeTeleport then pcall(function() safeTeleport:InvokeServer(CIRCUS_PORTAL_CF) end) end
-                hrp.CFrame = CIRCUS_PORTAL_CF
+            teleportWithPhysicsNudge(CIRCUS_PORTAL_CF)
+            if taskRE then
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
+                task.wait(0.1)
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
             end
-            task.wait(0.2)
-            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
-            task.wait(0.1)
+            task.wait(0.15)
             if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
             task.wait(0.1)
             if gameMatchRE then
@@ -1950,13 +2238,13 @@ local function runLobbyDungeonSelect()
             end
         elseif worldId:sub(1, 4) == "Cave" then
             -- วาร์ปไปพิกัดถ้ำ Cave
-            if hrp then
-                if safeTeleport then pcall(function() safeTeleport:InvokeServer(CAVE_PORTAL_CF) end) end
-                hrp.CFrame = CAVE_PORTAL_CF
+            teleportWithPhysicsNudge(CAVE_PORTAL_CF)
+            if taskRE then
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
+                task.wait(0.1)
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
             end
-            task.wait(0.2)
-            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
-            task.wait(0.1)
+            task.wait(0.15)
             if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
             task.wait(0.1)
             if gameMatchRE then
@@ -1964,13 +2252,13 @@ local function runLobbyDungeonSelect()
             end
         else
             -- วาร์ปไปพิกัดดันเจี้ยนหลัก 4 แมพ (Starless, Frozen, Oathlost, Tartarus)
-            if hrp then
-                if safeTeleport then pcall(function() safeTeleport:InvokeServer(DUNGEON_PORTAL_CF) end) end
-                hrp.CFrame = DUNGEON_PORTAL_CF
+            teleportWithPhysicsNudge(DUNGEON_PORTAL_CF)
+            if taskRE then
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
+                task.wait(0.1)
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
             end
-            task.wait(0.2)
-            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
-            task.wait(0.1)
+            task.wait(0.15)
             if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
             task.wait(0.1)
             if gameMatchRE then
@@ -1993,6 +2281,7 @@ local AutoSellTab = Window:AddTab({ Title = "💰 ขายของอัตโ
 local ForgeTab    = Window:AddTab({ Title = "🔨 ตีบวก & ตีไอเทม" })
 local AttrTab     = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
 local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ร้านค้า" })
+local RaceTab     = Window:AddTab({ Title = "🧬 รีเผ่า (Auto Race Reroll)" })
 local StatsTab    = Window:AddTab({ Title = "📊 ข้อมูล & สถานะ" })
 
 -- ──────── TAB 1: เข้าดันเจี้ยน & แมตช์ ────────
@@ -2249,20 +2538,28 @@ ForgeTab:AddButton({ Title = "⚡ สวมใส่ไอเทมที่ด�
 end })
 ForgeTab:AddToggle("AutoEquipBestToggle", { Title = "เปิดสวมใส่ไอเทมดีที่สุดอัตโนมัติ", Desc = "เช็คและสวมใส่อุปกรณ์พลังสูงที่สุดในกระเป๋าอย่างต่อเนื่อง", Default = Config.AutoSelectBest, Callback = function(t) Config.AutoSelectBest = t end })
 
-ForgeTab:AddSection("ออฟชั่นใบอัพเกรด & ตีบวก")
-ForgeTab:AddButton({ Title = "🔮 เปิดหน้าต่างคุยกับ NPC Milo (ช่างตีบวก)", Callback = function()
-    pcall(function()
-        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", "EquipmentEnchantNpc2|0")
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
-            ObsidianGlassEngine:Notify({ Title = "NPC ช่างตีบวก", Content = "เปิดหน้าต่างตีบวก (Milo) เรียบร้อยแล้ว!", Duration = 3 })
-        end
-    end)
+ForgeTab:AddSection("ระบบเตาหลอมไอเทม (Forge System)")
+ForgeTab:AddButton({ Title = "🔥 วาปไปเตาหลอม & เปิดหน้าต่าง Forge (ScreenForge)", Callback = function()
+    OpenForgeGUI()
+    ObsidianGlassEngine:Notify({ Title = "เตาหลอม Forge", Content = "วาร์ปไปพิกัดเตาหลอม และเปิดหน้าต่าง Forge เรียบร้อย!", Duration = 3 })
+end })
+
+ForgeTab:AddSection("🧙‍♂️ NPC Milo (ช่างออฟชั่น & ผสานรูน)")
+ForgeTab:AddButton({ Title = "✨ วาปไปหา Milo & เปิดหน้าออฟชั่นอุปกรณ์ (ScreenEnchantment)", Callback = function()
+    OpenMiloEnchantGUI()
+    ObsidianGlassEngine:Notify({ Title = "NPC Milo", Content = "วาร์ปไปหา Milo และเปิดหน้าต่าง Enchantment (ออฟชั่นอุปกรณ์) เรียบร้อย!", Duration = 3 })
+end })
+ForgeTab:AddButton({ Title = "🔮 วาปไปหา Milo & เปิดหน้าผสานรูน (ScreenEnchantmentFuse)", Callback = function()
+    OpenMiloFuseRuneGUI()
+    ObsidianGlassEngine:Notify({ Title = "NPC Milo", Content = "วาร์ปไปหา Milo และเปิดหน้าต่าง Fuse Rune (ผสานรูน) เรียบร้อย!", Duration = 3 })
 end })
 ForgeTab:AddToggle("AutoScrollToggle", { Title = "เปิดใช้งานคัมภีร์อัปเกรดอัตโนมัติ", Desc = "ใช้คัมภีร์ที่มีในตัวอัปเกรดอาวุธหลักอัตโนมัติ", Default = Config.AutoUseScroll, Callback = function(t) Config.AutoUseScroll = t end })
 
 ForgeTab:AddSection("ระบบตีบวกอาวุธ & ดรอปแร่")
+ForgeTab:AddButton({ Title = "🔨 วาปไปจุดตีบวก & เปิดหน้า ScreenFortify (Enhance Equipment)", Callback = function()
+    OpenEnhanceEquipmentGUI()
+    ObsidianGlassEngine:Notify({ Title = "ตีบวกอุปกรณ์", Content = "วาร์ปไปพิกัดตีบวก และเปิดหน้าต่าง ScreenFortify เรียบร้อย!", Duration = 3 })
+end })
 ForgeTab:AddButton({ Title = "⚡ สั่งรีโมทตีบวกอาวุธที่สวมใส่", Callback = function()
     pcall(function()
         local uuid = GetEquippedWeaponUUID()
@@ -2364,6 +2661,16 @@ DailyTab:AddToggle("AutoBuyShopToggle", {
     end
 })
 
+DailyTab:AddSection("🐾 ร้านค้าสัตว์เลี้ยง (Pet Shop & Hatch)")
+DailyTab:AddButton({ Title = "🐣 วาปไปร้าน Pet & เปิดระบบฟักไข่ (ScreenPetsHatch)", Callback = function()
+    OpenPetHatchGUI()
+    ObsidianGlassEngine:Notify({ Title = "ร้านค้าสัตว์เลี้ยง", Content = "วาร์ปไปร้าน Pet และเปิดระบบฟักไข่เรียบร้อย!", Duration = 3 })
+end })
+DailyTab:AddButton({ Title = "✨ วาปไปร้าน Pet & เปิดหน้าอัปเกรดสัตว์เลี้ยง (ScreenPetsFortifyAndUpgrade)", Callback = function()
+    OpenPetUpgradeGUI()
+    ObsidianGlassEngine:Notify({ Title = "ร้านค้าสัตว์เลี้ยง", Content = "วาร์ปไปร้าน Pet และเปิดหน้าอัปเกรดสัตว์เลี้ยงเรียบร้อย!", Duration = 3 })
+end })
+
 DailyTab:AddSection("รับรางวัลประจำวัน (Daily Login)")
 DailyTab:AddButton({ Title = "👀 เปิดดูหน้าต่างกิจกรรมประจำวัน", Callback = function()
     ViewDailyActivity()
@@ -2390,7 +2697,72 @@ DailyTab:AddButton({ Title = "💬 ดำเนินเควสคุยกั
 end })
 DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "เปิดคุยเควส NPC อัตโนมัติ", Desc = "ส่งคำสั่งดำเนินเควส NPC อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoTaskProgress or false, Callback = function(t) Config.AutoTaskProgress = t end })
 
--- ──────── TAB 6: ข้อมูล & สถานะ (Obsidian Dashboard) ────────
+-- ──────── TAB 6: รีเผ่า (Auto Race Reroll) ────────
+RaceTab:AddSection("ระบบรีเผ่าอัตโนมัติ (Auto Race Reroll System)")
+
+RaceTab:AddToggle("AutoRaceRerollToggle", {
+    Title = "เปิดระบบสุ่มเผ่าอัตโนมัติ (Auto Race Reroll)",
+    Desc = "ยิงคำสั่งสุ่มเผ่าเรื่อยๆ จนกว่าจะได้เผ่าเป้าหมายที่เลือกไว้ (เว้นระยะ 2 วินาทีต่อรอบ)",
+    Default = Config.AutoRaceReroll,
+    Callback = function(t)
+        Config.AutoRaceReroll = t
+        saveSettings()
+        if t then
+            startAutoRaceRerollLoop()
+            ObsidianGlassEngine:Notify({ Title = "🧬 เริ่มสุ่มเผ่าอัตโนมัติ", Content = "กำลังทำการสุ่มเผ่าจนกว่าจะได้เผ่าเป้าหมาย...", Duration = 4 })
+        end
+    end
+})
+
+RaceTab:AddDropdown("TargetRacesDropdown", {
+    Title = "เลือกเผ่าเป้าหมายที่ต้องการ (Target Races)",
+    Values = {
+        "Demon (0.20%)",
+        "Lucifer (0.20%)",
+        "Night Elf (0.20%)",
+        "Angel (0.30%)",
+        "Vampire (0.80%)",
+        "Fairy (1.70%)",
+        "Sorcerer (2.10%)",
+        "Dragonkin (6.00%)",
+        "Undead (13.00%)",
+        "Goblin (24.50%)",
+        "Orc (25.50%)",
+        "Human (25.50%)"
+    },
+    Multi = true,
+    Value = Config.SelectedTargetRaces or { "Demon", "Lucifer", "Night Elf" },
+    Callback = function(selectedList)
+        local cleaned = {}
+        for _, val in ipairs(selectedList) do
+            local nameOnly = val:match("^(%A*%w+)") or val:split(" ")[1] or val
+            table.insert(cleaned, nameOnly)
+        end
+        Config.SelectedTargetRaces = cleaned
+        saveSettings()
+    end
+})
+
+RaceTab:AddButton({ Title = "⚡ เลือกเฉพาะเผ่าระดับลับ & หายากสูงสุด (Demon, Lucifer, Night Elf, Angel, Vampire)", Callback = function()
+    Config.SelectedTargetRaces = { "Demon", "Lucifer", "Night Elf", "Angel", "Vampire" }
+    saveSettings()
+    ObsidianGlassEngine:Notify({ Title = "รีเผ่า", Content = "เลือกเป้าหมาย: Demon, Lucifer, Night Elf, Angel, Vampire เรียบร้อย!", Duration = 4 })
+end })
+
+RaceTab:AddButton({ Title = "🎲 สุ่มเผ่า 1 ครั้งทันที (Manual Roll 1x)", Callback = function()
+    task.spawn(function()
+        RollRaceOnce()
+        local cur = detectCurrentRace()
+        ObsidianGlassEngine:Notify({ Title = "สุ่มเผ่า 1 ครั้ง", Content = "เผ่าปัจจุบันของคุณคือ: " .. tostring(cur), Duration = 5 })
+    end)
+end })
+
+RaceTab:AddButton({ Title = "🔍 ตรวจสอบเผ่าปัจจุบันบนตัวละคร (Check Current Race)", Callback = function()
+    local cur = detectCurrentRace()
+    ObsidianGlassEngine:Notify({ Title = "ตรวจสอบเผ่า", Content = "เผ่าปัจจุบันของคุณคือ: " .. tostring(cur), Duration = 5 })
+end })
+
+-- ──────── TAB 7: ข้อมูล & สถานะ (Obsidian Dashboard) ────────
 StatsTab:AddSection("── 📊 Obsidian Status Dashboard ──")
 local StatsPowerPara  = StatsTab:AddParagraph({ Title = "⚡ พลังต่อสู้: ...",          Desc = "0 Power" })
 local StatsLevelPara  = StatsTab:AddParagraph({ Title = "🏆 เลเวล: ...",               Desc = "EXP: 0 / 0" })
@@ -2420,7 +2792,7 @@ local function RefreshStatsDisplay()
         local expMax = "0"
         local gold   = "0"
         local stock  = "0"
-        local race   = tostring(player:GetAttribute("LG_Race") or player:GetAttribute("Race") or "?")
+        local race   = detectCurrentRace()
         local weaponName = "None"
 
         if DataUtil then
@@ -2463,6 +2835,7 @@ local function RefreshStatsDisplay()
         if Config.AutoClaimDaily       then table.insert(autoList, "Daily")   end
         if Config.AutoBuyShopItem      then table.insert(autoList, "Shop")    end
         if Config.AutoQuest            then table.insert(autoList, "เควส")    end
+        if Config.AutoRaceReroll       then table.insert(autoList, "รีเผ่า")  end
         if Config.ChickenMode          then table.insert(autoList, "🐔ไก่ตัน") end
         local autoStr = #autoList > 0 and table.concat(autoList, " | ") or "ไม่มีระบบที่เปิดอยู่"
 
