@@ -39,6 +39,7 @@ end
 local VVIP_Keys = {
     ["HqknYxtQZPczCtbVnrrUDtpNVMLDltGD"] = true,
     ["iSYrBFIpuwzmimGRrFTqERIUUoNBQGZO"] = true,
+    ["pqUIXaEuYNqFvizjevfRpfqccBYyberK"] = true,
     ["PAYOMVVIP280342PBGZ19"] = true,
     ["lxYvkrsyHJvlQGmHaabwCwdNfMgBmpkg"] = true,
     ["RNbGlkVJluScsCyILmMqmJtQOeEaBqXj"] = true,
