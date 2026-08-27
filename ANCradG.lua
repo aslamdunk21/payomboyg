@@ -2085,18 +2085,14 @@ getgenv().SelectedTradePlayer = getgenv().SelectedTradePlayer or ""
 getgenv().BossRaidDifficulty = getgenv().BossRaidDifficulty or "NIGHTMARE"
 
 local RaritiesList = {
-    "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret",
-    "Divine", "Transcendent", "Shadow", "Emperor", "Demon", "Manga", "Celestial",
-    "Heavenly", "Corrupted", "Striker", "Sacred", "Paradox", "Founder", "Evolved",
-    "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
-    "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
-    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
-    "Smash", "Emblem", "Dunk", "Chrono", "Blossom", "Zenith"
+    "Common Pack", "Uncommon Pack", "Rare Pack", "Epic Pack", "Legendary Pack", "Mythic Pack", "Secret Pack",
+    "Divine Pack", "Transcendent Pack", "Shadow Pack", "Emperor Pack", "Demon Pack", "Manga Pack", "Celestial Pack",
+    "Heavenly Pack"
 }
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar", "Limited", "Event"
+    "Blessed", "Radioactive"
 }
 
 local TraitsList = {
@@ -4072,8 +4068,11 @@ do
         local display = _cleanDisplayName(rawRarity)
         if display then
             local key = string.lower(display)
-            if not _liveKnownRarities[key] then
+            local baseKey = string.gsub(key, "%s*pack$", "")
+            if not _liveKnownRarities[key] and not _liveKnownRarities[baseKey] and not _liveKnownRarities[baseKey .. " pack"] then
                 _liveKnownRarities[key] = true
+                _liveKnownRarities[baseKey] = true
+                _liveKnownRarities[baseKey .. " pack"] = true
                 table.insert(_liveRarityList, display)
                 return true
             end
@@ -4267,8 +4266,9 @@ local function getCardModelRarityAndMutation(model)
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(RaritiesList or {"common", "uncommon", "rare", "epic", "legendary", "mythical", "secret", "godly", "admin", "grail", "blaze", "conquest", "devour"}) do
-                    if cl:find(string.lower(rName)) then
+                for _, rName in ipairs(RaritiesList or {"common pack", "uncommon pack", "rare pack", "epic pack", "legendary pack", "mythical pack", "secret pack", "godly pack", "admin pack", "grail pack", "blaze pack", "conquest pack", "devour pack"}) do
+                    local cleanRName = string.lower(string.gsub(rName, "%s*pack$", ""))
+                    if cl:find(cleanRName) then
                         rarity = rName
                         break
                     end
@@ -4382,56 +4382,11 @@ AutoBuyToggle:OnChanged(function(state)
     getgenv().AutoBuyCards = state
 end)
 
--- Auto Update Dropdown (สแกน ReplicatedStorage.Tools.Packs & VFX.Mutation ทุก 10 วินาที)
+-- Auto Update Dropdown (สแกน ReplicatedStorage ทุก 10 วินาที)
 task.spawn(function()
     while true do
         task.wait(10)
-        pcall(function()
-            local rs = game:GetService("ReplicatedStorage")
-            -- อัพเดท Rarity dropdown จาก Tools.Packs
-            local packsFolder = rs:FindFirstChild("Tools") and rs.Tools:FindFirstChild("Packs")
-            if packsFolder then
-                local newRarities = {}
-                local seen = {}
-                for _, pack in ipairs(packsFolder:GetChildren()) do
-                    local name = pack.Name
-                    if name and name ~= "" and not seen[name] then
-                        seen[name] = true
-                        table.insert(newRarities, name)
-                    end
-                end
-                if #newRarities > 0 then
-                    -- เพิ่ม hardcoded rarities ที่ไม่อยู่ใน Packs folder
-                    for _, r in ipairs(RaritiesList) do
-                        if not seen[r] then
-                            table.insert(newRarities, r)
-                        end
-                    end
-                    RarityDropdown:SetValues(newRarities)
-                end
-            end
-            -- อัพเดท Mutation dropdown จาก VFX.Mutation
-            local mutFolder = rs:FindFirstChild("VFX") and rs.VFX:FindFirstChild("Mutation")
-            if mutFolder then
-                local newMuts = {}
-                local seenM = {}
-                for _, m in ipairs(mutFolder:GetChildren()) do
-                    local name = m.Name
-                    if name and name ~= "" and not seenM[name] then
-                        seenM[name] = true
-                        table.insert(newMuts, name)
-                    end
-                end
-                if #newMuts > 0 then
-                    for _, m in ipairs(MutationsList) do
-                        if not seenM[m] then
-                            table.insert(newMuts, m)
-                        end
-                    end
-                    MutationDropdown:SetValues(newMuts)
-                end
-            end
-        end)
+        pcall(_scanAllGameData)
     end
 end)
 
