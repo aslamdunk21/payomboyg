@@ -2303,6 +2303,44 @@ local function getCardTrait(item)
     return "None"
 end
 
+local function isRankMatch(currentRank, targetRank)
+    if not currentRank or not targetRank then return false end
+    local c = string.lower(string.match(tostring(currentRank), "^%s*(.-)%s*$") or "")
+    local t = string.lower(string.match(tostring(targetRank), "^%s*(.-)%s*$") or "")
+    if c == "" or t == "" or c == "none" or t == "none" then return false end
+    if c == t then return true end
+
+    local cleanC = string.gsub(c, "<[^>]+>", "")
+    cleanC = string.gsub(cleanC, "[%[%]%(%)]", " ")
+
+    local escapedT = string.gsub(t, "%+", "%%+")
+    local pattern = "(%f[%a%d]" .. escapedT .. "%f[%A%D])"
+    if string.find(cleanC, pattern) or cleanC == t then
+        return true
+    end
+    return false
+end
+
+local function isTraitMatch(currentTrait, targetTrait)
+    if not currentTrait or not targetTrait then return false end
+    local c = string.lower(string.match(tostring(currentTrait), "^%s*(.-)%s*$") or "")
+    local t = string.lower(string.match(tostring(targetTrait), "^%s*(.-)%s*$") or "")
+    if c == "" or t == "" or c == "none" or t == "none" then return false end
+    if c == t then return true end
+
+    local cleanC = string.gsub(c, "<[^>]+>", "")
+    local escapedT = string.gsub(t, "%-", "%%-")
+
+    if string.match(cleanC, "^" .. escapedT .. "$")
+        or string.match(cleanC, "^" .. escapedT .. "%s")
+        or string.match(cleanC, "%s" .. escapedT .. "$")
+        or string.match(cleanC, "%s" .. escapedT .. "%s")
+    then
+        return true
+    end
+    return false
+end
+
 local function getCardMutation(item)
     if not item then return "Normal" end
     local attr = item:GetAttribute("CardMutation") or item:GetAttribute("Mutation")
@@ -4744,6 +4782,7 @@ AutoRerollToggle:OnChanged(function(state)
                 Fluent:Notify({ Title = "Auto Reroll", Content = "กรุณาเลือกการ์ดอย่างน้อย 1 ใบ", Duration = 3 })
                 getgenv().AutoReroll = false
                 if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+                if AutoRerollToggle and AutoRerollToggle.SetValue then AutoRerollToggle:SetValue(false) end
                 return
             end
 
@@ -4751,6 +4790,24 @@ AutoRerollToggle:OnChanged(function(state)
                 if not getgenv().AutoReroll then break end
 
                 local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                if not (cardTool and cardTool.Parent) then
+                    pcall(function()
+                        local bp = LocalPlayer:FindFirstChild("Backpack")
+                        local ch = LocalPlayer.Character
+                        local function scan(folder)
+                            if not folder then return nil end
+                            for _, tool in ipairs(folder:GetChildren()) do
+                                if tool:IsA("Tool") then
+                                    local cName = tool:GetAttribute("CardName") or tool:GetAttribute("TemplateName") or tool.Name
+                                    if cardKey:find(cName, 1, true) then return tool end
+                                end
+                            end
+                            return nil
+                        end
+                        cardTool = scan(bp) or scan(ch)
+                    end)
+                end
+
                 if not (cardTool and cardTool.Parent) then
                     logTraitRoll(string.format("⚠️ ข้ามการ์ด [%d/%d]: ไม่พบการ์ดในกระเป๋าแล้ว", index, #cardKeys), true)
                     continue
@@ -4781,17 +4838,24 @@ AutoRerollToggle:OnChanged(function(state)
 
                     local hasSelected = false
                     for trait, _ in pairs(getgenv().SelectedTraits or {}) do
-                        if string.find(string.lower(currentTrait), string.lower(trait)) then
+                        if isTraitMatch(currentTrait, trait) then
                             hasSelected = true
                             break
                         end
                     end
 
                     if hasSelected then
-                        logTraitRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Trait: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentTrait), true)
-                        Fluent:Notify({ Title = "Auto Reroll", Content = ("%s ได้รับ Trait: %s แล้ว!"):format(cardName, currentTrait), Duration = 4 })
+                        logTraitRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Trait: %s -> หยุดรีการ์ดนี้", index, #cardKeys, cardName, currentTrait), true)
+                        Fluent:Notify({ Title = "Auto Reroll", Content = ("%s ได้รับ Trait: %s แล้ว!"):format(cardName, currentTrait), Duration = 5 })
+                        pcall(function()
+                            local char = LocalPlayer.Character
+                            if char and char:FindFirstChild("Humanoid") then
+                                char.Humanoid:UnequipTools()
+                            end
+                        end)
                         task.spawn(function() SendRerollWebhook("Trait", cardName, currentTrait) end)
                         finishedThisCard = true
+                        task.wait(0.3)
                         break
                     end
 
@@ -4801,7 +4865,7 @@ AutoRerollToggle:OnChanged(function(state)
                         local char = LocalPlayer.Character
                         if char and char:FindFirstChild("Humanoid") and cardTool.Parent ~= char then
                             char.Humanoid:EquipTool(cardTool)
-                            task.wait(0.2)
+                            task.wait(0.15)
                         end
                     end)
 
@@ -4883,18 +4947,16 @@ AutoRerollToggle:OnChanged(function(state)
                         end
                     end
 
-                    task.wait(math.max(0.01, tonumber(getgenv().RerollSpeed) or 0.05))
+                    local safeSpeed = math.max(0.15, tonumber(getgenv().RerollSpeed) or 0.2)
+                    task.wait(safeSpeed)
                 end
             end
 
-            if getgenv().AutoReroll then
-                logTraitRoll("🎉 สำเร็จ! รีโรล Trait ครบทุกใบที่เลือกแล้ว", true)
-                Fluent:Notify({ Title = "Auto Reroll", Content = "รีโรล Trait ครบทุกใบที่เลือกเรียบร้อยแล้ว!", Duration = 5 })
-                getgenv().AutoReroll = false
-                if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
-            else
-                logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว", true)
-            end
+            logTraitRoll("🎉 สำเร็จ! รีโรล Trait ครบตามเป้าหมายเรียบร้อยแล้ว", true)
+            Fluent:Notify({ Title = "Auto Reroll", Content = "รีโรล Trait ครบตามเป้าหมายเรียบร้อยแล้ว!", Duration = 5 })
+            getgenv().AutoReroll = false
+            if Options and Options.AutoRerollTrait then Options.AutoRerollTrait:SetValue(false) end
+            if AutoRerollToggle and AutoRerollToggle.SetValue then AutoRerollToggle:SetValue(false) end
         end)
     else
         logTraitRoll("🛑 ปิดการสุ่ม/รี Trait แล้ว", true)
@@ -4965,6 +5027,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                 Fluent:Notify({ Title = "Auto Rank", Content = "กรุณาเลือกการ์ดอย่างน้อย 1 ใบ", Duration = 3 })
                 getgenv().AutoRankReroll = false
                 if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
+                if AutoRankRerollToggle and AutoRankRerollToggle.SetValue then AutoRankRerollToggle:SetValue(false) end
                 return
             end
 
@@ -4972,6 +5035,24 @@ AutoRankRerollToggle:OnChanged(function(state)
                 if not getgenv().AutoRankReroll then break end
 
                 local cardTool = getgenv().RerollInventoryMap and getgenv().RerollInventoryMap[cardKey]
+                if not (cardTool and cardTool.Parent) then
+                    pcall(function()
+                        local bp = LocalPlayer:FindFirstChild("Backpack")
+                        local ch = LocalPlayer.Character
+                        local function scan(folder)
+                            if not folder then return nil end
+                            for _, tool in ipairs(folder:GetChildren()) do
+                                if tool:IsA("Tool") then
+                                    local cName = tool:GetAttribute("CardName") or tool:GetAttribute("TemplateName") or tool.Name
+                                    if cardKey:find(cName, 1, true) then return tool end
+                                end
+                            end
+                            return nil
+                        end
+                        cardTool = scan(bp) or scan(ch)
+                    end)
+                end
+
                 if not (cardTool and cardTool.Parent) then
                     logRankRoll(string.format("⚠️ ข้ามการ์ด [%d/%d]: ไม่พบการ์ดในกระเป๋าแล้ว", index, #cardKeys), true)
                     continue
@@ -5002,17 +5083,24 @@ AutoRankRerollToggle:OnChanged(function(state)
 
                     local hasSelected = false
                     for rank, _ in pairs(getgenv().SelectedRanks or {}) do
-                        if string.lower(currentRank) == string.lower(rank) then
+                        if isRankMatch(currentRank, rank) then
                             hasSelected = true
                             break
                         end
                     end
 
                     if hasSelected then
-                        logRankRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Rank: %s -> เปลี่ยนไปรีใบถัดไป", index, #cardKeys, cardName, currentRank), true)
-                        Fluent:Notify({ Title = "Auto Rank", Content = ("%s ได้รับ Rank: %s แล้ว!"):format(cardName, currentRank), Duration = 4 })
+                        logRankRoll(string.format("🎯 สำเร็จ [%d/%d]! %s ได้รับ Rank: %s -> หยุดรีการ์ดนี้", index, #cardKeys, cardName, currentRank), true)
+                        Fluent:Notify({ Title = "Auto Rank", Content = ("%s ได้รับ Rank: %s แล้ว!"):format(cardName, currentRank), Duration = 5 })
+                        pcall(function()
+                            local char = LocalPlayer.Character
+                            if char and char:FindFirstChild("Humanoid") then
+                                char.Humanoid:UnequipTools()
+                            end
+                        end)
                         task.spawn(function() SendRerollWebhook("Rank", cardName, currentRank) end)
                         finishedThisCard = true
+                        task.wait(0.3)
                         break
                     end
 
@@ -5022,7 +5110,7 @@ AutoRankRerollToggle:OnChanged(function(state)
                         local char = LocalPlayer.Character
                         if char and char:FindFirstChild("Humanoid") and cardTool.Parent ~= char then
                             char.Humanoid:EquipTool(cardTool)
-                            task.wait(0.2)
+                            task.wait(0.15)
                         end
                     end)
 
@@ -5104,18 +5192,16 @@ AutoRankRerollToggle:OnChanged(function(state)
                     end
                     fireAllRank(cId)
 
-                    task.wait(math.max(0.01, tonumber(getgenv().RerollSpeed) or 0.05))
+                    local safeSpeed = math.max(0.15, tonumber(getgenv().RerollSpeed) or 0.2)
+                    task.wait(safeSpeed)
                 end
             end
 
-            if getgenv().AutoRankReroll then
-                logRankRoll("🎉 สำเร็จ! รีโรล Rank ครบทุกใบที่เลือกแล้ว", true)
-                Fluent:Notify({ Title = "Auto Rank", Content = "รีโรล Rank ครบทุกใบที่เลือกเรียบร้อยแล้ว!", Duration = 5 })
-                getgenv().AutoRankReroll = false
-                if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
-            else
-                logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว", true)
-            end
+            logRankRoll("🎉 สำเร็จ! รีโรล Rank ครบตามเป้าหมายเรียบร้อยแล้ว", true)
+            Fluent:Notify({ Title = "Auto Rank", Content = "รีโรล Rank ครบตามเป้าหมายเรียบร้อยแล้ว!", Duration = 5 })
+            getgenv().AutoRankReroll = false
+            if Options and Options.AutoRerollRank then Options.AutoRerollRank:SetValue(false) end
+            if AutoRankRerollToggle and AutoRankRerollToggle.SetValue then AutoRankRerollToggle:SetValue(false) end
         end)
     else
         logRankRoll("🛑 ปิดการสุ่ม/รี Rank แล้ว", true)
@@ -5219,6 +5305,18 @@ setupPotionToggle("Production", "ผลผลิต", "PotionProduction", "Produ
 ---------------------------------------------------------
 -- HELPER FUNCTIONS FOR CARD VALUE & RARITY SCORING
 ---------------------------------------------------------
+local RaritiesList = {
+    "Common",
+    "Uncommon",
+    "Rare",
+    "Epic",
+    "Legendary",
+    "Mythical",
+    "Secret",
+    "Godly",
+    "Admin"
+}
+
 local RarityTiers = {
     ["admin"] = 100000, ["แอดมิน"] = 100000,
     ["godly"] = 50000, ["ก๊อดลี่"] = 50000, ["กอดลี่"] = 50000,
@@ -5257,160 +5355,281 @@ local function parseSuffixValue(txt)
     return nOnly or 0
 end
 
-Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing) ⚠️ **ห้ามเปิดพร้อมรีโรล**")
-local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { 
-    Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card) ⚠️ [ห้ามเปิดพร้อมรีโรล]", 
-    Description = "⚠️ **ห้ามเปิดพร้อมรีโรล** (เพื่อป้องกันการยิงรีโมทขายแพ็กชนกับระบบรีโรล)", 
-    Default = false 
-})
-local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
-    Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้",
-    Values = RaritiesList,
-    Multi = false,
-    Default = "Rare"
-})
-
-local function getToolRarity(item)
-    if not item then return "Common" end
-    local r = item:GetAttribute("Rarity") 
-        or item:GetAttribute("CardRarity") 
-        or item:GetAttribute("PackRarity")
-        or item:GetAttribute("CardGrade")
-        or item:GetAttribute("Grade")
-        or item:GetAttribute("TemplateName")
-        or item:GetAttribute("CardName")
-    if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
-
-    for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade", "TemplateName", "CardName"}) do
-        local valObj = item:FindFirstChild(childName)
-        if valObj then
-            if valObj:IsA("StringValue") and valObj.Value ~= "" then
-                return valObj.Value
-            elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
-                return valObj.Text
-            end
+local function getRarityScore(txt)
+    if not txt then return 0 end
+    local clean = string.lower(string.gsub(txt, "<[^>]+>", ""))
+    clean = string.match(clean, "^%s*(.-)%s*$") or ""
+    for rName, score in pairs(RarityTiers) do
+        if string.find(clean, rName) then
+            return score
         end
     end
+    return 0
+end
 
-    local cleanItemName = string.lower(item.Name or "")
-    for _, rName in ipairs(RaritiesList or {}) do
-        local lowerR = string.lower(rName)
-        if cleanItemName:find(lowerR, 1, true) then
-            return rName
-        end
-    end
-
+local function getUnifiedCardScore(item)
+    if not item then return 0 end
+    local cashScore, rarityScore, mutationScore = 0, 0, 0
     for _, txtObj in ipairs(item:GetDescendants()) do
-        if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-            local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
-            for _, rName in ipairs(RaritiesList or {}) do
-                if string.find(cleanTxt, string.lower(rName), 1, true) then
-                    return rName
+        if txtObj:IsA("TextLabel") or txtObj:IsA("TextButton") then
+            local val = parseSuffixValue(txtObj.Text)
+            if val > cashScore then cashScore = val end
+            local s = getRarityScore(txtObj.Text)
+            if s > rarityScore then rarityScore = s end
+            
+            local cleanMut = string.lower(string.gsub(txtObj.Text or "", "<[^>]+>", ""))
+            cleanMut = string.match(cleanMut, "^%s*(.-)%s*$") or ""
+            local MutationScores = {
+                ["unknow"] = 130, ["admin"] = 120, ["starfallen"] = 110, ["glitch"] = 100,
+                ["radioactive"] = 90, ["blessed"] = 80, ["candy"] = 70, ["sakura"] = 60,
+                ["rainbow"] = 50, ["venomous"] = 40, ["diamond"] = 30, ["golden"] = 20,
+            }
+            for mName, mScore in pairs(MutationScores) do
+                if string.find(cleanMut, mName) and mScore > mutationScore then
+                    mutationScore = mScore
                 end
             end
         end
     end
-    return "Common"
-end
-
-local function getRarityIndex(rarityStr)
-    if not rarityStr or rarityStr == "" or rarityStr == "None" then return 1 end
-    local lowerR = string.lower(tostring(rarityStr))
-    for i, rName in ipairs(RaritiesList) do
-        local lowerName = string.lower(rName)
-        if lowerName == lowerR or string.find(lowerR, lowerName, 1, true) then
-            return i
+    if cashScore == 0 and rarityScore == 0 then
+        local lvl = item:GetAttribute("Level") or item:GetAttribute("CardLevel") or 0
+        if tonumber(lvl) then cashScore = tonumber(lvl) end
+        if cashScore == 0 then
+            local val = item:GetAttribute("CashMultiplier") or item:GetAttribute("Multiplier")
+            if tonumber(val) then cashScore = tonumber(val) end
+        end
+        if cashScore == 0 and rarityScore == 0 and getCardRank then
+            local rName = getCardRank(item)
+            rarityScore = getRarityScore(rName)
         end
     end
-    return 99
+    return cashScore + (rarityScore * 1000) + (mutationScore * 100)
 end
 
-InvBalToggle:OnChanged(function(state)
-    getgenv().InventoryBalancing = state
-    if state then
-        if getgenv().AutoReroll or getgenv().AutoRankReroll then
-            Fluent:Notify({ Title = "คำเตือนระบบ", Content = "⚠️ ห้ามเปิดโหมดเคลียร์ขยะพร้อมกับโหมดรีโรล! เพื่อป้องกันปิงสูงและข้อผิดพลาด", Duration = 5 })
-        end
-        task.spawn(function()
-            while getgenv().InventoryBalancing do
-                pcall(function()
-                    local bp = LocalPlayer:FindFirstChild("Backpack")
-                    local char = LocalPlayer.Character
-                    local items = {}
-                    if bp then for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
-                    if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
-                    
-                    if #items > 0 then
-                        local selectedKeep = MinRarityDrop.Value or "Rare"
-                        local threshold = getRarityIndex(selectedKeep)
-                        if threshold == 99 then threshold = 3 end
-                        
-                        local trashCards = {}
-                        
-                        for _, t in ipairs(items) do
-                            -- Strict Protection: ONLY sell Pack Cards (isPackCard == true)
-                            -- NEVER sell actual character cards or boss/raid cards!
-                            local isPack = false
-                            pcall(function() isPack = isPackCard(t) end)
-                            if not isPack then
-                                continue
-                            end
+do
+    Tabs.Manage:AddSection("🎁 รับรางวัลอัตโนมัติ (Auto Claim)")
+    local AutoClaimToggle = Tabs.Manage:AddToggle("AutoClaimState", { Title = "🎁 กดรับรางวัลอัตโนมัติ (Playtime/Daily) [ยกเว้น Claim All]", Default = false })
+    AutoClaimToggle:OnChanged(function(state)
+        getgenv().AutoClaimRewards = state
+        if state then
+            task.spawn(function()
+                while getgenv().AutoClaimRewards do
+                    pcall(function()
+                        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+                        if playerGui then
+                            for _, v in ipairs(playerGui:GetDescendants()) do
+                                if (v:IsA("TextButton") or v:IsA("ImageButton")) and v.Visible then
+                                    local btnText = ""
+                                    if v:IsA("TextButton") then
+                                        btnText = string.upper(string.match(v.Text or "", "^%s*(.-)%s*$") or "")
+                                    else
+                                        local txtLabel = v:FindFirstChildWhichIsA("TextLabel")
+                                        if txtLabel then btnText = string.upper(string.match(txtLabel.Text or "", "^%s*(.-)%s*$") or "") end
+                                    end
+                                    
+                                    local name = string.upper(v.Name)
+                                    if (btnText:find("CLAIM") or btnText:find("COLLECT") or btnText:find("รับ") or name:find("CLAIM") or name:find("COLLECT")) then
+                                        local isForbidden = false
+                                        local current = v
+                                        while current and (current:IsA("GuiObject") or current:IsA("ScreenGui")) do
+                                            local cName = string.upper(current.Name)
+                                            if cName:find("GUILD") or cName:find("กิลด์") or cName:find("CLAN") 
+                                                or cName:find("ROBUX") or cName:find("PASS") or cName:find("SHOP") 
+                                                or cName:find("REBIRTH") or cName:find("TRADE") or cName:find("GIFT")
+                                                or cName:find("CLAIMALL") or cName:find("CLAIM ALL") or cName:find("PURCHASE")
+                                            then
+                                                isForbidden = true
+                                                break
+                                            end
+                                            current = current.Parent
+                                        end
 
-                            local isBossRaid = false
-                            pcall(function() isBossRaid = isBossOrRaidCard and isBossOrRaidCard(t) end)
-                            if isBossRaid then
-                                continue
-                            end
-                            
-                            local rarity = getToolRarity(t)
-                            local rIdx = getRarityIndex(rarity)
-                            
-                            if rIdx == 99 then
-                                local upName = string.upper(t.Name)
-                                for idx, rName in ipairs(RaritiesList) do
-                                    if string.find(upName, string.upper(rName), 1, true) then
-                                        rIdx = idx
-                                        break
+                                        -- Strict exclusion for Claim All / Purchase / Robux
+                                        local isClaimAll = name:find("CLAIMALL") or name:find("CLAIM ALL") 
+                                            or btnText:find("CLAIM ALL") or btnText:find("CLAIMALL") 
+                                            or btnText:find("ALL") or btnText:find("PURCHASE") or name:find("PURCHASE")
+
+                                        if not isForbidden and not isClaimAll and not name:find("ROBUX") and not btnText:find("ROBUX") and not btnText:find("R$") then
+                                            fireButton(v)
+                                            task.wait(0.2)
+                                        end
                                     end
                                 end
                             end
-                            
-                            if rIdx < threshold then
-                                table.insert(trashCards, t)
-                            end
                         end
+                    end)
+                    task.wait(30)
+                end
+            end)
+        end
+    end)
+end
+
+do
+    Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing) ⚠️ **ห้ามเปิดพร้อมรีโรล**")
+    local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { 
+        Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card) ⚠️ [ห้ามเปิดพร้อมรีโรล]", 
+        Description = "⚠️ **ห้ามเปิดพร้อมรีโรล** (เพื่อป้องกันการยิงรีโมทขายแพ็กชนกับระบบรีโรล)", 
+        Default = false 
+    })
+    local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
+        Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้",
+        Values = RaritiesList,
+        Multi = false,
+        Default = "Rare"
+    })
+
+    local function getToolRarity(item)
+        if not item then return "Common" end
+        local r = item:GetAttribute("Rarity") 
+            or item:GetAttribute("CardRarity") 
+            or item:GetAttribute("PackRarity")
+            or item:GetAttribute("CardGrade")
+            or item:GetAttribute("Grade")
+            or item:GetAttribute("TemplateName")
+            or item:GetAttribute("CardName")
+        if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
+
+        for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade", "TemplateName", "CardName"}) do
+            local valObj = item:FindFirstChild(childName)
+            if valObj then
+                if valObj:IsA("StringValue") and valObj.Value ~= "" then
+                    return valObj.Value
+                elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
+                    return valObj.Text
+                end
+            end
+        end
+
+        local cleanItemName = string.lower(item.Name or "")
+        for _, rName in ipairs(RaritiesList or {}) do
+            local lowerR = string.lower(rName)
+            if cleanItemName:find(lowerR, 1, true) then
+                return rName
+            end
+        end
+
+        for _, txtObj in ipairs(item:GetDescendants()) do
+            if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
+                local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
+                for _, rName in ipairs(RaritiesList or {}) do
+                    if string.find(cleanTxt, string.lower(rName), 1, true) then
+                        return rName
+                    end
+                end
+            end
+        end
+        return "Common"
+    end
+
+    local function getRarityIndex(rarityStr)
+        if not rarityStr or rarityStr == "" or rarityStr == "None" then return 1 end
+        local lowerR = string.lower(tostring(rarityStr))
+        for i, rName in ipairs(RaritiesList) do
+            local lowerName = string.lower(rName)
+            if lowerName == lowerR or string.find(lowerR, lowerName, 1, true) then
+                return i
+            end
+        end
+        return 99
+    end
+
+    InvBalToggle:OnChanged(function(state)
+        getgenv().InventoryBalancing = state
+        if state then
+            if getgenv().AutoReroll or getgenv().AutoRankReroll then
+                Fluent:Notify({ Title = "คำเตือนระบบ", Content = "⚠️ ห้ามเปิดโหมดเคลียร์ขยะพร้อมกับโหมดรีโรล! เพื่อป้องกันปิงสูงและข้อผิดพลาด", Duration = 5 })
+            end
+            task.spawn(function()
+                while getgenv().InventoryBalancing do
+                    pcall(function()
+                        local bp = LocalPlayer:FindFirstChild("Backpack")
+                        local char = LocalPlayer.Character
+                        local items = {}
+                        if bp then for _, t in ipairs(bp:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
+                        if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                         
-                        if #trashCards > 0 and char and char:FindFirstChild("Humanoid") then
-                            for _, t in ipairs(trashCards) do
-                                pcall(function()
-                                    char.Humanoid:EquipTool(t)
-                                    task.wait(0.15)
-                                    local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-                                    if rem then
-                                        if rem:FindFirstChild("SellRE") then
-                                            rem.SellRE:FireServer("SellHand")
-                                            rem.SellRE:FireServer("Sell", t)
-                                            rem.SellRE:FireServer(t)
-                                        end
-                                        if rem:FindFirstChild("Sell") then
-                                            rem.Sell:FireServer(t)
+                        if #items > 0 then
+                            local selectedKeep = MinRarityDrop.Value or "Rare"
+                            local threshold = getRarityIndex(selectedKeep)
+                            if threshold == 99 then threshold = 3 end
+                            
+                            local trashCards = {}
+                            
+                            for _, t in ipairs(items) do
+                                -- Strict Protection: ONLY sell Pack Cards (isPackCard == true)
+                                -- NEVER sell actual character cards or boss/raid cards!
+                                local isPack = false
+                                pcall(function() isPack = isPackCard(t) end)
+                                if not isPack then
+                                    continue
+                                end
+
+                                local isBossRaid = false
+                                pcall(function() isBossRaid = isBossOrRaidCard and isBossOrRaidCard(t) end)
+                                if isBossRaid then
+                                    continue
+                                end
+                                
+                                local rarity = getToolRarity(t)
+                                local rIdx = getRarityIndex(rarity)
+                                
+                                if rIdx == 99 then
+                                    local upName = string.upper(t.Name)
+                                    for idx, rName in ipairs(RaritiesList) do
+                                        if string.find(upName, string.upper(rName), 1, true) then
+                                            rIdx = idx
+                                            break
                                         end
                                     end
-                                    task.wait(0.15)
-                                    if t and t.Parent then t:Destroy() end
-                                end)
+                                end
+                                
+                                if rIdx < threshold then
+                                    table.insert(trashCards, t)
+                                end
                             end
-                            pcall(function() logLine("sell", string.format("🗑️ เคลียร์แพ็คขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
+                            
+                            if #trashCards > 0 and char and char:FindFirstChild("Humanoid") then
+                                for _, t in ipairs(trashCards) do
+                                    pcall(function()
+                                        char.Humanoid:EquipTool(t)
+                                        task.wait(0.15)
+                                        local rem = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                                        if rem then
+                                            if rem:FindFirstChild("SellRE") then
+                                                rem.SellRE:FireServer("SellHand")
+                                                rem.SellRE:FireServer("Sell", t)
+                                                rem.SellRE:FireServer(t)
+                                            end
+                                            if rem:FindFirstChild("Sell") then
+                                                rem.Sell:FireServer(t)
+                                            end
+                                        end
+                                        local plotFolder = findPlayerPlot()
+                                        if plotFolder and plotFolder:FindFirstChild("Plot_N0") and plotFolder.Plot_N0:FindFirstChild("SellPart") then
+                                            local sellPart = plotFolder.Plot_N0.SellPart
+                                            pcall(function()
+                                                firetouchinterest(t:FindFirstChild("Handle") or char:FindFirstChild("HumanoidRootPart"), sellPart, 0)
+                                                firetouchinterest(t:FindFirstChild("Handle") or char:FindFirstChild("HumanoidRootPart"), sellPart, 1)
+                                            end)
+                                        end
+                                        task.wait(0.15)
+                                        if t and t.Parent then t:Destroy() end
+                                    end)
+                                end
+                                pcall(function() logLine("sell", string.format("🗑️ เคลียร์แพ็คขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
+                            end
                         end
-                    end
-                end)
-                task.wait(2)
-            end
-        end)
-    end
-end)
+                    end)
+                    task.wait(2)
+                end
+            end)
+        end
+    end)
+end
 
-Tabs.Manage:AddSection("🧠 ระบบแท่นอัจฉริยะ (Smart Base)")
+do
+    Tabs.Manage:AddSection("🧠 ระบบแท่นอัจฉริยะ (Smart Base)")
 local function GetInventoryPackCards()
     local packs = {}
     local function scanFolder(folder)
@@ -5469,195 +5688,224 @@ SmartBaseToggle:OnChanged(function(state)
             while getgenv().SmartBase do
                 pcall(function()
                     local plotFolder = findPlayerPlot()
-                    if plotFolder then
-                        local baseDescendants = plotFolder:GetDescendants()
-                        local countedModels = {}
-                        local packsOnBaseCount = 0
-                        for _, desc in ipairs(baseDescendants) do
-                            if desc:IsA("ProximityPrompt") then
-                                local actTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
-                                if actTxt:find("OPEN") or actTxt:find("เปิด") or actTxt:find("SKIP") or actTxt:find("ข้าม") then
-                                    local model = desc:FindFirstAncestorOfClass("Model")
-                                    if model and model ~= plotFolder and model.Name ~= "SellPart" and not countedModels[model] then
-                                        local mName = string.upper(model.Name)
-                                        if not mName:find("SKIP ALL") and not mName:find("SELL") and not mName:find("SHOP") and not mName:find("PLOT") and not mName:find("REBIRTH") then
-                                            countedModels[model] = true
-                                            packsOnBaseCount = packsOnBaseCount + 1
-                                        end
-                                    end
-                                end
-                            end
+                    if not plotFolder then return end
+
+                    local bp = LocalPlayer:FindFirstChild("Backpack")
+                    local char = LocalPlayer.Character
+                    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+
+                    -- 1. ดึงรายการ Pack Cards ในกระเป๋าและตัวละคร
+                    local packsToPlace = {}
+                    local selectedPacks = getgenv().SelectedSmartBasePacks or {}
+                    
+                    local function isAllowed(t)
+                        local hasFilter = false
+                        for _, sel in pairs(selectedPacks) do
+                            if sel then hasFilter = true; break end
                         end
+                        if not hasFilter then return true end
                         
-                        local maxPlace = math.max(0, 10 - packsOnBaseCount)
-                        if maxPlace > 0 then
-                            local packsToPlace = {}
-                            local bp = LocalPlayer:FindFirstChild("Backpack")
-                            local char = LocalPlayer.Character
-                            
-                            local selectedPacks = getgenv().SelectedSmartBasePacks or {}
-                            local function isAllowed(t)
-                                local hasFilter = false
-                                for _, sel in pairs(selectedPacks) do
-                                    if sel then hasFilter = true; break end
-                                end
-                                if not hasFilter then return true end
-                                
-                                local tName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
-                                local lowerTName = string.lower(tName)
-                                
-                                for k, selected in pairs(selectedPacks) do
-                                    if selected then
-                                        local keyStr = string.lower(tostring(k))
-                                        keyStr = string.gsub(keyStr, "%.%.%.", "")
-                                        keyStr = string.gsub(keyStr, "%s*%(x%d+%)", "")
-                                        keyStr = string.match(keyStr, "^%s*(.-)%s*$") or ""
-                                        if keyStr ~= "" and (string.find(lowerTName, keyStr, 1, true) or string.find(keyStr, lowerTName, 1, true)) then
-                                            return true
-                                        end
-                                    end
-                                end
-                                return false
-                            end
-                            
-                            local function scanForPacks(folder)
-                                if not folder then return end
-                                for _, t in ipairs(folder:GetChildren()) do
-                                    if t:IsA("Tool") and isPackCard(t) and isAllowed(t) then
-                                        table.insert(packsToPlace, t)
-                                    end
+                        local tName = tostring(t:GetAttribute("CardName") or t:GetAttribute("TemplateName") or t.Name)
+                        local lowerTName = string.lower(tName)
+                        
+                        for k, selected in pairs(selectedPacks) do
+                            if selected then
+                                local keyStr = string.lower(tostring(k))
+                                keyStr = string.gsub(keyStr, "%.%.%.", "")
+                                keyStr = string.gsub(keyStr, "%s*%(x%d+%)", "")
+                                keyStr = string.match(keyStr, "^%s*(.-)%s*$") or ""
+                                if keyStr ~= "" and (string.find(lowerTName, keyStr, 1, true) or string.find(keyStr, lowerTName, 1, true)) then
+                                    return true
                                 end
                             end
-                            scanForPacks(bp)
-                            if char then scanForPacks(char) end
-                            
-                            if #packsToPlace > 0 then
-                                local candidates = {}
-                                for _, desc in ipairs(baseDescendants) do
-                                    if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                                        local actTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name or "")
-                                        
-                                        local isIgnored = actTxt:find("SELL") or actTxt:find("ขาย") or actTxt:find("OPEN") or actTxt:find("เปิด") 
-                                            or actTxt:find("ARTIFACT") or actTxt:find("อาร์ติแฟกต์") or actTxt:find("SKIP") or actTxt:find("ข้าม") 
-                                            or actTxt:find("BOSS") or actTxt:find("บอส") or actTxt:find("MASTER") or actTxt:find("ROBUX") 
-                                            or actTxt:find("BUY") or actTxt:find("PURCHASE") or actTxt:find("LUCK") or actTxt:find("CASH") 
-                                            or actTxt:find("BOOST") or actTxt:find("GEMS") or actTxt:find("PASS") or actTxt:find("PREMIUM") or actTxt:find("VIP")
-                                            or actTxt:find("UPGRADE") or actTxt:find("SHOP") or actTxt:find("REBIRTH") or actTxt:find("JOIN") or actTxt:find("ENTER")
-                                            
-                                        if not isIgnored then
-                                            local model = desc:FindFirstAncestorOfClass("Model")
-                                            local targetPos
-                                            if desc.Parent and desc.Parent:IsA("BasePart") then targetPos = desc.Parent.Position
-                                            elseif desc.Parent and desc.Parent:IsA("Attachment") then targetPos = desc.Parent.WorldPosition
-                                            elseif model and model.PrimaryPart then targetPos = model.PrimaryPart.Position end
-                                            
-                                            if targetPos then
-                                                local isPlacePrompt = actTxt:find("PLACE") or actTxt:find("วาง") or actTxt:find("EQUIP")
-                                                local isRemovePrompt = actTxt:find("REMOVE") or actTxt:find("ถอด") or actTxt:find("เอาออก") or actTxt:find("เก็บ") or actTxt:find("ลบ")
-                                                
-                                                if isPlacePrompt or not model or model == plotFolder or string.find(string.upper(model.Name), "PLOT") then
-                                                    table.insert(candidates, { prompt = desc, score = -1, pos = targetPos, isEmpty = true })
-                                                elseif (isRemovePrompt or (model and model ~= plotFolder)) and model.Name ~= "SellPart" and not model:FindFirstChildOfClass("Humanoid") then
-                                                    local isAlreadyPack = isPackCard(model)
-                                                    if not isAlreadyPack then
-                                                        local score = getUnifiedCardScore(model)
-                                                        table.insert(candidates, { prompt = desc, score = score, pos = targetPos, isRemove = true, model = model })
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
+                        end
+                        return false
+                    end
+
+                    local function scanForPacks(folder)
+                        if not folder then return end
+                        for _, t in ipairs(folder:GetChildren()) do
+                            if t:IsA("Tool") and isPackCard(t) and isAllowed(t) then
+                                table.insert(packsToPlace, t)
+                            end
+                        end
+                    end
+                    scanForPacks(bp)
+                    scanForPacks(char)
+
+                    if #packsToPlace == 0 then return end
+
+                    -- เรียง Pack ในกระเป๋าตามมูลค่า/ความหายาก (มากไปน้อย)
+                    table.sort(packsToPlace, function(a, b)
+                        return getUnifiedCardScore(a) > getUnifiedCardScore(b)
+                    end)
+
+                    -- 2. สแกนแท่นวางบน Plot (หาทั้งแท่นว่าง และแท่นที่มีการ์ดระดับต่ำกว่า)
+                    local baseDescendants = plotFolder:GetDescendants()
+                    local emptySlots = {}
+                    local occupiedCards = {}
+
+                    local function isPromptForbidden(desc)
+                        local actTxt = desc:IsA("ProximityPrompt") 
+                            and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) 
+                            or string.upper(desc.Name or "")
+                        local model = desc:FindFirstAncestorOfClass("Model")
+                        local mName = model and string.upper(model.Name or "") or ""
+                        local pName = desc.Parent and string.upper(desc.Parent.Name or "") or ""
+                        local fullText = actTxt .. " " .. mName .. " " .. pName
+
+                        return fullText:find("SELL") or fullText:find("ขาย") 
+                            or fullText:find("ARTIFACT") or fullText:find("อาร์ติแฟกต์") 
+                            or fullText:find("ALBUM") or fullText:find("สมุด") or fullText:find("อัลบั้ม") or fullText:find("BOOK")
+                            or fullText:find("CONVEYOR") or fullText:find("SPAWN") or fullText:find("SETTING")
+                            or fullText:find("SKIP") or fullText:find("ข้าม") or fullText:find("120MIN")
+                            or fullText:find("BOSS") or fullText:find("บอส") or fullText:find("MASTER") 
+                            or fullText:find("ROBUX") or fullText:find("BUY") or fullText:find("PURCHASE") 
+                            or fullText:find("LUCK") or fullText:find("CASH") or fullText:find("BOOST") 
+                            or fullText:find("GEMS") or fullText:find("PASS") or fullText:find("PREMIUM") 
+                            or fullText:find("VIP") or fullText:find("UPGRADE") or fullText:find("SHOP") 
+                            or fullText:find("REBIRTH") or fullText:find("JOIN") or fullText:find("ENTER")
+                            or fullText:find("CLAIM") or fullText:find("QUEST") or fullText:find("DAILY")
+                    end
+
+                    for _, desc in ipairs(baseDescendants) do
+                        if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
+                            if not isPromptForbidden(desc) then
+                                local model = desc:FindFirstAncestorOfClass("Model")
+                                local targetPos
+                                if desc.Parent and desc.Parent:IsA("BasePart") then 
+                                    targetPos = desc.Parent.Position
+                                elseif desc.Parent and desc.Parent:IsA("Attachment") then 
+                                    targetPos = desc.Parent.WorldPosition
+                                elseif model and model.PrimaryPart then 
+                                    targetPos = model.PrimaryPart.Position 
                                 end
-                                
-                                table.sort(candidates, function(a, b) return a.score < b.score end)
-                                
-                                local countToPlace = math.min(#packsToPlace, #candidates, maxPlace)
-                                if countToPlace > 0 then
-                                    local originalCFrame = char and char:GetPivot()
-                                    
-                                    for i = 1, countToPlace do
-                                        local packTool = packsToPlace[i]
-                                        local target = candidates[i]
-                                        
-                                        if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
-                                            if target.isEmpty then
-                                                char.Humanoid:EquipTool(packTool)
-                                                task.wait(0.4)
-                                                char.HumanoidRootPart.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
-                                                task.wait(0.4)
-                                                
-                                                if target.prompt and target.prompt.Parent then
-                                                    if target.prompt:IsA("ProximityPrompt") then
-                                                        target.prompt.RequiresLineOfSight = false
-                                                        target.prompt.MaxActivationDistance = 99999
-                                                        target.prompt.HoldDuration = 0
-                                                        fireproximityprompt(target.prompt)
-                                                    elseif target.prompt:IsA("ClickDetector") then
-                                                        fireclickdetector(target.prompt)
-                                                    end
-                                                    task.wait(0.5)
-                                                end
-                                            elseif target.isRemove then
-                                                char.HumanoidRootPart.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
-                                                task.wait(0.3)
-                                                
-                                                if target.prompt and target.prompt.Parent then
-                                                    if target.prompt:IsA("ProximityPrompt") then
-                                                        target.prompt.RequiresLineOfSight = false
-                                                        target.prompt.MaxActivationDistance = 99999
-                                                        target.prompt.HoldDuration = 0
-                                                        fireproximityprompt(target.prompt)
-                                                    elseif target.prompt:IsA("ClickDetector") then
-                                                        fireclickdetector(target.prompt)
-                                                    end
-                                                end
-                                                
-                                                task.wait(1.5)
-                                                char.Humanoid:EquipTool(packTool)
-                                                task.wait(0.4)
-                                                
-                                                local newPlacePrompt = nil
-                                                for retry = 1, 6 do
-                                                    for _, desc in ipairs(plotFolder:GetDescendants()) do
-                                                        if desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector") then
-                                                            local nTxt = desc:IsA("ProximityPrompt") and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) or string.upper(desc.Name)
-                                                            if nTxt:find("PLACE") or nTxt:find("วาง") or nTxt:find("EQUIP") or not desc:FindFirstAncestorOfClass("Model") then
-                                                                local nPos
-                                                                if desc.Parent:IsA("BasePart") then nPos = desc.Parent.Position
-                                                                elseif desc.Parent:IsA("Attachment") then nPos = desc.Parent.WorldPosition end
-                                                                
-                                                                if nPos and (nPos - target.pos).Magnitude < 5 then
-                                                                    newPlacePrompt = desc
-                                                                    break
-                                                                end
-                                                            end
-                                                        end
-                                                    end
-                                                    if newPlacePrompt then break end
-                                                    task.wait(0.3)
-                                                end
-                                                
-                                                if newPlacePrompt then
-                                                    if newPlacePrompt:IsA("ProximityPrompt") then
-                                                        newPlacePrompt.RequiresLineOfSight = false
-                                                        newPlacePrompt.MaxActivationDistance = 99999
-                                                        newPlacePrompt.HoldDuration = 0
-                                                        fireproximityprompt(newPlacePrompt)
-                                                    elseif newPlacePrompt:IsA("ClickDetector") then
-                                                        fireclickdetector(newPlacePrompt)
-                                                    end
-                                                    task.wait(0.5)
-                                                end
-                                            end
+
+                                if targetPos then
+                                    local mName = model and string.upper(model.Name or "") or ""
+                                    local actTxt = desc:IsA("ProximityPrompt") 
+                                        and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) 
+                                        or string.upper(desc.Name or "")
+
+                                    local isPlace = actTxt:find("PLACE") or actTxt:find("วาง") or actTxt:find("EQUIP") 
+                                        or actTxt:find("PAD") or actTxt:find("SLOT") or mName:find("PAD") 
+                                        or mName:find("SLOT") or mName:find("STAND") or mName:find("SPOT")
+
+                                    local isRemove = actTxt:find("REMOVE") or actTxt:find("ถอด") or actTxt:find("เอาออก") 
+                                        or actTxt:find("เก็บ") or actTxt:find("ลบ")
+
+                                    if isPlace then
+                                        table.insert(emptySlots, { prompt = desc, pos = targetPos })
+                                    elseif (isRemove or (model and model ~= plotFolder and not model:FindFirstChildOfClass("Humanoid"))) 
+                                        and model.Name ~= "SellPart" then
+                                        if not isPackCard(model) then
+                                            local score = getUnifiedCardScore(model)
+                                            table.insert(occupiedCards, { prompt = desc, score = score, pos = targetPos, model = model })
                                         end
-                                    end
-                                    
-                                    if originalCFrame and char and char:FindFirstChild("HumanoidRootPart") then
-                                        char.HumanoidRootPart.CFrame = originalCFrame
                                     end
                                 end
                             end
                         end
+                    end
+
+                    -- 3. เริ่มการวาร์ปวาง/เปลี่ยนการ์ด
+                    local originalCFrame = char and char:GetPivot()
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    local humanoid = char:FindFirstChildOfClass("Humanoid")
+                    if not hrp or not humanoid then return end
+
+                    -- วางลงแท่นว่างก่อน
+                    for _, slot in ipairs(emptySlots) do
+                        if #packsToPlace == 0 then break end
+                        local packTool = table.remove(packsToPlace, 1)
+
+                        humanoid:EquipTool(packTool)
+                        task.wait(0.3)
+                        hrp.CFrame = CFrame.new(slot.pos) + Vector3.new(0, 3, 0)
+                        task.wait(0.4)
+
+                        if slot.prompt and slot.prompt.Parent then
+                            if slot.prompt:IsA("ProximityPrompt") then
+                                slot.prompt.RequiresLineOfSight = false
+                                slot.prompt.MaxActivationDistance = 99999
+                                slot.prompt.HoldDuration = 0
+                                fireproximityprompt(slot.prompt)
+                            elseif slot.prompt:IsA("ClickDetector") then
+                                fireclickdetector(slot.prompt)
+                            end
+                            task.wait(0.5)
+                        end
+                    end
+
+                    -- ถ้าแท่นว่างเต็มแล้ว แต่อยากเปลี่ยนการ์ดที่มีคะแนนต่ำกว่า Pack ในกระเป๋า
+                    table.sort(occupiedCards, function(a, b) return a.score < b.score end)
+
+                    for _, target in ipairs(occupiedCards) do
+                        if #packsToPlace == 0 then break end
+                        local packTool = packsToPlace[1]
+                        local packScore = getUnifiedCardScore(packTool)
+
+                        -- ถ้า Pack ในกระเป๋ามีคะแนนสูงกว่าการ์ดบนฐาน ค่อยถอดเปลี่ยน
+                        if packScore > target.score then
+                            table.remove(packsToPlace, 1)
+
+                            hrp.CFrame = CFrame.new(target.pos) + Vector3.new(0, 3, 0)
+                            task.wait(0.3)
+
+                            if target.prompt and target.prompt.Parent then
+                                if target.prompt:IsA("ProximityPrompt") then
+                                    target.prompt.RequiresLineOfSight = false
+                                    target.prompt.MaxActivationDistance = 99999
+                                    target.prompt.HoldDuration = 0
+                                    fireproximityprompt(target.prompt)
+                                elseif target.prompt:IsA("ClickDetector") then
+                                    fireclickdetector(target.prompt)
+                                end
+                            end
+
+                            task.wait(1.2)
+                            humanoid:EquipTool(packTool)
+                            task.wait(0.3)
+
+                            local newPlacePrompt = nil
+                            for retry = 1, 6 do
+                                for _, desc in ipairs(plotFolder:GetDescendants()) do
+                                    if (desc:IsA("ProximityPrompt") or desc:IsA("ClickDetector")) and not isPromptForbidden(desc) then
+                                        local nTxt = desc:IsA("ProximityPrompt") 
+                                            and string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name) 
+                                            or string.upper(desc.Name)
+                                        if nTxt:find("PLACE") or nTxt:find("วาง") or nTxt:find("EQUIP") or nTxt:find("PAD") or nTxt:find("SLOT") then
+                                            local nPos
+                                            if desc.Parent:IsA("BasePart") then nPos = desc.Parent.Position
+                                            elseif desc.Parent:IsA("Attachment") then nPos = desc.Parent.WorldPosition end
+
+                                            if nPos and (nPos - target.pos).Magnitude < 5 then
+                                                newPlacePrompt = desc
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                                if newPlacePrompt then break end
+                                task.wait(0.3)
+                            end
+
+                            if newPlacePrompt then
+                                if newPlacePrompt:IsA("ProximityPrompt") then
+                                    newPlacePrompt.RequiresLineOfSight = false
+                                    newPlacePrompt.MaxActivationDistance = 99999
+                                    newPlacePrompt.HoldDuration = 0
+                                    fireproximityprompt(newPlacePrompt)
+                                elseif newPlacePrompt:IsA("ClickDetector") then
+                                    fireclickdetector(newPlacePrompt)
+                                end
+                                task.wait(0.5)
+                            end
+                        end
+                    end
+
+                    if originalCFrame and hrp and hrp.Parent then
+                        hrp.CFrame = originalCFrame
                     end
                 end)
                 task.wait(3)
@@ -5665,8 +5913,10 @@ SmartBaseToggle:OnChanged(function(state)
         end)
     end
 end)
+end
 
-local AutoOpenPackToggle = Tabs.Manage:AddToggle("AutoOpenPackState", { Title = "เปิดแพ็กบนฐานอัตโนมัติ", Default = false })
+do
+    local AutoOpenPackToggle = Tabs.Manage:AddToggle("AutoOpenPackState", { Title = "เปิดแพ็กบนฐานอัตโนมัติ", Default = false })
 AutoOpenPackToggle:OnChanged(function(state)
     getgenv().AutoOpenPack = state
     if state then
@@ -5677,8 +5927,18 @@ AutoOpenPackToggle:OnChanged(function(state)
                     if plot and plot:FindFirstChild("Plot_N0") then
                         for _, desc in ipairs(plot.Plot_N0:GetDescendants()) do
                             if desc:IsA("ProximityPrompt") then
-                                local actTxt = string.upper(desc.ActionText or "")
-                                if actTxt:find("OPEN") or actTxt:find("เปิด") then
+                                local actTxt = string.upper((desc.ActionText or "") .. " " .. (desc.ObjectText or "") .. " " .. desc.Name)
+                                local model = desc:FindFirstAncestorOfClass("Model")
+                                local mName = model and string.upper(model.Name or "") or ""
+                                local pName = desc.Parent and string.upper(desc.Parent.Name or "") or ""
+                                local fullText = actTxt .. " " .. mName .. " " .. pName
+
+                                local isForbidden = fullText:find("SELL") or fullText:find("ขาย") 
+                                    or fullText:find("ARTIFACT") or fullText:find("ALBUM") 
+                                    or fullText:find("CONVEYOR") or fullText:find("SPAWN") or fullText:find("SKIP") 
+                                    or fullText:find("ROBUX") or fullText:find("BUY")
+
+                                if not isForbidden and (actTxt:find("OPEN") or actTxt:find("เปิด")) then
                                     local model = desc:FindFirstAncestorOfClass("Model")
                                     if model then
                                         local isReady = false
@@ -5731,6 +5991,7 @@ AutoOpenPackToggle:OnChanged(function(state)
         end)
     end
 end)
+end
 
 Tabs.Manage:AddSection("⬆️ อัปเกรดฐาน (Auto Upgrade)")
 
