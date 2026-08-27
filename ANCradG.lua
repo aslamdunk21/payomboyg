@@ -2086,14 +2086,71 @@ getgenv().BossRaidDifficulty = getgenv().BossRaidDifficulty or "NIGHTMARE"
 
 local MinRarityDrop = nil
 local RaritiesList = {
-    "Common Pack", "Uncommon Pack", "Rare Pack", "Epic Pack", "Legendary Pack", "Mythic Pack", "Secret Pack",
-    "Divine Pack", "Transcendent Pack", "Shadow Pack", "Emperor Pack", "Demon Pack", "Manga Pack", "Celestial Pack",
-    "Heavenly Pack", "Soccer Pack", "Grail Pack", "Blaze Pack", "Conquest Pack"
+    "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret",
+    "Divine", "Transcendent", "Shadow", "Emperor", "Demon", "Manga", "Celestial",
+    "Heavenly", "Corrupted", "Striker", "Sacred", "Paradox", "Founder", "Evolved",
+    "Magic", "Oni", "Chaos", "Ruin", "Reborn", "Beast", "Nordic", "Hunter",
+    "Soul", "Swordsman", "Gamer", "Revenge", "Chainsaw", "Eternity", "Academy",
+    "Dynasty", "Grail", "Conquest", "Blaze", "Devour", "Raven", "Arcane", "Nightfall",
+    "Smash", "Emblem", "Dunk", "Chrono", "Blossom", "Zenith"
+}
+
+local PackNameToRarityMap = {
+    ["COMMON"] = 1, ["ICE"] = 1, ["ICE PACK"] = 1, ["COMMON PACK"] = 1,
+    ["UNCOMMON"] = 2, ["SAND"] = 2, ["SAND PACK"] = 2, ["UNCOMMON PACK"] = 2,
+    ["RARE"] = 3, ["INFERNO"] = 3, ["INFERNO PACK"] = 3, ["RARE PACK"] = 3,
+    ["EPIC"] = 4, ["LIGHTNING"] = 4, ["LIGHTNING PACK"] = 4, ["EPIC PACK"] = 4,
+    ["LEGENDARY"] = 5, ["HIGHTECH"] = 5, ["HIGHTECH PACK"] = 5, ["LEGENDARY PACK"] = 5,
+    ["MYTHIC"] = 6, ["DARK"] = 6, ["DARK PACK"] = 6, ["MYTHIC PACK"] = 6,
+    ["SECRET"] = 7, ["ECLIPSE"] = 7, ["ECLIPSE PACK"] = 7, ["SECRET PACK"] = 7,
+    ["DIVINE"] = 8, ["ISEKAI"] = 8, ["ISEKAI PACK"] = 8, ["DIVINE PACK"] = 8,
+    ["TRANSCENDENT"] = 9, ["SLAYER"] = 9, ["SLAYER PACK"] = 9, ["TRANSCENDENT PACK"] = 9,
+    ["SHADOW"] = 10, ["MONARCH"] = 10, ["MONARCH PACK"] = 10, ["SHADOW PACK"] = 10,
+    ["EMPEROR"] = 11, ["PIRATE KING"] = 11, ["PIRATE KING PACK"] = 11, ["EMPEROR PACK"] = 11,
+    ["DEMON"] = 12, ["DEMON PACK"] = 12,
+    ["MANGA"] = 13, ["MANGA PACK"] = 13,
+    ["CELESTIAL"] = 14, ["GALAXY"] = 14, ["GALAXY PACK"] = 14, ["CELESTIAL PACK"] = 14,
+    ["HEAVENLY"] = 15, ["HEAVEN"] = 15, ["HEAVEN PACK"] = 15, ["HEAVENLY PACK"] = 15,
+    ["CORRUPTED"] = 16, ["VOID"] = 16, ["VOID PACK"] = 16, ["CORRUPTED PACK"] = 16,
+    ["STRIKER"] = 17, ["SOCCER"] = 17, ["SOCCER PACK"] = 17, ["STRIKER PACK"] = 17,
+    ["SACRED"] = 18, ["EMPYREAN"] = 18, ["EMPYREAN PACK"] = 18, ["SACRED PACK"] = 18,
+    ["PARADOX"] = 19, ["BIZARRE"] = 19, ["BIZARRE PACK"] = 19, ["PARADOX PACK"] = 19,
+    ["FOUNDER"] = 20, ["TITAN"] = 20, ["TITAN PACK"] = 20, ["FOUNDER PACK"] = 20,
+    ["EVOLVED"] = 21, ["EVOLVED PACK"] = 21,
+    ["MAGIC"] = 22, ["GRIMOIRE"] = 22, ["GRIMOIRE PACK"] = 22, ["MAGIC PACK"] = 22,
+    ["ONI"] = 23, ["ONI PACK"] = 23,
+    ["CHAOS"] = 24, ["CHAOS PACK"] = 24,
+    ["RUIN"] = 25, ["RUIN PACK"] = 25,
+    ["REBORN"] = 26, ["MAGE"] = 26, ["MAGE PACK"] = 26, ["REBORN PACK"] = 26,
+    ["BEAST"] = 27, ["BEAST PACK"] = 27,
+    ["NORDIC"] = 28, ["VIKING"] = 28, ["VIKING PACK"] = 28, ["NORDIC PACK"] = 28,
+    ["HUNTER"] = 29, ["HUNTER PACK"] = 29,
+    ["SOUL"] = 30, ["SOUL PACK"] = 30,
+    ["SWORDSMAN"] = 31, ["SWORDSMAN PACK"] = 31,
+    ["GAMER"] = 32, ["GAMER PACK"] = 32,
+    ["REVENGE"] = 33, ["REVENGE PACK"] = 33,
+    ["CHAINSAW"] = 34, ["CHAINSAW PACK"] = 34,
+    ["ETERNITY"] = 35, ["ETERNITY PACK"] = 35,
+    ["ACADEMY"] = 36, ["ACADEMY PACK"] = 36,
+    ["DYNASTY"] = 37, ["DYNASTY PACK"] = 37,
+    ["GRAIL"] = 38, ["GRAIL PACK"] = 38,
+    ["CONQUEST"] = 39, ["CONQUEST PACK"] = 39,
+    ["BLAZE"] = 40, ["BLAZE PACK"] = 40,
+    ["DEVOUR"] = 41, ["DEVOUR PACK"] = 41,
+    ["RAVEN"] = 42, ["RAVEN PACK"] = 42,
+    ["ARCANE"] = 43, ["ARCANE PACK"] = 43,
+    ["NIGHTFALL"] = 44, ["NIGHTFALL PACK"] = 44,
+    ["SMASH"] = 45, ["SMASH PACK"] = 45,
+    ["EMBLEM"] = 46, ["EMBLEM PACK"] = 46,
+    ["DUNK"] = 47, ["DUNK PACK"] = 47,
+    ["CHRONO"] = 48, ["CHRONO PACK"] = 48,
+    ["BLOSSOM"] = 49, ["BLOSSOM PACK"] = 49,
+    ["ZENITH"] = 50, ["ZENITH PACK"] = 50,
 }
 
 local MutationsList = {
     "Normal", "Golden", "Diamond", "Venomous", "Rainbow", "Sakura", "Candy",
-    "Blessed", "Radioactive"
+    "Blessed", "Radioactive", "Glitch", "Starfallen", "Admin", "Unknown", "Nullstar", "Limited", "Event"
 }
 
 local TraitsList = {
@@ -4089,6 +4146,24 @@ do
     local function _liveAddRarity(rawRarity)
         local display = _cleanDisplayName(rawRarity)
         if display then
+            local upperKey = string.upper(display)
+            local upperBase = string.gsub(upperKey, "%s*PACK$", "")
+            upperBase = string.match(upperBase, "^%s*(.-)%s*$") or upperBase
+
+            if PackNameToRarityMap then
+                local idx = PackNameToRarityMap[upperKey] or PackNameToRarityMap[upperBase]
+                if idx then
+                    for _, existing in ipairs(_liveRarityList) do
+                        local exKey = string.upper(existing)
+                        local exBase = string.gsub(exKey, "%s*PACK$", "")
+                        exBase = string.match(exBase, "^%s*(.-)%s*$") or exBase
+                        if PackNameToRarityMap[exKey] == idx or PackNameToRarityMap[exBase] == idx then
+                            return false
+                        end
+                    end
+                end
+            end
+
             local key = string.lower(display)
             local baseKey = string.gsub(key, "%s*pack$", "")
             if not _liveKnownRarities[key] and not _liveKnownRarities[baseKey] and not _liveKnownRarities[baseKey .. " pack"] then
@@ -5491,95 +5566,16 @@ end
 do
     Tabs.Manage:AddSection("🗑️ จัดการกระเป๋า (Inventory Balancing) ⚠️ **ห้ามเปิดพร้อมรีโรล**")
     local InvBalToggle = Tabs.Manage:AddToggle("InvBalState", { 
-        Title = "เคลียร์แพ็คขยะอัตโนมัติเมื่อกระเป๋าเต็ม (ขายเฉพาะ Pack Card) ⚠️ [ห้ามเปิดพร้อมรีโรล]", 
+        Title = "เคลียร์ขยะอัตโนมัติเมื่อกระเป๋าเต็ม", 
         Description = "⚠️ **ห้ามเปิดพร้อมรีโรล** (เพื่อป้องกันการยิงรีโมทขายแพ็กชนกับระบบรีโรล)", 
         Default = false 
     })
     MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
-        Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้ (Pack Card)",
+        Title = "ระดับขั้นต่ำที่ต้องการเก็บไว้",
         Values = RaritiesList,
         Multi = false,
-        Default = "Rare Pack"
+        Default = "Rare"
     })
-
-    local function getToolRarity(item)
-        if not item then return "Common Pack" end
-        local r = item:GetAttribute("Rarity") 
-            or item:GetAttribute("CardRarity") 
-            or item:GetAttribute("PackRarity")
-            or item:GetAttribute("CardGrade")
-            or item:GetAttribute("Grade")
-            or item:GetAttribute("TemplateName")
-            or item:GetAttribute("CardName")
-            or item:GetAttribute("PackName")
-        if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
-
-        for _, childName in ipairs({"TemplateName", "CardName", "PackName", "Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade"}) do
-            local valObj = item:FindFirstChild(childName)
-            if valObj then
-                if valObj:IsA("StringValue") and valObj.Value ~= "" then
-                    return valObj.Value
-                elseif valObj:IsA("TextLabel") and valObj.Text ~= "" then
-                    return valObj.Text
-                end
-            end
-        end
-
-        local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
-        local cleanItemName = string.lower(item.Name or "")
-        for _, rName in ipairs(activeList or {}) do
-            local lowerR = string.lower(rName)
-            local baseR = string.gsub(lowerR, "%s*pack$", "")
-            baseR = string.gsub(baseR, "%s*card$", "")
-            baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
-            if #baseR >= 3 and cleanItemName:find(baseR, 1, true) then
-                return rName
-            end
-        end
-
-        for _, txtObj in ipairs(item:GetDescendants()) do
-            if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
-                local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(activeList or {}) do
-                    local lowerR = string.lower(rName)
-                    local baseR = string.gsub(lowerR, "%s*pack$", "")
-                    baseR = string.gsub(baseR, "%s*card$", "")
-                    baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
-                    if #baseR >= 3 and string.find(cleanTxt, baseR, 1, true) then
-                        return rName
-                    end
-                end
-            end
-        end
-        return "Common Pack"
-    end
-
-    local function getRarityIndex(rarityStr)
-        if not rarityStr or rarityStr == "" or rarityStr == "None" then return 1 end
-        local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
-        local lowerR = string.lower(tostring(rarityStr))
-        local baseR = string.gsub(lowerR, "%s*pack$", "")
-        baseR = string.gsub(baseR, "%s*card$", "")
-        baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
-
-        for i, rName in ipairs(activeList) do
-            local lowerName = string.lower(rName)
-            local baseName = string.gsub(lowerName, "%s*pack$", "")
-            baseName = string.gsub(baseName, "%s*card$", "")
-            baseName = string.match(baseName, "^%s*(.-)%s*$") or ""
-
-            if lowerName == lowerR or baseName == baseR then
-                return i
-            end
-
-            if #baseR >= 3 and #baseName >= 3 then
-                if string.find(lowerR, baseName, 1, true) or string.find(lowerName, baseR, 1, true) then
-                    return i
-                end
-            end
-        end
-        return 99
-    end
 
     InvBalToggle:OnChanged(function(state)
         getgenv().InventoryBalancing = state
@@ -5597,41 +5593,122 @@ do
                         if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                         
                         if #items > 0 then
-                            local selectedKeep = (MinRarityDrop and MinRarityDrop.Value) or "Rare Pack"
-                            local threshold = getRarityIndex(selectedKeep)
-                            if threshold == 99 then threshold = 3 end
-                            
-                            local trashCards = {}
-                            
-                            for _, t in ipairs(items) do
-                                local isPack = false
-                                pcall(function() isPack = isPackCard(t) end)
-                                if not isPack then
-                                    continue
-                                end
+                            local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
+                            local MinRarityIdx = {}
+                            for i, v in ipairs(activeList) do MinRarityIdx[v] = i end
 
-                                local isBossRaid = false
-                                pcall(function() isBossRaid = isBossOrRaidCard and isBossOrRaidCard(t) end)
-                                if isBossRaid then
-                                    continue
-                                end
-                                
-                                local rarity = getToolRarity(t)
-                                local rIdx = getRarityIndex(rarity)
-                                
-                                if rIdx == 99 then
-                                    local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
-                                    local upName = string.upper(t.Name)
-                                    for idx, rName in ipairs(activeList) do
-                                        local baseName = string.upper(string.gsub(rName, "%s*pack$", ""))
-                                        if #baseName >= 3 and string.find(upName, baseName, 1, true) then
-                                            rIdx = idx
-                                            break
+                            local selectedVal = (MinRarityDrop and (MinRarityDrop.Value or MinRarityDrop:GetValue())) or "Rare"
+                            local strSel = string.upper(tostring(selectedVal))
+                            strSel = string.match(strSel, "^%s*(.-)%s*$") or strSel
+
+                            local threshold = PackNameToRarityMap and PackNameToRarityMap[strSel]
+                            if not threshold then
+                                local cleanSel = string.gsub(strSel, "%s*PACK$", "")
+                                cleanSel = string.gsub(cleanSel, "%s*CARD$", "")
+                                cleanSel = string.match(cleanSel, "^%s*(.-)%s*$") or cleanSel
+                                threshold = (PackNameToRarityMap and PackNameToRarityMap[cleanSel]) or MinRarityIdx[selectedVal] or 3
+                            end
+
+                            local function resolveRarityIdx(t)
+                                local candidates = {}
+                                pcall(function()
+                                    if getCardRank then table.insert(candidates, getCardRank(t)) end
+                                    if getToolRarity then table.insert(candidates, getToolRarity(t)) end
+                                    table.insert(candidates, t:GetAttribute("Rarity"))
+                                    table.insert(candidates, t:GetAttribute("CardRarity"))
+                                    table.insert(candidates, t:GetAttribute("PackRarity"))
+                                    table.insert(candidates, t:GetAttribute("TemplateName"))
+                                    table.insert(candidates, t:GetAttribute("CardName"))
+                                    table.insert(candidates, t:GetAttribute("PackName"))
+                                    table.insert(candidates, t.Name)
+                                end)
+
+                                for _, rawR in ipairs(candidates) do
+                                    if rawR and rawR ~= "" then
+                                        local str = string.upper(tostring(rawR))
+                                        str = string.match(str, "^%s*(.-)%s*$") or str
+
+                                        if PackNameToRarityMap and PackNameToRarityMap[str] then
+                                            return PackNameToRarityMap[str]
+                                        end
+
+                                        local cleanRaw = string.gsub(str, "%s*PACK$", "")
+                                        cleanRaw = string.gsub(cleanRaw, "%s*CARD$", "")
+                                        cleanRaw = string.match(cleanRaw, "^%s*(.-)%s*$") or cleanRaw
+
+                                        if PackNameToRarityMap and PackNameToRarityMap[cleanRaw] then
+                                            return PackNameToRarityMap[cleanRaw]
+                                        end
+
+                                        for rName, idx in pairs(MinRarityIdx) do
+                                            local cleanR = string.upper(string.gsub(tostring(rName), "%s*PACK$", ""))
+                                            cleanR = string.gsub(cleanR, "%s*CARD$", "")
+                                            cleanR = string.match(cleanR, "^%s*(.-)%s*$") or ""
+                                            if cleanRaw == cleanR then return idx end
                                         end
                                     end
                                 end
+
+                                for _, desc in ipairs(t:GetDescendants()) do
+                                    if desc:IsA("TextLabel") and desc.Text then
+                                        local cleanTxt = string.upper(string.gsub(desc.Text, "<[^>]+>", ""))
+                                        if PackNameToRarityMap then
+                                            for keyName, idx in pairs(PackNameToRarityMap) do
+                                                if #keyName >= 3 and string.find(cleanTxt, "%f[%a]" .. keyName .. "%f[%A]") then
+                                                    return idx
+                                                end
+                                            end
+                                        end
+                                        for rName, idx in pairs(MinRarityIdx) do
+                                            local cleanR = string.upper(string.gsub(tostring(rName), "%s*PACK$", ""))
+                                            cleanR = string.gsub(cleanR, "%s*CARD$", "")
+                                            cleanR = string.match(cleanR, "^%s*(.-)%s*$") or ""
+                                            if #cleanR >= 3 and string.find(cleanTxt, "%f[%a]" .. cleanR .. "%f[%A]") then
+                                                return idx
+                                            end
+                                        end
+                                    end
+                                end
+
+                                return 99
+                            end
+
+                            local trashCards = {}
+                            
+                            for _, t in ipairs(items) do
+                                local isPack = isPackCard and isPackCard(t)
+                                local rankIdx = resolveRarityIdx(t)
                                 
-                                if rIdx < threshold then
+                                if not isPack then
+                                    local mut = string.lower(getCardMutation and getCardMutation(t) or "normal")
+                                    if mut ~= "normal" and mut ~= "golden" then continue end
+                                    local rank = getCardRank and getCardRank(t) or ""
+                                    if rank:find("SS") or rank:find("UR") or rank:find("LR") then rankIdx = 99 end
+                                end
+                                
+                                local cashScore = 0
+                                pcall(function()
+                                    for _, desc in ipairs(t:GetDescendants()) do
+                                        if desc:IsA("TextLabel") and desc.Text then
+                                            local txt = string.upper(desc.Text)
+                                            local nStr, suf = string.match(txt, "([%d%.]+)%s*([A-Z]+)")
+                                            if nStr and suf then
+                                                local mult = 0
+                                                if suf == "DD" then mult = 1e39
+                                                elseif suf == "UD" then mult = 1e36
+                                                elseif suf == "DC" then mult = 1e33
+                                                elseif suf == "NO" or suf == "N" then mult = 1e30
+                                                elseif suf == "OC" or suf == "O" then mult = 1e27
+                                                end
+                                                local v = (tonumber(nStr) or 0) * mult
+                                                if v > cashScore then cashScore = v end
+                                            end
+                                        end
+                                    end
+                                end)
+                                if cashScore >= 1e27 then continue end
+                                
+                                if rankIdx < threshold then
                                     table.insert(trashCards, t)
                                 end
                             end
@@ -5650,6 +5727,7 @@ do
                                             end
                                             if rem:FindFirstChild("Sell") then
                                                 rem.Sell:FireServer(t)
+                                                rem.Sell:FireServer("SellHand")
                                             end
                                         end
                                         local plotFolder = findPlayerPlot()
@@ -5664,7 +5742,7 @@ do
                                         if t and t.Parent then t:Destroy() end
                                     end)
                                 end
-                                pcall(function() logLine("sell", string.format("🗑️ เคลียร์แพ็คขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
+                                pcall(function() logLine("sell", string.format("🗑️ เคลียร์แพ็ค/การ์ดขยะเรียบร้อย (%d ใบ)", #trashCards)) end)
                             end
                         end
                     end)
