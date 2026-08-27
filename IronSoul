@@ -1591,35 +1591,6 @@ local function ActiveSkillNode(weaponType, skillNode)
     end)
 end
 
-local function EquipSkillToSlot(weaponDef, slotName, skillId)
-    pcall(function()
-        local wd = weaponDef or "Heavy_Hammer"
-        local sl = slotName or "Skill1"
-        local si = skillId or "ThunderHammer_Skill_3"
-        -- แยก weapon class จาก "Heavy_Hammer" → "Heavy"
-        local weaponClass = wd:match("^(%a+)_") or wd:match("^(%a+)$") or "Heavy"
-        local rpRE = getRemote("ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil.RemoteEvent")
-        if rpRE then rpRE:FireServer("Clear", "SkillActive" .. weaponClass, sl) end
-        local re = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.WeaponUtil.RemoteEvent")
-        if re then re:FireServer("EquipSkill", wd, sl, si) end
-    end)
-end
-
--- Batch equip skill preset (Heavy)
-local function EquipSkillPresetHeavy()
-    task.spawn(function()
-        local presets = {
-            { slot = "Skill1", id = "ThunderHammer_Skill_3" },
-            { slot = "Skill2", id = "Heavy_Skill_DragonRoar" },
-            { slot = "SkillU", id = "ThunderHammer_Skill_U" },
-        }
-        for _, p in ipairs(presets) do
-            EquipSkillToSlot("Heavy_Hammer", p.slot, p.id)
-            task.wait(0.3)
-        end
-    end)
-end
-
 local function EquipBestAll()
     pcall(function()
         local equipRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
@@ -1823,11 +1794,14 @@ local function GetEquipment()
 end
 
 local WorldMapData = {
-    ["ป่าไร้ดาว (World1)"]      = "World1",
-    ["หุบเขาเยือกเย็น (World2)"] = "World2",
-    ["ปราสาทแห่งคำสาบาน (World3)"] = "World3",
-    ["ทาร์ทารัส (World4)"]       = "World4",
-    ["ด่าน 5 (World5)"]          = "World5",
+    ["ป่าไร้ดาว (World1)"]          = "World1",
+    ["หุบเขาเยือกเย็น (World2)"]     = "World2",
+    ["ปราสาทแห่งคำสาบาน (World3)"]   = "World3",
+    ["ทาร์ทารัส (World4)"]           = "World4",
+    ["ด่าน 5 (World5)"]              = "World5",
+    ["ถ้ำคริสตัล (Cave1)"]           = "Cave1",
+    ["ถ้ำรูน (Cave2)"]              = "Cave2",
+    ["ลานกว้างร้าง (Cave3)"]        = "Cave3",
     ["ถ้ำวัตถุดิบ (SeasonResource1)"] = "SeasonResource1",
     ["หอคอยไร้พ่าย (EndlessTower)"]  = "EndlessTower",
 }
@@ -1840,6 +1814,13 @@ local DifficultyData = {
     ["ระดับนรกขุมลึก (Diff 5)"] = 5,
 }
 
+local PartySizeData = {
+    ["1 คน (Solo)"]   = 1,
+    ["2 คน (Duo)"]    = 2,
+    ["3 คน (Trio)"]   = 3,
+    ["4 คน (Full)"]   = 4,
+}
+
 local function findLobbyRoomForWorld(worldId)
     local matchFolder = workspace:FindFirstChild("MatchRoom")
     if not matchFolder then return nil end
@@ -1850,52 +1831,48 @@ local function findLobbyRoomForWorld(worldId)
             return room
         end
     end
-    if worldId == "World1" then return matchFolder:FindFirstChild("Room2") or matchFolder:FindFirstChild("Room1") end
-    if worldId == "World2" then return matchFolder:FindFirstChild("Room5") or matchFolder:FindFirstChild("Room6") end
-    return matchFolder:GetChildren()[1]
+    return nil
 end
 
 local function runLobbyDungeonSelect()
-    local matchFolder = workspace:FindFirstChild("MatchRoom")
-    if not matchFolder then return end
-
     local worldId = Config.SelectedWorldId or "World1"
     local diffNum = Config.SelectedDifficultyNum or 1
+    local partySize = Config.SelectedPartySizeNum or 4
 
-    -- Step 1: เปิดหน้าต่าง Match
+    -- Step 1: เปิดหน้าต่าง Match (ScreenMatch)
     pcall(function()
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
     end)
-    task.wait(0.3)
+    task.wait(0.2)
 
-    -- Step 2: เลือกโลก / ความยาก
+    -- Step 2: เลือกโลก / ความยาก (SelectWorld Remote)
     pcall(function()
         local worldUtilRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
         if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
     end)
-    task.wait(0.3)
+    task.wait(0.2)
 
-    -- Step 3: ออกห้องเดิมก่อน แล้วค่อยสร้างห้องใหม่
+    -- Step 3: ออกห้องเดิมก่อน แล้วสร้างห้องตามแมพ/ความยาก/ขนาดปาร์ตี้ (CreatRoom Remote)
     pcall(function()
         local gameMatchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
         if gameMatchRE then
             gameMatchRE:FireServer("LeaveRoom")
-            task.wait(0.3)
-            gameMatchRE:FireServer("CreatRoom", worldId, diffNum, 4)
+            task.wait(0.2)
+            gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
         end
     end)
-    task.wait(0.5)
+    task.wait(0.4)
 
-    -- Step 4: วาร์ปไปยังประตูห้องในล็อบบี้
+    -- Step 4: ถ้าระบบเกมต้องการวาร์ปไปแตะประตูห้องตรงกับ worldId
     pcall(function()
         local targetRoom = findLobbyRoomForWorld(worldId)
         local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
         if targetRoom and root then
-            root.CFrame = targetRoom:GetPivot() * CFrame.new(0, 3, 0)
-            task.wait(0.2)
             local touchFolder = targetRoom:FindFirstChild("Touch")
             if touchFolder then
+                root.CFrame = targetRoom:GetPivot() * CFrame.new(0, 3, 0)
+                task.wait(0.2)
                 for _, part in ipairs(touchFolder:GetChildren()) do
                     if part:IsA("BasePart") and type(firetouchinterest) == "function" then
                         pcall(firetouchinterest, root, part, 0)
@@ -1920,14 +1897,14 @@ local MatchTab    = Window:AddTab({ Title = "🏙️ เข้าดันเจ
 local AutoSellTab = Window:AddTab({ Title = "💰 ขายของอัตโนมัติ" })
 local ForgeTab    = Window:AddTab({ Title = "🔨 ตีบวก & ตีไอเทม" })
 local AttrTab     = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
-local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ทั่วไป" })
+local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ร้านค้า" })
 local StatsTab    = Window:AddTab({ Title = "📊 ข้อมูล & สถานะ" })
 
 -- ──────── TAB 1: เข้าดันเจี้ยน & แมตช์ ────────
-MatchTab:AddSection("ระบบเข้าดันเจี้ยนอัตโนมัติ (Lobby)")
+MatchTab:AddSection("ระบบสร้างห้อง & เข้าดันเจี้ยน (Zion Create Room Standard)")
 MatchTab:AddToggle("AutoEnterDungeonToggle", {
     Title = "เปิดระบบเข้าดันเจี้ยนอัตโนมัติ",
-    Desc = "เปิดหน้าต่างแมตช์ เลือกโลก/ระดับความยาก และวาปเข้าประตูในล็อบบี้อัตโนมัติ",
+    Desc = "เปิดหน้าต่างแมตช์ เลือกแมพ/ความยาก/ปาร์ตี้ และยิงคำสั่งเข้าดันเจี้ยนอัตโนมัติ",
     Default = Config.AutoEnterDungeon,
     Callback = function(t)
         Config.AutoEnterDungeon = t
@@ -1936,8 +1913,19 @@ MatchTab:AddToggle("AutoEnterDungeonToggle", {
 })
 
 MatchTab:AddDropdown("AutofarmWorldDropdown", {
-    Title = "เลือกโลก / ดันเจี้ยนเป้าหมาย",
-    Values = { "ป่าไร้ดาว (World1)", "หุบเขาเยือกเย็น (World2)", "ปราสาทแห่งคำสาบาน (World3)", "ทาร์ทารัส (World4)", "ด่าน 5 (World5)" },
+    Title = "เลือกแมพ / ดันเจี้ยนเป้าหมาย (World / Map Select)",
+    Values = {
+        "ป่าไร้ดาว (World1)",
+        "หุบเขาเยือกเย็น (World2)",
+        "ปราสาทแห่งคำสาบาน (World3)",
+        "ทาร์ทารัส (World4)",
+        "ด่าน 5 (World5)",
+        "ถ้ำคริสตัล (Cave1)",
+        "ถ้ำรูน (Cave2)",
+        "ลานกว้างร้าง (Cave3)",
+        "ถ้ำวัตถุดิบ (SeasonResource1)",
+        "หอคอยไร้พ่าย (EndlessTower)"
+    },
     Value = Config.SelectedWorldName or "ป่าไร้ดาว (World1)",
     Callback = function(val)
         Config.SelectedWorldName = val
@@ -1947,7 +1935,7 @@ MatchTab:AddDropdown("AutofarmWorldDropdown", {
 })
 
 MatchTab:AddDropdown("AutofarmDiffDropdown", {
-    Title = "เลือกระดับความยากดันเจี้ยน",
+    Title = "เลือกระดับความยากดันเจี้ยน (Difficulty)",
     Values = { "ระดับทดสอบ (Diff 1)", "ระดับท้าทาย (Diff 2)", "ระดับลงทัณฑ์ (Diff 3)", "ระดับทรมาน (Diff 4)", "ระดับนรกขุมลึก (Diff 5)" },
     Value = Config.SelectedDifficultyName or "ระดับทดสอบ (Diff 1)",
     Callback = function(val)
@@ -1957,51 +1945,31 @@ MatchTab:AddDropdown("AutofarmDiffDropdown", {
     end
 })
 
-MatchTab:AddSection("ระบบดันเจี้ยนถ้ำ & หอคอย")
-MatchTab:AddDropdown("CaveTargetDropdown", {
-    Title = "เลือกดันเจี้ยนถ้ำ",
-    Values = { "ถ้ำคริสตัล (Cave1)", "ถ้ำรูน (Cave2)", "ลานกว้างร้าง (Cave3)", "ถ้ำวัตถุดิบซีซั่น 1" },
-    Value = "ถ้ำคริสตัล (Cave1)",
-    Callback = function(v)
-        if v:find("Cave1") then Config.SelectedCaveId = "Cave1"
-        elseif v:find("Cave2") then Config.SelectedCaveId = "Cave2"
-        elseif v:find("Cave3") then Config.SelectedCaveId = "Cave3"
-        else Config.SelectedCaveId = "SeasonResource1" end
+MatchTab:AddDropdown("AutofarmPartyDropdown", {
+    Title = "เลือกขนาดปาร์ตี้ / จำนวนผู้เล่น (Party Size)",
+    Values = { "1 คน (Solo)", "2 คน (Duo)", "3 คน (Trio)", "4 คน (Full)" },
+    Value = Config.SelectedPartySizeName or "4 คน (Full)",
+    Callback = function(val)
+        Config.SelectedPartySizeName = val
+        Config.SelectedPartySizeNum = PartySizeData[val] or 4
+        saveSettings()
     end
 })
-MatchTab:AddDropdown("CaveDiffDropdown", { Title = "ระดับความยากถ้ำ", Values = { "1", "2", "3", "4", "5" }, Value = "1", Callback = function(v) Config.CaveDiffNum = tonumber(v) or 1 end })
-MatchTab:AddDropdown("CavePartyDropdown", { Title = "ขนาดปาร์ตี้ (คน)", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) Config.CavePartySize = tonumber(v) or 2 end })
 
-MatchTab:AddButton({ Title = "🔳 เข้าห้องดันเจี้ยนถ้ำทันที", Callback = function()
-    EnterCaveMode(Config.SelectedCaveId or "Cave1", Config.CaveDiffNum or 1, Config.CavePartySize or 2)
-    ObsidianGlassEngine:Notify({ Title = "โหมดถ้ำ", Content = "เข้าถ้ำ " .. (Config.SelectedCaveId or "Cave1") .. " ความยาก " .. (Config.CaveDiffNum or 1), Duration = 3 })
+MatchTab:AddButton({ Title = "🚀 สร้างห้องและเข้าดันเจี้ยนทันที (Create Room & Enter)", Callback = function()
+    pcall(runLobbyDungeonSelect)
+    ObsidianGlassEngine:Notify({ Title = "สร้างห้องดันเจี้ยน", Content = "สร้างห้อง " .. tostring(Config.SelectedWorldName) .. " | " .. tostring(Config.SelectedDifficultyName) .. " (" .. tostring(Config.SelectedPartySizeName or "4 คน") .. ")", Duration = 4 })
 end })
-MatchTab:AddButton({ Title = "🌀 วาร์ปไปหา NPC ถ้ำ", Callback = function()
-    TeleportToCaveNPC()
-    ObsidianGlassEngine:Notify({ Title = "วาร์ป", Content = "วาร์ปไปตำแหน่ง NPC ถ้ำเรียบร้อยแล้ว!", Duration = 3 })
-end })
-MatchTab:AddButton({ Title = "🏰 วาร์ปกลับเมืองหลวง", Callback = function()
-    TeleportToTown()
-    ObsidianGlassEngine:Notify({ Title = "วาร์ป", Content = "วาร์ปกลับเมืองเรียบร้อยแล้ว!", Duration = 3 })
-end })
-MatchTab:AddToggle("AutoCaveModeToggle", { Title = "เปิดเข้าถ้ำอัตโนมัติ (วนลูป)", Desc = "ยิงรีโมทเข้าถ้ำดันเจี้ยนอัตโนมัติอย่างต่อเนื่อง", Default = false, Callback = function(t) Config.AutoCaveMode = t end })
 
-MatchTab:AddSection("โหมดหอคอยไร้พ่าย (Endless Tower)")
-MatchTab:AddDropdown("EndlessPartyDropdown", { Title = "ขนาดปาร์ตี้หอคอย", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) Config.EndlessPartySize = tonumber(v) or 2 end })
-MatchTab:AddButton({ Title = "♾️ เข้าหอคอยไร้พ่ายทันที", Callback = function()
-    EnterEndlessTower(Config.EndlessTowerDiffNum or 1, Config.EndlessPartySize or 2)
-    ObsidianGlassEngine:Notify({ Title = "หอคอยไร้พ่าย", Content = "เข้าหอคอยไร้พ่ายเรียบร้อยแล้ว", Duration = 3 })
-end })
-MatchTab:AddToggle("AutoEndlessTowerToggle", { Title = "เปิดเข้าหอคอยอัตโนมัติ (วนลูป)", Desc = "ยิงรีโมทเข้าหอคอยไร้พ่ายอัตโนมัติอย่างต่อเนื่อง", Default = false, Callback = function(t) Config.AutoEndlessTowerMode = t end })
+
 
 MatchTab:AddSection("ควบคุมหลังจบเกม")
 MatchTab:AddToggle("AutoBonusCardToggle", { Title = "เปิดสุ่มการ์ดโบนัสหลังจบเกม", Desc = "เลือกรับการ์ดรางวัลสุ่มหลังเคลียร์ดันเจี้ยนอัตโนมัติ", Default = Config.AutoBonusCard, Callback = function(t) Config.AutoBonusCard = t end })
 MatchTab:AddToggle("AutoPlayAgainToggle", { Title = "เปิดโหวตเล่นอีกครั้ง / กลับเมืองอัตโนมัติ", Desc = "กดข้ามหน้าจบเกมและสั่งรีโมทกลับเข้าห้องเกมใหม่อัตโนมัติ", Default = Config.AutoPlayAgain, Callback = function(t) Config.AutoPlayAgain = t end })
 
-MatchTab:AddSection("── 🐔 ไก่ตัน (All-In-One Farm) ──")
-MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน — เปิดทุกระบบพร้อมกัน", Callback = function()
+MatchTab:AddSection("── 🐔 ไก่ตัน (All-In-One Lobby Farm) ──")
+MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน — เปิดทุกระบบล็อบบี้พร้อมกัน", Callback = function()
     if not Config.ChickenMode then
-        -- บันทึก state เดิม
         Config._ChickenPrevState = {
             AutoEnterDungeon     = Config.AutoEnterDungeon,
             AutoSelectBest       = Config.AutoSelectBest,
@@ -2011,8 +1979,9 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
             AutoBonusCard        = Config.AutoBonusCard,
             AutoPlayAgain        = Config.AutoPlayAgain,
             AutoQuest            = Config.AutoQuest,
+            AutoFarm             = Config.AutoFarm,
+            AutoSkill            = Config.AutoSkill,
         }
-        -- เปิดทุกระบบ
         Config.AutoEnterDungeon     = true
         Config.AutoSelectBest       = true
         Config.AutoSell             = true
@@ -2021,14 +1990,17 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
         Config.AutoBonusCard        = true
         Config.AutoPlayAgain        = true
         Config.AutoQuest            = true
+        Config.AutoFarm             = true
+        Config.AutoSkill            = true
         Config.ChickenMode          = true
-        -- ตั้ง sell Common+Uncommon อัตโนมัติ
+        _G.AutoFarm                 = true
+        _G.AutoSkill                = true
+
         if #Config.Crystals_Value == 0 then Config.Crystals_Value = {"Common","Uncommon"} end
         if #Config.Ores_Value == 0     then Config.Ores_Value     = {"Common","Uncommon"} end
-        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน เปิดแล้ว!", Content = "เปิดทุกระบบ Auto พร้อมกันแล้ว Farm เต็มแรง!", Duration = 5 })
+        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน เปิดแล้ว!", Content = "เปิดทุกระบบ Auto + Auto Skill ในดันเจี้ยนเต็มกำลัง!", Duration = 5 })
     else
-        -- คืน state เดิม
-        local p = Config._ChickenPrevState
+        local p = Config._ChickenPrevState or {}
         Config.AutoEnterDungeon     = p.AutoEnterDungeon     or false
         Config.AutoSelectBest       = p.AutoSelectBest       or false
         Config.AutoSell             = p.AutoSell             or false
@@ -2037,17 +2009,30 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
         Config.AutoBonusCard        = p.AutoBonusCard        or false
         Config.AutoPlayAgain        = p.AutoPlayAgain        or true
         Config.AutoQuest            = p.AutoQuest            or false
+        Config.AutoFarm             = p.AutoFarm             or false
+        Config.AutoSkill            = p.AutoSkill            or true
         Config.ChickenMode          = false
+        _G.AutoFarm                 = Config.AutoFarm
+        _G.AutoSkill                = Config.AutoSkill
         ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน ปิดแล้ว", Content = "คืนค่าระบบกลับเป็นเดิมเรียบร้อย", Duration = 4 })
     end
     saveSettings()
 end })
 
 -- ──────── TAB 2: ขายของอัตโนมัติ ────────
-AutoSellTab:AddSection("ตัวกรองไอเทมสำหรับขาย")
+AutoSellTab:AddSection("ตัวกรองไอเทมสำหรับขาย (Zion Central Architecture)")
 local CrystalDropdown = AutoSellTab:AddDropdown("CrystalSellDropdown", { Title = "เลือกระดับความหายากคริสตัลที่ต้องการขาย", Values = GetRarities(), Multi = true, Callback = function(val) Config.Crystals_Value = val end })
 local OreDropdown     = AutoSellTab:AddDropdown("OreSellDropdown",     { Title = "เลือกระดับความหายากแร่ที่ต้องการขาย",     Values = GetRarities(), Multi = true, Callback = function(val) Config.Ores_Value = val end })
 local EquipDropdown   = AutoSellTab:AddDropdown("EquipSellDropdown",   { Title = "เลือก ID อุปกรณ์ที่ต้องการขาย",            Values = GetEquipment(), Multi = true, Callback = function(val) Config.Equipment_Value = val end })
+
+AutoSellTab:AddButton({ Title = "⚡ เลือกเฉพาะระดับทั่วไป & หายาก (Common & Uncommon)", Callback = function()
+    Config.Crystals_Value = { "Common", "Uncommon" }
+    Config.Ores_Value     = { "Common", "Uncommon" }
+    CrystalDropdown:SetValues(GetRarities())
+    OreDropdown:SetValues(GetRarities())
+    saveSettings()
+    ObsidianGlassEngine:Notify({ Title = "ขายของอัตโนมัติ", Content = "เลือกขายเฉพาะระดับ Common & Uncommon เรียบร้อย!", Duration = 3 })
+end })
 
 AutoSellTab:AddButton({ Title = "🔄 รีเฟรชรายชื่อไอเทมในกระเป๋า", Callback = function()
     pcall(function()
@@ -2058,7 +2043,56 @@ AutoSellTab:AddButton({ Title = "🔄 รีเฟรชรายชื่อไ
     end)
 end })
 
-AutoSellTab:AddToggle("AutoSellToggle", { Title = "เปิดใช้งานขายของอัตโนมัติ", Desc = "ขาย คริสตัล, แร่ และอุปกรณ์ ที่เลือกไว้ตามระยะเวลาอัจฉริยะ", Default = Config.AutoSell, Callback = function(t) Config.AutoSell = t end })
+local function ExecuteSellNow()
+    local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
+    local ForgeRF    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
+    local EquipRE    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
+    local totalSold  = 0
+
+    if Config.Crystals_Value and type(Config.Crystals_Value) == "table" and #Config.Crystals_Value > 0 and MaterialRE then
+        local crystalLoop = {}
+        for _, v in pairs(GetCrystals()) do
+            if table.find(Config.Crystals_Value, v.Rarity) then
+                crystalLoop[v.ID] = 1
+                totalSold = totalSold + 1
+            end
+        end
+        if next(crystalLoop) then MaterialRE:FireServer("Sell", crystalLoop, {}) end
+    end
+
+    if Config.Ores_Value and type(Config.Ores_Value) == "table" and #Config.Ores_Value > 0 and ForgeRF then
+        local oresLoop = {}
+        for _, v in pairs(GetOresWithNames()) do
+            if table.find(Config.Ores_Value, v.Rarity) then
+                oresLoop[v.ID] = 1
+                totalSold = totalSold + 1
+            end
+        end
+        if next(oresLoop) then ForgeRF:InvokeServer("Sell", oresLoop) end
+    end
+
+    if Config.Equipment_Value and type(Config.Equipment_Value) == "table" and #Config.Equipment_Value > 0 and DataUtil and EquipRE then
+        local owned = {}
+        pcall(function() owned = DataUtil:GetPlayerData(player).Equipment.Owned end)
+        for _, v in pairs(owned or {}) do
+            if table.find(Config.Equipment_Value, v.ID) then
+                EquipRE:FireServer("Sell", { v.UUID })
+                totalSold = totalSold + 1
+            end
+        end
+    end
+
+    return totalSold
+end
+
+AutoSellTab:AddButton({ Title = "💵 ขายไอเทมที่เลือกทันที 1 ครั้ง", Callback = function()
+    pcall(function()
+        local count = ExecuteSellNow()
+        ObsidianGlassEngine:Notify({ Title = "ขายของทันที", Content = "สั่งขายไอเทมที่เลือกเรียบร้อยแล้ว (" .. tostring(count) .. " รายการ)", Duration = 3 })
+    end)
+end })
+
+AutoSellTab:AddToggle("AutoSellToggle", { Title = "เปิดใช้งานขายของอัตโนมัติ", Desc = "ขาย คริสตัล, แร่ และอุปกรณ์ ที่เลือกไว้ตามระยะเวลาอัจฉริยะ", Default = Config.AutoSell, Callback = function(t) Config.AutoSell = t saveSettings() end })
 
 -- ──────── TAB 3: ตีบวก & ตีไอเทม ────────
 ForgeTab:AddSection("สวมใส่อุปกรณ์ที่ดีที่สุด")
@@ -2148,7 +2182,41 @@ AttrTab:AddButton({ Title = "🎯 ติดตั้งสกิลลงช่�
     ObsidianGlassEngine:Notify({ Title = "ติดตั้งสกิล", Content = "ติดตั้ง " .. (_G.IRS_EquipSkillId or "ThunderHammer_Skill_3") .. " ใส่ช่อง " .. (_G.IRS_SkillSlot or "Skill1"), Duration = 3 })
 end })
 
--- ──────── TAB 5: รางวัลประจำวัน & ทั่วไป ────────
+-- ──────── TAB 5: ร้านค้า Grocery Shop & รางวัลประจำวัน ────────
+DailyTab:AddSection("🛒 ร้านค้า Grocery Shop (Consumable Shop Central)")
+DailyTab:AddDropdown("GroceryShopDropdown", {
+    Title = "เลือกไอเทมร้านค้าที่ต้องการซื้อ",
+    Values = {
+        "GoldShop_17 (คัมภีร์อัปเกรดอาวุธ)",
+        "GoldShop_1 (ยาฟื้นฟู HP ขนาดเล็ก)",
+        "GoldShop_2 (ยาฟื้นฟู HP ขนาดกลาง)",
+        "GoldShop_3 (ยาฟื้นฟู HP ขนาดใหญ่)",
+        "GoldShop_4 (ยาฟื้นฟู SP)"
+    },
+    Value = "GoldShop_17 (คัมภีร์อัปเกรดอาวุธ)",
+    Callback = function(val)
+        local itemId = val:match("^(%w+)") or "GoldShop_17"
+        Config.ShopItemToBuy = itemId
+        saveSettings()
+    end
+})
+
+DailyTab:AddButton({ Title = "🛒 ซื้อไอเทมร้านค้าที่เลือกทันที", Callback = function()
+    local itemId = Config.ShopItemToBuy or "GoldShop_17"
+    BuyConsumableItem("Gold", itemId)
+    ObsidianGlassEngine:Notify({ Title = "ร้านค้า Grocery Shop", Content = "ส่งคำสั่งซื้อ " .. tostring(itemId) .. " เรียบร้อยแล้ว!", Duration = 3 })
+end })
+
+DailyTab:AddToggle("AutoBuyShopToggle", {
+    Title = "เปิดซื้อไอเทมร้านค้าอัตโนมัติ (Auto Grocery Shop)",
+    Desc = "ซื้อไอเทมที่เลือกจากร้านค้าอัตโนมัติตามระยะเวลา",
+    Default = Config.AutoBuyShopItem or false,
+    Callback = function(t)
+        Config.AutoBuyShopItem = t
+        saveSettings()
+    end
+})
+
 DailyTab:AddSection("รับรางวัลประจำวัน (Daily Login)")
 DailyTab:AddButton({ Title = "👀 เปิดดูหน้าต่างกิจกรรมประจำวัน", Callback = function()
     ViewDailyActivity()
@@ -2167,14 +2235,7 @@ DailyTab:AddButton({ Title = "🎁 กดรับรางวัลประจ
 end })
 DailyTab:AddToggle("AutoClaimDailyToggle", { Title = "เปิดรับรางวัลประจำวันอัตโนมัติ", Desc = "เช็คและรับรางวัลล็อกอินประจำวันให้อัตโนมัติเมื่อพร้อม", Default = Config.AutoClaimDaily, Callback = function(t) Config.AutoClaimDaily = t end })
 
-DailyTab:AddSection("ร้านค้า & เควสภารกิจ")
-DailyTab:AddDropdown("ShopItemDropdown", { Title = "เลือก ID ไอเทมร้านค้า", Values = { "GoldShop_17", "GoldShop_1", "GoldShop_2" }, Value = "GoldShop_17", Callback = function(val) Config.ShopItemToBuy = val end })
-DailyTab:AddButton({ Title = "🛒 ซื้อไอเทมร้านค้าที่เลือก", Callback = function()
-    BuyConsumableItem("Gold", Config.ShopItemToBuy)
-    ObsidianGlassEngine:Notify({ Title = "ร้านค้า", Content = "ซื้อไอเทม " .. tostring(Config.ShopItemToBuy) .. " เรียบร้อยแล้ว", Duration = 3 })
-end })
-DailyTab:AddToggle("AutoBuyShopToggle", { Title = "เปิดซื้อไอเทมร้านค้าอัตโนมัติ", Desc = "ซื้อไอเทมร้านค้าที่เลือกอัตโนมัติตามระยะเวลา", Default = Config.AutoBuyShopItem, Callback = function(t) Config.AutoBuyShopItem = t end })
-
+DailyTab:AddSection("เควสภารกิจ & คุย NPC")
 DailyTab:AddDropdown("TaskNpcDropdown", { Title = "เลือก NPC เควสเป้าหมาย", Values = { "EquipmentEnchantNpc2|0", "DialogNpcStarterNext1|1", "DialogNpcStarterNext2|0", "DialogPetNpc4|0" }, Value = "EquipmentEnchantNpc2|0", Callback = function(val) Config.TaskNpcTarget = val end })
 DailyTab:AddButton({ Title = "💬 ดำเนินเควสคุยกับ NPC ที่เลือก", Callback = function()
     UpdateTaskProgress("DialogNpc", Config.TaskNpcTarget)
@@ -2182,8 +2243,8 @@ DailyTab:AddButton({ Title = "💬 ดำเนินเควสคุยกั
 end })
 DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "เปิดคุยเควส NPC อัตโนมัติ", Desc = "ส่งคำสั่งดำเนินเควส NPC อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoTaskProgress or false, Callback = function(t) Config.AutoTaskProgress = t end })
 
--- ──────── TAB 6: ข้อมูล & สถานะ ────────
-StatsTab:AddSection("── สถานะตัวละคร & ข้อมูลเรียลไทม์ ──")
+-- ──────── TAB 6: ข้อมูล & สถานะ (Obsidian Dashboard) ────────
+StatsTab:AddSection("── 📊 Obsidian Status Dashboard ──")
 local StatsPowerPara  = StatsTab:AddParagraph({ Title = "⚡ พลังต่อสู้: ...",          Desc = "0 Power" })
 local StatsLevelPara  = StatsTab:AddParagraph({ Title = "🏆 เลเวล: ...",               Desc = "EXP: 0 / 0" })
 local StatsGoldPara   = StatsTab:AddParagraph({ Title = "💰 เงินทอง: ...",             Desc = "0 Gold" })
@@ -2191,17 +2252,99 @@ local StatsStockPara  = StatsTab:AddParagraph({ Title = "📜 คัมภีร
 local StatsRacePara   = StatsTab:AddParagraph({ Title = "🧬 เชื้อชาติ: ...",           Desc = "Unknown" })
 local StatsWeaponPara = StatsTab:AddParagraph({ Title = "⚔️ อาวุธที่ใส่: ...",         Desc = "None" })
 local StatsAutoStatus = StatsTab:AddParagraph({ Title = "🤖 ระบบ Auto ที่ใช้งาน:",    Desc = "ไม่มีระบบที่เปิดอยู่" })
-StatsTab:AddSection("── Session ──")
-local StatsSessionPara = StatsTab:AddParagraph({ Title = "⏱️ เวลา Session",            Desc = "0 นาที" })
+StatsTab:AddSection("── Session & Net Metrics ──")
+local StatsSessionPara = StatsTab:AddParagraph({ Title = "⏱️ เวลา Session",            Desc = "0 นาที 0 วินาที" })
 local _statsSessionStart = os.time()
+
+local function RefreshStatsDisplay()
+    pcall(function()
+        local function setP(para, title, desc)
+            pcall(function()
+                local t = para:FindFirstChild("TitleLabel")
+                local d = para:FindFirstChild("DescLabel")
+                if t then t.Text = title end
+                if d then d.Text = desc   end
+            end)
+        end
+
+        local power  = tostring(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0)
+        local lv     = tostring(player:GetAttribute("LG_Level") or 1)
+        local exp    = "0"
+        local expMax = "0"
+        local gold   = "0"
+        local stock  = "0"
+        local race   = tostring(player:GetAttribute("LG_Race") or player:GetAttribute("Race") or "?")
+        local weaponName = "None"
+
+        if DataUtil then
+            pcall(function()
+                local pd = DataUtil:GetPlayerData(player)
+                if pd then
+                    lv     = tostring(pd.Level or lv)
+                    exp    = tostring(pd.EXP or 0)
+                    expMax = tostring(pd.EXPMax or pd.NextLevelEXP or "?")
+                    gold   = tostring(pd.Gold or pd.Currency or 0)
+                    if pd.Race then race = tostring(pd.Race) end
+                    if pd.Equipment then
+                        local uuid = pd.Equipment.Equipped or pd.Equipment.EquippedWeapon
+                        if type(uuid) == "table" then uuid = uuid.Weapon or uuid[1] end
+                        if uuid then weaponName = tostring(uuid) end
+                    end
+                end
+            end)
+        end
+
+        pcall(function()
+            local ls = player:FindFirstChild("leaderstats")
+            if ls then
+                local scrollObj = ls:FindFirstChild("Scroll") or ls:FindFirstChild("ScrollStock")
+                if scrollObj then stock = tostring(scrollObj.Value) end
+                local goldObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
+                if goldObj and gold == "0" then gold = tostring(goldObj.Value) end
+            end
+        end)
+
+        local autoList = {}
+        if Config.AutoEnterDungeon     then table.insert(autoList, "ลงดัน")   end
+        if Config.AutoFarm             then table.insert(autoList, "AutoFarmในแมตช์") end
+        if Config.AutoSkill            then table.insert(autoList, "AutoSkill") end
+        if Config.AutoCaveMode         then table.insert(autoList, "ถ้ำ")      end
+        if Config.AutoEndlessTowerMode then table.insert(autoList, "หอคอย")   end
+        if Config.AutoSell             then table.insert(autoList, "ขายของ")  end
+        if Config.AutoSelectBest       then table.insert(autoList, "EquipBest") end
+        if Config.AutoUpgradeAttribute then table.insert(autoList, "อัปสเตต") end
+        if Config.AutoClaimDaily       then table.insert(autoList, "Daily")   end
+        if Config.AutoBuyShopItem      then table.insert(autoList, "Shop")    end
+        if Config.AutoQuest            then table.insert(autoList, "เควส")    end
+        if Config.ChickenMode          then table.insert(autoList, "🐔ไก่ตัน") end
+        local autoStr = #autoList > 0 and table.concat(autoList, " | ") or "ไม่มีระบบที่เปิดอยู่"
+
+        local elapsed = os.time() - _statsSessionStart
+        local sessionStr = string.format("%d นาที %d วินาที", math.floor(elapsed/60), elapsed%60)
+
+        setP(StatsPowerPara,  "⚡ พลังต่อสู้: " .. power,          power .. " Power")
+        setP(StatsLevelPara,  "🏆 เลเวล: " .. lv,                 "EXP: " .. exp .. " / " .. expMax)
+        setP(StatsGoldPara,   "💰 เงินทอง: " .. gold,              gold .. " Gold")
+        setP(StatsStockPara,  "📜 คัมภีร์ตีบวก: " .. stock,        "คงเหลือ: " .. stock)
+        setP(StatsRacePara,   "🧬 เชื้อชาติ: " .. race,            race)
+        setP(StatsWeaponPara, "⚔️ อาวุธที่ใส่: " .. weaponName,    weaponName)
+        setP(StatsAutoStatus, "🤖 ระบบ Auto:",                     autoStr)
+        setP(StatsSessionPara,"⏱️ Session: " .. sessionStr,        sessionStr)
+    end)
+end
+
+StatsTab:AddButton({ Title = "🔄 รีเฟรชข้อมูลตัวละครทันที", Callback = function()
+    RefreshStatsDisplay()
+    ObsidianGlassEngine:Notify({ Title = "Dashboard", Content = "อัปเดตข้อมูลตัวละครเรียบร้อยแล้ว!", Duration = 3 })
+end })
 
 -- ════════════════════════════════════════════════════
 -- 7. BACKGROUND AUTOMATION LOOPS (LOBBY ENGINE)
 -- ════════════════════════════════════════════════════
 
--- ASYNC LOOP: โหวตเล่นอีกครั้ง / ข้ามหน้าต่างจบเกม
+-- ASYNC LOOP: เล่นแมตช์ & ข้ามหน้าเคลียร์ / โหวตเล่นอีกครั้ง
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait(1.5) do
         if State.Unloaded then break end
         if Config.AutoPlayAgain then
             pcall(function()
@@ -2234,39 +2377,7 @@ task.spawn(function()
     while task.wait(2) do
         if State.Unloaded then break end
         if Config.AutoSell then
-            pcall(function()
-                local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
-                local ForgeRF    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
-                local EquipRE    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
-
-                if Config.Crystals_Value and type(Config.Crystals_Value) == "table" and #Config.Crystals_Value > 0 and MaterialRE then
-                    local crystalLoop = {}
-                    for _, v in pairs(GetCrystals()) do
-                        if table.find(Config.Crystals_Value, v.Rarity) then
-                            crystalLoop[v.ID] = 1
-                        end
-                    end
-                    if next(crystalLoop) then MaterialRE:FireServer("Sell", crystalLoop, {}) end
-                end
-
-                if Config.Ores_Value and type(Config.Ores_Value) == "table" and #Config.Ores_Value > 0 and ForgeRF then
-                    local oresLoop = {}
-                    for _, v in pairs(GetOresWithNames()) do
-                        if table.find(Config.Ores_Value, v.Rarity) then
-                            oresLoop[v.ID] = 1
-                        end
-                    end
-                    if next(oresLoop) then ForgeRF:InvokeServer("Sell", oresLoop) end
-                end
-
-                if Config.Equipment_Value and type(Config.Equipment_Value) == "table" and #Config.Equipment_Value > 0 and DataUtil and EquipRE then
-                    local owned = {}
-                    pcall(function() owned = DataUtil:GetPlayerData(player).Equipment.Owned end)
-                    for _, v in pairs(owned or {}) do
-                        if table.find(Config.Equipment_Value, v.ID) then EquipRE:FireServer("Sell", { v.UUID }) end
-                    end
-                end
-            end)
+            pcall(ExecuteSellNow)
         end
     end
 end)
@@ -2296,10 +2407,10 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: วางแร่ใส่เตาหลอม (แยก loop + cooldown ไม่ให้ spam GUI)
+-- ASYNC LOOP: วางแร่ใส่เตาหลอม
 task.spawn(function()
     local lastDropTime = 0
-    local DROP_COOLDOWN = 20 -- วิ: วางแร่ทุก 20 วิ ไม่ spam
+    local DROP_COOLDOWN = 20
     while task.wait(3) do
         if State.Unloaded then break end
         if Config.AutoDropOres then
@@ -2312,12 +2423,12 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: เข้าดันเจี้ยนในล็อบบี้อัตโนมัติ (cooldown ป้องกัน spam)
+-- ASYNC LOOP: เข้าดันเจี้ยนในล็อบบี้อัตโนมัติ
 task.spawn(function()
     local lastDungeonTime = 0
     local lastCaveTime    = 0
     local lastTowerTime   = 0
-    local DUNGEON_COOLDOWN = 30 -- วิ: เดิมยิงทุก 2 วิ = spam 3 remote ต่อรอบ
+    local DUNGEON_COOLDOWN = 30
     local CAVE_COOLDOWN    = 20
     local TOWER_COOLDOWN   = 20
 
@@ -2330,21 +2441,10 @@ task.spawn(function()
             lastDungeonTime = tick()
         end
 
-        if Config.AutoCaveMode and (now - lastCaveTime) >= CAVE_COOLDOWN then
-            pcall(function() EnterCaveMode(Config.SelectedCaveId or "Cave1", Config.CaveDiffNum or 1, Config.CavePartySize or 2) end)
-            lastCaveTime = tick()
-        end
-
-        if Config.AutoEndlessTowerMode and (now - lastTowerTime) >= TOWER_COOLDOWN then
-            pcall(function() EnterEndlessTower(Config.EndlessTowerDiffNum or 1, Config.EndlessPartySize or 2) end)
-            lastTowerTime = tick()
-        end
-
         if Config.AutoBonusCard then
             pcall(function()
                 local resultGui = player.PlayerGui:FindFirstChild("ResultGui")
                 if resultGui and resultGui:FindFirstChild("ScreenSettlement") and resultGui.ScreenSettlement.Visible then
-                    -- ยิงผ่าน Remote แทน client-side module call
                     local bonusRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent")
                     if bonusRE then bonusRE:FireServer("SelectCard", 1) end
                 end
@@ -2353,7 +2453,7 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: อัปสเตตัสอัตโนมัติ (ตรวจ zero-preset ก่อน)
+-- ASYNC LOOP: อัปสเตตัสอัตโนมัติ
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
@@ -2386,7 +2486,7 @@ task.spawn(function()
             end)
         end
 
-        if Config.AutoBuyShopItem then pcall(function() BuyConsumableItem("Gold", Config.ShopItemToBuy) end) end
+        if Config.AutoBuyShopItem then pcall(function() BuyConsumableItem("Gold", Config.ShopItemToBuy or "GoldShop_17") end) end
     end
 end)
 
@@ -2541,83 +2641,14 @@ task.spawn(function()
 end)
 
 -- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (ครบถ้วน)
+-- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (Dashboard)
 task.spawn(function()
-    local function setP(para, title, desc)
-        pcall(function()
-            local t = para:FindFirstChild("TitleLabel")
-            local d = para:FindFirstChild("DescLabel")
-            if t then t.Text = title end
-            if d then d.Text = desc   end
-        end)
-    end
-
     while task.wait(1) do
         if State.Unloaded then break end
-        pcall(function()
-            local power  = tostring(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0)
-            local lv     = tostring(player:GetAttribute("LG_Level") or 1)
-            local exp    = "0"
-            local expMax = "0"
-            local gold   = "0"
-            local stock  = "0"
-            local race   = tostring(player:GetAttribute("LG_Race") or player:GetAttribute("Race") or "?")
-            local weaponName = "None"
-
-            if DataUtil then
-                pcall(function()
-                    local pd = DataUtil:GetPlayerData(player)
-                    if pd then
-                        lv     = tostring(pd.Level or lv)
-                        exp    = tostring(pd.EXP or 0)
-                        expMax = tostring(pd.EXPMax or pd.NextLevelEXP or "?")
-                        gold   = tostring(pd.Gold or pd.Currency or 0)
-                        if pd.Race then race = tostring(pd.Race) end
-                        if pd.Equipment then
-                            local uuid = pd.Equipment.Equipped or pd.Equipment.EquippedWeapon
-                            if type(uuid) == "table" then uuid = uuid.Weapon or uuid[1] end
-                            if uuid then weaponName = tostring(uuid) end
-                        end
-                    end
-                end)
-            end
-
-            pcall(function()
-                local ls = player:FindFirstChild("leaderstats")
-                if ls then
-                    local scrollObj = ls:FindFirstChild("Scroll") or ls:FindFirstChild("ScrollStock")
-                    if scrollObj then stock = tostring(scrollObj.Value) end
-                    local goldObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
-                    if goldObj and gold == "0" then gold = tostring(goldObj.Value) end
-                end
-            end)
-
-            -- auto status string
-            local autoList = {}
-            if Config.AutoEnterDungeon     then table.insert(autoList, "ลงดัน")   end
-            if Config.AutoCaveMode         then table.insert(autoList, "ถ้ำ")      end
-            if Config.AutoEndlessTowerMode then table.insert(autoList, "หอคอย")   end
-            if Config.AutoSell             then table.insert(autoList, "ขายของ")  end
-            if Config.AutoSelectBest       then table.insert(autoList, "EquipBest") end
-            if Config.AutoUpgradeAttribute then table.insert(autoList, "อัปสเตต") end
-            if Config.AutoClaimDaily       then table.insert(autoList, "Daily")   end
-            if Config.AutoQuest            then table.insert(autoList, "เควส")    end
-            if Config.ChickenMode          then table.insert(autoList, "🐔ไก่ตัน") end
-            local autoStr = #autoList > 0 and table.concat(autoList, " | ") or "ไม่มีระบบที่เปิดอยู่"
-
-            local elapsed = os.time() - _statsSessionStart
-            local sessionStr = string.format("%d นาที %d วินาที", math.floor(elapsed/60), elapsed%60)
-
-            setP(StatsPowerPara,  "⚡ พลังต่อสู้: " .. power,          power .. " Power")
-            setP(StatsLevelPara,  "🏆 เลเวล: " .. lv,                 "EXP: " .. exp .. " / " .. expMax)
-            setP(StatsGoldPara,   "💰 เงินทอง: " .. gold,              gold .. " Gold")
-            setP(StatsStockPara,  "📜 คัมภีร์ตีบวก: " .. stock,        "คงเหลือ: " .. stock)
-            setP(StatsRacePara,   "🧬 เชื้อชาติ: " .. race,            race)
-            setP(StatsWeaponPara, "⚔️ อาวุธที่ใส่: " .. weaponName,    weaponName)
-            setP(StatsAutoStatus, "🤖 ระบบ Auto:",                     autoStr)
-            setP(StatsSessionPara,"⏱️ Session: " .. sessionStr,        sessionStr)
-        end)
+        RefreshStatsDisplay()
     end
 end)
+
 
 -- ════════════════════════════════════════════════════
 -- ✅ UNLOAD & CLEANUP REGISTRY
