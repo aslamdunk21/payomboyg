@@ -3152,38 +3152,34 @@ local HeightTab = Window:AddTab({ Title = "⚙️ ระยะ & ตำแหน
 
 HeightTab:AddSection("ตั้งค่าระยะ & ความสูงการฟาร์ม")
 
-HeightTab:AddInput("AboveHeight", {
+HeightTab:AddSlider("AboveHeight", {
     Title = "Upper Height (ความสูงโหมดลอยเหนือหัว)",
-    Default = tostring(Config.AboveHeight),
-    Callback = function(text)
-        local val = tonumber(text)
-        if val then
-            val = math.clamp(val, 0, 250)
-            Config.AboveHeight = val
-            _G.AboveHeight = val
-            _G.FloatHeight = val
-            if Config.AutoFarm and targetIsValid() then
-                lockCombatPosition()
-            end
-            saveSettings()
+    Min = -10,
+    Max = 0,
+    Default = math.clamp(Config.AboveHeight or 0, -10, 0),
+    Callback = function(val)
+        Config.AboveHeight = val
+        _G.AboveHeight = val
+        _G.FloatHeight = val
+        if Config.AutoFarm and targetIsValid() then
+            lockCombatPosition()
         end
+        saveSettings()
     end
 })
 
-HeightTab:AddInput("UndergroundHeight", {
+HeightTab:AddSlider("UndergroundHeight", {
     Title = "Underground Height (ระยะลึกโหมดมุดใต้ดิน)",
-    Default = tostring(Config.UndergroundHeight),
-    Callback = function(text)
-        local val = tonumber(text)
-        if val then
-            val = math.clamp(val, 0, 250)
-            Config.UndergroundHeight = val
-            _G.UnderGroundHeight = val
-            if Config.AutoFarm and targetIsValid() then
-                lockCombatPosition()
-            end
-            saveSettings()
+    Min = -10,
+    Max = 0,
+    Default = math.clamp(Config.UndergroundHeight or 0, -10, 0),
+    Callback = function(val)
+        Config.UndergroundHeight = val
+        _G.UnderGroundHeight = val
+        if Config.AutoFarm and targetIsValid() then
+            lockCombatPosition()
         end
+        saveSettings()
     end
 })
 
