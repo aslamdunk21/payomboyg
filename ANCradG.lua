@@ -7351,7 +7351,6 @@ Tabs.Raid:AddButton({
     Title = "⏱️ เช็คคูลดาวน์บอสเรด",
     Callback = function()
         local minLeft = getMinutesToNextBoss()
-        Fluent:Notify({ Title = "คูลดาวน์บอสเรด", Content = string.format("เหลือเวลาอีก %d นาที จะเกิดบอสรอบถัดไป", minLeft), Duration = 5 })
     end
 })
 
@@ -7562,29 +7561,75 @@ AutoAcceptToggle:OnChanged(function(state)
                 pcall(function()
                     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                     if playerGui then
-                        -- [OPT] ค้นหาเฉพาะ TextButton ที่ Visible เท่านั้น ลด scan overhead
+                        local function isGuiVisible(gui)
+                            if not gui then return false end
+                            if gui:IsA("GuiObject") and not gui.Visible then return false end
+                            local current = gui.Parent
+                            while current and current:IsA("GuiObject") do
+                                if not current.Visible then return false end
+                                current = current.Parent
+                            end
+                            return not (current and current:IsA("ScreenGui")) or current.Enabled
+                        end
+
+                        local function isInTradeGui(obj)
+                            local current = obj
+                            local inTrade = false
+                            while current and current ~= playerGui do
+                                local name = string.lower(current.Name or "")
+                                if name:find("playtime") or name:find("reward") or name:find("daily") 
+                                    or name:find("claim") or name:find("spin") or name:find("shop") 
+                                    or name:find("store") or name:find("quest") or name:find("pass") 
+                                    or name:find("hud") or name:find("topbar") or name:find("main") then
+                                    return false
+                                end
+                                if name:find("trade") or name:find("gifting") or name:find("gift") then
+                                    inTrade = true
+                                end
+                                current = current.Parent
+                            end
+                            return inTrade
+                        end
+
                         for _, v in ipairs(playerGui:GetDescendants()) do
-                            if v:IsA("TextButton") and v.Visible and v.Text then
-                                local text = string.upper(string.match(v.Text or "", "^%s*(.-)%s*$") or "")
-                                if text == "ACCEPT" or text == "YES" or text == "รับ" or text == "ยอมรับ" or text == "ตกลง" then
-                                    local fired = false
-                                    if getconnections then
-                                        for _, conn in pairs(getconnections(v.MouseButton1Click)) do conn:Fire() fired = true end
-                                        for _, conn in pairs(getconnections(v.Activated)) do conn:Fire() fired = true end
+                            if v:IsA("TextLabel") or v:IsA("TextButton") or v:IsA("ImageButton") then
+                                local rawText = (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Text or ""
+                                local cleanText = string.gsub(rawText, "<[^>]+>", "")
+                                local text = string.upper(string.match(cleanText or "", "^%s*(.-)%s*$") or "")
+                                local name = string.upper(v.Name or "")
+
+                                local isAccept = false
+                                if isInTradeGui(v) then
+                                    if text == "ACCEPT" or text == "CONFIRM" or text == "READY" or text == "AGREE"
+                                        or text == "ยอมรับ" or text == "ตกลง" or text == "YES"
+                                        or text:find("ACCEPT") or text:find("CONFIRM") or text:find("READY") or text:find("ยอมรับ") then
+                                        isAccept = true
                                     end
-                                    if not fired then
-                                        local vim = game:GetService("VirtualInputManager")
-                                        local center = v.AbsolutePosition + (v.AbsoluteSize / 2)
-                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, true, game, 1)
-                                        task.wait(0.1)
-                                        vim:SendMouseButtonEvent(center.X, center.Y + 36, 0, false, game, 1)
+                                    if not isAccept and (v:IsA("TextButton") or v:IsA("ImageButton")) then
+                                        if name:find("ACCEPT") or name:find("CONFIRM") or name:find("READY") then
+                                            isAccept = true
+                                        end
+                                    end
+                                else
+                                    if text == "ACCEPT" or text == "ACCEPT TRADE" or text == "CONFIRM TRADE" or text == "ยอมรับการเทรด" or text == "ยอมรับ" then
+                                        isAccept = true
+                                    elseif name == "ACCEPTBUTTON" or name == "CONFIRMTRADE" or name == "ACCEPTTRADE" then
+                                        isAccept = true
+                                    end
+                                end
+
+                                if isAccept then
+                                    local btn = v:IsA("TextButton") and v or v:IsA("ImageButton") and v or v:FindFirstAncestorWhichIsA("TextButton") or v:FindFirstAncestorWhichIsA("ImageButton")
+                                    if btn and isGuiVisible(btn) then
+                                        fireButton(btn)
+                                        task.wait(0.3)
                                     end
                                 end
                             end
                         end
                     end
                 end)
-                task.wait(1.5)  -- [OPT] เพิ่ม interval จาก 0.5s -> 1.5s ลด scan ใน playerGui
+                task.wait(0.5)
             end
         end)
     end
