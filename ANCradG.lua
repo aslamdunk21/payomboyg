@@ -7474,7 +7474,7 @@ AutoGiftToggle:OnChanged(function(state)
                                 )
                                 local key = displayName .. " | " .. tostring(getCardRank(t)) .. " | " .. tostring(getCardMutation(t))
                                 for selectedText, _ in pairs(getgenv().SelectedTradeCards) do
-                                    if selectedText:find(displayName, 1, true) or selectedText:find(key, 1, true) then return true end
+                                    if selectedText:find(key, 1, true) then return true end
                                 end
                                 return false
                             end
