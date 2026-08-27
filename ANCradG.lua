@@ -2084,10 +2084,11 @@ getgenv().SelectedTradeCards = getgenv().SelectedTradeCards or {}
 getgenv().SelectedTradePlayer = getgenv().SelectedTradePlayer or ""
 getgenv().BossRaidDifficulty = getgenv().BossRaidDifficulty or "NIGHTMARE"
 
+local MinRarityDrop = nil
 local RaritiesList = {
     "Common Pack", "Uncommon Pack", "Rare Pack", "Epic Pack", "Legendary Pack", "Mythic Pack", "Secret Pack",
     "Divine Pack", "Transcendent Pack", "Shadow Pack", "Emperor Pack", "Demon Pack", "Manga Pack", "Celestial Pack",
-    "Heavenly Pack"
+    "Heavenly Pack", "Soccer Pack", "Grail Pack", "Blaze Pack", "Conquest Pack", "Devour Pack", "Godly Pack", "Admin Pack"
 }
 
 local MutationsList = {
@@ -3997,46 +3998,29 @@ AutoSpawnToggle:OnChanged(function(state)
                         AutoSpawnToggle:SetValue(false)
                         return
                     end
-                    task.wait(1)
+                    task.wait(0.5)
                     continue
                 end
                 retryCount = 0
-                if not getgenv().CardFolder then findCardFolder() end
-                local activeCards = 0
-                if getgenv().CardFolder then
-                    for _, model in ipairs(getgenv().CardFolder:GetChildren()) do
-                        if model:IsA("Model") and model:GetAttribute("IgnoreTutoBeam") ~= nil and model:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                            if getgenv().AutoBuyCards and model:GetAttribute("Rejected") then continue end
-                            activeCards = activeCards + 1
-                        end
-                    end
-                end
-                if getgenv().AutoBuyCards then
-                    if activeCards == 0 then
-                        pcall(fireclickdetector, cd)
-                        task.wait(0.3)
-                    else
-                        task.wait(0.05)
-                    end
-                else
-                    pcall(fireclickdetector, cd)
-                    if activeCards >= 3 then
-                        task.wait(0.2)
-                    else
-                        task.wait(0.01)
-                    end
-                end
+
+                pcall(function()
+                    cd.MaxActivationDistance = 99999
+                    fireclickdetector(cd)
+                end)
+
+                local delayTime = math.max(0.01, tonumber(getgenv().AutoSpawnDelay) or 0.01)
+                task.wait(delayTime)
             end
         end)
     end
 end)
 
-getgenv().AutoSpawnDelay = 0.3
+getgenv().AutoSpawnDelay = 0.01
 local AutoSpawnSlider = Tabs.Main:AddSlider("AutoSpawnDelay", {
     Title = "⏱️ ความเร็วการสุ่มแพ็ก (วินาที)",
-    Description = "ปรับระยะเวลารอระหว่างการกดสุ่มแพ็กแต่ละรอบ (ต่ำสุด 0.3s)",
-    Default = 0.3,
-    Min = 0.3,
+    Description = "ปรับระยะเวลารอระหว่างการกดสุ่มแพ็กแต่ละรอบ (ต่ำสุด 0.01s)",
+    Default = 0.01,
+    Min = 0.01,
     Max = 3,
     Rounding = 2
 })
@@ -4148,6 +4132,11 @@ do
                 end
             end)
             pcall(function()
+                if MinRarityDrop and MinRarityDrop.SetValues then
+                    MinRarityDrop:SetValues(_liveRarityList)
+                end
+            end)
+            pcall(function()
                 if MutationDropdown and MutationDropdown.SetValues then
                     MutationDropdown:SetValues(_liveMutationList)
                 end
@@ -4226,14 +4215,34 @@ end
 local function getCardModelRarityAndMutation(model)
     if not model then return "", "Normal" end
 
-    local rarity = model:GetAttribute("Rarity") or model:GetAttribute("CardGrade") or model:GetAttribute("Grade") or model:GetAttribute("CardRarity") or model:GetAttribute("TemplateName") or model:GetAttribute("CardName")
-    local mutation = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
+    local rarity = ""
+    local mutation = ""
 
-    rarity = rarity and tostring(rarity) or ""
-    mutation = mutation and tostring(mutation) or "Normal"
+    -- 1. Check direct attributes
+    local rawRar = model:GetAttribute("Rarity") 
+        or model:GetAttribute("CardGrade") 
+        or model:GetAttribute("Grade") 
+        or model:GetAttribute("CardRarity") 
+        or model:GetAttribute("PackRarity")
+        or model:GetAttribute("TemplateName") 
+        or model:GetAttribute("CardName")
+        or model:GetAttribute("PackName")
 
+    if rawRar and tostring(rawRar) ~= "" and tostring(rawRar) ~= "nil" then
+        rarity = tostring(rawRar)
+    end
+
+    -- 2. Check model Name if specific (e.g. "Soccer Pack", "Soccer Card", "Striker")
+    if (rarity == "" or rarity == "nil") and model.Name then
+        local mName = tostring(model.Name)
+        if mName ~= "" and mName ~= "Card" and mName ~= "Model" and mName ~= "Part" and mName ~= "Workspace" then
+            rarity = mName
+        end
+    end
+
+    -- 3. Check StringValue / TextLabel children
     if rarity == "" or rarity == "nil" then
-        for _, childName in ipairs({"Rarity", "CardGrade", "Grade", "CardRarity", "RarityLabel", "CardName", "TemplateName"}) do
+        for _, childName in ipairs({"TemplateName", "CardName", "PackName", "Rarity", "CardGrade", "Grade", "CardRarity", "PackRarity", "RarityLabel"}) do
             local obj = model:FindFirstChild(childName, true)
             if obj then
                 if obj:IsA("StringValue") and obj.Value ~= "" then
@@ -4242,7 +4251,8 @@ local function getCardModelRarityAndMutation(model)
                 elseif (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text ~= "" then
                     local cl = string.gsub(obj.Text, "<[^>]+>", "")
                     cl = string.match(cl, "^%s*(.-)%s*$") or ""
-                    if cl ~= "" and cl ~= "Label" then
+                    local lowerCl = cl:lower()
+                    if cl ~= "" and cl ~= "Label" and not lowerCl:find("press") and not lowerCl:find("hold") and not lowerCl:find("buy") and cl ~= "E" then
                         rarity = cl
                         break
                     end
@@ -4251,19 +4261,26 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
-    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        local pObj = prompt.ObjectText ~= "" and prompt.ObjectText or prompt.ActionText
-        if pObj and pObj ~= "" then
-            pObj = string.gsub(pObj, "<[^>]+>", "")
-            if rarity == "" or rarity == "nil" then
-                rarity = pObj
+    -- 4. Check ProximityPrompt ObjectText (Filter out generic action text)
+    if rarity == "" or rarity == "nil" then
+        local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prompt then
+            local objTxt = prompt.ObjectText ~= "" and prompt.ObjectText or prompt.ActionText
+            if objTxt and objTxt ~= "" then
+                objTxt = string.gsub(objTxt, "<[^>]+>", "")
+                objTxt = string.match(objTxt, "^%s*(.-)%s*$") or ""
+                local lowerObj = objTxt:lower()
+                if objTxt ~= "" and not lowerObj:find("buy") and not lowerObj:find("claim") and not lowerObj:find("press") and not lowerObj:find("hold") and objTxt ~= "E" then
+                    rarity = objTxt
+                end
             end
         end
     end
 
-    if (rarity == "" or rarity == "nil") and model.Name then
-        rarity = model.Name
+    -- 5. Mutation detection
+    local rawMut = model:GetAttribute("Mutation") or model:GetAttribute("CardMutation")
+    if rawMut and tostring(rawMut) ~= "" and tostring(rawMut) ~= "nil" then
+        mutation = tostring(rawMut)
     end
 
     if mutation == "" or mutation == "Normal" or mutation == "nil" then
@@ -4300,13 +4317,14 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
+    -- 6. Fallback scan descendants for Rarity/Pack names
     if rarity == "" then
         for _, desc in ipairs(model:GetDescendants()) do
             if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text then
                 local cl = string.lower(string.gsub(desc.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(RaritiesList or {"common pack", "uncommon pack", "rare pack", "epic pack", "legendary pack", "mythical pack", "secret pack", "godly pack", "admin pack", "grail pack", "blaze pack", "conquest pack", "devour pack"}) do
+                for _, rName in ipairs(RaritiesList or {}) do
                     local cleanRName = string.lower(string.gsub(rName, "%s*pack$", ""))
-                    if cl:find(cleanRName) then
+                    if cleanRName ~= "" and #cleanRName >= 3 and cl:find(cleanRName, 1, true) then
                         rarity = rName
                         break
                     end
@@ -4316,7 +4334,7 @@ local function getCardModelRarityAndMutation(model)
         end
     end
 
-    return rarity, mutation
+    return rarity, (mutation ~= "" and mutation or "Normal")
 end
 
 -- Heartbeat High-Frequency Instant Buy Loop (Unthrottled Zero-Delay Remote Trigger)
@@ -4358,9 +4376,27 @@ local function instantBuyLoop()
             matchRarity = true
         else
             local cleanRar = string.lower(string.gsub(tostring(cardRarity), "<[^>]+>", ""))
+            local baseRar = string.gsub(cleanRar, "%s*pack$", "")
+            baseRar = string.gsub(baseRar, "%s*card$", "")
+            baseRar = string.match(baseRar, "^%s*(.-)%s*$") or ""
+
             for selRar, _ in pairs(getgenv().SelectedRarities) do
                 local selClean = string.lower(tostring(selRar))
-                if string.find(cleanRar, selClean, 1, true) or string.find(selClean, cleanRar, 1, true) then
+                local selBase = string.gsub(selClean, "%s*pack$", "")
+                selBase = string.gsub(selBase, "%s*card$", "")
+                selBase = string.match(selBase, "^%s*(.-)%s*$") or ""
+
+                if cleanRar == selClean or baseRar == selBase then
+                    matchRarity = true
+                    break
+                end
+
+                if #selBase >= 3 and string.find(cleanRar, selBase, 1, true) then
+                    matchRarity = true
+                    break
+                end
+
+                if #baseRar >= 3 and string.find(selClean, baseRar, 1, true) then
                     matchRarity = true
                     break
                 end
@@ -4374,7 +4410,7 @@ local function instantBuyLoop()
             local cleanMut = string.lower(string.gsub(tostring(cardMutation), "<[^>]+>", ""))
             for selMut, _ in pairs(getgenv().SelectedMutations) do
                 local selClean = string.lower(tostring(selMut))
-                if string.find(cleanMut, selClean, 1, true) or string.find(selClean, cleanMut, 1, true) then
+                if cleanMut == selClean or (#selClean >= 3 and string.find(cleanMut, selClean, 1, true)) then
                     matchMutation = true
                     break
                 end
@@ -5305,18 +5341,6 @@ setupPotionToggle("Production", "ผลผลิต", "PotionProduction", "Produ
 ---------------------------------------------------------
 -- HELPER FUNCTIONS FOR CARD VALUE & RARITY SCORING
 ---------------------------------------------------------
-local RaritiesList = {
-    "Common",
-    "Uncommon",
-    "Rare",
-    "Epic",
-    "Legendary",
-    "Mythical",
-    "Secret",
-    "Godly",
-    "Admin"
-}
-
 local RarityTiers = {
     ["admin"] = 100000, ["แอดมิน"] = 100000,
     ["godly"] = 50000, ["ก๊อดลี่"] = 50000, ["กอดลี่"] = 50000,
@@ -5444,7 +5468,6 @@ do
                                             current = current.Parent
                                         end
 
-                                        -- Strict exclusion for Claim All / Purchase / Robux
                                         local isClaimAll = name:find("CLAIMALL") or name:find("CLAIM ALL") 
                                             or btnText:find("CLAIM ALL") or btnText:find("CLAIMALL") 
                                             or btnText:find("ALL") or btnText:find("PURCHASE") or name:find("PURCHASE")
@@ -5472,15 +5495,15 @@ do
         Description = "⚠️ **ห้ามเปิดพร้อมรีโรล** (เพื่อป้องกันการยิงรีโมทขายแพ็กชนกับระบบรีโรล)", 
         Default = false 
     })
-    local MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
-        Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้",
+    MinRarityDrop = Tabs.Manage:AddDropdown("MinRarityKeep", {
+        Title = "ระดับแพ็คขั้นต่ำที่ต้องการเก็บไว้ (Pack Card)",
         Values = RaritiesList,
         Multi = false,
-        Default = "Rare"
+        Default = "Rare Pack"
     })
 
     local function getToolRarity(item)
-        if not item then return "Common" end
+        if not item then return "Common Pack" end
         local r = item:GetAttribute("Rarity") 
             or item:GetAttribute("CardRarity") 
             or item:GetAttribute("PackRarity")
@@ -5488,9 +5511,10 @@ do
             or item:GetAttribute("Grade")
             or item:GetAttribute("TemplateName")
             or item:GetAttribute("CardName")
+            or item:GetAttribute("PackName")
         if r and tostring(r) ~= "" and tostring(r) ~= "nil" then return tostring(r) end
 
-        for _, childName in ipairs({"Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade", "TemplateName", "CardName"}) do
+        for _, childName in ipairs({"TemplateName", "CardName", "PackName", "Rarity", "CardRarity", "PackRarity", "Grade", "CardGrade"}) do
             local valObj = item:FindFirstChild(childName)
             if valObj then
                 if valObj:IsA("StringValue") and valObj.Value ~= "" then
@@ -5501,10 +5525,14 @@ do
             end
         end
 
+        local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
         local cleanItemName = string.lower(item.Name or "")
-        for _, rName in ipairs(RaritiesList or {}) do
+        for _, rName in ipairs(activeList or {}) do
             local lowerR = string.lower(rName)
-            if cleanItemName:find(lowerR, 1, true) then
+            local baseR = string.gsub(lowerR, "%s*pack$", "")
+            baseR = string.gsub(baseR, "%s*card$", "")
+            baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
+            if #baseR >= 3 and cleanItemName:find(baseR, 1, true) then
                 return rName
             end
         end
@@ -5512,23 +5540,42 @@ do
         for _, txtObj in ipairs(item:GetDescendants()) do
             if (txtObj:IsA("TextLabel") or txtObj:IsA("TextButton")) and txtObj.Text then
                 local cleanTxt = string.lower(string.gsub(txtObj.Text, "<[^>]+>", ""))
-                for _, rName in ipairs(RaritiesList or {}) do
-                    if string.find(cleanTxt, string.lower(rName), 1, true) then
+                for _, rName in ipairs(activeList or {}) do
+                    local lowerR = string.lower(rName)
+                    local baseR = string.gsub(lowerR, "%s*pack$", "")
+                    baseR = string.gsub(baseR, "%s*card$", "")
+                    baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
+                    if #baseR >= 3 and string.find(cleanTxt, baseR, 1, true) then
                         return rName
                     end
                 end
             end
         end
-        return "Common"
+        return "Common Pack"
     end
 
     local function getRarityIndex(rarityStr)
         if not rarityStr or rarityStr == "" or rarityStr == "None" then return 1 end
+        local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
         local lowerR = string.lower(tostring(rarityStr))
-        for i, rName in ipairs(RaritiesList) do
+        local baseR = string.gsub(lowerR, "%s*pack$", "")
+        baseR = string.gsub(baseR, "%s*card$", "")
+        baseR = string.match(baseR, "^%s*(.-)%s*$") or ""
+
+        for i, rName in ipairs(activeList) do
             local lowerName = string.lower(rName)
-            if lowerName == lowerR or string.find(lowerR, lowerName, 1, true) then
+            local baseName = string.gsub(lowerName, "%s*pack$", "")
+            baseName = string.gsub(baseName, "%s*card$", "")
+            baseName = string.match(baseName, "^%s*(.-)%s*$") or ""
+
+            if lowerName == lowerR or baseName == baseR then
                 return i
+            end
+
+            if #baseR >= 3 and #baseName >= 3 then
+                if string.find(lowerR, baseName, 1, true) or string.find(lowerName, baseR, 1, true) then
+                    return i
+                end
             end
         end
         return 99
@@ -5550,15 +5597,13 @@ do
                         if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then table.insert(items, t) end end end
                         
                         if #items > 0 then
-                            local selectedKeep = MinRarityDrop.Value or "Rare"
+                            local selectedKeep = (MinRarityDrop and MinRarityDrop.Value) or "Rare Pack"
                             local threshold = getRarityIndex(selectedKeep)
                             if threshold == 99 then threshold = 3 end
                             
                             local trashCards = {}
                             
                             for _, t in ipairs(items) do
-                                -- Strict Protection: ONLY sell Pack Cards (isPackCard == true)
-                                -- NEVER sell actual character cards or boss/raid cards!
                                 local isPack = false
                                 pcall(function() isPack = isPackCard(t) end)
                                 if not isPack then
@@ -5575,9 +5620,11 @@ do
                                 local rIdx = getRarityIndex(rarity)
                                 
                                 if rIdx == 99 then
+                                    local activeList = (_liveRarityList and #_liveRarityList > 0) and _liveRarityList or RaritiesList
                                     local upName = string.upper(t.Name)
-                                    for idx, rName in ipairs(RaritiesList) do
-                                        if string.find(upName, string.upper(rName), 1, true) then
+                                    for idx, rName in ipairs(activeList) do
+                                        local baseName = string.upper(string.gsub(rName, "%s*pack$", ""))
+                                        if #baseName >= 3 and string.find(upName, baseName, 1, true) then
                                             rIdx = idx
                                             break
                                         end
@@ -7809,6 +7856,8 @@ local function SaveConfig(name)
         RerollSpeed = getgenv().RerollSpeed or 0.05,
         SelectedTraits = getgenv().SelectedTraits or {},
         SelectedRanks = getgenv().SelectedRanks or {},
+        InvBalState = getgenv().InventoryBalancing or false,
+        MinRarityKeep = (Options and Options.MinRarityKeep) and Options.MinRarityKeep.Value or "Rare"
     }
     if writefile then
         pcall(function()
@@ -7839,8 +7888,8 @@ local function LoadConfig(name)
     if fileContent then
         local st, data = pcall(function() return HttpService:JSONDecode(fileContent) end)
         if st and type(data) == "table" then
-            getgenv().SelectedRarities = data.Rarities or {}
-            getgenv().SelectedMutations = data.Mutations or {}
+            getgenv().SelectedRarities = {}
+            getgenv().SelectedMutations = {}
             getgenv().DiscordWebhook = data.Webhook or ""
             getgenv().AutoCarryDelay = data.AutoCarryDelay or 5
             getgenv().RerollSpeed = data.RerollSpeed or 0.05
@@ -7848,14 +7897,18 @@ local function LoadConfig(name)
             getgenv().SelectedTraits = data.SelectedTraits or {}
             getgenv().SelectedRanks = data.SelectedRanks or {}
 
-            -- Sync Rarities Multi-Dropdown UI
+            -- Sync Rarities Multi-Dropdown UI (Supports static & dynamically scanned packs like Soccer Pack)
             local listR = {}
             if type(data.Rarities) == "table" then
-                for _, v in ipairs(RaritiesList) do
-                    local lowerV = string.lower(v)
-                    if data.Rarities[lowerV] == true or data.Rarities[v] == true or (table.find(data.Rarities, v) or table.find(data.Rarities, lowerV)) then
-                        table.insert(listR, v)
-                        getgenv().SelectedRarities[lowerV] = true
+                for k, v in pairs(data.Rarities) do
+                    if v == true or type(k) == "number" then
+                        local rawName = (type(k) == "number") and tostring(v) or tostring(k)
+                        table.insert(listR, rawName)
+                        local lowerName = string.lower(rawName)
+                        getgenv().SelectedRarities[lowerName] = true
+                        local base = string.gsub(lowerName, "%s*pack$", "")
+                        getgenv().SelectedRarities[base] = true
+                        getgenv().SelectedRarities[base .. " pack"] = true
                     end
                 end
             end
@@ -7864,11 +7917,11 @@ local function LoadConfig(name)
             -- Sync Mutations Multi-Dropdown UI
             local listM = {}
             if type(data.Mutations) == "table" then
-                for _, v in ipairs(MutationsList) do
-                    local lowerM = string.lower(v)
-                    if data.Mutations[lowerM] == true or data.Mutations[v] == true or (table.find(data.Mutations, v) or table.find(data.Mutations, lowerM)) then
-                        table.insert(listM, v)
-                        getgenv().SelectedMutations[lowerM] = true
+                for k, v in pairs(data.Mutations) do
+                    if v == true or type(k) == "number" then
+                        local rawName = (type(k) == "number") and tostring(v) or tostring(k)
+                        table.insert(listM, rawName)
+                        getgenv().SelectedMutations[string.lower(rawName)] = true
                     end
                 end
             end
@@ -7919,6 +7972,9 @@ local function LoadConfig(name)
             safeSetToggle("AutoUseProduction", data.AutoUseProduction)
             safeSetToggle("AutoTower", data.AutoTower)
             safeSetToggle("AutoBossRaid", data.AutoBossRaid)
+            safeSetToggle("InvBalState", data.InvBalState)
+
+            if Options.MinRarityKeep and data.MinRarityKeep then pcall(function() Options.MinRarityKeep:SetValue(data.MinRarityKeep) end) end
 
             if Options.AutoSpawnDelay and data.AutoSpawnDelay then pcall(function() Options.AutoSpawnDelay:SetValue(tonumber(data.AutoSpawnDelay)) end) end
             if Options.AutoCarryDelay and data.AutoCarryDelay then pcall(function() Options.AutoCarryDelay:SetValue(tonumber(data.AutoCarryDelay)) end) end
