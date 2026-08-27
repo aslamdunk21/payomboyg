@@ -2088,7 +2088,7 @@ local MinRarityDrop = nil
 local RaritiesList = {
     "Common Pack", "Uncommon Pack", "Rare Pack", "Epic Pack", "Legendary Pack", "Mythic Pack", "Secret Pack",
     "Divine Pack", "Transcendent Pack", "Shadow Pack", "Emperor Pack", "Demon Pack", "Manga Pack", "Celestial Pack",
-    "Heavenly Pack", "Soccer Pack", "Grail Pack", "Blaze Pack", "Conquest Pack", "Devour Pack", "Godly Pack", "Admin Pack"
+    "Heavenly Pack", "Soccer Pack", "Grail Pack", "Blaze Pack", "Conquest Pack"
 }
 
 local MutationsList = {
