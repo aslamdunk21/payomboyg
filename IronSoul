@@ -1821,65 +1821,160 @@ local PartySizeData = {
     ["4 คน (Full)"]   = 4,
 }
 
-local function findLobbyRoomForWorld(worldId)
-    local matchFolder = workspace:FindFirstChild("MatchRoom")
-    if not matchFolder then return nil end
-    for _, room in ipairs(matchFolder:GetChildren()) do
-        local clientScript = room:FindFirstChild("ClientMatchRoom")
-        local valObj = clientScript and clientScript:FindFirstChild("Value")
-        if valObj and valObj:IsA("StringValue") and valObj.Value == worldId then
-            return room
-        end
-    end
-    return nil
+local StandardDiffData = {
+    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
+    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
+    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
+    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
+    ["ระดับนรกขุมลึก (Inferno - Diff 5)"]    = 5,
+}
+
+local Cave1DiffData = {
+    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
+    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
+    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
+    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
+    ["ระดับนรกขุมลึก (Inferno - Diff 5)"]    = 5,
+}
+
+local Cave23DiffData = {
+    ["ระดับทดสอบ (Trial - Diff 1)"]      = 1,
+    ["ระดับท้าทาย (Challenge - Diff 2)"]     = 2,
+    ["ระดับลงทัณฑ์ (Penitent - Diff 3)"]    = 3,
+    ["ระดับทรมาน (Torment - Diff 4)"]      = 4,
+}
+
+local CircusDiffData = {
+    ["ระดับ 1 (Level 1)"]               = 1,
+    ["ระดับ 2 (Level 2)"]               = 2,
+    ["ระดับ 3 (Level 3)"]               = 3,
+    ["ระดับ 4 (Level 4)"]               = 4,
+    ["ระดับ 5 (Inferno - Level 5)"]        = 5,
+}
+
+local EndlessFloorOptions = {}
+local EndlessFloorMap = {}
+for _, stageNum in ipairs({
+    1, 6, 11, 16, 21, 26, 31, 36, 41, 46, 51, 56, 61, 66, 71, 76, 81, 86, 91, 96,
+    101, 106, 111, 116, 121, 126, 131, 136, 141, 146, 151, 156, 161, 166, 171, 176, 181, 186, 191, 196
+}) do
+    local label = "ชั้น " .. stageNum .. "-" .. (stageNum + 4) .. " (เริ่มด่าน " .. stageNum .. ")"
+    table.insert(EndlessFloorOptions, label)
+    EndlessFloorMap[label] = stageNum
 end
+
+local function getDifficultyOptionsForWorld(worldId)
+    if worldId == "EndlessTower" or worldId == "Endless1" then
+        return {
+            Title = "เลือกชั้นเริ่มต้นหอคอย (Endless Floor Select)",
+            Options = EndlessFloorOptions,
+            DataMap = EndlessFloorMap,
+            Default = "ชั้น 1-5 (เริ่มด่าน 1)"
+        }
+    elseif worldId == "SeasonResource1" then
+        return {
+            Title = "เลือกระดับถ้ำวัตถุดิบ (Season Resource Level)",
+            Options = { "ระดับ 1 (Level 1)", "ระดับ 2 (Level 2)", "ระดับ 3 (Level 3)", "ระดับ 4 (Level 4)", "ระดับ 5 (Inferno - Level 5)" },
+            DataMap = CircusDiffData,
+            Default = "ระดับ 1 (Level 1)"
+        }
+    elseif worldId == "Cave1" then
+        return {
+            Title = "เลือกระดับความยากถ้ำคริสตัล (Cave 1 Difficulty)",
+            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)", "ระดับนรกขุมลึก (Inferno - Diff 5)" },
+            DataMap = Cave1DiffData,
+            Default = "ระดับทดสอบ (Trial - Diff 1)"
+        }
+    elseif worldId == "Cave2" or worldId == "Cave3" then
+        return {
+            Title = "เลือกระดับความยากถ้ำ (Cave Difficulty)",
+            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)" },
+            DataMap = Cave23DiffData,
+            Default = "ระดับทดสอบ (Trial - Diff 1)"
+        }
+    else
+        return {
+            Title = "เลือกระดับความยากดันเจี้ยน (Difficulty)",
+            Options = { "ระดับทดสอบ (Trial - Diff 1)", "ระดับท้าทาย (Challenge - Diff 2)", "ระดับลงทัณฑ์ (Penitent - Diff 3)", "ระดับทรมาน (Torment - Diff 4)", "ระดับนรกขุมลึก (Inferno - Diff 5)" },
+            DataMap = StandardDiffData,
+            Default = "ระดับทดสอบ (Trial - Diff 1)"
+        }
+    end
+end
+
+local DUNGEON_PORTAL_CF = CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188)
+local CAVE_PORTAL_CF    = CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703)
+local TOWER_PORTAL_CF   = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094)
+local CIRCUS_PORTAL_CF  = CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562)
 
 local function runLobbyDungeonSelect()
     local worldId = Config.SelectedWorldId or "World1"
     local diffNum = Config.SelectedDifficultyNum or 1
     local partySize = Config.SelectedPartySizeNum or 4
 
-    -- Step 1: เปิดหน้าต่าง Match (ScreenMatch)
     pcall(function()
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
-    end)
-    task.wait(0.2)
-
-    -- Step 2: เลือกโลก / ความยาก (SelectWorld Remote)
-    pcall(function()
         local worldUtilRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
-        if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
-    end)
-    task.wait(0.2)
-
-    -- Step 3: ออกห้องเดิมก่อน แล้วสร้างห้องตามแมพ/ความยาก/ขนาดปาร์ตี้ (CreatRoom Remote)
-    pcall(function()
         local gameMatchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
-        if gameMatchRE then
-            gameMatchRE:FireServer("LeaveRoom")
-            task.wait(0.2)
-            gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
-        end
-    end)
-    task.wait(0.4)
+        local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
 
-    -- Step 4: ถ้าระบบเกมต้องการวาร์ปไปแตะประตูห้องตรงกับ worldId
-    pcall(function()
-        local targetRoom = findLobbyRoomForWorld(worldId)
-        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if targetRoom and root then
-            local touchFolder = targetRoom:FindFirstChild("Touch")
-            if touchFolder then
-                root.CFrame = targetRoom:GetPivot() * CFrame.new(0, 3, 0)
-                task.wait(0.2)
-                for _, part in ipairs(touchFolder:GetChildren()) do
-                    if part:IsA("BasePart") and type(firetouchinterest) == "function" then
-                        pcall(firetouchinterest, root, part, 0)
-                        task.wait(0.05)
-                        pcall(firetouchinterest, root, part, 1)
-                    end
-                end
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+
+        if worldId == "EndlessTower" or worldId == "Endless1" then
+            -- วาร์ปไปพิกัดหอคอย
+            if hrp then
+                if safeTeleport then pcall(function() safeTeleport:InvokeServer(TOWER_PORTAL_CF) end) end
+                hrp.CFrame = TOWER_PORTAL_CF
+            end
+            task.wait(0.2)
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless") end
+            task.wait(0.1)
+            local endlessFloor = Config.SelectedEndlessStage or Config.SelectedEndlessFloor or diffNum or 1
+            if gameMatchRE then
+                gameMatchRE:FireServer("CreatRoom", "Endless1", 1, partySize, endlessFloor)
+            end
+        elseif worldId == "SeasonResource1" then
+            -- วาร์ปไปพิกัด Royal Circus
+            if hrp then
+                if safeTeleport then pcall(function() safeTeleport:InvokeServer(CIRCUS_PORTAL_CF) end) end
+                hrp.CFrame = CIRCUS_PORTAL_CF
+            end
+            task.wait(0.2)
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
+            task.wait(0.1)
+            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
+            task.wait(0.1)
+            if gameMatchRE then
+                gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
+            end
+        elseif worldId:sub(1, 4) == "Cave" then
+            -- วาร์ปไปพิกัดถ้ำ Cave
+            if hrp then
+                if safeTeleport then pcall(function() safeTeleport:InvokeServer(CAVE_PORTAL_CF) end) end
+                hrp.CFrame = CAVE_PORTAL_CF
+            end
+            task.wait(0.2)
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
+            task.wait(0.1)
+            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
+            task.wait(0.1)
+            if gameMatchRE then
+                gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
+            end
+        else
+            -- วาร์ปไปพิกัดดันเจี้ยนหลัก 4 แมพ (Starless, Frozen, Oathlost, Tartarus)
+            if hrp then
+                if safeTeleport then pcall(function() safeTeleport:InvokeServer(DUNGEON_PORTAL_CF) end) end
+                hrp.CFrame = DUNGEON_PORTAL_CF
+            end
+            task.wait(0.2)
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
+            task.wait(0.1)
+            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
+            task.wait(0.1)
+            if gameMatchRE then
+                gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
             end
         end
     end)
@@ -1909,8 +2004,15 @@ MatchTab:AddToggle("AutoEnterDungeonToggle", {
     Callback = function(t)
         Config.AutoEnterDungeon = t
         saveSettings()
+        if t then
+            task.spawn(function()
+                pcall(runLobbyDungeonSelect)
+            end)
+        end
     end
 })
+
+local AutofarmDiffDropdown
 
 MatchTab:AddDropdown("AutofarmWorldDropdown", {
     Title = "เลือกแมพ / ดันเจี้ยนเป้าหมาย (World / Map Select)",
@@ -1929,19 +2031,61 @@ MatchTab:AddDropdown("AutofarmWorldDropdown", {
     Value = Config.SelectedWorldName or "ป่าไร้ดาว (World1)",
     Callback = function(val)
         Config.SelectedWorldName = val
-        Config.SelectedWorldId = WorldMapData[val] or "World1"
+        local worldId = WorldMapData[val] or "World1"
+        Config.SelectedWorldId = worldId
         saveSettings()
+
+        -- Dynamic Dependent Dropdown Update: อัปเดตรายการความยากตามแมพที่เลือกทันที
+        if AutofarmDiffDropdown then
+            local diffInfo = getDifficultyOptionsForWorld(worldId)
+            AutofarmDiffDropdown:SetValues(diffInfo.Options)
+
+            local found = false
+            if Config.SelectedDifficultyName then
+                for _, opt in ipairs(diffInfo.Options) do
+                    if opt == Config.SelectedDifficultyName then
+                        found = true
+                        break
+                    end
+                end
+            end
+
+            local newDiffName = found and Config.SelectedDifficultyName or diffInfo.Default
+            Config.SelectedDifficultyName = newDiffName
+            local diffNum = diffInfo.DataMap[newDiffName] or 1
+            Config.SelectedDifficultyNum = diffNum
+            if worldId == "EndlessTower" or worldId == "Endless1" then
+                Config.SelectedEndlessStage = diffNum
+            end
+            AutofarmDiffDropdown:SetValue(newDiffName)
+        end
+
+        if Config.AutoEnterDungeon then
+            task.spawn(function() pcall(runLobbyDungeonSelect) end)
+        end
     end
 })
 
-MatchTab:AddDropdown("AutofarmDiffDropdown", {
+local initialWorldId = Config.SelectedWorldId or "World1"
+local initialDiffInfo = getDifficultyOptionsForWorld(initialWorldId)
+
+AutofarmDiffDropdown = MatchTab:AddDropdown("AutofarmDiffDropdown", {
     Title = "เลือกระดับความยากดันเจี้ยน (Difficulty)",
-    Values = { "ระดับทดสอบ (Diff 1)", "ระดับท้าทาย (Diff 2)", "ระดับลงทัณฑ์ (Diff 3)", "ระดับทรมาน (Diff 4)", "ระดับนรกขุมลึก (Diff 5)" },
-    Value = Config.SelectedDifficultyName or "ระดับทดสอบ (Diff 1)",
+    Values = initialDiffInfo.Options,
+    Value = Config.SelectedDifficultyName or initialDiffInfo.Default,
     Callback = function(val)
         Config.SelectedDifficultyName = val
-        Config.SelectedDifficultyNum = DifficultyData[val] or 1
+        local worldId = Config.SelectedWorldId or "World1"
+        local diffInfo = getDifficultyOptionsForWorld(worldId)
+        local diffNum = diffInfo.DataMap[val] or DifficultyData[val] or 1
+        Config.SelectedDifficultyNum = diffNum
+        if worldId == "EndlessTower" or worldId == "Endless1" then
+            Config.SelectedEndlessStage = diffNum
+        end
         saveSettings()
+        if Config.AutoEnterDungeon then
+            task.spawn(function() pcall(runLobbyDungeonSelect) end)
+        end
     end
 })
 
@@ -1953,11 +2097,14 @@ MatchTab:AddDropdown("AutofarmPartyDropdown", {
         Config.SelectedPartySizeName = val
         Config.SelectedPartySizeNum = PartySizeData[val] or 4
         saveSettings()
+        if Config.AutoEnterDungeon then
+            task.spawn(function() pcall(runLobbyDungeonSelect) end)
+        end
     end
 })
 
 MatchTab:AddButton({ Title = "🚀 สร้างห้องและเข้าดันเจี้ยนทันที (Create Room & Enter)", Callback = function()
-    pcall(runLobbyDungeonSelect)
+    task.spawn(function() pcall(runLobbyDungeonSelect) end)
     ObsidianGlassEngine:Notify({ Title = "สร้างห้องดันเจี้ยน", Content = "สร้างห้อง " .. tostring(Config.SelectedWorldName) .. " | " .. tostring(Config.SelectedDifficultyName) .. " (" .. tostring(Config.SelectedPartySizeName or "4 คน") .. ")", Duration = 4 })
 end })
 
@@ -2428,9 +2575,9 @@ task.spawn(function()
     local lastDungeonTime = 0
     local lastCaveTime    = 0
     local lastTowerTime   = 0
-    local DUNGEON_COOLDOWN = 30
-    local CAVE_COOLDOWN    = 20
-    local TOWER_COOLDOWN   = 20
+    local DUNGEON_COOLDOWN = 15
+    local CAVE_COOLDOWN    = 15
+    local TOWER_COOLDOWN   = 15
 
     while task.wait(2) do
         if State.Unloaded then break end
