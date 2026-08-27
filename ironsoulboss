@@ -233,70 +233,34 @@ local function returnToLobby()
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         local gamePlayerRE = remotes and remotes:FindFirstChild("GamePlayerRE")
-        if not gamePlayerRE then
-            gamePlayerRE = ReplicatedStorage:FindFirstChild("Framework")
-                and ReplicatedStorage.Framework:FindFirstChild("Remotes")
-                and ReplicatedStorage.Framework.Remotes:FindFirstChild("GamePlayerRE")
-        end
-
-        local gameRoundRE = remotes and remotes:FindFirstChild("GameRoundRE")
-        if not gameRoundRE then
-            gameRoundRE = ReplicatedStorage:FindFirstChild("Framework")
-                and ReplicatedStorage.Framework:FindFirstChild("Remotes")
-                and ReplicatedStorage.Framework.Remotes:FindFirstChild("GameRoundRE")
-        end
-
-        -- If AutoReplay is enabled, vote to play again first
-        if Config.AutoReplay or _G.AutoReplay then
-            if gameRoundRE then
-                pcall(function() gameRoundRE:FireServer("VotePlayAgain") end)
-            end
-        end
-
-        -- Execute ExitSettlement for Return to Lobby
-        if Config.AutoReturnToLobby or _G.AutoReturnToLobby then
-            if gamePlayerRE then
-                gamePlayerRE:FireServer("ExitSettlement")
-            end
+        if gamePlayerRE then
+            gamePlayerRE:FireServer("ExitSettlement")
         end
     end)
 end
 
 local function isSettlementScreenVisible()
-    -- 1. Check ResultGui -> ScreenSettlement (Standard Iron Soul settlement GUI)
-    local resultGui = playerGui:FindFirstChild("ResultGui")
-    if resultGui and resultGui:FindFirstChild("ScreenSettlement") then
-        local screenSettlement = resultGui.ScreenSettlement
-        if screenSettlement:IsA("ScreenGui") and screenSettlement.Enabled then
-            return true
-        elseif screenSettlement:IsA("GuiObject") and screenSettlement.Visible then
-            return true
-        end
-    end
-
-    -- 2. Check PlayerRevive in BattleHUD (Game Over screen)
-    local battleHUD = playerGui:FindFirstChild("BattleHUD")
-    if battleHUD and battleHUD:FindFirstChild("PlayerRevive") then
-        local reviveFrame = battleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
-        if reviveFrame and reviveFrame.Visible then
-            return true
-        end
-    end
-
-    -- 3. Check generic Settlement GUI names
     local sGui = playerGui:FindFirstChild("ScreenSettlement") 
         or playerGui:FindFirstChild("Settlement") 
         or playerGui:FindFirstChild("SettlementGUI")
 
     if sGui then
-        if sGui:IsA("ScreenGui") and sGui.Enabled then
-            return true
+        if sGui:IsA("ScreenGui") then
+            if sGui.Enabled then
+                local hasVisibleChild = false
+                for _, child in ipairs(sGui:GetChildren()) do
+                    if child:IsA("GuiObject") and child.Visible then
+                        hasVisibleChild = true
+                        break
+                    end
+                end
+                if hasVisibleChild then return true end
+            end
         elseif sGui:IsA("GuiObject") and sGui.Visible then
             return true
         end
     end
 
-    -- 4. Check for any visible button named Return to Lobby
     for _, child in ipairs(playerGui:GetChildren()) do
         if child.Name ~= "ObsidianGlass2_UI" and child.Name ~= "ObsidianGlass_NotifHolder" then
             local returnBtn = child:FindFirstChild("Return to lobby", true) 
@@ -3037,17 +3001,6 @@ MainTab:AddToggle("AutoReturnToLobby", {
     end
 })
 
-MainTab:AddToggle("AutoReplay", {
-    Title = "Auto Replay / Play Again (กดเล่นอีกครั้งเมื่อจบเกม)",
-    Desc = "เมื่อขึ้นหน้าต่างจบเกม จะยิงคำสั่ง VotePlayAgain เพื่อเริ่มรอบใหม่ทันที",
-    Default = Config.AutoReplay or false,
-    Callback = function(val)
-        Config.AutoReplay = val
-        _G.AutoReplay = val
-        saveSettings()
-    end
-})
-
 MainTab:AddButton({
     Title = "🏠 Return to Lobby Now (กลับหน้าเลือกห้องทันที)",
     Callback = function()
@@ -3152,34 +3105,38 @@ local HeightTab = Window:AddTab({ Title = "⚙️ ระยะ & ตำแหน
 
 HeightTab:AddSection("ตั้งค่าระยะ & ความสูงการฟาร์ม")
 
-HeightTab:AddSlider("AboveHeight", {
+HeightTab:AddInput("AboveHeight", {
     Title = "Upper Height (ความสูงโหมดลอยเหนือหัว)",
-    Min = -10,
-    Max = 0,
-    Default = math.clamp(Config.AboveHeight or 0, -10, 0),
-    Callback = function(val)
-        Config.AboveHeight = val
-        _G.AboveHeight = val
-        _G.FloatHeight = val
-        if Config.AutoFarm and targetIsValid() then
-            lockCombatPosition()
+    Default = tostring(Config.AboveHeight),
+    Callback = function(text)
+        local val = tonumber(text)
+        if val then
+            val = math.clamp(val, 0, 250)
+            Config.AboveHeight = val
+            _G.AboveHeight = val
+            _G.FloatHeight = val
+            if Config.AutoFarm and targetIsValid() then
+                lockCombatPosition()
+            end
+            saveSettings()
         end
-        saveSettings()
     end
 })
 
-HeightTab:AddSlider("UndergroundHeight", {
+HeightTab:AddInput("UndergroundHeight", {
     Title = "Underground Height (ระยะลึกโหมดมุดใต้ดิน)",
-    Min = -10,
-    Max = 0,
-    Default = math.clamp(Config.UndergroundHeight or 0, -10, 0),
-    Callback = function(val)
-        Config.UndergroundHeight = val
-        _G.UnderGroundHeight = val
-        if Config.AutoFarm and targetIsValid() then
-            lockCombatPosition()
+    Default = tostring(Config.UndergroundHeight),
+    Callback = function(text)
+        local val = tonumber(text)
+        if val then
+            val = math.clamp(val, 0, 250)
+            Config.UndergroundHeight = val
+            _G.UnderGroundHeight = val
+            if Config.AutoFarm and targetIsValid() then
+                lockCombatPosition()
+            end
+            saveSettings()
         end
-        saveSettings()
     end
 })
 
@@ -3562,11 +3519,11 @@ connect(RunService.Heartbeat, function(dt)
         updateStatusPanel()
     end
 
-    if (Config.AutoReturnToLobby or Config.AutoReplay) and isSettlementScreenVisible() then
+    if Config.AutoReturnToLobby and isSettlementScreenVisible() then
         local now = tick()
         if now - lastReturnLobbyTime >= 1.5 then
             lastReturnLobbyTime = now
-            State.CurrentAction = Config.AutoReplay and "Replay Match" or "Return to Lobby"
+            State.CurrentAction = "Return to Lobby"
             returnToLobby()
         end
         return
