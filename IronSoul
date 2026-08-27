@@ -1,9 +1,9 @@
 --[[
     ╔══════════════════════════════════════════════════════════════╗
-    ║       PAYOMBOYZ HUB — IRON SOUL AUTOMATION ENGINE           ║
+    ║       PAYOMBOYZ HUB — IRON SOUL LOBBY AUTOMATION ENGINE     ║
     ║       Game: Iron Soul (PlaceId: 117533937949084)            ║
-    ║       UI Engine: Obsidian Glassmorphic 2 Engine             ║
-    ║       Version: Phase 3 (Full 6-Tab Specification)          ║
+    ║       UI Engine: Obsidian Glassmorphic 2 Engine (Thai)       ║
+    ║       Scope: Lobby Automation & Hub Management               ║
     ╚══════════════════════════════════════════════════════════════╝
 --]]
 
@@ -14,11 +14,11 @@ task.wait(1)
 
 local IRON_LOBBY_ID     = 117533937949084
 local IRON_BOSS_MAP_ID  = 116456628154258
-local IRON_CAVE_MAP_ID  = 132445869992129 -- Auto Cave
+local IRON_CAVE_MAP_ID  = 132445869992129
 
 if game.PlaceId == IRON_BOSS_MAP_ID or game.GameId == IRON_BOSS_MAP_ID
    or game.PlaceId == IRON_CAVE_MAP_ID or game.GameId == IRON_CAVE_MAP_ID then
-    print("[PayomboyZ HUB] Detected Dungeon/Auto Cave Map (" .. tostring(game.PlaceId) .. "). Loading Dungeon Engine...")
+    print("[PayomboyZ HUB] ตรวจพบแมพดันเจี้ยน/ถ้ำ (" .. tostring(game.PlaceId) .. ") กำลังโหลดระบบดันเจี้ยน...")
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss"))()
 end
 
@@ -31,6 +31,7 @@ local Stats             = game:GetService("Stats")
 local SoundService      = game:GetService("SoundService")
 local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService       = game:GetService("HttpService")
 
 local player            = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local character         = player.Character or player.CharacterAdded:Wait()
@@ -123,9 +124,26 @@ local function loadCustomAvatarImage()
     return customAvatarAsset
 end
 
+local function GetSafeParentGui()
+    if typeof(gethui) == "function" then
+        local ok, h = pcall(gethui)
+        if ok and h then return h end
+    end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then
+        local canAccess = pcall(function() local _ = cg.Name return true end)
+        if canAccess then return cg end
+    end
+    local pl = game:GetService("Players").LocalPlayer
+    if pl then
+        return pl:FindFirstChildOfClass("PlayerGui") or pl:WaitForChild("PlayerGui", 5)
+    end
+    return game:GetService("CoreGui")
+end
+
 function ObsidianGlassEngine:Notify(cfg)
     pcall(function()
-        local title    = cfg.Title or "System"
+        local title    = cfg.Title or "ระบบ"
         local content  = cfg.Content or ""
         local duration = cfg.Duration or 4
         
@@ -191,23 +209,6 @@ function ObsidianGlassEngine:Notify(cfg)
     end)
 end
 
-local function GetSafeParentGui()
-    if typeof(gethui) == "function" then
-        local ok, h = pcall(gethui)
-        if ok and h then return h end
-    end
-    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then
-        local canAccess = pcall(function() local _ = cg.Name return true end)
-        if canAccess then return cg end
-    end
-    local pl = game:GetService("Players").LocalPlayer
-    if pl then
-        return pl:FindFirstChildOfClass("PlayerGui") or pl:WaitForChild("PlayerGui", 5)
-    end
-    return game:GetService("CoreGui")
-end
-
 function ObsidianGlassEngine:CreateWindow(cfg)
     local parentGui = GetSafeParentGui()
     if parentGui then
@@ -264,7 +265,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     shellStroke.Transparency = 0.3
     shellStroke.Parent = shell
 
-    -- Snow particles
+    -- Snow Layer Particles
     local snowLayer = Instance.new("Frame")
     snowLayer.Name = "SnowLayer"
     snowLayer.Size = UDim2.fromScale(1, 1)
@@ -306,7 +307,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
     end)
 
-    -- Toggle Capsule
+    -- Toggle Capsule (Minimized Floating Button)
     local toggleCapsule = Instance.new("Frame")
     toggleCapsule.Name = "ObsidianToggleCapsule"
     toggleCapsule.Size = UDim2.fromOffset(230, 58)
@@ -444,7 +445,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
     end)
 
-    -- Sidebar
+    -- Sidebar / Navigation
     local userPanel = Instance.new("Frame")
     userPanel.Name = "UserPanel"
     userPanel.Size = UDim2.new(0, 240, 1, 0)
@@ -553,7 +554,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     navHeader.Size = UDim2.new(1, -28, 0, 18)
     navHeader.Position = UDim2.new(0, 16, 0, 100)
     navHeader.BackgroundTransparency = 1
-    navHeader.Text = "SYSTEM MODULES"
+    navHeader.Text = "เมนูหลัก"
     navHeader.TextColor3 = Color3.fromRGB(255, 255, 255)
     navHeader.Font = Enum.Font.GothamBold
     navHeader.TextSize = 11
@@ -597,7 +598,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local stTitle = Instance.new("TextLabel")
     stTitle.Size = UDim2.fromScale(1, 1)
     stTitle.BackgroundTransparency = 1
-    stTitle.Text = "✅ Iron Soul Automation Active"
+    stTitle.Text = "✅ ระบบล็อบบี้ Iron Soul พร้อมใช้งาน"
     stTitle.TextColor3 = COLORS.success
     stTitle.Font = Enum.Font.GothamBold
     stTitle.TextSize = 11
@@ -632,7 +633,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
     mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
     mainSubTitle.BackgroundTransparency = 1
-    mainSubTitle.Text = cfg.SubTitle or "Iron Soul — Obsidian Glass Engine"
+    mainSubTitle.Text = cfg.SubTitle or "Iron Soul — ระบบออโต้ล็อบบี้ & จัดการตัวละคร"
     mainSubTitle.TextColor3 = COLORS.textMuted
     mainSubTitle.Font = Enum.Font.Gotham
     mainSubTitle.TextSize = 11
@@ -693,7 +694,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local WindowObj = { Tabs = {} }
 
     function WindowObj:AddTab(tabCfg)
-        local tabTitle = tabCfg.Title or "Tab"
+        local tabTitle = tabCfg.Title or "แท็บ"
         local tabIndex = #WindowObj.Tabs + 1
 
         local tabBtn = Instance.new("TextButton")
@@ -801,47 +802,47 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             fStroke.Thickness = 1
             fStroke.Parent = frame
 
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1, -70, 0, 22)
-            lbl.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 11)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = title
-            lbl.TextColor3 = COLORS.text
-            lbl.Font = Enum.Font.GothamBold
-            lbl.TextSize = 13
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = frame
+            local tTitle = Instance.new("TextLabel")
+            tTitle.Size = UDim2.new(1, -70, 0, 20)
+            tTitle.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 12)
+            tTitle.BackgroundTransparency = 1
+            tTitle.Text = title
+            tTitle.TextColor3 = COLORS.text
+            tTitle.Font = Enum.Font.GothamBold
+            tTitle.TextSize = 13
+            tTitle.TextXAlignment = Enum.TextXAlignment.Left
+            tTitle.Parent = frame
 
             if desc ~= "" then
-                local dLbl = Instance.new("TextLabel")
-                dLbl.Size = UDim2.new(1, -70, 0, 18)
-                dLbl.Position = UDim2.new(0, 12, 0, 30)
-                dLbl.BackgroundTransparency = 1
-                dLbl.Text = desc
-                dLbl.TextColor3 = COLORS.textMuted
-                dLbl.Font = Enum.Font.Gotham
-                dLbl.TextSize = 11
-                dLbl.TextXAlignment = Enum.TextXAlignment.Left
-                dLbl.Parent = frame
+                local tDesc = Instance.new("TextLabel")
+                tDesc.Size = UDim2.new(1, -70, 0, 18)
+                tDesc.Position = UDim2.new(0, 12, 0, 28)
+                tDesc.BackgroundTransparency = 1
+                tDesc.Text = desc
+                tDesc.TextColor3 = COLORS.textMuted
+                tDesc.Font = Enum.Font.Gotham
+                tDesc.TextSize = 10
+                tDesc.TextXAlignment = Enum.TextXAlignment.Left
+                tDesc.Parent = frame
             end
 
-            local switch = Instance.new("TextButton")
-            switch.Size = UDim2.fromOffset(46, 24)
-            switch.Position = UDim2.new(1, -56, 0.5, -12)
-            switch.BackgroundColor3 = defaultVal and COLORS.cyan or COLORS.surface
-            switch.Text = ""
-            switch.Parent = frame
+            local switchBg = Instance.new("Frame")
+            switchBg.Size = UDim2.fromOffset(44, 24)
+            switchBg.Position = UDim2.new(1, -54, 0.5, -12)
+            switchBg.BackgroundColor3 = defaultVal and COLORS.primary or COLORS.input
+            switchBg.BorderSizePixel = 0
+            switchBg.Parent = frame
 
             local swCorner = Instance.new("UICorner")
             swCorner.CornerRadius = UDim.new(1, 0)
-            swCorner.Parent = switch
+            swCorner.Parent = switchBg
 
             local knob = Instance.new("Frame")
-            knob.Size = UDim2.fromOffset(20, 20)
-            knob.Position = defaultVal and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
-            knob.BackgroundColor3 = COLORS.text
+            knob.Size = UDim2.fromOffset(18, 18)
+            knob.Position = defaultVal and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+            knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             knob.BorderSizePixel = 0
-            knob.Parent = switch
+            knob.Parent = switchBg
 
             local kCorner = Instance.new("UICorner")
             kCorner.CornerRadius = UDim.new(1, 0)
@@ -854,129 +855,26 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
 
             local function updateToggle(val)
+                OptionObj.Value = val
+                TweenService:Create(switchBg, TweenInfo.new(0.2), { BackgroundColor3 = val and COLORS.primary or COLORS.input }):Play()
+                TweenService:Create(knob, TweenInfo.new(0.2), { Position = val and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9) }):Play()
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            local tBtn = Instance.new("TextButton")
+            tBtn.Size = UDim2.fromScale(1, 1)
+            tBtn.BackgroundTransparency = 1
+            tBtn.Text = ""
+            tBtn.Parent = frame
+
+            tBtn.MouseButton1Click:Connect(function()
                 playClickSound()
-                OptionObj.Value = val
-                switch.BackgroundColor3 = val and COLORS.cyan or COLORS.surface
-                knob.Position = val and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
-                pcall(function() OptionObj.Callback(val) end)
-                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
-            end
+                updateToggle(not OptionObj.Value)
+            end)
 
             function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
-            function OptionObj:SetValue(val) updateToggle(val == true) end
-
-            switch.MouseButton1Click:Connect(function() updateToggle(not OptionObj.Value) end)
-            ObsidianGlassEngine.Options[id] = OptionObj
-            return OptionObj
-        end
-
-        function TabObj:AddSlider(id, sCfg)
-            local title = sCfg.Title or id
-            local minVal = sCfg.Min or 0
-            local maxVal = sCfg.Max or 100
-            local defaultVal = sCfg.Default or minVal
-
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, 52)
-            frame.BackgroundColor3 = COLORS.glassDeep
-            frame.BackgroundTransparency = 0.18
-            frame.BorderSizePixel = 0
-            frame.Parent = pageScroll
-
-            local fCorner = Instance.new("UICorner")
-            fCorner.CornerRadius = UDim.new(0, 8)
-            fCorner.Parent = frame
-
-            local fStroke = Instance.new("UIStroke")
-            fStroke.Color = COLORS.surface
-            fStroke.Thickness = 1
-            fStroke.Parent = frame
-
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(0.7, 0, 0, 22)
-            lbl.Position = UDim2.new(0, 12, 0, 6)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = title
-            lbl.TextColor3 = COLORS.text
-            lbl.Font = Enum.Font.GothamBold
-            lbl.TextSize = 13
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = frame
-
-            local valLbl = Instance.new("TextLabel")
-            valLbl.Size = UDim2.new(0.3, -12, 0, 22)
-            valLbl.Position = UDim2.new(0.7, 0, 0, 6)
-            valLbl.BackgroundTransparency = 1
-            valLbl.Text = tostring(defaultVal)
-            valLbl.TextColor3 = COLORS.cyan
-            valLbl.Font = Enum.Font.GothamBold
-            valLbl.TextSize = 13
-            valLbl.TextXAlignment = Enum.TextXAlignment.Right
-            valLbl.Parent = frame
-
-            local bar = Instance.new("TextButton")
-            bar.Size = UDim2.new(1, -24, 0, 8)
-            bar.Position = UDim2.new(0, 12, 0, 34)
-            bar.BackgroundColor3 = COLORS.surface
-            bar.Text = ""
-            bar.Parent = frame
-
-            local bCorner = Instance.new("UICorner")
-            bCorner.CornerRadius = UDim.new(1, 0)
-            bCorner.Parent = bar
-
-            local fill = Instance.new("Frame")
-            local pct = (defaultVal - minVal) / math.max(maxVal - minVal, 1)
-            fill.Size = UDim2.new(pct, 0, 1, 0)
-            fill.BackgroundColor3 = COLORS.cyan
-            fill.BorderSizePixel = 0
-            fill.Parent = bar
-
-            local fillCorner = Instance.new("UICorner")
-            fillCorner.CornerRadius = UDim.new(1, 0)
-            fillCorner.Parent = fill
-
-            local OptionObj = {
-                Value = defaultVal,
-                Callback = sCfg.Callback or function() end,
-                ChangedCallbacks = {}
-            }
-
-            local function updateSlider(val)
-                val = math.clamp(val, minVal, maxVal)
-                val = math.floor(val + 0.5)
-                OptionObj.Value = val
-                valLbl.Text = tostring(val)
-                local newPct = (val - minVal) / math.max(maxVal - minVal, 1)
-                fill.Size = UDim2.new(newPct, 0, 1, 0)
-                pcall(function() OptionObj.Callback(val) end)
-                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
-            end
-
-            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
-            function OptionObj:SetValue(val) updateSlider(val) end
-
-            local isDragging = false
-            bar.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    isDragging = true
-                    local relX = input.Position.X - bar.AbsolutePosition.X
-                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
-                end
-            end)
-
-            UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    isDragging = false
-                end
-            end)
-
-            UserInputService.InputChanged:Connect(function(input)
-                if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                    local relX = input.Position.X - bar.AbsolutePosition.X
-                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
-                end
-            end)
+            function OptionObj:SetValue(val) updateToggle(val) end
 
             ObsidianGlassEngine.Options[id] = OptionObj
             return OptionObj
@@ -985,11 +883,11 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         function TabObj:AddDropdown(id, dCfg)
             local title = dCfg.Title or id
             local values = dCfg.Values or {}
-            local defaultVal = dCfg.Value or (values[1] or "")
-            local isMulti = dCfg.Multi == true
+            local defaultVal = dCfg.Value or (dCfg.Multi and {} or values[1])
+            local isMulti = dCfg.Multi or false
 
             local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, 52)
+            frame.Size = UDim2.new(1, -10, 0, 48)
             frame.BackgroundColor3 = COLORS.glassDeep
             frame.BackgroundTransparency = 0.18
             frame.BorderSizePixel = 0
@@ -1016,14 +914,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             lbl.Parent = frame
 
             local dBtn = Instance.new("TextButton")
-            dBtn.Size = UDim2.new(0.46, 0, 0, 34)
-            dBtn.Position = UDim2.new(0.52, 0, 0.5, -17)
+            dBtn.Size = UDim2.new(0, 180, 0, 32)
+            dBtn.Position = UDim2.new(1, -192, 0.5, -16)
             dBtn.BackgroundColor3 = COLORS.surface
             dBtn.BackgroundTransparency = 0.20
 
             local function formatValText(val)
                 if type(val) == "table" then
-                    if #val == 0 then return "[ Select Items ]" end
+                    if #val == 0 then return "[ เลือกรายการ ]" end
                     return table.concat(val, ", ")
                 end
                 return tostring(val)
@@ -1215,8 +1113,147 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             return OptionObj
         end
 
+        function TabObj:AddSlider(id, sCfg)
+            local title = sCfg.Title or id
+            local minVal = sCfg.Min or 0
+            local maxVal = sCfg.Max or 100
+            local defaultVal = math.clamp(sCfg.Default or minVal, minVal, maxVal)
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, 54)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local fStroke = Instance.new("UIStroke")
+            fStroke.Color = COLORS.surface
+            fStroke.Thickness = 1
+            fStroke.Parent = frame
+
+            local sTitle = Instance.new("TextLabel")
+            sTitle.Size = UDim2.new(1, -80, 0, 20)
+            sTitle.Position = UDim2.new(0, 12, 0, 6)
+            sTitle.BackgroundTransparency = 1
+            sTitle.Text = title
+            sTitle.TextColor3 = COLORS.text
+            sTitle.Font = Enum.Font.GothamBold
+            sTitle.TextSize = 13
+            sTitle.TextXAlignment = Enum.TextXAlignment.Left
+            sTitle.Parent = frame
+
+            local valLabel = Instance.new("TextLabel")
+            valLabel.Size = UDim2.new(0, 60, 0, 20)
+            valLabel.Position = UDim2.new(1, -72, 0, 6)
+            valLabel.BackgroundTransparency = 1
+            valLabel.Text = tostring(defaultVal)
+            valLabel.TextColor3 = COLORS.cyan
+            valLabel.Font = Enum.Font.GothamBold
+            valLabel.TextSize = 13
+            valLabel.TextXAlignment = Enum.TextXAlignment.Right
+            valLabel.Parent = frame
+
+            local sliderTrack = Instance.new("Frame")
+            sliderTrack.Size = UDim2.new(1, -24, 0, 8)
+            sliderTrack.Position = UDim2.new(0, 12, 0, 34)
+            sliderTrack.BackgroundColor3 = COLORS.input
+            sliderTrack.BorderSizePixel = 0
+            sliderTrack.Parent = frame
+
+            local stCorner = Instance.new("UICorner")
+            stCorner.CornerRadius = UDim.new(1, 0)
+            stCorner.Parent = sliderTrack
+
+            local sliderFill = Instance.new("Frame")
+            local pct = (defaultVal - minVal) / math.max(1, (maxVal - minVal))
+            sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+            sliderFill.BackgroundColor3 = COLORS.primary
+            sliderFill.BorderSizePixel = 0
+            sliderFill.Parent = sliderTrack
+
+            local sfCorner = Instance.new("UICorner")
+            sfCorner.CornerRadius = UDim.new(1, 0)
+            sfCorner.Parent = sliderFill
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.fromOffset(16, 16)
+            knob.AnchorPoint = Vector2.new(0.5, 0.5)
+            knob.Position = UDim2.new(pct, 0, 0.5, 0)
+            knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            knob.BorderSizePixel = 0
+            knob.Parent = sliderTrack
+
+            local kCorner = Instance.new("UICorner")
+            kCorner.CornerRadius = UDim.new(1, 0)
+            kCorner.Parent = knob
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = sCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local sliding = false
+
+            local function updateSlider(input)
+                local posX = math.clamp((input.Position.X - sliderTrack.AbsolutePosition.X) / sliderTrack.AbsoluteSize.X, 0, 1)
+                local rawVal = minVal + (maxVal - minVal) * posX
+                local val = math.floor(rawVal + 0.5)
+                OptionObj.Value = val
+                valLabel.Text = tostring(val)
+                local newPct = (val - minVal) / math.max(1, (maxVal - minVal))
+                sliderFill.Size = UDim2.new(newPct, 0, 1, 0)
+                knob.Position = UDim2.new(newPct, 0, 0.5, 0)
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            local sBtn = Instance.new("TextButton")
+            sBtn.Size = UDim2.fromScale(1, 1)
+            sBtn.BackgroundTransparency = 1
+            sBtn.Text = ""
+            sBtn.Parent = sliderTrack
+
+            sBtn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    sliding = true
+                    updateSlider(input)
+                end
+            end)
+
+            sBtn.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    sliding = false
+                end
+            end)
+
+            UserInputService.InputChanged:Connect(function(input)
+                if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    updateSlider(input)
+                end
+            end)
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val)
+                val = math.clamp(val, minVal, maxVal)
+                OptionObj.Value = val
+                valLabel.Text = tostring(val)
+                local newPct = (val - minVal) / math.max(1, (maxVal - minVal))
+                sliderFill.Size = UDim2.new(newPct, 0, 1, 0)
+                knob.Position = UDim2.new(newPct, 0, 0.5, 0)
+                pcall(function() OptionObj.Callback(val) end)
+            end
+
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
         function TabObj:AddButton(bCfg)
-            local title = bCfg.Title or "Button"
+            local title = bCfg.Title or "ปุ่มกด"
             local cb = bCfg.Callback or function() end
 
             local btn = Instance.new("TextButton")
@@ -1375,154 +1412,86 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 end
 
 -- ════════════════════════════════════════════════════
--- 3. LOAD GAME FRAMEWORK & CONTROLLER
+-- 3. FRAMEWORK & GAME MODULES
 -- ════════════════════════════════════════════════════
-local manager = character:WaitForChild("LocalControlMgr", 10)
-local ActionFolder = manager and manager:WaitForChild("Action", 5)
-
-local ActionModules = {}
-if ActionFolder then
-    for _, module in ActionFolder:GetChildren() do
-        if module:IsA("ModuleScript") then
-            ActionModules[module.Name] = require(module)
-        end
-    end
-end
-
-local ControllerClass, controller
-pcall(function()
-    if manager and manager:FindFirstChild("Controller") then
-        ControllerClass = require(manager.Controller)
-        controller = ControllerClass.new(character, ActionModules)
-    end
-end)
-
 local Framework, TranslationUtil, ForgeUtil, RarityTiers, DataUtil, MaterialUtil
 pcall(function()
-    Framework       = require(ReplicatedStorage.Framework)
-    TranslationUtil = Framework.Modules.TranslationUtil
-    ForgeUtil       = Framework.Modules.ForgeUtil
-    RarityTiers     = Framework.Modules.RarityTiers
-    DataUtil        = Framework.Modules.DataUtil
-    MaterialUtil    = Framework.Modules.MaterialUtil
+    Framework       = require(ReplicatedStorage:WaitForChild("Framework", 10))
+end)
+pcall(function()
+    ForgeUtil       = require(ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeUtil)
+end)
+pcall(function()
+    DataUtil        = require(ReplicatedStorage.Framework.Systems.DataSystem.DataUtil)
+end)
+pcall(function()
+    MaterialUtil    = require(ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil)
+end)
+pcall(function()
+    TranslationUtil = require(ReplicatedStorage.Framework.Systems.TranslationLib.TranslationUtil)
+end)
+pcall(function()
+    RarityTiers     = require(ReplicatedStorage.Framework.Systems.ItemsSystem.RarityTiers)
 end)
 
 -- ════════════════════════════════════════════════════
--- 4. CONFIG & STATE ENGINE (PORTED & OPTIMIZED)
+-- 4. CONFIG & STATE ENGINE (LOBBY HUB)
 -- ════════════════════════════════════════════════════
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local SETTINGS_FILE = "IronSoulSettings.json"
 
 local Config = {
-    AutoFarm             = false,
-    AutoSkill            = false,
-    AutoAttack           = true,
-    AutoAvoid            = false,
-    AutoProgressStage    = true, -- Auto Door & Portal Entry!
-    AutoEnterDungeon     = true, -- Auto Dungeon Select & Lobby Entry!
-    SelectedWorldName    = "Starless Forest (World1)",
+    AutoEnterDungeon     = true,
+    SelectedWorldName    = "ป่าไร้ดาว (World1)",
     SelectedWorldId      = "World1",
-    SelectedDifficultyName = "Trial (Diff 1)",
+    SelectedDifficultyName = "ระดับทดสอบ (Diff 1)",
     SelectedDifficultyNum  = 1,
     SaveSettings         = true,
-    OrbitRadius          = 6,
-    OrbitSpeed           = 4,
-    AboveHeight          = 8,
-    UndergroundHeight    = 8,
-    UndergroundMode      = true,
-    KillAuraRadius       = 45,
-    TargetRefresh        = 0.15,
-    PortalRefresh        = 0.80,
-    SkillInterval        = 2.50,
-    RoomClearRadius      = 140,
-    RoomClearDelay       = 1.25,
-    TargetSearchRadius   = 600,
-    DoorInteractDistance = 18,
-    DoorOpenWait         = 0.90,
-    ExitSearchRadius     = 600,
-    ExitRetryDelay       = 0.75,
-    AttackInterval       = 0.10,
-    StatusInterval       = 0.20,
-    PerformanceMode      = false,
-    SafeMode             = true,
-    EmergencyEscape      = true,
+
+    -- Auto Systems Flags
+    AutoSell             = false,
+    AutoSelectBest       = false,
+    AutoUseScroll        = false,
+    AutoFortifyWeapon    = false,
+    AutoDropOres         = false,
+    AutoBonusCard        = false,
+    AutoUpgradeAttribute = false,
+    AutoClaimDaily       = false,
+    AutoCaveMode         = false,
+    AutoEndlessTowerMode = false,
+    AutoBuyShopItem      = false,
+    AutoPlayAgain        = true,
+    AutoQuest            = false, -- ออโต้ทำเควสประจำวัน
+    ChickenMode          = false, -- ไก่ตัน: เปิดทุกระบบพร้อมกัน
+    _ChickenPrevState    = {},    -- เก็บ state ก่อนเปิดไก่ตัน
+
+    -- Dropdowns / Selectors
+    Crystals_Value       = {},
+    Ores_Value           = {},
+    Equipment_Value      = {},
+    ShopItemToBuy        = "GoldShop_17",
+    TaskNpcTarget        = "EquipmentEnchantNpc2|0",
+    SelectedCaveId       = "Cave1",
+    CaveDiffNum          = 1,
+    CavePartySize        = 2,
+    EndlessTowerDiffNum  = 1,
+    EndlessPartySize     = 2,
+    AttrPreset           = { AtkBonusValue = 1, HpBonus = 1, SkillCDReduce = 0, AtkRangeBonus = 0, MoveSpeedBonus = 0 },
 }
 
 local State = {
-    Character = nil,
-    Humanoid  = nil,
-    Root      = nil,
-
-    TargetModel    = nil,
-    TargetRoot     = nil,
-    TargetHumanoid = nil,
-
-    Portal      = nil,
-    PortalScore = 0,
-
-    OrbitAngle     = 0,
-    TargetTimer    = 0,
-    PortalTimer    = 0,
-    SkillTimer     = 0,
-    AttackTimer    = 0,
-    StatusTimer    = 0,
-    SkillCooldowns = { Q = 0, E = 0, R = 0 },
-
-    StageBusy           = false,
-    StageCooldown       = false,
-    EmergencyBusy       = false,
-    CurrentAction       = "Idle",
-    LastDamageTime      = 0,
-    LastTargetName      = "-",
-    LastTargetDistance  = math.huge,
-    TargetHealthPercent = 0,
-    DangerDistance      = math.huge,
-    DangerPart          = nil,
-    DangerTimer         = 0,
-    UndergroundPhysics  = false,
-    RoomClearTimer      = 0,
-    DoorBusy            = false,
-    DoorCooldown        = false,
-    StageBusyTimer      = 0,
-    WatchdogTimer       = 0,
-    FallbackTargetTimer = 0,
-    Stats = {
-        Heartbeats      = 0,
-        TargetScans     = 0,
-        PortalScans     = 0,
-        DangerScans     = 0,
-        LastHeartbeatMs = 0,
-    },
     Unloaded = false,
 }
 
--- ──────── JSON SETTINGS SAVE / LOAD ────────
 local function getSaveData()
     return {
-        AutoFarm               = Config.AutoFarm,
-        AutoSkill              = Config.AutoSkill,
-        AutoAttack             = Config.AutoAttack,
-        AutoAvoid              = Config.AutoAvoid,
-        AutoProgressStage      = Config.AutoProgressStage,
         AutoEnterDungeon       = Config.AutoEnterDungeon,
         SelectedWorldName      = Config.SelectedWorldName,
         SelectedWorldId        = Config.SelectedWorldId,
         SelectedDifficultyName = Config.SelectedDifficultyName,
         SelectedDifficultyNum  = Config.SelectedDifficultyNum,
-        OrbitRadius            = Config.OrbitRadius,
-        OrbitSpeed             = Config.OrbitSpeed,
-        AboveHeight            = Config.AboveHeight,
-        UndergroundHeight      = Config.UndergroundHeight,
-        UndergroundMode        = Config.UndergroundMode,
-        KillAuraRadius         = Config.KillAuraRadius,
-        PerformanceMode        = Config.PerformanceMode,
-        SafeMode               = Config.SafeMode,
-        EmergencyEscape        = Config.EmergencyEscape,
-        TargetSearchRadius     = Config.TargetSearchRadius,
-        DoorInteractDistance   = Config.DoorInteractDistance,
-        DoorOpenWait           = Config.DoorOpenWait,
-        ExitSearchRadius       = Config.ExitSearchRadius,
-        ExitRetryDelay         = Config.ExitRetryDelay,
+        AutoSell               = Config.AutoSell,
+        AutoSelectBest         = Config.AutoSelectBest,
+        AutoUpgradeAttribute   = Config.AutoUpgradeAttribute,
     }
 end
 
@@ -1547,19 +1516,10 @@ end
 
 pcall(loadSettings)
 
--- ──────── CONNECTIONS & CLEANUP REGISTRY ────────
 local Connections = {}
-local CharacterConnections = {}
-
 local function connect(signal, callback)
     local conn = signal:Connect(callback)
     table.insert(Connections, conn)
-    return conn
-end
-
-local function connectCharacter(signal, callback)
-    local conn = signal:Connect(callback)
-    table.insert(CharacterConnections, conn)
     return conn
 end
 
@@ -1570,1007 +1530,11 @@ local function disconnectList(list)
     table.clear(list)
 end
 
--- ──────── ANTI-AFK ENGINE ────────
-if not _G.AntiAFK_Loaded then
-    _G.AntiAFK_Loaded = true
-    connect(player.Idled, function()
-        if State.Unloaded then return end
-        pcall(function()
-            VirtualUser:CaptureController()
-            VirtualUser:ClickButton2(Vector2.zero)
-        end)
-    end)
-end
-
--- Legacy bridge variables for backward compatibility with UI callbacks
-local Autofarm          = false
-local AutoUseSkill      = false
-local BringMobs         = false
-local AutoCollectChests = false
-local AutoCollectEggs   = false
-local AutoPlayAgain     = false
-local CameraChange      = false
-local WalkSpeedEnabled  = false
-local AutoSell          = false
-
-local AutoForgeWeapon   = false
-local AutoSelectBest    = false
-local AutoUseScroll     = false
-
-local AutoEnterDungeon  = false
-local AutoDifficulty    = "Normal"
-local SelectedStage     = "Room1"
-local SelectedWorld     = "World1"
-local SelectedStageNum  = 1
-local AutoBonusCard     = false
-
-local AutoDailyLogin    = false
-local AutoAscend        = false
-local AutoSkillTree     = false
-local ESPEnemies        = false
-
-local AutoBuyShopItem   = false
-local ShopItemToBuy     = "GoldShop_17"
-local AutoFortifyWeapon = false
-local AutoDropOres      = false
-local AutoTaskProgress  = false
-local TaskNpcTarget     = "EquipmentEnchantNpc2|0"
-
--- [NEW] Attribute Upgrade system state
-local AutoUpgradeAttribute = false
-local AttrPreset = { AtkBonusValue = 1, HpBonus = 1, SkillCDReduce = 0, AtkRangeBonus = 0, MoveSpeedBonus = 0 }
-
--- [NEW] EventHall / Daily state
-local AutoClaimDaily   = false   -- ใช้ EventHallRE "ClaimDailyLogin" จริง
-local DailyRewardIds   = { "DR_1", "DR_2", "DR_3", "DR_4", "DR_5", "DR_6", "DR_7" }
-
--- [NEW] Cave / Endless Tower
-local AutoCaveMode          = false
-local CaveDiffNum           = 1
-local AutoEndlessTowerMode  = false
-local EndlessTowerDiffNum   = 1
-
-local Distance_X        = 0
-local Distance_Y        = 0
-local Distance_Z        = 10
-local Pitch             = 45
-local CameraDistance    = 70
-local WalkSpeed_Speed   = 16
-
-local CollectingEggs    = false
-local CollectingChests  = false
-local CurrentEnemy      = nil
-local CurrentEnemyModel = nil
-local OldWalkSpeed      = controller and controller.SetWalkSpeed or nil
-
-local Crystals_Value    = {}
-local Ores_Value        = {}
-local Equipment_Value   = {}
+local DailyRewardIds = { "DR_1", "DR_2", "DR_3", "DR_4", "DR_5", "DR_6", "DR_7" }
 
 -- ════════════════════════════════════════════════════
--- 5. CHARACTER & PHYSICS MANAGEMENT (NO JITTER)
+-- 5. HELPER DATA & REMOTE FUNCTIONS
 -- ════════════════════════════════════════════════════
-local TargetHighlight = Instance.new("Highlight")
-TargetHighlight.Name             = "IronSoul_AutofarmTarget"
-TargetHighlight.Enabled          = false
-TargetHighlight.DepthMode        = Enum.HighlightDepthMode.AlwaysOnTop
-TargetHighlight.FillTransparency = 0.5
-TargetHighlight.FillColor        = Color3.fromRGB(0, 0, 255)
-TargetHighlight.OutlineTransparency = 0
-TargetHighlight.OutlineColor     = Color3.fromRGB(0, 200, 40)
-pcall(function()
-    TargetHighlight.Parent = player.PlayerGui:WaitForChild("woof", 5) or player.PlayerGui
-end)
-
-local function SetCurrentEnemy(enemy)
-    CurrentEnemyModel       = enemy
-    TargetHighlight.Adornee = enemy
-    TargetHighlight.Enabled = enemy ~= nil
-end
-
-local function configurePart(obj)
-    if obj:IsA("BasePart") then
-        obj.CanCollide = false
-    end
-end
-
-local forwardDeclarationEmergencyEscape
-
-local function installHealthWatcher()
-    local hum = State.Humanoid
-    if not hum then return end
-    local prevHealth = hum.Health
-
-    connectCharacter(hum.HealthChanged, function(health)
-        if health < prevHealth then
-            State.LastDamageTime = os.clock()
-            if Config.AutoAvoid then State.CurrentAction = "Avoiding Attack" end
-            if Config.EmergencyEscape and forwardDeclarationEmergencyEscape then
-                task.spawn(function() forwardDeclarationEmergencyEscape("Emergency Escape") end)
-            end
-        end
-        prevHealth = health
-        State.TargetHealthPercent = State.TargetHumanoid and State.TargetHumanoid.MaxHealth > 0 and math.clamp(State.TargetHumanoid.Health / State.TargetHumanoid.MaxHealth, 0, 1) * 100 or 0
-    end)
-end
-
-local function refreshCharacter(char)
-    disconnectList(CharacterConnections)
-    State.Character = char
-    State.Humanoid  = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
-    State.Root      = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
-
-    pcall(function()
-        if ControllerClass and char then
-            controller = ControllerClass.new(char, ActionModules)
-        end
-    end)
-
-    State.TargetModel        = nil
-    State.TargetRoot         = nil
-    State.TargetHumanoid     = nil
-    State.StageBusy          = false
-    State.StageCooldown      = false
-    State.DoorBusy           = false
-    State.DoorCooldown       = false
-    State.RoomClearTimer     = 0
-    State.StageBusyTimer     = 0
-    State.UndergroundPhysics  = false
-
-    if State.Humanoid then
-        pcall(function()
-            State.Humanoid.PlatformStand = false
-            State.Humanoid.AutoRotate = true
-        end)
-    end
-
-    -- Character No-Clip (Disable part collision to prevent snagging on walls)
-    for _, obj in ipairs(char:GetDescendants()) do configurePart(obj) end
-    connectCharacter(char.DescendantAdded, configurePart)
-    installHealthWatcher()
-end
-
-connect(player.CharacterAdded, refreshCharacter)
-if player.Character then refreshCharacter(player.Character) end
-
-local function beginTravel()
-    if not State.Humanoid then return end
-    pcall(function()
-        State.Humanoid.PlatformStand = false
-        State.Humanoid.AutoRotate = true
-        State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end)
-    State.UndergroundPhysics = false
-end
-
-local function travelToPosition(position, lookAt)
-    if not State.Character or not State.Root then return false end
-    beginTravel()
-    local cf = lookAt and CFrame.new(position, lookAt) or CFrame.new(position)
-    return pcall(function()
-        State.Character:PivotTo(cf)
-        State.Root.CFrame = cf
-        State.Root.AssemblyLinearVelocity = Vector3.zero
-        State.Root.AssemblyAngularVelocity = Vector3.zero
-    end)
-end
-
-local function setUndergroundPhysics(enabled)
-    if not State.Humanoid or not State.Humanoid.Parent then return end
-    if State.UndergroundPhysics == enabled then return end
-    pcall(function()
-        if enabled then
-            State.Humanoid.AutoRotate = false
-            State.Humanoid.PlatformStand = true
-            State.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-        else
-            State.Humanoid.PlatformStand = false
-            State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-            State.Humanoid.AutoRotate = true
-        end
-    end)
-    State.UndergroundPhysics = enabled
-end
-
-local function getDesiredCombatCFrame()
-    if not Config.AutoFarm or State.StageBusy or not State.Root or not State.TargetRoot or not State.Humanoid then
-        return nil
-    end
-
-    local targetPos = State.TargetRoot.Position
-    local radius = Config.OrbitRadius
-    local verticalOffset = Config.UndergroundMode
-        and math.max(0, tonumber(Config.UndergroundHeight) or 0)
-        or math.max(0, tonumber(Config.AboveHeight) or 0)
-
-    State.OrbitAngle = State.OrbitAngle + (1 / 60) * Config.OrbitSpeed
-    local x = math.sin(State.OrbitAngle) * radius
-    local z = math.cos(State.OrbitAngle) * radius
-    local y, tilt
-
-    if Config.UndergroundMode then
-        setUndergroundPhysics(true)
-        y = targetPos.Y - verticalOffset
-        tilt = 90
-    else
-        setUndergroundPhysics(false)
-        y = targetPos.Y + verticalOffset
-        tilt = -90
-    end
-
-    return CFrame.new(targetPos.X + x + Distance_X, y + Distance_Y, targetPos.Z + z + Distance_Z) * CFrame.Angles(math.rad(tilt), 0, math.rad(Pitch))
-end
-
-local function lockCombatPosition()
-    if not (Config.AutoFarm or Autofarm) then return end
-    local desiredCFrame = getDesiredCombatCFrame()
-    if not desiredCFrame or not State.Character or not State.Root then return end
-    pcall(function() State.Character:PivotTo(desiredCFrame) end)
-    pcall(function()
-        State.Root.CFrame = desiredCFrame
-        State.Root.AssemblyLinearVelocity = Vector3.zero
-        State.Root.AssemblyAngularVelocity = Vector3.zero
-    end)
-end
-
--- ════════════════════════════════════════════════════
--- 6. TARGET SCANNING ENGINE
--- ════════════════════════════════════════════════════
-local enemyCandidates = {}
-
-local function looksLikeEnemyModel(model)
-    if not model or not model:IsA("Model") or model == State.Character or Players:GetPlayerFromCharacter(model) ~= nil then
-        return false
-    end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return false end
-    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-    if not root or not root:IsA("BasePart") then return false end
-
-    local enemyNpc = workspace:FindFirstChild("EnemyNpc")
-    if enemyNpc then
-        if model:IsDescendantOf(enemyNpc) then return true end
-        if model.Parent == workspace or model.Parent == workspace:FindFirstChild("BossNpc") or model.Name:lower():find("boss") or model:GetAttribute("LevelType") == "Boss" then
-            return true
-        end
-        return false
-    end
-    return true
-end
-
-local function addEnemyCandidate(obj)
-    local m = obj:IsA("Model") and obj or obj:FindFirstAncestorOfClass("Model")
-    if m and m ~= State.Character and looksLikeEnemyModel(m) then enemyCandidates[m] = true end
-end
-
-local function removeEnemyCandidate(obj)
-    if obj:IsA("Model") then enemyCandidates[obj] = nil else
-        local m = obj:FindFirstAncestorOfClass("Model")
-        if m then enemyCandidates[m] = nil end
-    end
-end
-
-for _, obj in ipairs(workspace:GetDescendants()) do addEnemyCandidate(obj) end
-workspace.DescendantAdded:Connect(addEnemyCandidate)
-workspace.DescendantRemoving:Connect(removeEnemyCandidate)
-
-local function getAliveTargetParts(model)
-    if not model or model == State.Character then return nil, nil end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return nil, nil end
-    local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-    if not root or not root:IsA("BasePart") then return nil, nil end
-    return hum, root
-end
-
-local function scoreTarget(model, humanoid, root, distanceSquared)
-    local score = 0
-    local name = string.lower(model.Name)
-    if distanceSquared < 15 * 15 then score += 8 elseif distanceSquared < 35 * 35 then score += 5 else score += 2 end
-    if name:find("boss", 1, true) or model:GetAttribute("LevelType") == "Boss" then score += 500 elseif name:find("elite", 1, true) then score += 15 end
-    if humanoid.MaxHealth > 0 and (humanoid.Health / humanoid.MaxHealth) < 0.25 then score += 4 end
-    if root.Position.Y < -500 then score -= 2 end
-    return score
-end
-
-local fallbackOverlapParams = OverlapParams.new()
-fallbackOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local function findNearestTargetFallback()
-    if not State.Root or not State.Root.Parent then return nil, nil, nil end
-    fallbackOverlapParams.FilterDescendantsInstances = { State.Character }
-    local origin = State.Root.Position
-    local radius = Config.TargetSearchRadius
-    local radiusSquared = radius * radius
-    local seen, bestModel, bestRoot, bestHumanoid, bestScore = {}, nil, nil, nil, -math.huge
-
-    local ok, parts = pcall(function() return workspace:GetPartBoundsInRadius(origin, radius, fallbackOverlapParams) end)
-    if ok and parts then
-        for _, part in ipairs(parts) do
-            local model = part:FindFirstAncestorOfClass("Model")
-            if model and model ~= State.Character and not seen[model] then
-                seen[model] = true
-                local hum, root = getAliveTargetParts(model)
-                if hum and root then
-                    local offset = origin - root.Position
-                    local distSq = offset:Dot(offset)
-                    if distSq <= radiusSquared then
-                        local score = scoreTarget(model, hum, root, distSq)
-                        if score > bestScore then
-                            bestModel, bestRoot, bestHumanoid, bestScore = model, root, hum, score
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return bestModel, bestRoot, bestHumanoid
-end
-
-local findBestExit
-
-local function findNearestTarget()
-    State.Stats.TargetScans += 1
-    if not State.Root or not State.Root.Parent then return nil, nil, nil end
-
-    local exitObj, exitScore, exitType = nil, 0, nil
-    if typeof(findBestExit) == "function" then
-        pcall(function() exitObj, exitScore, exitType = findBestExit() end)
-    end
-    local exitDist = (exitObj and exitObj:IsA("BasePart")) and (State.Root.Position - exitObj.Position).Magnitude or math.huge
-
-    local origin = State.Root.Position
-    local radius = Config.TargetSearchRadius
-    local radiusSq = radius * radius
-    local bestModel, bestRoot, bestHumanoid, bestScore = nil, nil, nil, -math.huge
-
-    for model in pairs(enemyCandidates) do
-        if not model or not model.Parent then
-            enemyCandidates[model] = nil
-        else
-            local hum, root = getAliveTargetParts(model)
-            if hum and root then
-                local distSq = (origin - root.Position):Dot(origin - root.Position)
-                if distSq <= radiusSq then
-                    local targetDist = math.sqrt(distSq)
-
-                    -- FIX BOSS PORTAL FILTER:
-                    -- Do not ignore Boss targets under any circumstance.
-                    -- Only ignore non-boss targets if an exit portal is strictly closer and between rooms.
-                    local isBoss = name:find("boss", 1, true) or model:GetAttribute("LevelType") == "Boss"
-                    if not isBoss and exitObj and exitDist < 120 and exitDist < (targetDist - 20) then
-                        -- Ignore next-room regular mob targets
-                    else
-                        local score = scoreTarget(model, hum, root, distSq)
-                        if score > bestScore then
-                            bestScore = score; bestModel = model; bestRoot = root; bestHumanoid = hum
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if bestModel then return bestModel, bestRoot, bestHumanoid end
-    if State.FallbackTargetTimer > 0 then return nil, nil, nil end
-    State.FallbackTargetTimer = 1.0
-    return findNearestTargetFallback()
-end
-
-local function targetIsValid()
-    local model = State.TargetModel
-    local hum = State.TargetHumanoid
-    local root = State.TargetRoot
-    return model and model.Parent and hum and hum.Parent and hum.Health > 0 and root and root.Parent
-end
-
-local function refreshTarget()
-    if not Config.AutoFarm or State.StageBusy then
-        State.TargetModel = nil; State.TargetRoot = nil; State.TargetHumanoid = nil; State.RoomClearTimer = 0
-        SetCurrentEnemy(nil)
-        return
-    end
-    local model, root, hum = findNearestTarget()
-    State.TargetModel = model
-    State.TargetRoot = root
-    State.TargetHumanoid = hum
-    State.LastTargetName = model and model.Name or "No target"
-    State.LastTargetDistance = root and State.Root and (State.Root.Position - root.Position).Magnitude or math.huge
-    State.TargetHealthPercent = hum and hum.MaxHealth > 0 and math.clamp(hum.Health / hum.MaxHealth, 0, 1) * 100 or 0
-    SetCurrentEnemy(model)
-    if model and hum and hum.Health > 0 then State.RoomClearTimer = 0 end
-end
-
--- ════════════════════════════════════════════════════
--- 7. PORTAL & DOOR ENGINE (AUTO DUNGEON ENTRY)
--- ════════════════════════════════════════════════════
-local portalCandidates = {}
-
-local function getExitType(part)
-    if not part or not part:IsA("BasePart") then return nil end
-    local names = { string.lower(part.Name) }
-    local ancestor = part.Parent
-    local depth = 0
-    while ancestor and depth < 4 do
-        if ancestor:IsA("Model") or ancestor:IsA("Folder") then table.insert(names, string.lower(ancestor.Name)) end
-        ancestor = ancestor.Parent; depth += 1
-    end
-    local hasPortalName, hasDoorName = false, false
-    for _, name in ipairs(names) do
-        if name:find("portal", 1, true) or name:find("teleport", 1, true) or name:find("portalexit", 1, true) or name:find("warp", 1, true) or name:find("next", 1, true) or name:find("finish", 1, true) then
-            hasPortalName = true
-        end
-        if name:find("door", 1, true) or name:find("gate", 1, true) or name:find("exit", 1, true) or name:find("entrance", 1, true) or name:find("rounddoor", 1, true) then
-            hasDoorName = true
-        end
-    end
-    if hasPortalName then return "portal" end
-    if hasDoorName then return "door" end
-    return nil
-end
-
-local function isPortalCandidate(part) return getExitType(part) ~= nil end
-
-local function rebuildPortalCandidates()
-    State.Stats.PortalScans += 1
-    table.clear(portalCandidates)
-    for _, object in ipairs(workspace:GetDescendants()) do
-        if isPortalCandidate(object) then table.insert(portalCandidates, object) end
-    end
-end
-
-local function registerPortalCandidate(object)
-    if isPortalCandidate(object) and not table.find(portalCandidates, object) then
-        table.insert(portalCandidates, object)
-    end
-end
-
-local function unregisterPortalCandidate(object)
-    for index = #portalCandidates, 1, -1 do
-        if portalCandidates[index] == object then
-            table.remove(portalCandidates, index); break
-        end
-    end
-end
-
-connect(workspace.DescendantAdded, registerPortalCandidate)
-connect(workspace.DescendantRemoving, unregisterPortalCandidate)
-
-local function scorePortal(part, origin)
-    if not part or not part.Parent then return -math.huge, nil end
-    local exitType = getExitType(part)
-    if not exitType then return -math.huge, nil end
-    local name = string.lower(part.Name)
-    local parentName = part.Parent and string.lower(part.Parent.Name) or ""
-    local score = 0
-
-    if exitType == "portal" then
-        score += 8
-        if name:find("portal", 1, true) or parentName:find("portal", 1, true) then score += 5 end
-        if name:find("teleport", 1, true) or parentName:find("teleport", 1, true) then score += 3 end
-    else
-        score += 2
-        if name:find("door", 1, true) then score += 2 end
-        if name:find("gate", 1, true) then score += 2 end
-    end
-    if name:find("next", 1, true) or name:find("finish", 1, true) or name:find("exit", 1, true) then score += 2 end
-    if part:FindFirstChildOfClass("TouchTransmitter") then score += 3 end
-    if part:FindFirstChildOfClass("ProximityPrompt") then score += 4 end
-    if part.Material == Enum.Material.Neon then score += 3 end
-    if part.Size.Y > 5 and part.Size.X > 5 then score += 2 end
-
-    local distSq = (origin - part.Position):Dot(origin - part.Position)
-    score += math.max(0, 1 - distSq / (50 * 50))
-    return score, exitType
-end
-
-findBestExit = function()
-    if not State.Root then return nil, 0, nil end
-    local origin = State.Root.Position
-    local maxDistSq = Config.ExitSearchRadius * Config.ExitSearchRadius
-    local bestPortal, bestPortalScore = nil, -math.huge
-    local bestDoor, bestDoorScore = nil, -math.huge
-
-    for index = #portalCandidates, 1, -1 do
-        local part = portalCandidates[index]
-        if not part or not part.Parent then
-            table.remove(portalCandidates, index)
-        else
-            local distSq = (origin - part.Position):Dot(origin - part.Position)
-            if distSq <= maxDistSq then
-                local score, exitType = scorePortal(part, origin)
-                if exitType == "portal" and score > bestPortalScore then
-                    bestPortal = part; bestPortalScore = score
-                elseif exitType == "door" and score > bestDoorScore then
-                    bestDoor = part; bestDoorScore = score
-                end
-            end
-        end
-    end
-    if bestPortal then return bestPortal, bestPortalScore, "portal" end
-    if bestDoor then return bestDoor, bestDoorScore, "door" end
-    return nil, 0, nil
-end
-
-local function findBestPortalOnly()
-    if not State.Root then return nil, 0 end
-    local origin = State.Root.Position
-    local maxDistSq = Config.ExitSearchRadius * Config.ExitSearchRadius
-    local bestPortal, bestScore = nil, -math.huge
-
-    for index = #portalCandidates, 1, -1 do
-        local part = portalCandidates[index]
-        if not part or not part.Parent then
-            table.remove(portalCandidates, index)
-        else
-            local distSq = (origin - part.Position):Dot(origin - part.Position)
-            if distSq <= maxDistSq then
-                local score, exitType = scorePortal(part, origin)
-                if exitType == "portal" and score > bestScore then
-                    bestPortal = part; bestScore = score
-                end
-            end
-        end
-    end
-    return bestPortal, bestScore
-end
-
-local function findProximityPrompt(rootObject)
-    if not rootObject then return nil end
-    if rootObject:IsA("ProximityPrompt") then return rootObject end
-    return rootObject:FindFirstChildOfClass("ProximityPrompt") or rootObject:FindFirstChildWhichIsA("ProximityPrompt", true)
-end
-
-local function TriggerDoorAndPortalRemotes()
-    pcall(function()
-        local roundDoor = workspace:FindFirstChild("RoundDoor")
-        if roundDoor then
-            local door = roundDoor:FindFirstChild("Door")
-            local doorRoot = door and door:FindFirstChild("Root")
-            local doorRE = doorRoot and doorRoot:FindFirstChild("RE")
-            if doorRE then pcall(function() doorRE:FireServer() end) end
-
-            local portal = roundDoor:FindFirstChild("Portal")
-            local portalRoot = portal and portal:FindFirstChild("Root")
-            local portalRF = portalRoot and portalRoot:FindFirstChild("RF")
-            if portalRF then pcall(function() portalRF:InvokeServer() end) end
-        end
-
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v.Name == "RE" and v.Parent and v.Parent.Name == "Root" and v.Parent.Parent and (v.Parent.Parent.Name == "Door" or v.Parent.Parent.Name == "RoundDoor") then
-                pcall(function() v:FireServer() end)
-            elseif v.Name == "RF" and v.Parent and v.Parent.Name == "Root" and v.Parent.Parent and (v.Parent.Parent.Name == "Portal" or v.Parent.Parent.Name == "RoundDoor") then
-                pcall(function() v:InvokeServer() end)
-            end
-        end
-    end)
-    return true
-end
-local TriggerDoorRemote = TriggerDoorAndPortalRemotes
-
-local function pressKey(keyName)
-    local keyCode = Enum.KeyCode[keyName]
-    if not keyCode then return end
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-        task.wait(0.02)
-        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
-    end)
-end
-
-local function interactWithDoor(door)
-    if not door or not door.Parent or State.DoorBusy or State.DoorCooldown or not State.Root or not State.Humanoid then
-        return false
-    end
-    State.DoorBusy = true
-    State.CurrentAction = "Opening Door"
-    local succeeded = false
-
-    pcall(function()
-        local prompt = findProximityPrompt(door)
-        local approachPos = door.Position - door.CFrame.LookVector * Config.DoorInteractDistance
-        travelToPosition(approachPos, door.Position)
-        task.wait(0.25)
-
-        TriggerDoorRemote()
-
-        if prompt and type(fireproximityprompt) == "function" then
-            fireproximityprompt(prompt)
-            succeeded = true
-        else
-            pressKey("F")
-            succeeded = true
-        end
-
-        task.wait(Config.DoorOpenWait)
-
-        if door.Parent and prompt == nil then
-            pressKey("F")
-            task.wait(0.35)
-        end
-    end)
-
-    State.DoorBusy = false
-    State.DoorCooldown = true
-    task.delay(1.25, function() if not State.Unloaded then State.DoorCooldown = false end end)
-    return succeeded
-end
-
-local function teleportNearPortal()
-    if not State.Root then return end
-    local portal, score = findBestPortalOnly()
-    if not portal or score < 2 then return end
-    State.Portal = portal
-    State.PortalScore = score
-    local pos = portal.Position - portal.CFrame.LookVector * 8
-    travelToPosition(pos, portal.Position)
-end
-
-local function collectDragonEggs()
-    if not State.Root then return end
-    pcall(function()
-        local eggList = {}
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and (v.Name == "DragonEgg" or v.Name == "LocalDragonEgg" or string.find(v.Name, "DragonEgg")) then
-                if not v:GetAttribute("Broken") then
-                    table.insert(eggList, v)
-                end
-            end
-        end
-
-        for _, eggModel in ipairs(eggList) do
-            if eggModel and eggModel.Parent and not eggModel:GetAttribute("Broken") then
-                local eggRoot = eggModel.PrimaryPart or eggModel:FindFirstChild("Root") or eggModel:FindFirstChild("EggModel")
-                if eggRoot then
-                    State.CurrentAction = "Harvesting Dragon Egg"
-                    local startT = os.clock()
-                    repeat
-                        if not State.Root or State.Unloaded then break end
-                        local pos = (eggRoot:IsA("Model") and eggRoot:GetPivot().Position or eggRoot.Position)
-                        State.Root.CFrame = CFrame.new(pos + Vector3.new(0, 2, 2), pos)
-
-                        -- Trigger Proximity Prompts on DragonEgg
-                        for _, p in ipairs(eggModel:GetDescendants()) do
-                            if p:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
-                                pcall(fireproximityprompt, p)
-                            end
-                        end
-
-                        -- Attack DragonEgg to break it
-                        pcall(activateTool)
-                        pcall(function() Attack(true) end)
-
-                        task.wait(0.15)
-                    until eggModel:GetAttribute("Broken") or not eggModel.Parent or (os.clock() - startT) > 3.5
-                end
-            end
-        end
-    end)
-end
-
-local function moveToNextStage()
-    if not Config.AutoProgressStage or State.StageBusy or State.StageCooldown or State.DoorBusy or not State.Root or not State.Humanoid or not Config.AutoFarm then
-        return
-    end
-
-    -- 1. IF ENEMIES ARE PRESENT / TARGET FOUND: PRIORITIZE COMBAT IMMEDIATELY
-    local model, root, hum = findNearestTarget()
-    if model and root and hum and hum.Health > 0 then
-        State.TargetModel = model; State.TargetRoot = root; State.TargetHumanoid = hum
-        State.RoomClearTimer = 0; State.CurrentAction = "Farming"
-        return
-    end
-
-    local enemyNpc = workspace:FindFirstChild("EnemyNpc")
-    if enemyNpc then
-        for _, child in ipairs(enemyNpc:GetChildren()) do
-            if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
-                local h = child:FindFirstChildOfClass("Humanoid")
-                if h and h.Health > 0 then
-                    State.CurrentAction = "Farming"
-                    return
-                end
-            end
-        end
-    end
-
-    -- 2. IF ROOM IS CLEARED / WAITING FOR WAVE OR BOSS SPAWN:
-    State.StageBusy = true
-    State.TargetModel = nil; State.TargetRoot = nil; State.TargetHumanoid = nil
-
-    -- Priority 0: Auto Collect Dragon Eggs in current room
-    pcall(collectDragonEggs)
-
-    -- Priority 1: TRIGGER PLAYER RESPAWN / ROOM WAVE & BOSS SPAWN FIRST!
-    local playerRespawn = workspace:FindFirstChild("PlayerRespawn")
-    if playerRespawn then
-        State.CurrentAction = "Triggering Boss/Wave Spawn"
-        local respawnParts = {}
-        for _, v in pairs(playerRespawn:GetChildren()) do
-            if v:IsA("Part") or v:IsA("BasePart") then
-                table.insert(respawnParts, v)
-            end
-        end
-
-        if #respawnParts > 0 then
-            pcall(function()
-                for _, v in ipairs(respawnParts) do
-                    if State.Root then
-                        State.Root.CFrame = v.CFrame + Vector3.new(0, 3, 0)
-                        task.wait(0.3)
-                    end
-                end
-            end)
-
-            -- Wait 0.8s to give server time to spawn Boss / next wave
-            task.wait(0.8)
-
-            -- Re-check if Boss or Mobs spawned!
-            local checkModel, checkRoot, checkHum = findNearestTarget()
-            if checkModel and checkRoot and checkHum then
-                State.TargetModel = checkModel
-                State.TargetRoot = checkRoot
-                State.TargetHumanoid = checkHum
-                State.StageBusy = false
-                State.StageBusyTimer = 0
-                return
-            end
-        end
-    end
-
-    -- Priority 2: Interacting with Stage Doors / Prompts if door is present
-    local roundDoor = workspace:FindFirstChild("RoundDoor")
-    if roundDoor then
-        local door = roundDoor:FindFirstChild("Door")
-        local prompt = findProximityPrompt(door or roundDoor)
-        if prompt then
-            State.CurrentAction = "Opening Stage Door"
-            pcall(function()
-                State.Root.CFrame = (door and door:GetPivot() or roundDoor:GetPivot()) + Vector3.new(0, 2, 0)
-                if type(fireproximityprompt) == "function" then
-                    fireproximityprompt(prompt)
-                else
-                    pressKey("F")
-                end
-                TriggerDoorAndPortalRemotes()
-            end)
-            task.wait(0.6)
-            State.StageBusy = false
-            State.StageBusyTimer = 0
-            return
-        end
-    end
-
-    -- Priority 3: Enter Exit Portal / RoundDoor only if wave/boss is completely finished
-    rebuildPortalCandidates()
-    local exitObject, score, exitType = findBestExit()
-    if roundDoor or exitObject then
-        State.CurrentAction = "Entering RoundDoor/Portal"
-        local portalPart = (roundDoor and (roundDoor:FindFirstChild("Portal") or roundDoor:FindFirstChild("Door"))) or exitObject
-        local rootPart = portalPart and (portalPart:FindFirstChild("Root") or portalPart)
-        if rootPart and State.Root then
-            pcall(function()
-                State.Root.CFrame = rootPart.CFrame + Vector3.new(0, 3, 0)
-                TriggerDoorAndPortalRemotes()
-                if type(firetouchinterest) == "function" and portalPart:IsA("BasePart") then
-                    firetouchinterest(State.Root, portalPart, 0)
-                    task.wait(0.05)
-                    firetouchinterest(State.Root, portalPart, 1)
-                end
-            end)
-        end
-    end
-
-    State.StageBusy = false
-    State.StageBusyTimer = 0
-end
-
--- ════════════════════════════════════════════════════
--- 8. COMBAT ACTIONS, SKILLS & AUTO AVOID
--- ════════════════════════════════════════════════════
-local SkillCooldownConfig = { Q = 0.70, E = 0.70, R = 1.50 }
-
-local function getController()
-    if controller and typeof(controller) == "table" and type(controller.PerformAction) == "function" then
-        return controller
-    end
-    pcall(function()
-        local char = player.Character or character
-        if not char then return end
-        local mgr = char:FindFirstChild("LocalControlMgr") or char:WaitForChild("LocalControlMgr", 3)
-        if not mgr then return end
-        local actFolder = mgr:FindFirstChild("Action")
-        local actMods = {}
-        if actFolder then
-            for _, m in ipairs(actFolder:GetChildren()) do
-                if m:IsA("ModuleScript") then
-                    pcall(function() actMods[m.Name] = require(m) end)
-                end
-            end
-        end
-        if mgr:FindFirstChild("Controller") then
-            local CtrlClass = require(mgr.Controller)
-            controller = CtrlClass.new(char, actMods)
-        end
-    end)
-    return controller
-end
-
-local function activateTool()
-    if not State.Character then return nil end
-    local tool = State.Character:FindFirstChildOfClass("Tool")
-    if not tool then
-        local bp = player:FindFirstChild("Backpack")
-        if bp then
-            tool = bp:FindFirstChildOfClass("Tool")
-            if tool and State.Humanoid then
-                pcall(function() State.Humanoid:EquipTool(tool) end)
-            end
-        end
-    end
-    if tool then
-        pcall(function() tool:Activate() end)
-    end
-    return tool
-end
-
-local function FirePlayerAction(actionName, subParam)
-    pcall(function()
-        local actionRE = ReplicatedStorage:FindFirstChild("Remotes")
-            and ReplicatedStorage.Remotes:FindFirstChild("PlayerActionRE")
-        if actionRE then
-            if subParam ~= nil then
-                actionRE:FireServer("SkillAction", actionName, subParam)
-            else
-                actionRE:FireServer("SkillAction", actionName)
-            end
-        end
-    end)
-end
-
-local function Attack(bool)
-	if not (Config.AutoFarm or Autofarm) then return end
-	bool = bool or AutoUseSkill or Config.AutoSkill or false
-	-- controller.WeaponDef.BaseAttack.InStage = false
-	-- controller.WeaponDef.BaseAttack.Info.CD = 0
-
-	local ctrl = getController() or controller
-	if ctrl then
-		pcall(function()
-			ctrl:PerformAction("BaseAttack")
-			task.wait()
-			ctrl:StopAction("BaseAttack")
-		end)
-	end
-
-	if bool then
-		task.spawn(function()
-			pcall(function()
-				local pgui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-				local skillsFolder = pgui and pgui:FindFirstChild("ScreenInput")
-					and pgui.ScreenInput:FindFirstChild("PCInput")
-					and pgui.ScreenInput.PCInput:FindFirstChild("Skills")
-
-				if skillsFolder then
-					for i, v in pairs(skillsFolder:GetChildren()) do
-						if v:IsA("ImageButton") and v:GetAttribute("OnCD") == false then
-							if v:GetAttribute("FullCharge") == true then
-								if ctrl then ctrl:PerformAction("SkillU") end
-								task.wait(0.1)
-								return
-							end
-							if ctrl then
-								ctrl:PerformAction("Skill1")
-								task.wait(0.1)
-								ctrl:PerformAction("Skill2")
-								task.wait(0.1)
-								ctrl:PerformAction("SkillAW")
-							end
-						end
-					end
-				end
-			end)
-		end)
-	end
-end
-
-local function useSkills()
-    if not (Config.AutoFarm or Autofarm) or not (Config.AutoSkill or AutoUseSkill) or not targetIsValid() or State.StageBusy then return end
-    local now = os.clock()
-    for _, key in ipairs({ "E", "Q", "R" }) do
-        if now >= (State.SkillCooldowns[key] or 0) then
-            pressKey(key)
-            State.SkillCooldowns[key] = now + (SkillCooldownConfig[key] or 1.0)
-            task.wait(0.15)
-        end
-    end
-    Attack(true)
-end
-
-local function updateKillAura()
-    if not (Config.AutoFarm or Autofarm) or State.StageBusy then return end
-    Attack(AutoUseSkill or Config.AutoSkill)
-end
-
-local function isRedAttackObject(object)
-    if not object:IsA("BasePart") then return false end
-    local color = object.Color
-    local hue, saturation, value = Color3.toHSV(color)
-    local redHue = hue < 0.055 or hue > 0.945
-    return redHue and saturation > 0.55 and value > 0.35 and color.R > color.G * 1.35 and color.R > color.B * 1.35
-end
-
-local dangerOverlapParams = OverlapParams.new()
-dangerOverlapParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local function findNearbyRedAttack()
-    State.Stats.DangerScans += 1
-    if not Config.AutoAvoid or not State.Root then return nil end
-    dangerOverlapParams.FilterDescendantsInstances = { State.Character }
-    local origin = State.Root.Position
-    local dangerRadius = 35
-    local nearest, nearestDistSq = nil, dangerRadius * dangerRadius
-    local ok, parts = pcall(function() return workspace:GetPartBoundsInRadius(origin, dangerRadius, dangerOverlapParams) end)
-    if ok and parts then
-        for _, object in ipairs(parts) do
-            if isRedAttackObject(object) then
-                local distSq = (origin - object.Position):Dot(origin - object.Position)
-                if distSq < nearestDistSq then nearestDistSq = distSq; nearest = object end
-            end
-        end
-    end
-    return nearest
-end
-
-local function emergencyEscape(reason)
-    if not Config.EmergencyEscape or State.EmergencyBusy or not State.Root or not State.Humanoid then return end
-    State.EmergencyBusy = true
-    State.CurrentAction = reason or "Emergency Escape"
-    local root, humanoid = State.Root, State.Humanoid
-    local danger = State.DangerPart
-    local direction
-    if danger and danger.Parent then
-        direction = Vector3.new((root.Position - danger.Position).X, 0, (root.Position - danger.Position).Z)
-    end
-    if not direction or direction.Magnitude < 0.05 then
-        direction = Vector3.new(math.cos(State.OrbitAngle), 0, math.sin(State.OrbitAngle))
-    else
-        direction = direction.Unit
-    end
-    humanoid:MoveTo(root.Position + direction * 18)
-    task.delay(0.45, function() if not State.Unloaded then State.EmergencyBusy = false; State.CurrentAction = Config.AutoFarm and "Farming" or "Idle" end end)
-end
-
-local function updateAutoAvoid(dt)
-    if not Config.AutoAvoid or State.StageBusy or State.EmergencyBusy or not State.Root or not State.Humanoid then
-        State.DangerPart = nil; State.DangerDistance = math.huge; return
-    end
-    State.DangerTimer += dt
-    local scanInterval = Config.PerformanceMode and 0.30 or 0.12
-    if State.DangerTimer >= scanInterval then
-        State.DangerTimer = 0; State.DangerPart = findNearbyRedAttack()
-    end
-    local danger = State.DangerPart
-    if not danger or not danger.Parent then
-        State.DangerPart = nil; State.DangerDistance = math.huge
-        if Config.AutoFarm then State.CurrentAction = "Farming" end
-        return
-    end
-    local toDanger = danger.Position - State.Root.Position
-    State.DangerDistance = Vector3.new(toDanger.X, 0, toDanger.Z).Magnitude
-    local predicted = danger.Position + danger.AssemblyLinearVelocity * 0.20
-    local away = Vector3.new((State.Root.Position - predicted).X, 0, (State.Root.Position - predicted).Z)
-    away = away.Magnitude < 0.05 and Vector3.new(1, 0, 0) or away.Unit
-    local safeDistance = Config.SafeMode and 16 or 12
-    State.CurrentAction = "Avoiding Attack"
-    State.Humanoid:MoveTo(State.Root.Position + away * safeDistance)
-    if Config.EmergencyEscape and State.DangerDistance < 6 then emergencyEscape("Emergency Escape") end
-end
-
--- ════════════════════════════════════════════════════
--- 9. HELPER DATA & REMOTE FUNCTIONS (VERIFIED REMOTES)
--- ════════════════════════════════════════════════════
-
--- ── REMOTE PATH CACHE (WaitForChild-based, called once) ──
 local _RC = {}
 local function getRemote(path)
     if _RC[path] then return _RC[path] end
@@ -2586,9 +1550,7 @@ local function getRemote(path)
     if ok and result then _RC[path] = result end
     return ok and result or nil
 end
--- ── ATTRIBUTE UPGRADE (AttributeUpgradeUtil:RemoteEvent) ──
--- Path: ReplicatedStorage.Framework.Gameplay.AttributeUpgrade.AttributeUpgradeUtil.RemoteEvent
--- Usage: FireServer("Upgrade", { AtkBonusValue=N, HpBonus=N, SkillCDReduce=N, AtkRangeBonus=N, MoveSpeedBonus=N })
+
 local function UpgradeAttribute(attrTable)
     pcall(function()
         local re = getRemote("ReplicatedStorage.Framework.Gameplay.AttributeUpgrade.AttributeUpgradeUtil.RemoteEvent")
@@ -2596,9 +1558,6 @@ local function UpgradeAttribute(attrTable)
     end)
 end
 
--- ── EVENTHALL / DAILY LOGIN (EventHallRE) ──
--- Path: ReplicatedStorage.Framework.Gameplay.EventHallSystem.EventHallRE
--- Usage: FireServer("ViewActivity", "DailyLogin") then FireServer("ClaimDailyLogin", "DailyLogin", "DR_1")
 local function ViewDailyActivity()
     pcall(function()
         local re = getRemote("ReplicatedStorage.Framework.Gameplay.EventHallSystem.EventHallRE")
@@ -2613,41 +1572,54 @@ local function ClaimDailyReward(rewardId)
     end)
 end
 
-local function ClaimEventTask(eventId, taskId)
-    pcall(function()
-        local re = getRemote("ReplicatedStorage.Framework.Gameplay.EventHallSystem.EventHallRE")
-        if re then re:FireServer("ClaimEventTask", eventId or "DualGun", taskId or "E_010") end
-    end)
-end
-
--- ── SKILLTREE (SkillTreeUtil:RemoteEvent + WeaponUtil:RemoteEvent) ──
--- Path: ReplicatedStorage.Framework.Gameplay.SkillTreeSystem.SkillTreeUtil.RemoteEvent
--- Usage: FireServer("ActiveSkill", weaponType, skillNode)
 local function ActiveSkillNode(weaponType, skillNode)
     pcall(function()
-        -- Clear RedPoint notification first
+        local wt = weaponType or "Heavy"
+        local sn = skillNode or "UnlockSkill1"
+        -- เปิดหน้า SkillTree ก่อน
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", "DialogNpcNormal1|1")
+            task.wait(0.15)
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSkillTree")
+            task.wait(0.15)
+        end
         local rpRE = getRemote("ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil.RemoteEvent")
-        if rpRE then rpRE:FireServer("Clear", "SkillTree" .. (weaponType or "Heavy"), skillNode or "UnlockSkill1") end
-        -- Then activate the skill node
+        if rpRE then rpRE:FireServer("Clear", "SkillTree" .. wt, sn) end
         local re = getRemote("ReplicatedStorage.Framework.Gameplay.SkillTreeSystem.SkillTreeUtil.RemoteEvent")
-        if re then re:FireServer("ActiveSkill", weaponType or "Heavy", skillNode or "UnlockSkill1") end
+        if re then re:FireServer("ActiveSkill", wt, sn) end
     end)
 end
 
--- WeaponUtil:RemoteEvent — EquipSkill slot
--- Usage: FireServer("EquipSkill", weaponDef, slotName, skillId)
 local function EquipSkillToSlot(weaponDef, slotName, skillId)
     pcall(function()
+        local wd = weaponDef or "Heavy_Hammer"
+        local sl = slotName or "Skill1"
+        local si = skillId or "ThunderHammer_Skill_3"
+        -- แยก weapon class จาก "Heavy_Hammer" → "Heavy"
+        local weaponClass = wd:match("^(%a+)_") or wd:match("^(%a+)$") or "Heavy"
         local rpRE = getRemote("ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil.RemoteEvent")
-        if rpRE then rpRE:FireServer("Clear", "SkillActive" .. (weaponDef and weaponDef:match("^%a+") or "Heavy"), slotName or "Skill1") end
+        if rpRE then rpRE:FireServer("Clear", "SkillActive" .. weaponClass, sl) end
         local re = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.WeaponUtil.RemoteEvent")
-        if re then re:FireServer("EquipSkill", weaponDef or "Heavy_Hammer", slotName or "Skill1", skillId or "ThunderHammer_Skill_3") end
+        if re then re:FireServer("EquipSkill", wd, sl, si) end
     end)
 end
 
--- ── EQUIP BEST (EquipmentRE) ──
--- Path: ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE
--- Usage: FireServer("EquipBest", slotType) -> "Weapon", "Helmet", "Breastplate", "Leggings", "Ring", "Necklace"
+-- Batch equip skill preset (Heavy)
+local function EquipSkillPresetHeavy()
+    task.spawn(function()
+        local presets = {
+            { slot = "Skill1", id = "ThunderHammer_Skill_3" },
+            { slot = "Skill2", id = "Heavy_Skill_DragonRoar" },
+            { slot = "SkillU", id = "ThunderHammer_Skill_U" },
+        }
+        for _, p in ipairs(presets) do
+            EquipSkillToSlot("Heavy_Hammer", p.slot, p.id)
+            task.wait(0.3)
+        end
+    end)
+end
+
 local function EquipBestAll()
     pcall(function()
         local equipRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
@@ -2662,114 +1634,145 @@ local function EquipBestAll()
     end)
 end
 
--- ── CAVE / SEASON RESOURCE (SafeTeleportUtil RF + WorldUtil + GameMatchRE) ──
--- Path: ReplicatedStorage.Framework.Gameplay.WorldPlace.*
--- SelectWorld(caveId, diffNum) + CreatRoom(caveId, diffNum, maxPlayers)
 local function EnterCaveMode(caveId, diffNum, maxPlayers)
     pcall(function()
         local cId = caveId or "Cave1"
         local diff = tonumber(diffNum) or 1
         local players = tonumber(maxPlayers) or 2
 
-        -- Open ScreenMatch window
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
         task.wait(0.2)
-        -- Select Cave World (Cave1: Crystal, Cave2: Runes, Cave3: Courtyard, SeasonResource1)
         local worldRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
         if worldRE then worldRE:FireServer("SelectWorld", cId, diff) end
         task.wait(0.2)
-        -- Leave any current room
         local matchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
         if matchRE then matchRE:FireServer("LeaveRoom") end
         task.wait(0.2)
-        -- Create new Cave room
         if matchRE then matchRE:FireServer("CreatRoom", cId, diff, players) end
     end)
 end
 
--- ── TELEPORT TO CAVE NPC / TELEPORT TO TOWN (SafeTeleportUtil) ──
 local function TeleportToCaveNPC()
     pcall(function()
+        local targetCF = CFrame.new(16.461, -423.788, 175.610, -0.997, 0.000, 0.075, 0.000, 1.000, -0.000, -0.075, -0.000, -0.997)
         local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
         if safeTeleport then
-            safeTeleport:InvokeServer(CFrame.new(-13.84639, -421.8895, 137.9573, 0.701558, 0, -0.712611, 0, 1, 0, 0.712611, 0, 0.701558))
+            safeTeleport:InvokeServer(targetCF)
+        end
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = targetCF
         end
     end)
 end
 
 local function TeleportToTown()
     pcall(function()
-        local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
-        if safeTeleport then
-            safeTeleport:InvokeServer(CFrame.new(54.5297, -438.6044, -588.7032, 0.079286, 0, -0.996851, 0, 1, 0, 0.996851, 0, 0.079286))
-        end
+        -- พิกัดเมืองหลวงจริง (ยืนยันจาก session)
+        local targetCF = CFrame.new(
+            2.91400003, 34.035202, 60.2041512,
+            -0.997479618, -5.74424863e-09, 0.0709539279,
+            -1.01399769e-08, 1, -6.15916846e-08,
+            -0.0709539279, -6.21559195e-08, -0.997479618
+        )
+        -- ลอง LobbyLocationUtil ก่อน
+        local lobbyRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.LobbyLocationUtil.RemoteEvent")
+        if lobbyRE then pcall(function() lobbyRE:FireServer("ReturnToLobby") end) task.wait(0.3) end
+        -- fallback วาร์ปตรง
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = targetCF end
     end)
 end
 
--- ── ENDLESS TOWER (GameMatchRE CreatRoom mode="EndlessTower") ──
--- From โหมดEndlessTower.txt: FireServer("CreatRoom", "Endless1", maxPlayers, diffNum)
 local function EnterEndlessTower(diffNum, maxPlayers)
     pcall(function()
+        local d = tonumber(diffNum) or 1
+        local p = tonumber(maxPlayers) or 2
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless") end
-        task.wait(0.2)
+        task.wait(0.3)
         local matchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
         if matchRE then
-            matchRE:FireServer("CreatRoom", "Endless1", tonumber(maxPlayers) or 2, tonumber(diffNum) or 1)
+            matchRE:FireServer("LeaveRoom")
+            task.wait(0.3)
+            -- ยืนยัน arg จากไฟล์ Raw: CreatRoom, worldId, floor/startFloor, maxPlayers, diffNum
+            matchRE:FireServer("CreatRoom", "Endless1", 1, p, d)
         end
-    end)
-end
-
--- ── UNFORGE / SELL EQUIPMENT (EquipmentRE / ForgeRF / MaterialUtil) ──
-local function UnforgeEquipment(equipUUID)
-    pcall(function()
-        local re = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
-        if re and equipUUID then re:FireServer("Unforge", equipUUID) end
-    end)
-end
-
-local function SellMaterials(materials)
-    pcall(function()
-        local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
-        if forgeRF then forgeRF:InvokeServer("Sell", materials or { ObsidianChunk = 1 }) end
-
-        local matRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
-        if matRE then matRE:FireServer("Sell", materials or { CrystalFlake = 1 }, {}) end
     end)
 end
 
 local function BuyConsumableItem(shopType, itemId)
     pcall(function()
         local shopRE = getRemote("ReplicatedStorage.Framework.Features.ConsumableShopSystem.ConsumableShopUtil.RemoteEvent")
-        if shopRE then shopRE:FireServer("BuyShopItem", shopType or "Gold", itemId or "GoldShop_21") end
+        if shopRE then shopRE:FireServer("BuyShopItem", shopType or "Gold", itemId or "GoldShop_17") end
     end)
 end
 
--- ── STATS REPORT (StatsRE) ──
-local function SendStatsReport()
+local function UpdateTaskProgress(actionType, param1)
     pcall(function()
-        local statsRE = getRemote("ReplicatedStorage.Remotes.StatsRE")
-        if statsRE then
-            statsRE:FireServer("report", {
-                Ping = 80, PhysicsSendKbps = 0, InstanceCount = 150000,
-                LagDetected = false, ContactsCount = 96, HeartbeatTimeMs = 2,
-                FrameCount = 700, PhysicsStepTimeMs = 3, DataReceiveKbps = 18,
-                RenderFPS = 45, DataSendKbps = 1, PhysicsReceiveKbps = 0,
-                LagSpikeCount = 0, PrimitivesCount = 7000, PhysicsFPS = 58,
-                MovingPrimitivesCount = 900
-            })
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then taskRE:FireServer("UpdateTaskProgress", actionType, param1) end
+    end)
+end
+
+local function FortifyEquipment(equipUUID)
+    pcall(function()
+        local equipRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
+        if equipRE then equipRE:FireServer("Fortify", equipUUID) end
+    end)
+end
+
+local function OpenForgeGUI()
+    pcall(function()
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge") end
+    end)
+end
+
+local function DropForgeOres(oresTable, forgeType)
+    pcall(function()
+        OpenForgeGUI()
+        task.wait(0.5)
+        local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
+        if forgeRF then
+            local ok, result = pcall(function()
+                return forgeRF:InvokeServer("DropOres", oresTable or { Sandstone = 4 }, forgeType or "Weapon")
+            end)
+            return ok and result
         end
     end)
+end
+
+local function ConfirmForgeResult(success)
+    pcall(function()
+        local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
+        if forgeRF then forgeRF:InvokeServer("ForgeResult", success == nil and true or success) end
+    end)
+end
+
+local function GetEquippedWeaponUUID()
+    local uuid = nil
+    pcall(function()
+        if DataUtil then
+            local pd = DataUtil:GetPlayerData(player)
+            if pd and pd.Equipment then
+                -- ลอง Equipped ก่อน แล้ว fallback ไป EquippedWeapon
+                uuid = pd.Equipment.Equipped or pd.Equipment.EquippedWeapon
+                if type(uuid) == "table" then uuid = uuid.Weapon or uuid[1] end
+            end
+        end
+    end)
+    return uuid
 end
 
 local function GetRarities()
     local result = {}
     if not RarityTiers then return { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } end
     pcall(function()
-        for _, v in pairs(RarityTiers.Tiers) do
-            table.insert(result, v.Name)
-        end
+        for _, v in pairs(RarityTiers.Tiers) do table.insert(result, v.Name) end
     end)
     if #result == 0 then result = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } end
     return result
@@ -2785,12 +1788,7 @@ local function GetOresWithNames()
             if def then
                 local name   = TranslationUtil and TranslationUtil:TranslateByKey("K_" .. string.upper(def.ID)) or def.ID
                 local rarity = RarityTiers and RarityTiers.Tiers[def.Rarity]
-                table.insert(result, {
-                    ID     = oreId,
-                    Name   = name,
-                    Amount = amount,
-                    Rarity = rarity and rarity.Name or "Unknown"
-                })
+                table.insert(result, { ID = oreId, Name = name, Amount = amount, Rarity = rarity and rarity.Name or "Unknown" })
             end
         end
     end)
@@ -2807,13 +1805,7 @@ local function GetCrystals()
             if def then
                 local name   = TranslationUtil and TranslationUtil:TranslateByKey("K_" .. string.upper(def.ID)) or def.ID
                 local rarity = RarityTiers and RarityTiers.Tiers[def.Rarity]
-                table.insert(result, {
-                    ID           = crystalId,
-                    Name         = name,
-                    Amount       = amount,
-                    Rarity       = rarity and rarity.Name or "Unknown",
-                    MaterialType = materialType
-                })
+                table.insert(result, { ID = crystalId, Name = name, Amount = amount, Rarity = rarity and rarity.Name or "Unknown", MaterialType = materialType })
             end
         end
     end)
@@ -2825,45 +1817,27 @@ local function GetEquipment()
     if not DataUtil then return result end
     pcall(function()
         local owned = DataUtil:GetPlayerData(player).Equipment.Owned
-        for _, v in pairs(owned or {}) do
-            table.insert(result, v.ID)
-        end
+        for _, v in pairs(owned or {}) do table.insert(result, v.ID) end
     end)
     return result
 end
 
-local function GetMatchRooms()
-    local rooms = {}
-    table.insert(rooms, "Lobby / Spawn")
-    table.insert(rooms, "Island 2")
-    table.insert(rooms, "Pro Server")
-    local matchFolder = workspace:FindFirstChild("MatchRoom")
-    if matchFolder then
-        for _, r in pairs(matchFolder:GetChildren()) do
-            table.insert(rooms, r.Name)
-        end
-    else
-        for i = 1, 20 do table.insert(rooms, "Room" .. i) end
-    end
-    return rooms
-end
-
 local WorldMapData = {
-    ["Starless Forest (World1)"] = "World1",
-    ["Frozen Valley (World2)"]   = "World2",
-    ["Oathlost Castle (World3)"] = "World3",
-    ["Tartarus (World4)"]        = "World4",
-    ["World 5"]                  = "World5",
-    ["Cave (SeasonResource1)"]   = "SeasonResource1",  -- [NEW]
-    ["Endless Tower"]            = "EndlessTower",      -- [NEW]
+    ["ป่าไร้ดาว (World1)"]      = "World1",
+    ["หุบเขาเยือกเย็น (World2)"] = "World2",
+    ["ปราสาทแห่งคำสาบาน (World3)"] = "World3",
+    ["ทาร์ทารัส (World4)"]       = "World4",
+    ["ด่าน 5 (World5)"]          = "World5",
+    ["ถ้ำวัตถุดิบ (SeasonResource1)"] = "SeasonResource1",
+    ["หอคอยไร้พ่าย (EndlessTower)"]  = "EndlessTower",
 }
 
 local DifficultyData = {
-    ["Trial (Diff 1)"]     = 1,
-    ["Challenge (Diff 2)"] = 2,
-    ["Penitent (Diff 3)"]  = 3,
-    ["Torment (Diff 4)"]   = 4,
-    ["Inferno (Diff 5)"]   = 5,
+    ["ระดับทดสอบ (Diff 1)"]  = 1,
+    ["ระดับท้าทาย (Diff 2)"]  = 2,
+    ["ระดับลงทัณฑ์ (Diff 3)"] = 3,
+    ["ระดับทรมาน (Diff 4)"]   = 4,
+    ["ระดับนรกขุมลึก (Diff 5)"] = 5,
 }
 
 local function findLobbyRoomForWorld(worldId)
@@ -2883,58 +1857,50 @@ end
 
 local function runLobbyDungeonSelect()
     local matchFolder = workspace:FindFirstChild("MatchRoom")
-    if not matchFolder then return end -- Inside dungeon, do nothing
+    if not matchFolder then return end
 
-    if State.StageBusy or State.DoorBusy then return end
+    local worldId = Config.SelectedWorldId or "World1"
+    local diffNum = Config.SelectedDifficultyNum or 1
 
-    -- Step 1: Open ScreenMatch Window via TaskRE
+    -- Step 1: เปิดหน้าต่าง Match
     pcall(function()
-        local taskRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Features")
-            and ReplicatedStorage.Framework.Features:FindFirstChild("TaskSystem")
-            and ReplicatedStorage.Framework.Features.TaskSystem:FindFirstChild("TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-        end
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
     end)
+    task.wait(0.3)
 
-    -- Step 2: Fire SelectWorld RemoteEvent with chosen World & Difficulty
-    local worldId = Config.SelectedWorldId or SelectedWorld or "World1"
-    local diffNum = Config.SelectedDifficultyNum or SelectedStageNum or 1
-
+    -- Step 2: เลือกโลก / ความยาก
     pcall(function()
-        local worldUtilRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("WorldPlace")
-            and ReplicatedStorage.Framework.Gameplay.WorldPlace:FindFirstChild("WorldUtil")
-            and ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil:FindFirstChild("RemoteEvent")
-        if worldUtilRE then
-            worldUtilRE:FireServer("SelectWorld", worldId, diffNum)
-        end
+        local worldUtilRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
+        if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
     end)
+    task.wait(0.3)
 
-    -- Step 3: Create Match Room via GameMatchRE ("CreatRoom")
+    -- Step 3: ออกห้องเดิมก่อน แล้วค่อยสร้างห้องใหม่
     pcall(function()
-        local gameMatchRE = ReplicatedStorage:FindFirstChild("Remotes")
-            and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
+        local gameMatchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
         if gameMatchRE then
+            gameMatchRE:FireServer("LeaveRoom")
+            task.wait(0.3)
             gameMatchRE:FireServer("CreatRoom", worldId, diffNum, 4)
         end
     end)
+    task.wait(0.5)
 
-    -- Step 4: Teleport player to matching lobby MatchRoom portal
+    -- Step 4: วาร์ปไปยังประตูห้องในล็อบบี้
     pcall(function()
         local targetRoom = findLobbyRoomForWorld(worldId)
-        if targetRoom and State.Root then
-            State.Root.CFrame = targetRoom:GetPivot()
-
+        local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if targetRoom and root then
+            root.CFrame = targetRoom:GetPivot() * CFrame.new(0, 3, 0)
+            task.wait(0.2)
             local touchFolder = targetRoom:FindFirstChild("Touch")
             if touchFolder then
                 for _, part in ipairs(touchFolder:GetChildren()) do
                     if part:IsA("BasePart") and type(firetouchinterest) == "function" then
-                        pcall(firetouchinterest, State.Root, part, 0)
-                        task.wait(0.02)
-                        pcall(firetouchinterest, State.Root, part, 1)
+                        pcall(firetouchinterest, root, part, 0)
+                        task.wait(0.05)
+                        pcall(firetouchinterest, root, part, 1)
                     end
                 end
             end
@@ -2942,414 +1908,253 @@ local function runLobbyDungeonSelect()
     end)
 end
 
-local function SelectWorldAndStage(worldName, stageNum)
-    pcall(function()
-        local taskRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Features")
-            and ReplicatedStorage.Framework.Features:FindFirstChild("TaskSystem")
-            and ReplicatedStorage.Framework.Features.TaskSystem:FindFirstChild("TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-        end
-    end)
-
-    pcall(function()
-        local worldUtilRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("WorldPlace")
-            and ReplicatedStorage.Framework.Gameplay.WorldPlace:FindFirstChild("WorldUtil")
-            and ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil:FindFirstChild("RemoteEvent")
-        if worldUtilRE then
-            worldUtilRE:FireServer("SelectWorld", worldName or "World1", tonumber(stageNum) or 1)
-        end
-    end)
-
-    pcall(function()
-        local gameMatchRE = ReplicatedStorage:FindFirstChild("Remotes")
-            and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
-        if gameMatchRE then
-            gameMatchRE:FireServer("CreatRoom", worldName or "World1", tonumber(stageNum) or 1, 4)
-        end
-    end)
-
-    pcall(function()
-        local redPointRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Systems")
-            and ReplicatedStorage.Framework.Systems:FindFirstChild("RedPointSystem")
-            and ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil:FindFirstChild("RemoteEvent")
-        if redPointRE then
-            redPointRE:FireServer("Clear", "WorldStyle", "OpenHell")
-        end
-    end)
-end
-
-local function LeaveRoomRemote()
-    pcall(function()
-        local gameMatchRE = ReplicatedStorage:FindFirstChild("Remotes")
-            and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
-        if gameMatchRE then
-            gameMatchRE:FireServer("LeaveRoom")
-        end
-    end)
-end
-
-local function CreateRoomRemote(worldName, stageNum, maxPlayers)
-    pcall(function()
-        local gameMatchRE = ReplicatedStorage:FindFirstChild("Remotes")
-            and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
-        if gameMatchRE then
-            gameMatchRE:FireServer("CreatRoom", worldName or "World1", tonumber(stageNum) or 2, tonumber(maxPlayers) or 4)
-        end
-    end)
-end
-
-local function FetchLeaderboard(boardName)
-    pcall(function()
-        local lbRF = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Features")
-            and ReplicatedStorage.Framework.Features:FindFirstChild("LeaderboardSystem")
-            and ReplicatedStorage.Framework.Features.LeaderboardSystem:FindFirstChild("RF")
-        if lbRF then
-            return lbRF:InvokeServer("GetLeaderBoard", boardName or "EndlessClear_Season3")
-        end
-    end)
-end
-
-local function BuyShopItem(shopType, itemId)
-    pcall(function()
-        local shopRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Features")
-            and ReplicatedStorage.Framework.Features:FindFirstChild("ConsumableShopSystem")
-            and ReplicatedStorage.Framework.Features.ConsumableShopSystem:FindFirstChild("ConsumableShopUtil")
-            and ReplicatedStorage.Framework.Features.ConsumableShopSystem.ConsumableShopUtil:FindFirstChild("RemoteEvent")
-        if shopRE then
-            shopRE:FireServer("BuyShopItem", shopType or "Gold", itemId or "GoldShop_17")
-        end
-    end)
-end
-
-local function UpdateTaskProgress(actionType, param1)
-    pcall(function()
-        local taskRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Features")
-            and ReplicatedStorage.Framework.Features:FindFirstChild("TaskSystem")
-            and ReplicatedStorage.Framework.Features.TaskSystem:FindFirstChild("TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", actionType, param1)
-        end
-    end)
-end
-
-local function FortifyEquipment(equipUUID)
-    pcall(function()
-        local equipRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("EquipmentSystem")
-            and ReplicatedStorage.Framework.Gameplay.EquipmentSystem:FindFirstChild("EquipmentRE")
-        if equipRE then
-            equipRE:FireServer("Fortify", equipUUID)
-        end
-    end)
-end
-
-local function DropForgeOres(oresTable, forgeType)
-    pcall(function()
-        local forgeRF = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("EquipmentSystem")
-            and ReplicatedStorage.Framework.Gameplay.EquipmentSystem:FindFirstChild("ForgeRF")
-        if forgeRF then
-            return forgeRF:InvokeServer("DropOres", oresTable or { Sandstone = 4 }, forgeType or "Weapon")
-        end
-    end)
-end
-
-local function ConfirmForgeResult(success)
-    pcall(function()
-        local forgeRF = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("EquipmentSystem")
-            and ReplicatedStorage.Framework.Gameplay.EquipmentSystem:FindFirstChild("ForgeRF")
-        if forgeRF then
-            forgeRF:InvokeServer("ForgeResult", success == nil and true or success)
-        end
-    end)
-end
-
-local function SetEquipmentAlreadyShown(itemId)
-    pcall(function()
-        local equipRE = ReplicatedStorage:FindFirstChild("Framework")
-            and ReplicatedStorage.Framework:FindFirstChild("Gameplay")
-            and ReplicatedStorage.Framework.Gameplay:FindFirstChild("EquipmentSystem")
-            and ReplicatedStorage.Framework.Gameplay.EquipmentSystem:FindFirstChild("EquipmentRE")
-        if equipRE then
-            equipRE:FireServer("SetAlreadyShown", itemId or "Staff_Wing_T4_Black")
-        end
-    end)
-end
-
 -- ════════════════════════════════════════════════════
--- 10. CREATE OBSIDIAN GLASS UI WINDOW & TABS
+-- 6. OBSIDIAN GLASS UI WINDOW & THAI TABS CREATION
 -- ════════════════════════════════════════════════════
 local Window = ObsidianGlassEngine:CreateWindow({
     Title    = "PayomboyZ HUB",
-    SubTitle = "Iron Soul — Lobby Automation Hub"
+    SubTitle = "Iron Soul — ระบบออโต้ล็อบบี้ & จัดการตัวละคร"
 })
 
-local MatchTab    = Window:AddTab({ Title = "🏙️ Match & Dungeon Entry" })
-local AutoSellTab = Window:AddTab({ Title = "💰 Auto Sell" })
-local ForgeTab    = Window:AddTab({ Title = "🔨 Auto Forge" })
-local AttrTab     = Window:AddTab({ Title = "📈 Attribute & Skill" })
-local DailyTab    = Window:AddTab({ Title = "📅 Daily & Misc" })
-local StatsTab    = Window:AddTab({ Title = "📊 Stats & Info" })
+local MatchTab    = Window:AddTab({ Title = "🏙️ เข้าดันเจี้ยน & แมตช์" })
+local AutoSellTab = Window:AddTab({ Title = "💰 ขายของอัตโนมัติ" })
+local ForgeTab    = Window:AddTab({ Title = "🔨 ตีบวก & ตีไอเทม" })
+local AttrTab     = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
+local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ทั่วไป" })
+local StatsTab    = Window:AddTab({ Title = "📊 ข้อมูล & สถานะ" })
 
--- ──────── TAB 1: MATCH & DUNGEON ENTRY ────────
-MatchTab:AddSection("Dungeon Auto-Entry System")
+-- ──────── TAB 1: เข้าดันเจี้ยน & แมตช์ ────────
+MatchTab:AddSection("ระบบเข้าดันเจี้ยนอัตโนมัติ (Lobby)")
 MatchTab:AddToggle("AutoEnterDungeonToggle", {
-    Title = "Auto Enter Selected Dungeon",
-    Desc = "Open Match GUI, select world & difficulty, and enter match portal in lobby",
+    Title = "เปิดระบบเข้าดันเจี้ยนอัตโนมัติ",
+    Desc = "เปิดหน้าต่างแมตช์ เลือกโลก/ระดับความยาก และวาปเข้าประตูในล็อบบี้อัตโนมัติ",
     Default = Config.AutoEnterDungeon,
     Callback = function(t)
         Config.AutoEnterDungeon = t
-        AutoEnterDungeon = t
         saveSettings()
     end
 })
 
 MatchTab:AddDropdown("AutofarmWorldDropdown", {
-    Title = "Dungeon / World Target",
-    Values = { "Starless Forest (World1)", "Frozen Valley (World2)", "Oathlost Castle (World3)", "Tartarus (World4)", "World 5" },
-    Value = Config.SelectedWorldName or "Starless Forest (World1)",
+    Title = "เลือกโลก / ดันเจี้ยนเป้าหมาย",
+    Values = { "ป่าไร้ดาว (World1)", "หุบเขาเยือกเย็น (World2)", "ปราสาทแห่งคำสาบาน (World3)", "ทาร์ทารัส (World4)", "ด่าน 5 (World5)" },
+    Value = Config.SelectedWorldName or "ป่าไร้ดาว (World1)",
     Callback = function(val)
         Config.SelectedWorldName = val
         Config.SelectedWorldId = WorldMapData[val] or "World1"
-        SelectedWorld = Config.SelectedWorldId
         saveSettings()
     end
 })
 
 MatchTab:AddDropdown("AutofarmDiffDropdown", {
-    Title = "Dungeon Difficulty Level",
-    Values = { "Trial (Diff 1)", "Challenge (Diff 2)", "Penitent (Diff 3)", "Torment (Diff 4)", "Inferno (Diff 5)" },
-    Value = Config.SelectedDifficultyName or "Trial (Diff 1)",
+    Title = "เลือกระดับความยากดันเจี้ยน",
+    Values = { "ระดับทดสอบ (Diff 1)", "ระดับท้าทาย (Diff 2)", "ระดับลงทัณฑ์ (Diff 3)", "ระดับทรมาน (Diff 4)", "ระดับนรกขุมลึก (Diff 5)" },
+    Value = Config.SelectedDifficultyName or "ระดับทดสอบ (Diff 1)",
     Callback = function(val)
         Config.SelectedDifficultyName = val
         Config.SelectedDifficultyNum = DifficultyData[val] or 1
-        SelectedStageNum = Config.SelectedDifficultyNum
         saveSettings()
     end
 })
 
--- ──────── TAB 2: AUTO SELL ────────
-AutoSellTab:AddSection("Sell Filters")
-local CrystalDropdown = AutoSellTab:AddDropdown("CrystalSellDropdown", { Title = "Crystal Rarities to Sell", Values = GetRarities(), Multi = true, Callback = function(val) Crystals_Value = val end })
-local OreDropdown     = AutoSellTab:AddDropdown("OreSellDropdown",     { Title = "Ore Rarities to Sell",     Values = GetRarities(), Multi = true, Callback = function(val) Ores_Value = val end })
-local EquipDropdown   = AutoSellTab:AddDropdown("EquipSellDropdown",   { Title = "Equipment IDs to Sell",    Values = GetEquipment(), Multi = true, Callback = function(val) Equipment_Value = val end })
+MatchTab:AddSection("ระบบดันเจี้ยนถ้ำ & หอคอย")
+MatchTab:AddDropdown("CaveTargetDropdown", {
+    Title = "เลือกดันเจี้ยนถ้ำ",
+    Values = { "ถ้ำคริสตัล (Cave1)", "ถ้ำรูน (Cave2)", "ลานกว้างร้าง (Cave3)", "ถ้ำวัตถุดิบซีซั่น 1" },
+    Value = "ถ้ำคริสตัล (Cave1)",
+    Callback = function(v)
+        if v:find("Cave1") then Config.SelectedCaveId = "Cave1"
+        elseif v:find("Cave2") then Config.SelectedCaveId = "Cave2"
+        elseif v:find("Cave3") then Config.SelectedCaveId = "Cave3"
+        else Config.SelectedCaveId = "SeasonResource1" end
+    end
+})
+MatchTab:AddDropdown("CaveDiffDropdown", { Title = "ระดับความยากถ้ำ", Values = { "1", "2", "3", "4", "5" }, Value = "1", Callback = function(v) Config.CaveDiffNum = tonumber(v) or 1 end })
+MatchTab:AddDropdown("CavePartyDropdown", { Title = "ขนาดปาร์ตี้ (คน)", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) Config.CavePartySize = tonumber(v) or 2 end })
 
-AutoSellTab:AddButton({ Title = "🔄 Refresh Item Lists", Callback = function()
+MatchTab:AddButton({ Title = "🔳 เข้าห้องดันเจี้ยนถ้ำทันที", Callback = function()
+    EnterCaveMode(Config.SelectedCaveId or "Cave1", Config.CaveDiffNum or 1, Config.CavePartySize or 2)
+    ObsidianGlassEngine:Notify({ Title = "โหมดถ้ำ", Content = "เข้าถ้ำ " .. (Config.SelectedCaveId or "Cave1") .. " ความยาก " .. (Config.CaveDiffNum or 1), Duration = 3 })
+end })
+MatchTab:AddButton({ Title = "🌀 วาร์ปไปหา NPC ถ้ำ", Callback = function()
+    TeleportToCaveNPC()
+    ObsidianGlassEngine:Notify({ Title = "วาร์ป", Content = "วาร์ปไปตำแหน่ง NPC ถ้ำเรียบร้อยแล้ว!", Duration = 3 })
+end })
+MatchTab:AddButton({ Title = "🏰 วาร์ปกลับเมืองหลวง", Callback = function()
+    TeleportToTown()
+    ObsidianGlassEngine:Notify({ Title = "วาร์ป", Content = "วาร์ปกลับเมืองเรียบร้อยแล้ว!", Duration = 3 })
+end })
+MatchTab:AddToggle("AutoCaveModeToggle", { Title = "เปิดเข้าถ้ำอัตโนมัติ (วนลูป)", Desc = "ยิงรีโมทเข้าถ้ำดันเจี้ยนอัตโนมัติอย่างต่อเนื่อง", Default = false, Callback = function(t) Config.AutoCaveMode = t end })
+
+MatchTab:AddSection("โหมดหอคอยไร้พ่าย (Endless Tower)")
+MatchTab:AddDropdown("EndlessPartyDropdown", { Title = "ขนาดปาร์ตี้หอคอย", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) Config.EndlessPartySize = tonumber(v) or 2 end })
+MatchTab:AddButton({ Title = "♾️ เข้าหอคอยไร้พ่ายทันที", Callback = function()
+    EnterEndlessTower(Config.EndlessTowerDiffNum or 1, Config.EndlessPartySize or 2)
+    ObsidianGlassEngine:Notify({ Title = "หอคอยไร้พ่าย", Content = "เข้าหอคอยไร้พ่ายเรียบร้อยแล้ว", Duration = 3 })
+end })
+MatchTab:AddToggle("AutoEndlessTowerToggle", { Title = "เปิดเข้าหอคอยอัตโนมัติ (วนลูป)", Desc = "ยิงรีโมทเข้าหอคอยไร้พ่ายอัตโนมัติอย่างต่อเนื่อง", Default = false, Callback = function(t) Config.AutoEndlessTowerMode = t end })
+
+MatchTab:AddSection("ควบคุมหลังจบเกม")
+MatchTab:AddToggle("AutoBonusCardToggle", { Title = "เปิดสุ่มการ์ดโบนัสหลังจบเกม", Desc = "เลือกรับการ์ดรางวัลสุ่มหลังเคลียร์ดันเจี้ยนอัตโนมัติ", Default = Config.AutoBonusCard, Callback = function(t) Config.AutoBonusCard = t end })
+MatchTab:AddToggle("AutoPlayAgainToggle", { Title = "เปิดโหวตเล่นอีกครั้ง / กลับเมืองอัตโนมัติ", Desc = "กดข้ามหน้าจบเกมและสั่งรีโมทกลับเข้าห้องเกมใหม่อัตโนมัติ", Default = Config.AutoPlayAgain, Callback = function(t) Config.AutoPlayAgain = t end })
+
+MatchTab:AddSection("── 🐔 ไก่ตัน (All-In-One Farm) ──")
+MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน — เปิดทุกระบบพร้อมกัน", Callback = function()
+    if not Config.ChickenMode then
+        -- บันทึก state เดิม
+        Config._ChickenPrevState = {
+            AutoEnterDungeon     = Config.AutoEnterDungeon,
+            AutoSelectBest       = Config.AutoSelectBest,
+            AutoSell             = Config.AutoSell,
+            AutoUpgradeAttribute = Config.AutoUpgradeAttribute,
+            AutoClaimDaily       = Config.AutoClaimDaily,
+            AutoBonusCard        = Config.AutoBonusCard,
+            AutoPlayAgain        = Config.AutoPlayAgain,
+            AutoQuest            = Config.AutoQuest,
+        }
+        -- เปิดทุกระบบ
+        Config.AutoEnterDungeon     = true
+        Config.AutoSelectBest       = true
+        Config.AutoSell             = true
+        Config.AutoUpgradeAttribute = true
+        Config.AutoClaimDaily       = true
+        Config.AutoBonusCard        = true
+        Config.AutoPlayAgain        = true
+        Config.AutoQuest            = true
+        Config.ChickenMode          = true
+        -- ตั้ง sell Common+Uncommon อัตโนมัติ
+        if #Config.Crystals_Value == 0 then Config.Crystals_Value = {"Common","Uncommon"} end
+        if #Config.Ores_Value == 0     then Config.Ores_Value     = {"Common","Uncommon"} end
+        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน เปิดแล้ว!", Content = "เปิดทุกระบบ Auto พร้อมกันแล้ว Farm เต็มแรง!", Duration = 5 })
+    else
+        -- คืน state เดิม
+        local p = Config._ChickenPrevState
+        Config.AutoEnterDungeon     = p.AutoEnterDungeon     or false
+        Config.AutoSelectBest       = p.AutoSelectBest       or false
+        Config.AutoSell             = p.AutoSell             or false
+        Config.AutoUpgradeAttribute = p.AutoUpgradeAttribute or false
+        Config.AutoClaimDaily       = p.AutoClaimDaily       or false
+        Config.AutoBonusCard        = p.AutoBonusCard        or false
+        Config.AutoPlayAgain        = p.AutoPlayAgain        or true
+        Config.AutoQuest            = p.AutoQuest            or false
+        Config.ChickenMode          = false
+        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน ปิดแล้ว", Content = "คืนค่าระบบกลับเป็นเดิมเรียบร้อย", Duration = 4 })
+    end
+    saveSettings()
+end })
+
+-- ──────── TAB 2: ขายของอัตโนมัติ ────────
+AutoSellTab:AddSection("ตัวกรองไอเทมสำหรับขาย")
+local CrystalDropdown = AutoSellTab:AddDropdown("CrystalSellDropdown", { Title = "เลือกระดับความหายากคริสตัลที่ต้องการขาย", Values = GetRarities(), Multi = true, Callback = function(val) Config.Crystals_Value = val end })
+local OreDropdown     = AutoSellTab:AddDropdown("OreSellDropdown",     { Title = "เลือกระดับความหายากแร่ที่ต้องการขาย",     Values = GetRarities(), Multi = true, Callback = function(val) Config.Ores_Value = val end })
+local EquipDropdown   = AutoSellTab:AddDropdown("EquipSellDropdown",   { Title = "เลือก ID อุปกรณ์ที่ต้องการขาย",            Values = GetEquipment(), Multi = true, Callback = function(val) Config.Equipment_Value = val end })
+
+AutoSellTab:AddButton({ Title = "🔄 รีเฟรชรายชื่อไอเทมในกระเป๋า", Callback = function()
     pcall(function()
         CrystalDropdown:SetValues(GetRarities())
         OreDropdown:SetValues(GetRarities())
         EquipDropdown:SetValues(GetEquipment())
-        ObsidianGlassEngine:Notify({ Title = "Auto Sell", Content = "Refreshed item filters successfully!", Duration = 3 })
+        ObsidianGlassEngine:Notify({ Title = "ขายของอัตโนมัติ", Content = "อัปเดตรายการไอเทมในตัวเรียบร้อยแล้ว!", Duration = 3 })
     end)
 end })
 
-AutoSellTab:AddToggle("AutoSellToggle", { Title = "Enable Auto Sell", Desc = "Sell selected Crystals, Ores & Equipment periodically", Default = false, Callback = function(t) AutoSell = t end })
+AutoSellTab:AddToggle("AutoSellToggle", { Title = "เปิดใช้งานขายของอัตโนมัติ", Desc = "ขาย คริสตัล, แร่ และอุปกรณ์ ที่เลือกไว้ตามระยะเวลาอัจฉริยะ", Default = Config.AutoSell, Callback = function(t) Config.AutoSell = t end })
 
--- ──────── TAB 3: AUTO FORGE & ENCHANT ────────
-ForgeTab:AddSection("Equipment & Equip Best")
-ForgeTab:AddButton({ Title = "⚡ Equip Best Gear (All Slots)", Callback = function()
+-- ──────── TAB 3: ตีบวก & ตีไอเทม ────────
+ForgeTab:AddSection("สวมใส่อุปกรณ์ที่ดีที่สุด")
+ForgeTab:AddButton({ Title = "⚡ สวมใส่ไอเทมที่ดีที่สุดทุกช่องทันที", Callback = function()
     EquipBestAll()
-    ObsidianGlassEngine:Notify({ Title = "Equip Best", Content = "Equipped best Weapon, Armor & Accessories!", Duration = 3 })
+    ObsidianGlassEngine:Notify({ Title = "สวมใส่ไอเทม", Content = "สวมใส่อาวุธ ชุดเกราะ และเครื่องประดับที่ดีที่สุดแล้ว!", Duration = 3 })
 end })
-ForgeTab:AddToggle("AutoEquipBestToggle", { Title = "Auto Equip Best Gear", Desc = "Periodically equip highest power gear", Default = false, Callback = function(t) AutoSelectBest = t end })
+ForgeTab:AddToggle("AutoEquipBestToggle", { Title = "เปิดสวมใส่ไอเทมดีที่สุดอัตโนมัติ", Desc = "เช็คและสวมใส่อุปกรณ์พลังสูงที่สุดในกระเป๋าอย่างต่อเนื่อง", Default = Config.AutoSelectBest, Callback = function(t) Config.AutoSelectBest = t end })
 
-ForgeTab:AddSection("Enchant Equipment & Scrolls")
-ForgeTab:AddButton({ Title = "🔮 Open Milo (Enchant NPC) Dialog", Callback = function()
+ForgeTab:AddSection("ออฟชั่นใบอัพเกรด & ตีบวก")
+ForgeTab:AddButton({ Title = "🔮 เปิดหน้าต่างคุยกับ NPC Milo (ช่างตีบวก)", Callback = function()
     pcall(function()
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         if taskRE then
             taskRE:FireServer("UpdateTaskProgress", "DialogNpc", "EquipmentEnchantNpc2|0")
             taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
-            ObsidianGlassEngine:Notify({ Title = "Enchant NPC", Content = "Opened Enchant NPC (Milo) interface!", Duration = 3 })
+            ObsidianGlassEngine:Notify({ Title = "NPC ช่างตีบวก", Content = "เปิดหน้าต่างตีบวก (Milo) เรียบร้อยแล้ว!", Duration = 3 })
         end
     end)
 end })
-ForgeTab:AddToggle("AutoScrollToggle", { Title = "Auto Use Enchant Scroll", Desc = "Use available scrolls to enchant current weapon", Default = false, Callback = function(t) AutoUseScroll = t end })
+ForgeTab:AddToggle("AutoScrollToggle", { Title = "เปิดใช้งานคัมภีร์อัปเกรดอัตโนมัติ", Desc = "ใช้คัมภีร์ที่มีในตัวอัปเกรดอาวุธหลักอัตโนมัติ", Default = Config.AutoUseScroll, Callback = function(t) Config.AutoUseScroll = t end })
 
-ForgeTab:AddSection("Fortify & Ore Drop Automation")
-ForgeTab:AddButton({ Title = "⚡ Fortify Equipped Weapon (Fire Remote)", Callback = function()
+ForgeTab:AddSection("ระบบตีบวกอาวุธ & ดรอปแร่")
+ForgeTab:AddButton({ Title = "⚡ สั่งรีโมทตีบวกอาวุธที่สวมใส่", Callback = function()
     pcall(function()
-        if DataUtil then
-            local pData = DataUtil:GetPlayerData(player)
-            local eqUUID = pData and pData.Equipment and pData.Equipment.Equipped
-            if eqUUID then
-                FortifyEquipment(eqUUID)
-                ObsidianGlassEngine:Notify({ Title = "Fortify Equipment", Content = "Sent Fortify remote for equipped weapon", Duration = 3 })
-            end
+        local uuid = GetEquippedWeaponUUID()
+        if uuid then
+            FortifyEquipment(uuid)
+            ObsidianGlassEngine:Notify({ Title = "ตีบวกอาวุธ", Content = "Fortify UUID: " .. tostring(uuid), Duration = 3 })
+        else
+            ObsidianGlassEngine:Notify({ Title = "ตีบวกอาวุธ", Content = "ไม่พบ UUID อาวุธ — ลองสวมใส่อาวุธก่อน", Duration = 4 })
         end
     end)
 end })
-ForgeTab:AddToggle("AutoFortifyToggle", { Title = "Auto Fortify Weapon", Desc = "Continuously fortify equipped weapon", Default = false, Callback = function(t) AutoFortifyWeapon = t end })
+ForgeTab:AddToggle("AutoFortifyToggle", { Title = "เปิดตีบวกอาวุธอัตโนมัติ", Desc = "ตีบวกอาวุธที่สวมใส่อย่างต่อเนื่อง", Default = Config.AutoFortifyWeapon, Callback = function(t) Config.AutoFortifyWeapon = t end })
 
-ForgeTab:AddButton({ Title = "🔨 Drop Ores to Forge (Invoke Remote)", Callback = function()
+ForgeTab:AddButton({ Title = "🔨 สั่งรีโมทวางแร่ใส่เตาหลอม (Sandstone 4 ชิ้น)", Callback = function()
     pcall(function()
         DropForgeOres({ Sandstone = 4 }, "Weapon")
-        ObsidianGlassEngine:Notify({ Title = "Forge Ores", Content = "Dropped 4 Sandstone for Weapon forging", Duration = 3 })
+        ObsidianGlassEngine:Notify({ Title = "หลอมแร่", Content = "วางแร่ Sandstone 4 ชิ้นใส่เตาหลอมแล้ว", Duration = 3 })
     end)
 end })
-ForgeTab:AddToggle("AutoDropOresToggle", { Title = "Auto Drop Ores to Forge", Desc = "Continuously drop Sandstone to Forge", Default = false, Callback = function(t) AutoDropOres = t end })
+ForgeTab:AddToggle("AutoDropOresToggle", { Title = "เปิดวางแร่ใส่เตาหลอมอัตโนมัติ", Desc = "วางแร่ Sandstone ใส่เตาหลอมอาวุธอัตโนมัติ", Default = Config.AutoDropOres, Callback = function(t) Config.AutoDropOres = t end })
 
-ForgeTab:AddButton({ Title = "✨ Confirm Forge Result (Invoke Remote)", Callback = function()
+ForgeTab:AddButton({ Title = "✨ ยืนยันผลการตีไอเทม", Callback = function()
     pcall(function()
         ConfirmForgeResult(true)
-        ObsidianGlassEngine:Notify({ Title = "Forge Result", Content = "Invoked ForgeResult: true", Duration = 3 })
+        ObsidianGlassEngine:Notify({ Title = "ผลการตีไอเทม", Content = "ยืนยันผลการหลอมอาวุธเรียบร้อยแล้ว", Duration = 3 })
     end)
 end })
 
-ForgeTab:AddButton({ Title = "👁️ Set Equipment Already Shown (Fire Remote)", Callback = function()
-    pcall(function()
-        SetEquipmentAlreadyShown("Staff_Wing_T4_Black")
-        ObsidianGlassEngine:Notify({ Title = "Equipment State", Content = "Sent SetAlreadyShown for Staff_Wing_T4_Black", Duration = 3 })
-    end)
+-- ──────── TAB 4: อัปสเตตัส & สกิล ────────
+AttrTab:AddSection("อัปเกรดสเตตัสตัวละคร (Attribute Upgrade)")
+AttrTab:AddSlider("AttrAtkSlider",   { Title = "เพิ่มพลังโจมตี (ATK)",  Min = 0, Max = 10, Default = 1, Callback = function(v) Config.AttrPreset.AtkBonusValue = v end })
+AttrTab:AddSlider("AttrHpSlider",    { Title = "เพิ่มพลังชีวิต (HP)",   Min = 0, Max = 10, Default = 1, Callback = function(v) Config.AttrPreset.HpBonus = v end })
+AttrTab:AddSlider("AttrCDSlider",    { Title = "ลดคูลดาวน์สกิล (CD)", Min = 0, Max = 10, Default = 0, Callback = function(v) Config.AttrPreset.SkillCDReduce = v end })
+AttrTab:AddSlider("AttrRangeSlider", { Title = "เพิ่มระยะโจมตี (Range)", Min = 0, Max = 10, Default = 0, Callback = function(v) Config.AttrPreset.AtkRangeBonus = v end })
+AttrTab:AddSlider("AttrSpeedSlider", { Title = "เพิ่มความเร็วการเคลื่อนที่ (Speed)", Min = 0, Max = 10, Default = 0, Callback = function(v) Config.AttrPreset.MoveSpeedBonus = v end })
+
+AttrTab:AddButton({ Title = "⬆️ กดอัปสเตตัส 1 ครั้ง", Callback = function()
+    UpgradeAttribute(Config.AttrPreset)
+    ObsidianGlassEngine:Notify({ Title = "อัปสเตตัส", Content = "ส่งคำสั่งอัปสเตตัสเรียบร้อยแล้ว", Duration = 3 })
 end })
 
--- ──────── TAB 4: MATCH & STAGE ────────
-MatchTab:AddSection("Remote World & Stage Automation")
-MatchTab:AddDropdown("WorldSelectDropdown", { Title = "Select World", Values = { "World1", "World2", "World3", "World4", "World5" }, Value = "World1", Callback = function(val) SelectedWorld = val end })
-MatchTab:AddSlider("StageNumSlider",        { Title = "Select Stage Level Number", Min = 1, Max = 20, Default = 1, Callback = function(val) SelectedStageNum = val end })
+AttrTab:AddToggle("AutoAttrUpgradeToggle", { Title = "เปิดอัปสเตตัสอัตโนมัติ", Desc = "อัปเดตสเตตัสตามค่าที่ตั้งไว้อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoUpgradeAttribute, Callback = function(t) Config.AutoUpgradeAttribute = t end })
 
-MatchTab:AddButton({ Title = "🎮 Select World & Enter Stage (Fire Remote)", Callback = function()
-    SelectWorldAndStage(SelectedWorld, SelectedStageNum)
-    ObsidianGlassEngine:Notify({ Title = "World Selection", Content = "Sent SelectWorld: " .. tostring(SelectedWorld) .. " Stage " .. tostring(SelectedStageNum), Duration = 3 })
-end })
-
-MatchTab:AddButton({ Title = "🚪 Leave Room (Fire Remote)", Callback = function()
-    LeaveRoomRemote()
-    ObsidianGlassEngine:Notify({ Title = "Leave Room", Content = "Sent LeaveRoom remote", Duration = 3 })
-end })
-
-MatchTab:AddButton({ Title = "🏠 Create Match Room (Fire Remote)", Callback = function()
-    CreateRoomRemote(SelectedWorld, SelectedStageNum, 4)
-    ObsidianGlassEngine:Notify({ Title = "Create Room", Content = "Sent CreatRoom: " .. tostring(SelectedWorld) .. " Stage " .. tostring(SelectedStageNum), Duration = 3 })
-end })
-
-MatchTab:AddButton({ Title = "🚪 Trigger Round Door / Return to Lobby (Fire Remote)", Callback = function()
-    local success = TriggerDoorRemote()
-    ObsidianGlassEngine:Notify({ Title = "Round Door Trigger", Content = success and "Fired RoundDoor RE successfully!" or "RoundDoor RE not found in workspace", Duration = 3 })
-end })
-
-MatchTab:AddToggle("AutoEnterMatchToggle", { Title = "Auto Enter Selected World & Stage", Desc = "Loop SelectWorld remote continuously to keep entering stage", Default = false, Callback = function(t) AutoEnterDungeon = t end })
-
-MatchTab:AddSection("Cave Dungeon System (Cave 1/2/3 & Teleport)")
-MatchTab:AddDropdown("CaveTargetDropdown", {
-    Title = "Cave Dungeon Target",
-    Values = { "Cave of Crystal (Cave1)", "Cave of Runes (Cave2)", "Abandoned Courtyard (Cave3)", "Season Resource 1" },
-    Value = "Cave of Crystal (Cave1)",
-    Callback = function(v)
-        if v:find("Cave1") then SelectedCaveId = "Cave1"
-        elseif v:find("Cave2") then SelectedCaveId = "Cave2"
-        elseif v:find("Cave3") then SelectedCaveId = "Cave3"
-        else SelectedCaveId = "SeasonResource1" end
-    end
-})
-MatchTab:AddDropdown("CaveDiffDropdown", { Title = "Cave Difficulty", Values = { "1", "2", "3", "4", "5" }, Value = "1", Callback = function(v) CaveDiffNum = tonumber(v) or 1 end })
-MatchTab:AddDropdown("CavePartyDropdown", { Title = "Party Size (Players)", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) CavePartySize = tonumber(v) or 2 end })
-
-MatchTab:AddButton({ Title = "🔳 Enter Cave Dungeon Room", Callback = function()
-    EnterCaveMode(SelectedCaveId or "Cave1", CaveDiffNum or 1, CavePartySize or 2)
-    ObsidianGlassEngine:Notify({ Title = "Cave Mode", Content = "Entered " .. (SelectedCaveId or "Cave1") .. " Diff " .. (CaveDiffNum or 1) .. " (Party: " .. (CavePartySize or 2) .. ")", Duration = 3 })
-end })
-MatchTab:AddButton({ Title = "🌀 Teleport to Cave NPC", Callback = function()
-    TeleportToCaveNPC()
-    ObsidianGlassEngine:Notify({ Title = "Teleport", Content = "Teleported to Cave NPC location!", Duration = 3 })
-end })
-MatchTab:AddButton({ Title = "🏰 Teleport Back to Town", Callback = function()
-    TeleportToTown()
-    ObsidianGlassEngine:Notify({ Title = "Teleport", Content = "Teleported back to Town!", Duration = 3 })
-end })
-MatchTab:AddToggle("AutoCaveModeToggle", { Title = "Auto Cave Mode", Desc = "Loop Cave entry remote automatically", Default = false, Callback = function(t) AutoCaveMode = t end })
-
-MatchTab:AddSection("Endless Tower Mode")
-MatchTab:AddSlider("EndlessTowerDiffSlider", { Title = "Endless Tower Difficulty", Min = 1, Max = 20, Default = 1, Callback = function(v) EndlessTowerDiffNum = v end })
-MatchTab:AddDropdown("EndlessPartyDropdown", { Title = "Endless Party Size", Values = { "1", "2", "3", "4" }, Value = "2", Callback = function(v) EndlessPartySize = tonumber(v) or 2 end })
-MatchTab:AddButton({ Title = "♾️ Enter Endless Tower Mode", Callback = function()
-    EnterEndlessTower(EndlessTowerDiffNum or 1, EndlessPartySize or 2)
-    ObsidianGlassEngine:Notify({ Title = "Endless Tower", Content = "Entered Endless Tower Diff " .. (EndlessTowerDiffNum or 1), Duration = 3 })
-end })
-MatchTab:AddToggle("AutoEndlessTowerToggle", { Title = "Auto Endless Tower", Desc = "Loop Endless Tower entry remote automatically", Default = false, Callback = function(t) AutoEndlessTowerMode = t end })
-
-MatchTab:AddSection("Local Teleport & Settlement")
-MatchTab:AddDropdown("StageSelectDropdown", { Title = "Local Teleport Map / Stage", Values = GetMatchRooms(), Value = "Room1", Callback = function(val) SelectedStage = val end })
-MatchTab:AddButton({ Title = "🚀 Teleport to Selected Location", Callback = function()
-    pcall(function()
-        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
-        if SelectedStage == "Lobby / Spawn" then
-            hrp.CFrame = CFrame.new(8561.289, 273.670, -3727.456)
-        elseif SelectedStage == "Island 2" then
-            local island2 = workspace:FindFirstChild("Island2")
-            if island2 then hrp.CFrame = island2:GetPivot() end
-        elseif SelectedStage == "Pro Server" then
-            local proServer = workspace:FindFirstChild("ProServer")
-            if proServer then hrp.CFrame = proServer:GetPivot() end
-        else
-            local matchFolder = workspace:FindFirstChild("MatchRoom")
-            local targetRoom = matchFolder and matchFolder:FindFirstChild(SelectedStage)
-            if targetRoom then
-                hrp.CFrame = targetRoom:GetPivot()
-            end
-        end
-        ObsidianGlassEngine:Notify({ Title = "Map Teleport", Content = "Teleported to " .. tostring(SelectedStage), Duration = 3 })
-    end)
-end })
-
-MatchTab:AddDropdown("DifficultyDropdown", { Title = "Dungeon Difficulty", Values = { "Normal", "Hard", "Nightmare" }, Value = "Normal", Callback = function(val) AutoDifficulty = val end })
-MatchTab:AddToggle("AutoBonusCardToggle",  { Title = "Auto Pick Bonus Card", Desc = "Automatically select settlement reward cards", Default = false, Callback = function(t) AutoBonusCard = t end })
-
--- ──────── TAB 5: ATTRIBUTE & SKILL ────────
-AttrTab:AddSection("Attribute Upgrade (AttributeUpgradeUtil Remote)")
-AttrTab:AddParagraph({ Title = "Remote Event", Desc = "AttributeUpgrade.AttributeUpgradeUtil.RemoteEvent : Upgrade" })
-AttrTab:AddSlider("AttrAtkSlider",   { Title = "ATK Bonus Value",  Min = 0, Max = 10, Default = 1, Callback = function(v) AttrPreset.AtkBonusValue = v end })
-AttrTab:AddSlider("AttrHpSlider",    { Title = "HP Bonus",         Min = 0, Max = 10, Default = 1, Callback = function(v) AttrPreset.HpBonus = v end })
-AttrTab:AddSlider("AttrCDSlider",    { Title = "Skill CD Reduce",  Min = 0, Max = 10, Default = 0, Callback = function(v) AttrPreset.SkillCDReduce = v end })
-AttrTab:AddSlider("AttrRangeSlider", { Title = "ATK Range Bonus",  Min = 0, Max = 10, Default = 0, Callback = function(v) AttrPreset.AtkRangeBonus = v end })
-AttrTab:AddSlider("AttrSpeedSlider", { Title = "Move Speed Bonus", Min = 0, Max = 10, Default = 0, Callback = function(v) AttrPreset.MoveSpeedBonus = v end })
-
-AttrTab:AddButton({ Title = "⬆️ Upgrade Attribute Once (Fire Remote)", Callback = function()
-    UpgradeAttribute(AttrPreset)
-    ObsidianGlassEngine:Notify({ Title = "Attribute Upgrade", Content = "Sent Upgrade ATK+" .. AttrPreset.AtkBonusValue .. " HP+" .. AttrPreset.HpBonus, Duration = 3 })
-end })
-
-AttrTab:AddToggle("AutoAttrUpgradeToggle", { Title = "Auto Upgrade Attribute", Desc = "Continuously upgrade attributes in background", Default = false, Callback = function(t) AutoUpgradeAttribute = t end })
-
-AttrTab:AddSection("Skill Tree Unlock (SkillTreeUtil Remote)")
-AttrTab:AddDropdown("SkillWeaponDD", { Title = "Weapon Class", Values = { "Heavy", "Sword", "Magic", "Bow", "Dagger" }, Value = "Heavy", Callback = function(v) _G.IRS_SkillWeaponType = v end })
-AttrTab:AddInput("SkillNodeInput",   { Title = "Node Name", Default = "UnlockSkill1", Callback = function(v) _G.IRS_SkillNode = v end })
-AttrTab:AddButton({ Title = "🌳 Active Skill Node (Fire Remote)", Callback = function()
+AttrTab:AddSection("ปลดล็อกสกิลต้นไม้ (Skill Tree)")
+AttrTab:AddDropdown("SkillWeaponDD", { Title = "สายอาวุธ", Values = { "Heavy", "Sword", "Magic", "Bow", "Dagger" }, Value = "Heavy", Callback = function(v) _G.IRS_SkillWeaponType = v end })
+AttrTab:AddInput("SkillNodeInput",   { Title = "ชื่อโหนดสกิล", Default = "UnlockSkill1", Callback = function(v) _G.IRS_SkillNode = v end })
+AttrTab:AddButton({ Title = "🌳 ปลดล็อกโหนดสกิลที่เลือก", Callback = function()
     local wType = _G.IRS_SkillWeaponType or "Heavy"
     local sNode = _G.IRS_SkillNode or "UnlockSkill1"
     ActiveSkillNode(wType, sNode)
-    ObsidianGlassEngine:Notify({ Title = "Skill Tree", Content = "Activated Skill: " .. wType .. " / " .. sNode, Duration = 3 })
+    ObsidianGlassEngine:Notify({ Title = "สกิลต้นไม้", Content = "เปิดใช้งานสกิล: " .. wType .. " / " .. sNode, Duration = 3 })
 end })
 
-AttrTab:AddSection("Skill Slot Equip (WeaponUtil Remote)")
-AttrTab:AddInput("EquipWeaponDefInput", { Title = "Weapon ID",  Default = "Heavy_Hammer",       Callback = function(v) _G.IRS_WeaponDef = v end })
-AttrTab:AddDropdown("EquipSlotDD",      { Title = "Slot Name",  Values = { "Skill1", "Skill2", "SkillU", "SkillAW" }, Value = "Skill1", Callback = function(v) _G.IRS_SkillSlot = v end })
-AttrTab:AddInput("EquipSkillIDInput",   { Title = "Skill ID",  Default = "ThunderHammer_Skill_3", Callback = function(v) _G.IRS_EquipSkillId = v end })
-AttrTab:AddButton({ Title = "🎯 Equip Skill to Slot (Fire Remote)", Callback = function()
+AttrTab:AddSection("ติดตั้งสกิลลงช่อง (Skill Equip)")
+AttrTab:AddInput("EquipWeaponDefInput", { Title = "ID อาวุธ",  Default = "Heavy_Hammer", Callback = function(v) _G.IRS_WeaponDef = v end })
+AttrTab:AddDropdown("EquipSlotDD",      { Title = "ช่องสกิล",  Values = { "Skill1", "Skill2", "SkillU", "SkillAW" }, Value = "Skill1", Callback = function(v) _G.IRS_SkillSlot = v end })
+AttrTab:AddInput("EquipSkillIDInput",   { Title = "ID สกิล",  Default = "ThunderHammer_Skill_3", Callback = function(v) _G.IRS_EquipSkillId = v end })
+AttrTab:AddButton({ Title = "🎯 ใส่สกิล Preset Heavy (Skill1+Skill2+SkillU)", Callback = function()
+    EquipSkillPresetHeavy()
+    ObsidianGlassEngine:Notify({ Title = "Skill Preset", Content = "ใส่ ThunderHammer Skill1+Skill2+SkillU เรียบร้อย", Duration = 3 })
+end })
+AttrTab:AddButton({ Title = "🎯 ติดตั้งสกิลลงช่องที่เลือก", Callback = function()
     EquipSkillToSlot(_G.IRS_WeaponDef or "Heavy_Hammer", _G.IRS_SkillSlot or "Skill1", _G.IRS_EquipSkillId or "ThunderHammer_Skill_3")
-    ObsidianGlassEngine:Notify({ Title = "Skill Equip", Content = "Equipped " .. (_G.IRS_EquipSkillId or "ThunderHammer_Skill_3") .. " to " .. (_G.IRS_SkillSlot or "Skill1"), Duration = 3 })
+    ObsidianGlassEngine:Notify({ Title = "ติดตั้งสกิล", Content = "ติดตั้ง " .. (_G.IRS_EquipSkillId or "ThunderHammer_Skill_3") .. " ใส่ช่อง " .. (_G.IRS_SkillSlot or "Skill1"), Duration = 3 })
 end })
 
--- ──────── TAB 6: DAILY & MISC ────────
-DailyTab:AddSection("Daily Rewards via EventHallRE (Verified Remote)")
-DailyTab:AddButton({ Title = "👀 View Daily Activity", Callback = function()
+-- ──────── TAB 5: รางวัลประจำวัน & ทั่วไป ────────
+DailyTab:AddSection("รับรางวัลประจำวัน (Daily Login)")
+DailyTab:AddButton({ Title = "👀 เปิดดูหน้าต่างกิจกรรมประจำวัน", Callback = function()
     ViewDailyActivity()
-    ObsidianGlassEngine:Notify({ Title = "Daily Activity", Content = "Fired ViewActivity DailyLogin", Duration = 3 })
+    ObsidianGlassEngine:Notify({ Title = "กิจกรรมประจำวัน", Content = "ส่งคำสั่งเปิดหน้าต่างกิจกรรมเรียบร้อยแล้ว", Duration = 3 })
 end })
-DailyTab:AddButton({ Title = "🎁 Claim All Daily Rewards (DR_1 ~ DR_7)", Callback = function()
+DailyTab:AddButton({ Title = "🎁 กดรับรางวัลประจำวันทั้งหมด (วัน 1 ~ 7)", Callback = function()
     task.spawn(function()
         ViewDailyActivity()
         task.wait(0.5)
@@ -3357,356 +2162,108 @@ DailyTab:AddButton({ Title = "🎁 Claim All Daily Rewards (DR_1 ~ DR_7)", Callb
             ClaimDailyReward(rid)
             task.wait(0.3)
         end
-        ObsidianGlassEngine:Notify({ Title = "Daily Rewards", Content = "Claimed all daily login rewards!", Duration = 4 })
+        ObsidianGlassEngine:Notify({ Title = "รางวัลประจำวัน", Content = "กดรับรางวัลประจำวันทั้งหมดเรียบร้อยแล้ว!", Duration = 4 })
     end)
 end })
-DailyTab:AddToggle("AutoClaimDailyToggle", { Title = "Auto Claim Daily Login (EventHallRE)", Desc = "Claim daily login rewards automatically via EventHallRE", Default = false, Callback = function(t) AutoClaimDaily = t end })
+DailyTab:AddToggle("AutoClaimDailyToggle", { Title = "เปิดรับรางวัลประจำวันอัตโนมัติ", Desc = "เช็คและรับรางวัลล็อกอินประจำวันให้อัตโนมัติเมื่อพร้อม", Default = Config.AutoClaimDaily, Callback = function(t) Config.AutoClaimDaily = t end })
 
-DailyTab:AddSection("Event Task Progression")
-DailyTab:AddButton({ Title = "🏆 Claim Event Task (DualGun / E_010)", Callback = function()
-    ClaimEventTask("DualGun", "E_010")
-    ObsidianGlassEngine:Notify({ Title = "Event Task", Content = "Fired ClaimEventTask DualGun E_010", Duration = 3 })
+DailyTab:AddSection("ร้านค้า & เควสภารกิจ")
+DailyTab:AddDropdown("ShopItemDropdown", { Title = "เลือก ID ไอเทมร้านค้า", Values = { "GoldShop_17", "GoldShop_1", "GoldShop_2" }, Value = "GoldShop_17", Callback = function(val) Config.ShopItemToBuy = val end })
+DailyTab:AddButton({ Title = "🛒 ซื้อไอเทมร้านค้าที่เลือก", Callback = function()
+    BuyConsumableItem("Gold", Config.ShopItemToBuy)
+    ObsidianGlassEngine:Notify({ Title = "ร้านค้า", Content = "ซื้อไอเทม " .. tostring(Config.ShopItemToBuy) .. " เรียบร้อยแล้ว", Duration = 3 })
 end })
+DailyTab:AddToggle("AutoBuyShopToggle", { Title = "เปิดซื้อไอเทมร้านค้าอัตโนมัติ", Desc = "ซื้อไอเทมร้านค้าที่เลือกอัตโนมัติตามระยะเวลา", Default = Config.AutoBuyShopItem, Callback = function(t) Config.AutoBuyShopItem = t end })
 
-DailyTab:AddSection("Consumable Shop & Task Automation")
-DailyTab:AddDropdown("ShopItemDropdown", { Title = "Shop Item ID", Values = { "GoldShop_17", "GoldShop_1", "GoldShop_2" }, Value = "GoldShop_17", Callback = function(val) ShopItemToBuy = val end })
-DailyTab:AddButton({ Title = "🛒 Buy Selected Shop Item", Callback = function()
-    BuyShopItem("Gold", ShopItemToBuy)
-    ObsidianGlassEngine:Notify({ Title = "Shop Purchase", Content = "Sent BuyShopItem for " .. tostring(ShopItemToBuy), Duration = 3 })
+DailyTab:AddDropdown("TaskNpcDropdown", { Title = "เลือก NPC เควสเป้าหมาย", Values = { "EquipmentEnchantNpc2|0", "DialogNpcStarterNext1|1", "DialogNpcStarterNext2|0", "DialogPetNpc4|0" }, Value = "EquipmentEnchantNpc2|0", Callback = function(val) Config.TaskNpcTarget = val end })
+DailyTab:AddButton({ Title = "💬 ดำเนินเควสคุยกับ NPC ที่เลือก", Callback = function()
+    UpdateTaskProgress("DialogNpc", Config.TaskNpcTarget)
+    ObsidianGlassEngine:Notify({ Title = "ภารกิจ", Content = "ส่งคำสั่งคุยเควส NPC: " .. tostring(Config.TaskNpcTarget), Duration = 3 })
 end })
-DailyTab:AddToggle("AutoBuyShopToggle", { Title = "Auto Buy Shop Item", Desc = "Buy selected shop item automatically", Default = false, Callback = function(t) AutoBuyShopItem = t end })
+DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "เปิดคุยเควส NPC อัตโนมัติ", Desc = "ส่งคำสั่งดำเนินเควส NPC อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoTaskProgress or false, Callback = function(t) Config.AutoTaskProgress = t end })
 
-DailyTab:AddDropdown("TaskNpcDropdown", { Title = "Task NPC Target", Values = { "EquipmentEnchantNpc2|0", "DialogNpcStarterNext1|1", "DialogNpcStarterNext2|0", "DialogPetNpc4|0" }, Value = "EquipmentEnchantNpc2|0", Callback = function(val) TaskNpcTarget = val end })
-DailyTab:AddButton({ Title = "💬 Update Task Progress (Selected NPC)", Callback = function()
-    UpdateTaskProgress("DialogNpc", TaskNpcTarget)
-    ObsidianGlassEngine:Notify({ Title = "Task Progress", Content = "Sent UpdateTaskProgress DialogNpc: " .. tostring(TaskNpcTarget), Duration = 3 })
-end })
-DailyTab:AddButton({ Title = "🪟 Update Task Progress (Open ScreenFortify)", Callback = function()
-    UpdateTaskProgress("OpenGUIWindow", "ScreenFortify")
-    ObsidianGlassEngine:Notify({ Title = "Task Progress", Content = "Sent UpdateTaskProgress OpenGUIWindow ScreenFortify", Duration = 3 })
-end })
-DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "Auto Task Dialog NPC", Desc = "Continuously trigger selected NPC Dialog task progress", Default = false, Callback = function(t) AutoTaskProgress = t end })
-
-DailyTab:AddSection("Visual Helpers")
-DailyTab:AddToggle("ESPEnemiesToggle",     { Title = "ESP Enemy Highlight", Desc = "Draw AlwaysOnTop highlights over enemies", Default = false, Callback = function(t)
-    ESPEnemies = t
-    UpdateESP()
-end })
-
--- ──────── TAB 6: STATS & INFO ────────
-StatsTab:AddSection("Character & World Telemetry")
-local StatsPowerPara = StatsTab:AddParagraph({ Title = "⚡ Power Rating", Desc = "194 Power" })
-local StatsLevelPara = StatsTab:AddParagraph({ Title = "🏆 Level & EXP",   Desc = "Level: 1 | EXP: 0" })
-local StatsGoldPara  = StatsTab:AddParagraph({ Title = "💰 Gold Currency", Desc = "0 Gold" })
-local StatsStockPara = StatsTab:AddParagraph({ Title = "📜 Scroll Stock", Desc = "Stock Remaining: 0" })
-
-StatsTab:AddSection("Leaderboard System")
-StatsTab:AddButton({ Title = "📊 Fetch Season 3 Endless Leaderboard", Callback = function()
-    pcall(function()
-        local lbData = FetchLeaderboard("EndlessClear_Season3")
-        ObsidianGlassEngine:Notify({ Title = "Leaderboard", Content = "Fetched EndlessClear_Season3 leaderboard successfully!", Duration = 3 })
-    end)
-end })
+-- ──────── TAB 6: ข้อมูล & สถานะ ────────
+StatsTab:AddSection("── สถานะตัวละคร & ข้อมูลเรียลไทม์ ──")
+local StatsPowerPara  = StatsTab:AddParagraph({ Title = "⚡ พลังต่อสู้: ...",          Desc = "0 Power" })
+local StatsLevelPara  = StatsTab:AddParagraph({ Title = "🏆 เลเวล: ...",               Desc = "EXP: 0 / 0" })
+local StatsGoldPara   = StatsTab:AddParagraph({ Title = "💰 เงินทอง: ...",             Desc = "0 Gold" })
+local StatsStockPara  = StatsTab:AddParagraph({ Title = "📜 คัมภีร์ตีบวก: ...",       Desc = "คงเหลือ: 0" })
+local StatsRacePara   = StatsTab:AddParagraph({ Title = "🧬 เชื้อชาติ: ...",           Desc = "Unknown" })
+local StatsWeaponPara = StatsTab:AddParagraph({ Title = "⚔️ อาวุธที่ใส่: ...",         Desc = "None" })
+local StatsAutoStatus = StatsTab:AddParagraph({ Title = "🤖 ระบบ Auto ที่ใช้งาน:",    Desc = "ไม่มีระบบที่เปิดอยู่" })
+StatsTab:AddSection("── Session ──")
+local StatsSessionPara = StatsTab:AddParagraph({ Title = "⏱️ เวลา Session",            Desc = "0 นาที" })
+local _statsSessionStart = os.time()
 
 -- ════════════════════════════════════════════════════
--- 11. UNIFIED HEARTBEAT & BACKGROUND AUTOMATION LOOPS
+-- 7. BACKGROUND AUTOMATION LOOPS (LOBBY ENGINE)
 -- ════════════════════════════════════════════════════
 
--- 🔁 CORE HEARTBEAT DRIVE (COMBAT + STAGE ENTRY + AVOIDANCE + RECOVERY)
-RunService.Heartbeat:Connect(function(dt)
-    if State.Unloaded then return end
-    State.Stats.Heartbeats += 1
-
-    if not (Config.AutoFarm or Autofarm) then
-        State.TargetModel = nil
-        State.TargetRoot = nil
-        State.TargetHumanoid = nil
-        State.WatchdogTimer = 0
-        State.StageBusyTimer = 0
-        State.CurrentAction = "Idle"
-        if type(SetCurrentEnemy) == "function" then pcall(SetCurrentEnemy, nil) end
-        return
-    end
-
-    if not State.Character or not State.Root or not State.Humanoid or State.Humanoid.Health <= 0 then return end
-
-    -- Clear WhiteEffect UI overlay if present
-    pcall(function()
-        local screenDesign = player.PlayerGui:FindFirstChild("ScreenDesign")
-        if screenDesign then
-            local we = screenDesign:FindFirstChild("WhiteEffect")
-            if we then we:Destroy() end
-        end
-    end)
-
-    -- Watchdog Timer: auto-recover if stuck in stage transition > 6 seconds
-    State.WatchdogTimer += dt
-    if State.StageBusy then
-        State.StageBusyTimer += dt
-        if State.StageBusyTimer >= 6 then
-            State.StageBusy = false
-            State.DoorBusy = false
-            State.StageBusyTimer = 0
-            State.RoomClearTimer = 0
-            State.CurrentAction = "Recovering"
-        end
-    else
-        State.StageBusyTimer = 0
-    end
-
-    if State.WatchdogTimer >= 2 then
-        State.WatchdogTimer = 0
-        if Config.AutoProgressStage and not State.StageBusy then rebuildPortalCandidates() end
-        if not State.TargetRoot or not targetIsValid() then
-            local model, root, hum = findNearestTarget()
-            State.TargetModel = model; State.TargetRoot = root; State.TargetHumanoid = hum
-            if model and root and hum then State.RoomClearTimer = 0 end
-        end
-    end
-
-    if not State.TargetRoot or not targetIsValid() then State.RoomClearTimer += dt end
-    if State.FallbackTargetTimer > 0 then State.FallbackTargetTimer = math.max(0, State.FallbackTargetTimer - dt) end
-
-    -- Target Scan Cadence
-    State.TargetTimer += dt
-    local targetInterval = Config.PerformanceMode and 0.25 or 0.15
-    if State.TargetTimer >= targetInterval then
-        State.TargetTimer = 0
-        refreshTarget()
-    end
-
-    -- Portal / Door Auto-Entry Cadence
-    State.PortalTimer += dt
-    local portalInterval = Config.PerformanceMode and 1.0 or 0.8
-    if State.PortalTimer >= portalInterval then
-        State.PortalTimer = 0
-        if Config.AutoProgressStage and not State.StageBusy then
-            task.spawn(function()
-                local ok, err = pcall(moveToNextStage)
-                if not ok then
-                    State.StageBusy = false; State.DoorBusy = false; State.RoomClearTimer = 0
-                    State.CurrentAction = "Recovering"
-                end
-            end)
-        end
-    end
-
-    -- Combat Position Lock / Auto Avoid / Emergency Escape
-    if State.EmergencyBusy then
-        State.CurrentAction = "Emergency Escape"
-    elseif Config.AutoAvoid and State.DangerPart then
-        updateAutoAvoid(dt)
-    elseif Config.AutoProgressStage and State.StageBusy then
-        if State.CurrentAction == "Farming" then State.CurrentAction = "Portal" end
-    else
-        lockCombatPosition()
-        State.AttackTimer += dt
-        if State.AttackTimer >= Config.AttackInterval then
-            State.AttackTimer = 0
-            updateKillAura()
-        end
-        State.CurrentAction = "Farming"
-    end
-
-    -- Skill Cadence
-    State.SkillTimer += dt
-    if State.SkillTimer >= Config.SkillInterval then
-        State.SkillTimer = 0
-        if Config.AutoSkill and targetIsValid() then task.spawn(useSkills) end
-    end
-end)
-
--- 🔁 ASYNC LOOP: BRING MOBS + DRAGON EGGS + CAMERA
-task.spawn(function()
-    while task.wait() do
-        if Config.AutoFarm then
-            pcall(function()
-                if BringMobs and State.TargetRoot then
-                    task.spawn(function()
-                        local EnemyNpc = workspace:FindFirstChild("EnemyNpc")
-                        if not EnemyNpc then return end
-                        for _, v in pairs(EnemyNpc:GetChildren()) do
-                            if v:IsA("Model")
-                                and v:FindFirstChild("Humanoid")
-                                and v.Humanoid.Health > 0
-                                and v:FindFirstChild("HumanoidRootPart")
-                                and (State.TargetRoot.Position - v.HumanoidRootPart.Position).Magnitude <= 100
-                            then
-                                v.HumanoidRootPart.CFrame = State.TargetRoot.CFrame
-                                task.wait()
-                            end
-                        end
-                    end)
-                end
-
-                if AutoCollectEggs then
-                    task.spawn(function()
-                        for _, v in pairs(workspace:GetChildren()) do
-                            if v:FindFirstChild("DragonEgg")
-                                and v.DragonEgg:FindFirstChild("EggModel")
-                                and v.DragonEgg.EggModel:FindFirstChild("Root")
-                                and v:FindFirstChild("Root")
-                                and not v:GetAttribute("Active")
-                            then
-                                CollectingEggs = true
-                                travelToPosition(v.DragonEgg.EggModel.Root.Position)
-                                task.wait(0.1)
-                                pcall(fireproximityprompt, v.Root.Interact_ProximityPrompt)
-                                CollectingEggs = false
-                            end
-                        end
-                    end)
-                end
-
-                task.spawn(function()
-                    if not CameraChange then return end
-                    local char = player.Character
-                    if not char then return end
-                    local root = char:FindFirstChild("HumanoidRootPart")
-                    if not root then return end
-
-                    Camera.CameraType    = Enum.CameraType.Scriptable
-                    Camera.CameraSubject = nil
-
-                    local targetPos = root.Position
-                    local cameraPos = targetPos + Vector3.new(0, CameraDistance, 50)
-
-                    TweenService:Create(
-                        Camera,
-                        TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-                        { CFrame = CFrame.lookAt(cameraPos, targetPos) }
-                    ):Play()
-                    Camera.Focus = CFrame.new(targetPos)
-                end)
-
-                task.spawn(function()
-                    Attack(AutoUseSkill or Config.AutoSkill)
-                end)
-            end)
-        end
-    end
-end)
-
--- 🔁 ASYNC LOOP: AUTO COLLECT CHESTS
-task.spawn(function()
-    while task.wait() do
-        if AutoCollectChests and State.Root then
-            pcall(function()
-                for _, v in pairs(workspace:GetChildren()) do
-                    if v:IsA("Model")
-                        and string.find(v.Name, "Chest")
-                        and v:FindFirstChild("Root")
-                        and (v:GetAttribute("HitCount") or 0) > 0
-                    then
-                        CollectingChests = true
-                        repeat
-                            task.wait()
-                            travelToPosition(v.Root.Position + Vector3.new(Distance_X, Distance_Y, Distance_Z))
-                        until not AutoCollectChests
-                            or not v
-                            or not v:FindFirstChild("Root")
-                            or (v:GetAttribute("HitCount") or 0) == 0
-                        CollectingChests = false
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- 🔁 ASYNC LOOP: AUTO COLLECT DRAGON EGGS
-task.spawn(function()
-    while task.wait(0.5) do
-        if (AutoCollectEggs or Config.AutoCollectEggs or true) and State.Root and not State.StageBusy then
-            pcall(collectDragonEggs)
-        end
-    end
-end)
-
--- 🔁 ASYNC LOOP: AUTO PLAY AGAIN / REVIVE
+-- ASYNC LOOP: โหวตเล่นอีกครั้ง / ข้ามหน้าต่างจบเกม
 task.spawn(function()
     while task.wait(1) do
-        if AutoPlayAgain then
+        if State.Unloaded then break end
+        if Config.AutoPlayAgain then
             pcall(function()
+                local gamePlayerRE = getRemote("ReplicatedStorage.Remotes.GamePlayerRE")
+                local gameRoundRE  = getRemote("ReplicatedStorage.Remotes.GameRoundRE")
+
                 local reviveFrame = player.PlayerGui:FindFirstChild("BattleHUD")
                     and player.PlayerGui.BattleHUD:FindFirstChild("PlayerRevive")
                     and player.PlayerGui.BattleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
                 if reviveFrame and reviveFrame.Visible then
-                    ReplicatedStorage.Remotes.GamePlayerRE:FireServer("ExitSettlement")
+                    if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
                 end
 
                 local settlement = player.PlayerGui:FindFirstChild("ResultGui")
                     and player.PlayerGui.ResultGui:FindFirstChild("ScreenSettlement")
                 if settlement and settlement.Visible then
                     pcall(function()
-                        local taskRE = ReplicatedStorage:FindFirstChild("Framework")
-                            and ReplicatedStorage.Framework:FindFirstChild("Features")
-                            and ReplicatedStorage.Framework.Features:FindFirstChild("TaskSystem")
-                            and ReplicatedStorage.Framework.Features.TaskSystem:FindFirstChild("TaskRE")
-                        if taskRE then
-                            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement")
-                        end
+                        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement") end
                     end)
-                    ReplicatedStorage.Remotes.GameRoundRE:FireServer("VotePlayAgain")
-                    TriggerDoorAndPortalRemotes()
+                    if gameRoundRE then gameRoundRE:FireServer("VotePlayAgain") end
                 end
             end)
         end
     end
 end)
 
--- 🔁 ASYNC LOOP: WALKSPEED OVERRIDE
-task.spawn(function()
-    while task.wait() do
-        if WalkSpeedEnabled and controller then
-            pcall(function()
-                controller.SetWalkSpeed = function(p65, p66)
-                    p65.Humanoid.WalkSpeed = WalkSpeed_Speed
-                end
-                if player.Character and player.Character:FindFirstChild("Humanoid") then
-                    player.Character.Humanoid.WalkSpeed = WalkSpeed_Speed
-                end
-            end)
-        elseif not WalkSpeedEnabled and OldWalkSpeed and controller then
-            controller.SetWalkSpeed = OldWalkSpeed
-        end
-    end
-end)
-
--- 🔁 ASYNC LOOP: AUTO SELL
+-- ASYNC LOOP: ขายของอัตโนมัติ
 task.spawn(function()
     while task.wait(2) do
-        if AutoSell then
+        if State.Unloaded then break end
+        if Config.AutoSell then
             pcall(function()
-                local MaterialRE = ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent
-                local ForgeRF    = ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF
-                local EquipRE    = ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE
+                local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
+                local ForgeRF    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
+                local EquipRE    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
 
-                if Crystals_Value and type(Crystals_Value) == "table" and #Crystals_Value > 0 then
+                if Config.Crystals_Value and type(Config.Crystals_Value) == "table" and #Config.Crystals_Value > 0 and MaterialRE then
                     local crystalLoop = {}
                     for _, v in pairs(GetCrystals()) do
-                        if table.find(Crystals_Value, v.Rarity) then
+                        if table.find(Config.Crystals_Value, v.Rarity) then
                             crystalLoop[v.ID] = 1
                         end
                     end
                     if next(crystalLoop) then MaterialRE:FireServer("Sell", crystalLoop, {}) end
                 end
 
-                if Ores_Value and type(Ores_Value) == "table" and #Ores_Value > 0 then
+                if Config.Ores_Value and type(Config.Ores_Value) == "table" and #Config.Ores_Value > 0 and ForgeRF then
                     local oresLoop = {}
                     for _, v in pairs(GetOresWithNames()) do
-                        if table.find(Ores_Value, v.Rarity) then
+                        if table.find(Config.Ores_Value, v.Rarity) then
                             oresLoop[v.ID] = 1
                         end
                     end
                     if next(oresLoop) then ForgeRF:InvokeServer("Sell", oresLoop) end
                 end
 
-                if Equipment_Value and type(Equipment_Value) == "table" and #Equipment_Value > 0 and DataUtil then
+                if Config.Equipment_Value and type(Config.Equipment_Value) == "table" and #Config.Equipment_Value > 0 and DataUtil and EquipRE then
                     local owned = {}
                     pcall(function() owned = DataUtil:GetPlayerData(player).Equipment.Owned end)
                     for _, v in pairs(owned or {}) do
-                        if table.find(Equipment_Value, v.ID) then EquipRE:FireServer("Sell", { v.UUID }) end
+                        if table.find(Config.Equipment_Value, v.ID) then EquipRE:FireServer("Sell", { v.UUID }) end
                     end
                 end
             end)
@@ -3714,97 +2271,111 @@ task.spawn(function()
     end
 end)
 
--- 🔁 ASYNC LOOP: AUTO FORGE & SCROLL AUTOMATION
+-- ASYNC LOOP: ตีบวก & สวมใส่ไอเทมอัตโนมัติ
 task.spawn(function()
     while task.wait(3) do
-        if AutoForgeWeapon then
+        if State.Unloaded then break end
+        if Config.AutoSelectBest then pcall(EquipBestAll) end
+
+        if Config.AutoUseScroll then
             pcall(function()
-                local ForgeRF = ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF
-                if ForgeRF and DataUtil then
-                    local playerData = DataUtil:GetPlayerData(player)
-                    local equippedUUID = playerData and playerData.Equipment and playerData.Equipment.Equipped
-                    if equippedUUID then ForgeRF:InvokeServer("Forge", { weaponUUID = equippedUUID }) end
+                local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
+                local uuid = GetEquippedWeaponUUID()
+                if MaterialRE and uuid then
+                    MaterialRE:FireServer("UseScroll", { scrollId = "DefaultScroll", weaponUUID = uuid })
                 end
             end)
         end
 
-        if AutoSelectBest then
-            pcall(EquipBestAll)
-        end
-
-        if AutoUseScroll then
+        if Config.AutoFortifyWeapon then
             pcall(function()
-                local MaterialRE = ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent
-                if MaterialRE and DataUtil then
-                    local playerData = DataUtil:GetPlayerData(player)
-                    local equippedUUID = playerData and playerData.Equipment and playerData.Equipment.Equipped
-                    if equippedUUID then MaterialRE:FireServer("UseScroll", { scrollId = "DefaultScroll", weaponUUID = equippedUUID }) end
-                end
+                local uuid = GetEquippedWeaponUUID()
+                if uuid then FortifyEquipment(uuid) end
             end)
-        end
-
-        if AutoFortifyWeapon then
-            pcall(function()
-                if DataUtil then
-                    local playerData = DataUtil:GetPlayerData(player)
-                    local equippedUUID = playerData and playerData.Equipment and playerData.Equipment.Equipped
-                    if equippedUUID then FortifyEquipment(equippedUUID) end
-                end
-            end)
-        end
-
-        if AutoDropOres then
-            pcall(function() DropForgeOres({ Sandstone = 4 }, "Weapon") end)
         end
     end
 end)
 
--- 🔁 ASYNC LOOP: MATCH & STAGE SELECTION AUTOMATION
+-- ASYNC LOOP: วางแร่ใส่เตาหลอม (แยก loop + cooldown ไม่ให้ spam GUI)
 task.spawn(function()
+    local lastDropTime = 0
+    local DROP_COOLDOWN = 20 -- วิ: วางแร่ทุก 20 วิ ไม่ spam
+    while task.wait(3) do
+        if State.Unloaded then break end
+        if Config.AutoDropOres then
+            local now = tick()
+            if (now - lastDropTime) >= DROP_COOLDOWN then
+                pcall(function() DropForgeOres({ Sandstone = 4 }, "Weapon") end)
+                lastDropTime = tick()
+            end
+        end
+    end
+end)
+
+-- ASYNC LOOP: เข้าดันเจี้ยนในล็อบบี้อัตโนมัติ (cooldown ป้องกัน spam)
+task.spawn(function()
+    local lastDungeonTime = 0
+    local lastCaveTime    = 0
+    local lastTowerTime   = 0
+    local DUNGEON_COOLDOWN = 30 -- วิ: เดิมยิงทุก 2 วิ = spam 3 remote ต่อรอบ
+    local CAVE_COOLDOWN    = 20
+    local TOWER_COOLDOWN   = 20
+
     while task.wait(2) do
         if State.Unloaded then break end
+        local now = tick()
 
-        if (Config.AutoFarm or Config.AutoEnterDungeon or AutoEnterDungeon) then
+        if Config.AutoEnterDungeon and (now - lastDungeonTime) >= DUNGEON_COOLDOWN then
             pcall(runLobbyDungeonSelect)
+            lastDungeonTime = tick()
         end
 
-        if AutoCaveMode then
-            pcall(function() EnterCaveMode(SelectedCaveId or "Cave1", CaveDiffNum or 1, CavePartySize or 2) end)
+        if Config.AutoCaveMode and (now - lastCaveTime) >= CAVE_COOLDOWN then
+            pcall(function() EnterCaveMode(Config.SelectedCaveId or "Cave1", Config.CaveDiffNum or 1, Config.CavePartySize or 2) end)
+            lastCaveTime = tick()
         end
 
-        if AutoEndlessTowerMode then
-            pcall(function() EnterEndlessTower(EndlessTowerDiffNum or 1, EndlessPartySize or 2) end)
+        if Config.AutoEndlessTowerMode and (now - lastTowerTime) >= TOWER_COOLDOWN then
+            pcall(function() EnterEndlessTower(Config.EndlessTowerDiffNum or 1, Config.EndlessPartySize or 2) end)
+            lastTowerTime = tick()
         end
 
-        if AutoBonusCard then
+        if Config.AutoBonusCard then
             pcall(function()
                 local resultGui = player.PlayerGui:FindFirstChild("ResultGui")
                 if resultGui and resultGui:FindFirstChild("ScreenSettlement") and resultGui.ScreenSettlement.Visible then
-                    local BonusCardUtil
-                    pcall(function() BonusCardUtil = Framework.Systems.WorldPlace.WorldBonusCardUtil end)
-                    if BonusCardUtil and BonusCardUtil.SelectCard then BonusCardUtil.SelectCard(1) end
+                    -- ยิงผ่าน Remote แทน client-side module call
+                    local bonusRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent")
+                    if bonusRE then bonusRE:FireServer("SelectCard", 1) end
                 end
             end)
         end
     end
 end)
 
--- 🔁 ASYNC LOOP: ATTRIBUTE & SKILL AUTOMATION
+-- ASYNC LOOP: อัปสเตตัสอัตโนมัติ (ตรวจ zero-preset ก่อน)
 task.spawn(function()
-    while task.wait(3) do
+    while task.wait(5) do
         if State.Unloaded then break end
-        if AutoUpgradeAttribute then
-            pcall(function() UpgradeAttribute(AttrPreset) end)
+        if Config.AutoUpgradeAttribute then
+            pcall(function()
+                local p = Config.AttrPreset
+                local hasVal = false
+                for _, v in pairs(p) do
+                    if type(v) == "number" and v > 0 then hasVal = true break end
+                end
+                if hasVal then UpgradeAttribute(p) end
+            end)
         end
     end
 end)
 
--- 🔁 ASYNC LOOP: DAILY & MISC AUTOMATION (VERIFIED REMOTES)
+-- ASYNC LOOP: รับรางวัลประจำวัน & ซื้อของอัตโนมัติ
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
 
-        if AutoClaimDaily then
+        if Config.AutoClaimDaily then
             pcall(function()
                 ViewDailyActivity()
                 task.wait(0.3)
@@ -3815,66 +2386,235 @@ task.spawn(function()
             end)
         end
 
-        if AutoDailyLogin then
-            pcall(function()
-                ViewDailyActivity()
-                task.wait(0.3)
-                ClaimDailyReward("DR_1")
-            end)
-        end
-
-        if AutoAscend then
-            pcall(function()
-                local ascendGui = player.PlayerGui:FindFirstChild("MainGui")
-                    and player.PlayerGui.MainGui:FindFirstChild("ScreenAscend")
-                if ascendGui then
-                    local ascendBtn = ascendGui:FindFirstChild("AscendButton", true)
-                    if ascendBtn and ascendBtn:IsA("GuiButton") then pcall(function() ascendBtn.MouseButton1Click:Fire() end) end
-                end
-            end)
-        end
-
-        if AutoSkillTree then
-            pcall(function()
-                ActiveSkillNode(_G.IRS_SkillWeaponType or "Heavy", _G.IRS_SkillNode or "UnlockSkill1")
-            end)
-        end
-
-        if AutoBuyShopItem then pcall(function() BuyShopItem("Gold", ShopItemToBuy) end) end
-        if AutoTaskProgress then pcall(function() UpdateTaskProgress("DialogNpc", TaskNpcTarget or "EquipmentEnchantNpc2|0") end) end
+        if Config.AutoBuyShopItem then pcall(function() BuyConsumableItem("Gold", Config.ShopItemToBuy) end) end
     end
 end)
 
--- 🔁 ASYNC LOOP: TELEMETRY & STATS DISPLAY UPDATE
-task.spawn(function()
-    while task.wait(1) do
+-- ════════════════════════════════════════════════
+-- AUTO QUEST SYSTEM (Senior Dev Architecture)
+-- สถาปัตยกรรม: State Machine แบบ Poll-based
+-- ขั้นตอน: Fetch → Parse → Execute → Claim
+-- ════════════════════════════════════════════════
+--[[
+  Quest Remote Paths (ยืนยันจาก IRSRE.lua dump):
+    DailyQuestRE = ReplicatedStorage.Framework.Features.DailyQuestSystem.RE
+    TaskRE       = ReplicatedStorage.Framework.Features.TaskSystem.TaskRE
+  Actions ที่รองรับ:
+    DailyQuestRE:FireServer("GetDailyQuest")   → server return quest list
+    DailyQuestRE:FireServer("ClaimDailyQuest", questId)
+    TaskRE:FireServer("UpdateTaskProgress", "DialogNpc", npcId)
+    TaskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", windowId)
+--]]
+
+local _questState = {
+    phase       = "idle",   -- idle | fetching | executing | claiming | cooldown
+    lastFetch   = 0,
+    fetchCooldown = 60,     -- วิ: ดึงข้อมูลเควสใหม่ทุก 60 วิ
+    pendingQuests = {},
+    currentIdx  = 0,
+    execCooldown = 0,
+}
+
+-- ฟังก์ชัน execute quest ตาม type
+local function _executeQuest(quest)
+    if not quest then return end
+    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+    local qType  = tostring(quest.Type or quest.QuestType or "")
+    local qParam = tostring(quest.Param or quest.NpcId or quest.Target or "")
+
+    -- Dialog NPC quest
+    if qType:find("Dialog") or qType:find("NPC") or qType:find("Talk") then
+        if taskRE and qParam ~= "" then
+            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", qParam)
+            task.wait(0.3)
+        end
+    end
+
+    -- Open GUI / Visit window quest
+    if qType:find("Open") or qType:find("Visit") or qType:find("GUI") then
+        if taskRE and qParam ~= "" then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", qParam)
+            task.wait(0.3)
+        end
+    end
+
+    -- Generic progress bump (ยิง UpdateTaskProgress ทั่วไป)
+    if taskRE then
         pcall(function()
-            local levelText = "Level: " .. tostring(player:GetAttribute("LG_Level") or 1)
-            local powerText = "Power Rating: " .. tostring(player:GetAttribute("LG_PowerNew1") or 0)
-            local goldText  = "Gold: 0"
-            local stockVal  = workspace:GetAttribute("ScrollStockRemaining") or 0
+            taskRE:FireServer("UpdateTaskProgress", qType, qParam)
+        end)
+    end
+end
+
+task.spawn(function()
+    while task.wait(2) do
+        if State.Unloaded then break end
+        if not Config.AutoQuest then
+            _questState.phase = "idle"
+            _questState.pendingQuests = {}
+            _questState.currentIdx = 0
+            continue
+        end
+
+        local now = tick()
+        local dailyRE = getRemote("ReplicatedStorage.Framework.Features.DailyQuestSystem.RE")
+
+        -- Phase: idle → fetch
+        if _questState.phase == "idle" then
+            if (now - _questState.lastFetch) >= _questState.fetchCooldown then
+                _questState.phase = "fetching"
+            end
+
+        -- Phase: fetching → request quest list จาก server
+        elseif _questState.phase == "fetching" then
+            _questState.lastFetch = now
+            -- เปิดหน้า quest ก่อนเพื่อ trigger server sync
+            pcall(function()
+                local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                if taskRE then
+                    taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenDailyQuest")
+                end
+            end)
+            -- รวบรวม quest จาก PlayerGui หรือ Attributes
+            local quests = {}
+            pcall(function()
+                -- วิธีที่ 1: อ่านจาก PlayerGui ที่ game render ให้
+                local questGui = player.PlayerGui:FindFirstChild("QuestGui")
+                    or player.PlayerGui:FindFirstChild("DailyQuestGui")
+                    or player.PlayerGui:FindFirstChild("UIMain")
+                if questGui then
+                    for _, v in ipairs(questGui:GetDescendants()) do
+                        local qId = v:GetAttribute("QuestId") or v:GetAttribute("questId")
+                        local isDone = v:GetAttribute("Completed") or v:GetAttribute("IsDone")
+                        local qType = v:GetAttribute("QuestType") or v:GetAttribute("Type") or "DialogNpc"
+                        local qParam = v:GetAttribute("QuestParam") or v:GetAttribute("Param") or ""
+                        if qId and not isDone then
+                            table.insert(quests, { Id = qId, Type = qType, Param = qParam })
+                        end
+                    end
+                end
+                -- วิธีที่ 2: ยิง server แบบ fire-and-read ผ่าน DailyQuestRE
+                if #quests == 0 and dailyRE then
+                    pcall(function() dailyRE:FireServer("GetDailyQuest") end)
+                    -- fallback: สร้าง quest list จาก NPC ที่รู้จัก
+                    quests = {
+                        { Id = "dq_dialog1",    Type = "DialogNpc",     Param = "DialogNpcNormal1|1"    },
+                        { Id = "dq_enchant",    Type = "DialogNpc",     Param = "EquipmentEnchantNpc2|0" },
+                        { Id = "dq_skilltree",  Type = "OpenGUIWindow",  Param = "ScreenSkillTree"       },
+                        { Id = "dq_forge",      Type = "OpenGUIWindow",  Param = "ScreenForge"           },
+                        { Id = "dq_shop",       Type = "OpenGUIWindow",  Param = "ScreenShop"            },
+                    }
+                end
+            end)
+            _questState.pendingQuests = quests
+            _questState.currentIdx    = 0
+            _questState.phase = (#quests > 0) and "executing" or "cooldown"
+
+        -- Phase: executing → ทำเควสทีละตัว
+        elseif _questState.phase == "executing" then
+            _questState.currentIdx = _questState.currentIdx + 1
+            local quest = _questState.pendingQuests[_questState.currentIdx]
+            if quest then
+                pcall(_executeQuest, quest)
+                task.wait(1.5)
+                -- claim ทันทีหลัง execute
+                if dailyRE then
+                    pcall(function() dailyRE:FireServer("ClaimDailyQuest", quest.Id) end)
+                end
+            else
+                -- ทำหมดแล้ว
+                _questState.phase = "cooldown"
+                ObsidianGlassEngine:Notify({
+                    Title = "Auto Quest",
+                    Content = "ทำเควสครบทั้งหมดแล้ว! รอรอบถัดไป",
+                    Duration = 4
+                })
+            end
+
+        -- Phase: cooldown → รอรอบถัดไป
+        elseif _questState.phase == "cooldown" then
+            if (now - _questState.lastFetch) >= _questState.fetchCooldown then
+                _questState.phase = "idle"
+            end
+        end
+    end
+end)
+
+-- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (ครบถ้วน)
+task.spawn(function()
+    local function setP(para, title, desc)
+        pcall(function()
+            local t = para:FindFirstChild("TitleLabel")
+            local d = para:FindFirstChild("DescLabel")
+            if t then t.Text = title end
+            if d then d.Text = desc   end
+        end)
+    end
+
+    while task.wait(1) do
+        if State.Unloaded then break end
+        pcall(function()
+            local power  = tostring(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0)
+            local lv     = tostring(player:GetAttribute("LG_Level") or 1)
+            local exp    = "0"
+            local expMax = "0"
+            local gold   = "0"
+            local stock  = "0"
+            local race   = tostring(player:GetAttribute("LG_Race") or player:GetAttribute("Race") or "?")
+            local weaponName = "None"
 
             if DataUtil then
                 pcall(function()
-                    local pData = DataUtil:GetPlayerData(player)
-                    if pData then
-                        goldText  = "Gold: " .. tostring(pData.Gold or 0)
-                        levelText = string.format("Level: %s | EXP: %s", tostring(pData.Level or player:GetAttribute("LG_Level") or 1), tostring(pData.EXP or 0))
+                    local pd = DataUtil:GetPlayerData(player)
+                    if pd then
+                        lv     = tostring(pd.Level or lv)
+                        exp    = tostring(pd.EXP or 0)
+                        expMax = tostring(pd.EXPMax or pd.NextLevelEXP or "?")
+                        gold   = tostring(pd.Gold or pd.Currency or 0)
+                        if pd.Race then race = tostring(pd.Race) end
+                        if pd.Equipment then
+                            local uuid = pd.Equipment.Equipped or pd.Equipment.EquippedWeapon
+                            if type(uuid) == "table" then uuid = uuid.Weapon or uuid[1] end
+                            if uuid then weaponName = tostring(uuid) end
+                        end
                     end
                 end)
             end
 
-            local pTitle = StatsPowerPara:FindFirstChild("TitleLabel")
-            if pTitle then pTitle.Text = "⚡ " .. powerText end
+            pcall(function()
+                local ls = player:FindFirstChild("leaderstats")
+                if ls then
+                    local scrollObj = ls:FindFirstChild("Scroll") or ls:FindFirstChild("ScrollStock")
+                    if scrollObj then stock = tostring(scrollObj.Value) end
+                    local goldObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
+                    if goldObj and gold == "0" then gold = tostring(goldObj.Value) end
+                end
+            end)
 
-            local lTitle = StatsLevelPara:FindFirstChild("TitleLabel")
-            if lTitle then lTitle.Text = "🏆 " .. levelText end
+            -- auto status string
+            local autoList = {}
+            if Config.AutoEnterDungeon     then table.insert(autoList, "ลงดัน")   end
+            if Config.AutoCaveMode         then table.insert(autoList, "ถ้ำ")      end
+            if Config.AutoEndlessTowerMode then table.insert(autoList, "หอคอย")   end
+            if Config.AutoSell             then table.insert(autoList, "ขายของ")  end
+            if Config.AutoSelectBest       then table.insert(autoList, "EquipBest") end
+            if Config.AutoUpgradeAttribute then table.insert(autoList, "อัปสเตต") end
+            if Config.AutoClaimDaily       then table.insert(autoList, "Daily")   end
+            if Config.AutoQuest            then table.insert(autoList, "เควส")    end
+            if Config.ChickenMode          then table.insert(autoList, "🐔ไก่ตัน") end
+            local autoStr = #autoList > 0 and table.concat(autoList, " | ") or "ไม่มีระบบที่เปิดอยู่"
 
-            local gTitle = StatsGoldPara:FindFirstChild("TitleLabel")
-            if gTitle then gTitle.Text = "💰 " .. goldText end
+            local elapsed = os.time() - _statsSessionStart
+            local sessionStr = string.format("%d นาที %d วินาที", math.floor(elapsed/60), elapsed%60)
 
-            local sTitle = StatsStockPara:FindFirstChild("TitleLabel")
-            if sTitle then sTitle.Text = "📜 Scroll Stock Remaining: " .. tostring(stockVal) end
+            setP(StatsPowerPara,  "⚡ พลังต่อสู้: " .. power,          power .. " Power")
+            setP(StatsLevelPara,  "🏆 เลเวล: " .. lv,                 "EXP: " .. exp .. " / " .. expMax)
+            setP(StatsGoldPara,   "💰 เงินทอง: " .. gold,              gold .. " Gold")
+            setP(StatsStockPara,  "📜 คัมภีร์ตีบวก: " .. stock,        "คงเหลือ: " .. stock)
+            setP(StatsRacePara,   "🧬 เชื้อชาติ: " .. race,            race)
+            setP(StatsWeaponPara, "⚔️ อาวุธที่ใส่: " .. weaponName,    weaponName)
+            setP(StatsAutoStatus, "🤖 ระบบ Auto:",                     autoStr)
+            setP(StatsSessionPara,"⏱️ Session: " .. sessionStr,        sessionStr)
         end)
     end
 end)
@@ -3885,21 +2625,7 @@ end)
 local function unload()
     if State.Unloaded then return end
     State.Unloaded = true
-    Config.AutoFarm = false
-    _G.AutoFarm = false
-
-    disconnectList(CharacterConnections)
-    disconnectList(Connections)
-
-    if State.Humanoid then
-        pcall(function()
-            State.Humanoid.PlatformStand = false
-            State.Humanoid.AutoRotate = true
-            State.Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end)
-    end
-    SetCurrentEnemy(nil)
-    print("✅ [PayomboyZ HUB] Iron Soul Engine Unloaded successfully.")
+    print("✅ [PayomboyZ HUB] ปิดใช้งานระบบล็อบบี้ Iron Soul เรียบร้อยแล้ว")
 end
 
 _G.IronSoulUnload = unload
@@ -3908,9 +2634,9 @@ _G.IronSoulUnload = unload
 -- ✅ NOTIFICATION & SCRIPT LOADED
 -- ════════════════════════════════════════════════════
 ObsidianGlassEngine:Notify({
-    Title   = "PayomboyZ HUB Loaded",
-    Content = "Iron Soul Engine initialized with Zero-Jitter Movement, Settings Persistence & Boss-Portal Priority!",
+    Title   = "PayomboyZ HUB โหลดเสร็จสิ้น",
+    Content = "ระบบออโต้ล็อบบี้ Iron Soul พร้อมใช้งานแล้ว!",
     Duration = 5
 })
 
-print("✅ [PayomboyZ HUB] Iron Soul Engine loaded successfully with Obsidian Glassmorphic 2 UI Engine!")
+print("✅ [PayomboyZ HUB] โหลดระบบออโต้ล็อบบี้ Iron Soul (ภาษาไทย) เรียบร้อยแล้ว!")
