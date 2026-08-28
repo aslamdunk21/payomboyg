@@ -29,7 +29,10 @@ if game.PlaceId == IRON_BOSS_MAP_ID or game.GameId == IRON_BOSS_MAP_ID
 end
 
 if not game:IsLoaded() then
-    pcall(function() game.Loaded:Wait() end)
+    local waitStart = tick()
+    while not game:IsLoaded() and (tick() - waitStart) < 10 do
+        task.wait(0.1)
+    end
 end
 
 local CoreGui           = game:GetService("CoreGui")
@@ -43,7 +46,14 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
-local player            = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local player            = Players.LocalPlayer
+if not player then
+    local pStart = tick()
+    while not player and (tick() - pStart) < 10 do
+        player = Players.LocalPlayer or Players:FindFirstChildOfClass("Player")
+        task.wait(0.1)
+    end
+end
 local character         = player and player.Character
 local Camera            = workspace.CurrentCamera or workspace:WaitForChild("CurrentCamera", 5)
 
@@ -1606,8 +1616,8 @@ local function getRemote(path)
         local parts = string.split(path, ".")
         local obj = game:GetService(parts[1])
         for i = 2, #parts do
-            obj = obj:WaitForChild(parts[i], 1)
             if not obj then return nil end
+            obj = obj:FindFirstChild(parts[i]) or obj:WaitForChild(parts[i], 0.2)
         end
         return obj
     end)
@@ -1810,14 +1820,16 @@ local function CloseAllNPCWindows()
 
         local pg = player and player:FindFirstChildOfClass("PlayerGui")
         if pg then
+            local nameSet = {}
             for _, name in ipairs(ALL_NPC_WINDOW_NAMES) do
-                for _, obj in ipairs(pg:GetDescendants()) do
-                    if obj.Name == name then
-                        if obj:IsA("ScreenGui") then
-                            obj.Enabled = false
-                        elseif obj:IsA("GuiObject") then
-                            obj.Visible = false
-                        end
+                nameSet[name] = true
+            end
+            for _, obj in ipairs(pg:GetDescendants()) do
+                if nameSet[obj.Name] then
+                    if obj:IsA("ScreenGui") then
+                        obj.Enabled = false
+                    elseif obj:IsA("GuiObject") then
+                        obj.Visible = false
                     end
                 end
             end
