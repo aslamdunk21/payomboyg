@@ -31,6 +31,7 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
+repeat task.wait() until Players.LocalPlayer
 local player            = Players.LocalPlayer
 local character         = player and player.Character
 local Camera            = workspace.CurrentCamera
@@ -44,13 +45,15 @@ end
 -- ════════════════════════════════════════════════════
 -- 1. ANTI-AFK SYSTEM
 -- ════════════════════════════════════════════════════
-player.Idled:Connect(function()
-    pcall(function()
-        VirtualUser:Button2Down(Vector2.zero, Camera.CFrame)
-        task.wait(1)
-        VirtualUser:Button2Up(Vector2.zero, Camera.CFrame)
+if player then
+    player.Idled:Connect(function()
+        pcall(function()
+            VirtualUser:Button2Down(Vector2.zero, Camera.CFrame)
+            task.wait(1)
+            VirtualUser:Button2Up(Vector2.zero, Camera.CFrame)
+        end)
     end)
-end)
+end
 
 -- ════════════════════════════════════════════════════
 -- 2. OBSIDIAN GLASSMORPHIC 2 UI ENGINE
