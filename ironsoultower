@@ -1,3 +1,7 @@
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
@@ -8,7 +12,17 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+if not player then
+    pcall(function()
+        player = Players:FindFirstChildOfClass("Player") or Players.PlayerAdded:Wait()
+    end)
+    while not player do
+        task.wait(0.1)
+        player = Players.LocalPlayer
+    end
+end
+
+local playerGui = player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui")
 
 local Config = {
     AutoFarm = true,
@@ -1380,17 +1394,19 @@ local orbitRayParams = RaycastParams.new()
 orbitRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function getGroundY(position)
-    if not State.TargetModel or not State.Character then
+    if not State.Character then
         return nil
     end
 
-    orbitRayParams.FilterDescendantsInstances = {
-        State.TargetModel,
-        State.Character,
-    }
+    local filter = { State.Character }
+    if State.TargetModel then
+        table.insert(filter, State.TargetModel)
+    end
 
-    local rayOrigin = position + Vector3.new(0, 80, 0)
-    local rayDirection = Vector3.new(0, -400, 0)
+    orbitRayParams.FilterDescendantsInstances = filter
+
+    local rayOrigin = position + Vector3.new(0, 100, 0)
+    local rayDirection = Vector3.new(0, -500, 0)
 
     local result = workspace:Raycast(
         rayOrigin,
@@ -1482,15 +1498,31 @@ local function lockCombatPosition()
 
     if not desiredCFrame or not State.Character or not State.Root then
         setUndergroundPhysics(false)
-        if State.Root then
-            -- Anti-Void Fall Protection: Restore character position if dropping below floor level
-            if State.Root.Position.Y < -50 or (State.GroundY and State.Root.Position.Y < (State.GroundY - 3)) then
+        if State.Root and State.Humanoid then
+            pcall(function()
+                State.Humanoid.PlatformStand = false
+                State.Humanoid.AutoRotate = true
+            end)
+
+            -- เมื่อไม่มีมอนสเตอร์ / รอมอนชุดใหม่: วางตัวละครกลับมายืนบนพื้นทันที ป้องกันการร่วงหรือตกใต้ดิน
+            local currentPos = State.Root.Position
+            local gY = getGroundY(currentPos) or State.GroundY
+            if gY and gY > -150 then
                 pcall(function()
-                    local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 4) or 10
-                    State.Root.CFrame = CFrame.new(State.Root.Position.X, targetY, State.Root.Position.Z)
+                    State.GroundY = gY
+                    State.Root.CFrame = CFrame.new(currentPos.X, gY + 3.5, currentPos.Z)
                     State.Root.AssemblyLinearVelocity = Vector3.zero
                     State.Root.AssemblyAngularVelocity = Vector3.zero
                 end)
+            else
+                if currentPos.Y < -50 then
+                    pcall(function()
+                        local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 3.5) or 10
+                        State.Root.CFrame = CFrame.new(currentPos.X, targetY, currentPos.Z)
+                        State.Root.AssemblyLinearVelocity = Vector3.zero
+                        State.Root.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
             end
         end
         return
@@ -2325,7 +2357,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabLayout.Parent = tabScroll
 
     tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        task.defer(function()
+            pcall(function()
+                if tabScroll and tabLayout then
+                    tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+                end
+            end)
+        end)
     end)
 
     local statusCard = Instance.new("Frame")
@@ -2589,7 +2627,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageLayout.Parent = pageScroll
 
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+            task.defer(function()
+                pcall(function()
+                    if pageScroll and pageLayout then
+                        pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+                    end
+                end)
+            end)
         end)
 
         local function activateTab()
