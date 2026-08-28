@@ -16,8 +16,20 @@ local IRON_CAVE_MAP_ID  = 132445869992129
 
 if game.PlaceId == IRON_BOSS_MAP_ID or game.GameId == IRON_BOSS_MAP_ID
    or game.PlaceId == IRON_CAVE_MAP_ID or game.GameId == IRON_CAVE_MAP_ID then
-    print("[PayomboyZ HUB] ตรวจพบแมพดันเจี้ยน/ถ้ำ (" .. tostring(game.PlaceId) .. ") กำลังโหลดระบบดันเจี้ยน...")
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss"))()
+    print("[PayomboyZ HUB] ตรวจพบแมพดันเจี้ยน/ถ้ำ (" .. tostring(game.PlaceId) .. ") กำลังโหลดระบบดันเจี้ยนแบบ Async...")
+    task.spawn(function()
+        pcall(function()
+            local code = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss")
+            if code and #code > 0 then
+                loadstring(code)()
+            end
+        end)
+    end)
+    return
+end
+
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
 end
 
 local CoreGui           = game:GetService("CoreGui")
@@ -31,11 +43,9 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
-repeat task.wait() until Players.LocalPlayer
-local player            = Players.LocalPlayer
-
+local player            = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local character         = player and player.Character
-local Camera            = workspace.CurrentCamera
+local Camera            = workspace.CurrentCamera or workspace:WaitForChild("CurrentCamera", 5)
 
 if player then
     player.CharacterAdded:Connect(function(char)
@@ -100,38 +110,48 @@ local function playClickSound()
     end)
 end
 
+local registeredAvatarLabels = {}
 local customAvatarAsset = nil
-local function loadCustomAvatarImage()
-    if customAvatarAsset then return customAvatarAsset end
-    if player then
-        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
-    else
-        customAvatarAsset = ""
-    end
 
-    task.spawn(function()
-        local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
-        local fileName  = "payomboyz_avatar.jpg"
-        
-        pcall(function()
-            if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-                local getAsset = getcustomasset or getsynasset
-                local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
-                if not isFileExist then
-                    local imageBytes = game:HttpGet(avatarUrl)
-                    if imageBytes and #imageBytes > 0 then
-                        writefile(fileName, imageBytes)
-                    end
-                end
-                if typeof(isfile) == "function" and isfile(fileName) then
-                    customAvatarAsset = getAsset(fileName)
+local function getAvatarImage()
+    if customAvatarAsset then return customAvatarAsset end
+    local uid = (player and player.UserId) or 1
+    return "rbxthumb://type=AvatarHeadShot&id=" .. uid .. "&w=150&h=150"
+end
+
+local function registerAvatarLabel(imgLabel)
+    if not imgLabel then return end
+    table.insert(registeredAvatarLabels, imgLabel)
+    imgLabel.Image = getAvatarImage()
+end
+
+task.spawn(function()
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local fileName  = "payomboyz_avatar.jpg"
+    pcall(function()
+        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+            local getAsset = getcustomasset or getsynasset
+            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+            if not isFileExist then
+                local imageBytes = game:HttpGet(avatarUrl)
+                if imageBytes and #imageBytes > 0 then
+                    writefile(fileName, imageBytes)
                 end
             end
-        end)
+            if typeof(isfile) == "function" and isfile(fileName) then
+                local asset = getAsset(fileName)
+                if asset then
+                    customAvatarAsset = asset
+                    for _, label in ipairs(registeredAvatarLabels) do
+                        pcall(function()
+                            if label and label.Parent then label.Image = asset end
+                        end)
+                    end
+                end
+            end
+        end
     end)
-
-    return customAvatarAsset
-end
+end)
 
 local function GetSafeParentGui()
     if typeof(gethui) == "function" then
@@ -353,7 +373,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local capAvatarImg = Instance.new("ImageLabel")
     capAvatarImg.Size = UDim2.fromScale(1, 1)
     capAvatarImg.BackgroundTransparency = 1
-    capAvatarImg.Image = loadCustomAvatarImage()
+    registerAvatarLabel(capAvatarImg)
     capAvatarImg.ZIndex = 4
     capAvatarImg.Parent = capAvatarFrame
 
@@ -492,7 +512,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local avatarImg = Instance.new("ImageLabel")
     avatarImg.Size = UDim2.fromScale(1, 1)
     avatarImg.BackgroundTransparency = 1
-    avatarImg.Image = loadCustomAvatarImage()
+    registerAvatarLabel(avatarImg)
     avatarImg.ZIndex = 11
     avatarImg.Parent = avatarFrame
 
@@ -589,7 +609,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabLayout.Parent = tabScroll
 
     tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        task.defer(function()
+            pcall(function()
+                if tabScroll and tabLayout then
+                    tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+                end
+            end)
+        end)
     end)
 
     local statusCard = Instance.new("Frame")
@@ -757,7 +783,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageLayout.Parent = pageScroll
 
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+            task.defer(function()
+                pcall(function()
+                    if pageScroll and pageLayout then
+                        pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+                    end
+                end)
+            end)
         end)
 
         local function activateTab()
@@ -1066,7 +1098,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 optLayout.Parent = optScroll
 
                 optLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-                    optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 20)
+                    task.defer(function()
+                        pcall(function()
+                            if optScroll and optLayout then
+                                optScroll.CanvasSize = UDim2.new(0, 0, 0, optLayout.AbsoluteContentSize.Y + 20)
+                            end
+                        end)
+                    end)
                 end)
 
                 local currentSelected = {}
@@ -1462,6 +1500,8 @@ local Config = {
     SelectedWorldId      = "World1",
     SelectedDifficultyName = "ระดับทดสอบ (Diff 1)",
     SelectedDifficultyNum  = 1,
+    SelectedPartySizeName  = "4 คน (Full)",
+    SelectedPartySizeNum   = 4,
     SaveSettings         = true,
 
     -- Auto Systems Flags
@@ -1479,6 +1519,9 @@ local Config = {
     AutoPlayAgain        = true,
     AutoQuest            = false, -- ออโต้ทำเควสประจำวัน
     AutoRaceReroll       = false, -- ออโต้สุ่มเผ่า (Race Reroll)
+    AutoPerfectQTE       = false, -- ออโต้กด Perfect ตีอาวุธ (Rating 15)
+    AutoFarm             = false,
+    AutoSkill            = false,
     ChickenMode          = false, -- ไก่ตัน: เปิดทุกระบบพร้อมกัน
     _ChickenPrevState    = {},    -- เก็บ state ก่อนเปิดไก่ตัน
 
@@ -1612,6 +1655,28 @@ local function ActiveSkillNode(weaponType, skillNode)
     end)
 end
 
+local function EquipSkillToSlot(weaponDef, slot, skillId)
+    pcall(function()
+        local wDef = weaponDef or "Heavy_Hammer"
+        local sSlot = slot or "Skill1"
+        local sId = skillId or "ThunderHammer_Skill_3"
+        local rpRE = getRemote("ReplicatedStorage.Framework.Systems.RedPointSystem.RedPointUtil.RemoteEvent")
+        if rpRE then rpRE:FireServer("Clear", "SkillActiveHeavy", sSlot) end
+        local weaponRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.WeaponUtil.RemoteEvent")
+        if weaponRE then weaponRE:FireServer("EquipSkill", wDef, sSlot, sId) end
+    end)
+end
+
+local function EquipSkillPresetHeavy()
+    pcall(function()
+        EquipSkillToSlot("Heavy_Hammer", "SkillU", "ThunderHammer_Skill_U")
+        task.wait(0.15)
+        EquipSkillToSlot("Heavy_Hammer", "Skill2", "Heavy_Skill_MegaWildLeap")
+        task.wait(0.15)
+        EquipSkillToSlot("Heavy_Hammer", "Skill1", "ThunderHammer_Skill_3")
+    end)
+end
+
 local function EquipBestAll()
     pcall(function()
         local equipRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
@@ -1726,6 +1791,70 @@ local PET_PORTAL_CF     = CFrame.new(-73.71713256835938, 34.35190963745117, -16.
 local MILO_PORTAL_CF    = CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469)
 local FORTIFY_PORTAL_CF = CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484)
 
+local ALL_NPC_WINDOW_NAMES = {
+    "ScreenForge",
+    "ScreenEnchantment",
+    "ScreenEnchantmentFuse",
+    "ScreenPetsHatch",
+    "ScreenPetsFortifyAndUpgrade",
+    "ScreenFortify",
+    "DialogNpc"
+}
+
+local function CloseAllNPCWindows()
+    pcall(function()
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "CloseGUIWindow")
+        end
+
+        local pg = player and player:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            for _, name in ipairs(ALL_NPC_WINDOW_NAMES) do
+                for _, obj in ipairs(pg:GetDescendants()) do
+                    if obj.Name == name then
+                        if obj:IsA("ScreenGui") then
+                            obj.Enabled = false
+                        elseif obj:IsA("GuiObject") then
+                            obj.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function OpenNPCWindowCleanly(guiName, targetCF)
+    pcall(function()
+        CloseAllNPCWindows()
+        task.wait(0.1)
+
+        if targetCF then
+            teleportWithPhysicsNudge(targetCF)
+            task.wait(0.15)
+        end
+
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName)
+        end
+
+        local pg = player and player:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+            local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
+            if targetGui then
+                if targetGui:IsA("ScreenGui") then
+                    targetGui.Enabled = true
+                elseif targetGui:IsA("GuiObject") then
+                    targetGui.Visible = true
+                end
+            end
+        end
+    end)
+end
+
 local function teleportWithPhysicsNudge(targetCF)
     if typeof(targetCF) ~= "CFrame" then return end
     pcall(function()
@@ -1770,29 +1899,7 @@ local function teleportWithPhysicsNudge(targetCF)
 end
 
 local function ForceOpenUIWindow(guiName, npcDialogId)
-    pcall(function()
-        -- 1. Fire TaskRE DialogNpc & OpenGUIWindow (ตรงตามโครงสร้างของ Iron Soul)
-        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", npcDialogId or "DialogNpcNormal1|1")
-            task.wait(0.05)
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName)
-        end
-
-        -- 2. เปิดการมองเห็นของ GUI ใน PlayerGui สำหรับ Client
-        local pg = player:FindFirstChildOfClass("PlayerGui")
-        if pg then
-            local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
-            local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName)
-            if targetGui then
-                if targetGui:IsA("ScreenGui") then
-                    targetGui.Enabled = true
-                elseif targetGui:IsA("Frame") or targetGui:IsA("CanvasGroup") then
-                    targetGui.Visible = true
-                end
-            end
-        end
-    end)
+    OpenNPCWindowCleanly(guiName)
 end
 
 local function triggerNPCInteraction(targetCF)
@@ -1841,52 +1948,41 @@ local function triggerNPCInteraction(targetCF)
     end)
 end
 
+local function TriggerForgePerfectQTE(targetUUID)
+    pcall(function()
+        local uuid = targetUUID or GetEquippedWeaponUUID()
+        local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
+        if forgeRF then
+            forgeRF:InvokeServer("QTE", {
+                UUID = uuid or "eca0f3be-0265-4e24-bfbc-6cf26763f426",
+                Rating = 15
+            })
+        end
+    end)
+end
+
 local function OpenForgeGUI()
-    teleportWithPhysicsNudge(FORGE_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(FORGE_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenForge", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenForge", FORGE_PORTAL_CF)
 end
 
 local function OpenPetHatchGUI()
-    teleportWithPhysicsNudge(PET_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(PET_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenPetsHatch", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenPetsHatch", PET_PORTAL_CF)
 end
 
 local function OpenPetUpgradeGUI()
-    teleportWithPhysicsNudge(PET_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(PET_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenPetsFortifyAndUpgrade", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenPetsFortifyAndUpgrade", PET_PORTAL_CF)
 end
 
 local function OpenMiloEnchantGUI()
-    teleportWithPhysicsNudge(MILO_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(MILO_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenEnchantment", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenEnchantment", MILO_PORTAL_CF)
 end
 
 local function OpenMiloFuseRuneGUI()
-    teleportWithPhysicsNudge(MILO_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(MILO_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenEnchantmentFuse", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenEnchantmentFuse", MILO_PORTAL_CF)
 end
 
 local function OpenEnhanceEquipmentGUI()
-    teleportWithPhysicsNudge(FORTIFY_PORTAL_CF)
-    task.wait(0.15)
-    triggerNPCInteraction(FORTIFY_PORTAL_CF)
-    task.wait(0.1)
-    ForceOpenUIWindow("ScreenFortify", "DialogNpcNormal1|1")
+    OpenNPCWindowCleanly("ScreenFortify", FORTIFY_PORTAL_CF)
 end
 
 local function DropForgeOres(oresTable, forgeType)
@@ -2633,10 +2729,19 @@ end })
 ForgeTab:AddToggle("AutoEquipBestToggle", { Title = "เปิดสวมใส่ไอเทมดีที่สุดอัตโนมัติ", Desc = "เช็คและสวมใส่อุปกรณ์พลังสูงที่สุดในกระเป๋าอย่างต่อเนื่อง", Default = Config.AutoSelectBest, Callback = function(t) Config.AutoSelectBest = t end })
 
 ForgeTab:AddSection("ระบบเตาหลอมไอเทม (Forge System)")
+ForgeTab:AddButton({ Title = "❌ ปิดหน้าต่าง NPC & เตาหลอมทั้งหมดทันที", Callback = function()
+    CloseAllNPCWindows()
+    ObsidianGlassEngine:Notify({ Title = "ปิดหน้าต่าง", Content = "ซ่อนและปิดหน้าต่าง NPC ทั้งหมดเรียบร้อยแล้ว!", Duration = 3 })
+end })
 ForgeTab:AddButton({ Title = "🔥 วาปไปเตาหลอม & เปิดหน้าต่าง Forge (ScreenForge)", Callback = function()
     OpenForgeGUI()
     ObsidianGlassEngine:Notify({ Title = "เตาหลอม Forge", Content = "วาร์ปไปพิกัดเตาหลอม และเปิดหน้าต่าง Forge เรียบร้อย!", Duration = 3 })
 end })
+ForgeTab:AddButton({ Title = "🎯 สั่งตีอาวุธ Auto Perfect (QTE Rating 15)", Callback = function()
+    TriggerForgePerfectQTE()
+    ObsidianGlassEngine:Notify({ Title = "Auto Perfect", Content = "ส่งสัญญาณตีอาวุธ Perfect (Rating 15) เรียบร้อยแล้ว!", Duration = 3 })
+end })
+ForgeTab:AddToggle("AutoPerfectQTEToggle", { Title = "เปิดใช้งานตีอาวุธ Perfect อัตโนมัติ (Auto QTE)", Desc = "ส่งสัญญาณ QTE Perfect (Rating 15) อัตโนมัติทุกครั้งเมื่อเปิดหน้าเตาหลอม", Default = Config.AutoPerfectQTE, Callback = function(t) Config.AutoPerfectQTE = t end })
 
 ForgeTab:AddSection("🧙‍♂️ NPC Milo (ช่างออฟชั่น & ผสานรูน)")
 ForgeTab:AddButton({ Title = "✨ วาปไปหา Milo & เปิดหน้าออฟชั่นอุปกรณ์ (ScreenEnchantment)", Callback = function()
@@ -2965,21 +3070,23 @@ task.spawn(function()
                 local gamePlayerRE = getRemote("ReplicatedStorage.Remotes.GamePlayerRE")
                 local gameRoundRE  = getRemote("ReplicatedStorage.Remotes.GameRoundRE")
 
-                local reviveFrame = player.PlayerGui:FindFirstChild("BattleHUD")
-                    and player.PlayerGui.BattleHUD:FindFirstChild("PlayerRevive")
-                    and player.PlayerGui.BattleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
-                if reviveFrame and reviveFrame.Visible then
-                    if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
-                end
+                local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                if pg then
+                    local battleHUD = pg:FindFirstChild("BattleHUD")
+                    local reviveFrame = battleHUD and battleHUD:FindFirstChild("PlayerRevive") and battleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
+                    if reviveFrame and reviveFrame.Visible then
+                        if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
+                    end
 
-                local settlement = player.PlayerGui:FindFirstChild("ResultGui")
-                    and player.PlayerGui.ResultGui:FindFirstChild("ScreenSettlement")
-                if settlement and settlement.Visible then
-                    pcall(function()
-                        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-                        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement") end
-                    end)
-                    if gameRoundRE then gameRoundRE:FireServer("VotePlayAgain") end
+                    local resultGui = pg:FindFirstChild("ResultGui")
+                    local settlement = resultGui and resultGui:FindFirstChild("ScreenSettlement")
+                    if settlement and settlement.Visible then
+                        pcall(function()
+                            local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement") end
+                        end)
+                        if gameRoundRE then gameRoundRE:FireServer("VotePlayAgain") end
+                    end
                 end
             end)
         end
@@ -3058,7 +3165,8 @@ task.spawn(function()
 
         if Config.AutoBonusCard then
             pcall(function()
-                local resultGui = player.PlayerGui:FindFirstChild("ResultGui")
+                local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                local resultGui = pg and pg:FindFirstChild("ResultGui")
                 if resultGui and resultGui:FindFirstChild("ScreenSettlement") and resultGui.ScreenSettlement.Visible then
                     local bonusRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent")
                     if bonusRE then bonusRE:FireServer("SelectCard", 1) end
@@ -3089,6 +3197,16 @@ end)
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
+
+        if Config.AutoPerfectQTE then
+            pcall(function()
+                local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                local screenForge = pg and pg:FindFirstChild("ScreenForge", true)
+                if screenForge and (screenForge.Enabled or screenForge.Visible) then
+                    TriggerForgePerfectQTE()
+                end
+            end)
+        end
 
         if Config.AutoClaimDaily then
             pcall(function()
@@ -3194,9 +3312,10 @@ task.spawn(function()
             local quests = {}
             pcall(function()
                 -- วิธีที่ 1: อ่านจาก PlayerGui ที่ game render ให้
-                local questGui = player.PlayerGui:FindFirstChild("QuestGui")
-                    or player.PlayerGui:FindFirstChild("DailyQuestGui")
-                    or player.PlayerGui:FindFirstChild("UIMain")
+                local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                local questGui = pg and (pg:FindFirstChild("QuestGui")
+                    or pg:FindFirstChild("DailyQuestGui")
+                    or pg:FindFirstChild("UIMain"))
                 if questGui then
                     for _, v in ipairs(questGui:GetDescendants()) do
                         local qId = v:GetAttribute("QuestId") or v:GetAttribute("questId")
