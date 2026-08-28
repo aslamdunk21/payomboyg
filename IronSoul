@@ -275,7 +275,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     task.spawn(function()
         local dots = {}
-        for i = 1, 30 do
+        for i = 1, 10 do
             local dot = Instance.new("Frame")
             dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
             dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -296,12 +296,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(0.1) do
             if not gui or not gui.Parent then break end
             for _, data in ipairs(dots) do
-                data.pos = data.pos + data.speed
+                data.pos = data.pos + data.speed * 3
                 if data.pos > 1.05 then data.pos = -0.05 end
-                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                local newX = (data.frame.Position.X.Scale + data.drift * 3) % 1.0
                 data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
             end
         end
@@ -1700,109 +1700,118 @@ local function FortifyEquipment(equipUUID)
     end)
 end
 
+local DUNGEON_PORTAL_CF = CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188)
+local CAVE_PORTAL_CF    = CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703)
+local TOWER_PORTAL_CF   = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094)
+local CIRCUS_PORTAL_CF  = CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562)
+local FORGE_PORTAL_CF   = CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042)
+local PET_PORTAL_CF     = CFrame.new(-73.71713256835938, 34.35190963745117, -16.689453125)
+local MILO_PORTAL_CF    = CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469)
+local FORTIFY_PORTAL_CF = CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484)
+
 local function teleportWithPhysicsNudge(targetCF)
+    if typeof(targetCF) ~= "CFrame" then return end
     pcall(function()
         local char = player.Character or player.CharacterAdded:Wait()
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
 
-        if hrp then
-            -- 1. Server SafeTeleport
-            if safeTeleport then pcall(function() safeTeleport:InvokeServer(targetCF) end) end
-            
-            -- 2. Direct Teleport Position
+        -- 1. เคลียร์ความเร็วตัวละครทันที (กันโดน Rubberband ย้อนกลับ)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+
+        -- 2. ย้ายพิกัดตัวละครทันที (Instant Teleport แบบเดียวกับระบบสร้างห้องดันเจี้ยน)
+        if char.PrimaryPart then
+            char:SetPrimaryPartCFrame(targetCF)
+        else
             hrp.CFrame = targetCF
-            task.wait(0.05)
+        end
 
-            -- 3. Trigger TouchTransmitters (หากมี Portal Zone ในระยะ 15 Studs)
-            pcall(function()
-                if type(firetouchinterest) == "function" then
-                    for _, v in ipairs(workspace:GetDescendants()) do
-                        if v:IsA("TouchTransmitter") and v.Parent then
-                            if (v.Parent.Position - hrp.Position).Magnitude < 15 then
-                                firetouchinterest(hrp, v.Parent, 0)
-                                task.wait(0.02)
-                                firetouchinterest(hrp, v.Parent, 1)
-                            end
-                        end
+        task.wait(0.05)
+
+        -- 3. ยิง TouchTransmitter กระตุ้น Zone หากมี Portal NPC ตรงจุดนั้น
+        pcall(function()
+            if type(firetouchinterest) == "function" and workspace.OverlapParams then
+                local params = OverlapParams.new()
+                params.FilterType = Enum.RaycastFilterType.Exclude
+                params.FilterDescendantsInstances = { char }
+                local parts = workspace:GetPartBoundsInBox(targetCF, Vector3.new(20, 20, 20), params)
+                for _, p in ipairs(parts) do
+                    local tt = p:FindFirstChildOfClass("TouchTransmitter")
+                    if tt then
+                        firetouchinterest(hrp, p, 0)
+                        task.wait(0.02)
+                        firetouchinterest(hrp, p, 1)
                     end
                 end
-            end)
-
-            -- 4. Physics Impulse & Jump Nudge (ส่งสัญญาณ Physics กระตุ้น Zone Client/Server)
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 8, 0)
-            if hum then
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
+        end)
 
-            -- 5. Micro Movement Offset (ขยับเล็กน้อยเพื่อกระตุ้น Physics Stepped)
-            hrp.CFrame = targetCF * CFrame.new(0, 0.15, -0.15)
-            task.wait(0.08)
-            hrp.CFrame = targetCF
+        -- 4. ย้ำพิกัดอีกครั้งให้มั่นใจว่าตัวไม่เด้งกลับ
+        hrp.CFrame = targetCF
+    end)
+end
+
+local function ForceOpenUIWindow(guiName, npcDialogId)
+    pcall(function()
+        -- 1. Fire TaskRE DialogNpc & OpenGUIWindow (ตรงตามโครงสร้างของ Iron Soul)
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", npcDialogId or "DialogNpcNormal1|1")
             task.wait(0.05)
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName)
+        end
+
+        -- 2. เปิดการมองเห็นของ GUI ใน PlayerGui สำหรับ Client
+        local pg = player:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+            local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName)
+            if targetGui then
+                if targetGui:IsA("ScreenGui") then
+                    targetGui.Enabled = true
+                elseif targetGui:IsA("Frame") or targetGui:IsA("CanvasGroup") then
+                    targetGui.Visible = true
+                end
+            end
         end
     end)
 end
 
 local function OpenForgeGUI()
     teleportWithPhysicsNudge(FORGE_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenForge")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenForge", "DialogNpcNormal1|1")
 end
 
 local function OpenPetHatchGUI()
     teleportWithPhysicsNudge(PET_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsHatch")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsHatch")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenPetsHatch", "DialogNpcNormal1|1")
 end
 
 local function OpenPetUpgradeGUI()
     teleportWithPhysicsNudge(PET_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsFortifyAndUpgrade")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenPetsFortifyAndUpgrade")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenPetsFortifyAndUpgrade", "DialogNpcNormal1|1")
 end
 
 local function OpenMiloEnchantGUI()
     teleportWithPhysicsNudge(MILO_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantment")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantment")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenEnchantment", "DialogNpcNormal1|1")
 end
 
 local function OpenMiloFuseRuneGUI()
     teleportWithPhysicsNudge(MILO_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantmentFuse")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenEnchantmentFuse")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenEnchantmentFuse", "DialogNpcNormal1|1")
 end
 
 local function OpenEnhanceEquipmentGUI()
     teleportWithPhysicsNudge(FORTIFY_PORTAL_CF)
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    if taskRE then
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
-        task.wait(0.1)
-        taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenFortify")
-    end
+    task.wait(0.1)
+    ForceOpenUIWindow("ScreenFortify", "DialogNpcNormal1|1")
 end
 
 local function DropForgeOres(oresTable, forgeType)
@@ -1916,7 +1925,27 @@ local KNOWN_RACES = {
 local function detectCurrentRace()
     local foundRace = nil
 
-    -- 1. Scan Character Head & BillboardGuis (Overhead text)
+    -- 1. Check DataUtil or Player attributes / values FIRST (Fastest, 0 lag)
+    pcall(function()
+        if DataUtil then
+            local pd = DataUtil:GetPlayerData(player)
+            if pd and pd.Race then
+                local rName = tostring(pd.Race)
+                for _, r in ipairs(KNOWN_RACES) do
+                    if string.find(rName, r) then foundRace = r return end
+                end
+                foundRace = rName
+                return
+            end
+        end
+        local rAttr = player:GetAttribute("Race") or player:GetAttribute("CurrentRace")
+        if rAttr then foundRace = tostring(rAttr) return end
+        local rVal = player:FindFirstChild("Race") or player:FindFirstChild("RaceValue")
+        if rVal and rVal:IsA("StringValue") then foundRace = rVal.Value return end
+    end)
+    if foundRace then return foundRace end
+
+    -- 2. Scan Character Head Overhead GUI (Scanning Head descendants is 100% accurate for overhead title/race)
     pcall(function()
         local char = player.Character
         if char then
@@ -1934,11 +1963,19 @@ local function detectCurrentRace()
                     end
                 end
             end
-            for _, desc in ipairs(char:GetDescendants()) do
-                if desc:IsA("BillboardGui") or desc:IsA("SurfaceGui") then
-                    for _, txtLabel in ipairs(desc:GetDescendants()) do
-                        if txtLabel:IsA("TextLabel") then
-                            local txt = txtLabel.Text or ""
+        end
+    end)
+    if foundRace then return foundRace end
+
+    -- 3. Check PlayerGui for ScreenRace or HUD labels
+    pcall(function()
+        local pg = player:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") or gui:IsA("Frame") then
+                    for _, desc in ipairs(gui:GetDescendants()) do
+                        if desc:IsA("TextLabel") and desc.Visible then
+                            local txt = desc.Text or ""
                             for _, rName in ipairs(KNOWN_RACES) do
                                 if string.find(txt, rName) then
                                     foundRace = rName
@@ -1950,51 +1987,6 @@ local function detectCurrentRace()
                 end
             end
         end
-    end)
-    if foundRace then return foundRace end
-
-    -- 2. Scan PlayerGui descendants for Race UI / HUD
-    pcall(function()
-        local pg = player:FindFirstChildOfClass("PlayerGui")
-        if pg then
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") then
-                    for _, desc in ipairs(gui:GetDescendants()) do
-                        if desc:IsA("TextLabel") and desc.Visible then
-                            local txt = desc.Text or ""
-                            if string.find(txt, "★") or string.find(txt, "Race") or string.find(txt, "Human") or string.find(txt, "Demon") then
-                                for _, rName in ipairs(KNOWN_RACES) do
-                                    if string.find(txt, rName) then
-                                        foundRace = rName
-                                        return
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-    if foundRace then return foundRace end
-
-    -- 3. Check DataUtil or Player attributes / values
-    pcall(function()
-        if DataUtil then
-            local pd = DataUtil:GetPlayerData(player)
-            if pd and pd.Race then
-                local rName = tostring(pd.Race)
-                for _, r in ipairs(KNOWN_RACES) do
-                    if string.find(rName, r) then foundRace = r return end
-                end
-                foundRace = rName
-                return
-            end
-        end
-        local rAttr = player:GetAttribute("Race") or player:GetAttribute("CurrentRace")
-        if rAttr then foundRace = tostring(rAttr) return end
-        local rVal = player:FindFirstChild("Race") or player:FindFirstChild("RaceValue")
-        if rVal and rVal:IsA("StringValue") then foundRace = rVal.Value return end
     end)
 
     return foundRace or "Unknown"
@@ -2189,15 +2181,6 @@ local function getDifficultyOptionsForWorld(worldId)
         }
     end
 end
-
-local DUNGEON_PORTAL_CF = CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188)
-local CAVE_PORTAL_CF    = CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703)
-local TOWER_PORTAL_CF   = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094)
-local CIRCUS_PORTAL_CF  = CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562)
-local FORGE_PORTAL_CF   = CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042)
-local PET_PORTAL_CF     = CFrame.new(-73.71713256835938, 34.35190963745117, -16.689453125)
-local MILO_PORTAL_CF    = CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469)
-local FORTIFY_PORTAL_CF = CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484)
 
 local function runLobbyDungeonSelect()
     local worldId = Config.SelectedWorldId or "World1"
@@ -2945,6 +2928,7 @@ end)
 
 -- ASYNC LOOP: เข้าดันเจี้ยนในล็อบบี้อัตโนมัติ
 task.spawn(function()
+    task.wait(3) -- รอให้สคริปต์และ UI โหลดตัวเสร็จก่อนเริ่มลูป ป้องกันมือถือค้างตอนกด Execute
     local lastDungeonTime = 0
     local lastCaveTime    = 0
     local lastTowerTime   = 0
@@ -3163,7 +3147,7 @@ end)
 -- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (ครบถ้วน)
 -- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (Dashboard)
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait(3) do
         if State.Unloaded then break end
         RefreshStatsDisplay()
     end
