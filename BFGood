@@ -1,3 +1,6 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
+task.wait(5)
+
 -- Re-entrancy Cleanup: terminate previous execution threads
 if getgenv().PayomboyZ_BloxFruits_Cleanup then
     pcall(getgenv().PayomboyZ_BloxFruits_Cleanup)
@@ -6,6 +9,17 @@ local scriptRunning = true
 getgenv().PayomboyZ_BloxFruits_Cleanup = function()
     scriptRunning = false
 end
+
+-- Teleport Persistence: Auto-execute script after place transitions
+pcall(function()
+    local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+    if queueFunc then
+        queueFunc([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+        ]])
+    end
+end)
 
 getgenv().Configs = {
     Team = "Pirates",
@@ -72,19 +86,19 @@ local Entrance = {}
 
 -- Safe Parent GUI Resolver (Supports All Executors & Prevents CoreGui Capability Errors)
 local function GetSafeParentGui()
-    local success, result = pcall(function()
-        if typeof(gethui) == "function" then
-            local h = gethui()
-            if h and typeof(h) == "Instance" then return h end
-        end
-        local core = game:GetService("CoreGui")
-        local testObj = Instance.new("Folder")
-        testObj.Parent = core
-        testObj:Destroy()
-        return core
+    if typeof(gethui) == "function" then
+        local ok, h = pcall(gethui)
+        if ok and h and typeof(h) == "Instance" then return h end
+    end
+    local core = game:GetService("CoreGui")
+    local success = pcall(function()
+        local testGui = Instance.new("ScreenGui")
+        testGui.Name = "Obsidian_Perm_Test"
+        testGui.Parent = core
+        testGui:Destroy()
     end)
-    if success and result then
-        return result
+    if success then
+        return core
     end
     return LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
 end
@@ -224,8 +238,9 @@ local LastAttackTime = 0
 -- Inventory / Tool Helper
 local function IsOwn(name)
     if not name then return nil end
-    if LocalPlayer.Backpack:FindFirstChild(name) then
-        return LocalPlayer.Backpack:FindFirstChild(name)
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp and bp:FindFirstChild(name) then
+        return bp:FindFirstChild(name)
     end
     local k
     if LocalPlayer.Character then
@@ -241,6 +256,14 @@ end
 -- Fast Attack Logic (From LogicMain.txt)
 local function Attack(v)
     if not getgenv().Configs.FastAttack then return end
+    pcall(function()
+        local activeTool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if activeTool then
+            activeTool:Activate()
+        end
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end)
     if tick() - LastAttackTime >= 0.2 then
         if LocalPlayer.Character and not LocalPlayer.Character:FindFirstChild("HasBuso") then
             pcall(function() CommF_:InvokeServer("Buso") end)
@@ -275,43 +298,53 @@ local function Attack(v)
             end
         end)
     end
-    pcall(function()
+        if not r or not r.Parent then
+            local paths = {ReplicatedStorage:FindFirstChild("Util"), ReplicatedStorage:FindFirstChild("Remotes"), ReplicatedStorage:FindFirstChild("Assets"), ReplicatedStorage:FindFirstChild("Common"), ReplicatedStorage:FindFirstChild("FX")}
+            for _, path in ipairs(paths) do
+                if path then
+                    for _, child in ipairs(path:GetChildren()) do
+                        if child:GetAttribute("Id") and child:IsA("RemoteEvent") then
+                            r = child
+                            break
+                        end
+                    end
+                end
+                if r then break end
+            end
+        end
+        if seed == 0 or not seed then
+            pcall(function()
+                seed = ReplicatedStorage.Modules.Net.seed:InvokeServer() * 2
+            end)
+        end
+
         local h = "RE/RegisterHit"
         local key = math.floor(workspace:GetServerTimeNow() / 10 % 10)
         local encoded = ""
         for i = 1, #h do
             encoded = encoded .. string.char(bit32.bxor(string.byte(h, i), key + 1))
         end
-        if type(v) == "table" then
-            ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer(0)
-            r:FireServer(encoded, bit32.bxor(r:GetAttribute("Id") + 909090, seed),
-                v[1]:FindFirstChild("Head"),
-                {
-                    { v[1], v[1]:FindFirstChild("Head") }, 
-                    v[1],
-                    { v[2], v[2]:FindFirstChild("Head") }, 
-                    v[2]
-                },
-                nil,
-                v106
-            )
-            ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(
-                v[1]:FindFirstChild("Head"),
-                {
-                    { v[1], v[1]:FindFirstChild("Head") }, 
-                    v[1],
-                    { v[2], v[2]:FindFirstChild("Head") }, 
-                    v[2]
-                },
-                nil,
-                v106
-            )
-        else
-            ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer(0)
-            r:FireServer(encoded, bit32.bxor(r:GetAttribute("Id") + 909090, seed), v:FindFirstChild("Head"), {v, v:FindFirstChild("Head")}, v106)
-            ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(v:FindFirstChild("Head"), {v, v:FindFirstChild("Head")}, v106)
+        
+        if r and r:FindFirstChildOfClass("Folder") or r then
+            local hitId = bit32.bxor((r:GetAttribute("Id") or 0) + 909090, seed)
+            if type(v) == "table" and v[1] and v[1]:FindFirstChild("Head") then
+                pcall(function() ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer(0) end)
+                pcall(function()
+                    r:FireServer(encoded, hitId, v[1].Head, {{ v[1], v[1].Head }, v[1]}, nil, v106)
+                end)
+                pcall(function()
+                    ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(v[1].Head, {{ v[1], v[1].Head }, v[1]}, v106)
+                end)
+            elseif typeof(v) == "Instance" and v:FindFirstChild("Head") then
+                pcall(function() ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer(0) end)
+                pcall(function()
+                    r:FireServer(encoded, hitId, v.Head, {{ v, v.Head }, v}, v106)
+                end)
+                pcall(function()
+                    ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(v.Head, {{ v, v.Head }, v}, v106)
+                end)
+            end
         end
-    end)
     LastAttackTime = tick()
 end
 
@@ -328,30 +361,26 @@ end
 
 local function EquipWeapon(type)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
-    local targetToolName = ""
-    for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
-        if v:IsA("Tool") and v.ToolTip == type then
-            targetToolName = v.Name
-            break
-        end
-    end
     for _, v in pairs(LocalPlayer.Character:GetChildren()) do
         if v:IsA("Tool") and v.ToolTip == type then
-            targetToolName = v.Name
-            break
+            return
         end
     end
-    if targetToolName ~= "" and LocalPlayer.Backpack:FindFirstChild(targetToolName) then
-        local tool = LocalPlayer.Backpack:FindFirstChild(targetToolName)
-        task.wait()
-        LocalPlayer.Character.Humanoid:EquipTool(tool)
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if not bp then return end
+    for _, v in pairs(bp:GetChildren()) do
+        if v:IsA("Tool") and v.ToolTip == type then
+            LocalPlayer.Character.Humanoid:EquipTool(v)
+            break
+        end
     end
 end
 
 local function EquipName(toolName)
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("Humanoid") then return end
-    local tool = character:FindFirstChild(toolName) or LocalPlayer.Backpack:FindFirstChild(toolName)
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local tool = character:FindFirstChild(toolName) or (bp and bp:FindFirstChild(toolName))
     if not tool then return end
     character.Humanoid:EquipTool(tool)
 end
@@ -401,8 +430,14 @@ DestroyExistingUI("Obsidian_HUD_Status")
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "Obsidian_HUD_Status"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = GetSafeParentGui()
+local parentOk = pcall(function()
+    ScreenGui.Parent = GetSafeParentGui()
+end)
+if not parentOk or not ScreenGui.Parent then
+    pcall(function()
+        ScreenGui.Parent = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    end)
+end
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 500, 0, 75)
@@ -663,8 +698,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 99999
-    gui.Parent = GetSafeParentGui()
+    local parentOk = pcall(function()
+        gui.Parent = GetSafeParentGui()
+    end)
+    if not parentOk or not gui.Parent then
+        pcall(function()
+            gui.Parent = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+        end)
+    end
 
     local uiScale = Instance.new("UIScale")
     local camera = workspace.CurrentCamera
@@ -1440,7 +1481,7 @@ if placeid == 2753915549 then
         Vector3.new(-4607.8227539063, 872.54248046875, -1667.5568847656),
         Vector3.new(-7894.6176757813, 5547.1416015625, -380.29119873047),
     }
-elseif placeid == 79091703265657 then
+elseif placeid == 4442272183 or placeid == 79091703265657 then
     World2 = true
     Entrance = {
         Vector3.new(923.21252441406, 126.9760055542, 32852.83203125),
@@ -1448,7 +1489,7 @@ elseif placeid == 79091703265657 then
         Vector3.new(2284, 15, 905),
         Vector3.new(-286.98907470703125, 306.1379089355469, 597.8827514648438),
     }
-elseif placeid == 7449423635 then
+elseif placeid == 7449423635 or placeid == 7449423635 or placeid == 7449423635 then
     World3 = true
 end
 
@@ -1559,6 +1600,81 @@ local function CheckQuest()
             Monster = "Water Fighter" NameQuest = "ForgottenQuest" LevelQuest = 2 NameCheckQuest = "Water Fighter" CFrameQ = CFrame.new(-3054, 237, -10148) CFrameMon = CFrame.new(-3385, 239, -10542)
         end
     end
+    if World3 then
+        if Level == 1500 or Level <= 1524 then
+            Monster = "Pirate Millionaire" NameQuest = "PiratePortQuest" LevelQuest = 1 NameCheckQuest = "Pirate Millionaire" CFrameQ = CFrame.new(-290, 44, 5580) CFrameMon = CFrame.new(-373, 75, 5552)
+        elseif Level == 1525 or Level <= 1574 then
+            Monster = "Pistol Billionaire" NameQuest = "PiratePortQuest" LevelQuest = 2 NameCheckQuest = "Pistol Billionaire" CFrameQ = CFrame.new(-290, 44, 5580) CFrameMon = CFrame.new(-469, 74, 5952)
+        elseif Level == 1575 or Level <= 1599 then
+            Monster = "Dragon Crew Warrior" NameQuest = "AmazonQuest" LevelQuest = 1 NameCheckQuest = "Dragon Crew Warrior" CFrameQ = CFrame.new(5832, 52, -1105) CFrameMon = CFrame.new(6157, 52, -1112)
+        elseif Level == 1600 or Level <= 1624 then
+            Monster = "Dragon Crew Archer" NameQuest = "AmazonQuest" LevelQuest = 2 NameCheckQuest = "Dragon Crew Archer" CFrameQ = CFrame.new(5832, 52, -1105) CFrameMon = CFrame.new(6633, 47, -197)
+        elseif Level == 1625 or Level <= 1649 then
+            Monster = "Female Islander" NameQuest = "AmazonQuest2" LevelQuest = 1 NameCheckQuest = "Female Islander" CFrameQ = CFrame.new(5446, 602, 749) CFrameMon = CFrame.new(4714, 602, 232)
+        elseif Level == 1650 or Level <= 1699 then
+            Monster = "Giant Islander" NameQuest = "AmazonQuest2" LevelQuest = 2 NameCheckQuest = "Giant Islander" CFrameQ = CFrame.new(5446, 602, 749) CFrameMon = CFrame.new(5207, 583, -29)
+        elseif Level == 1700 or Level <= 1724 then
+            Monster = "Marine Commodore" NameQuest = "MarineTreeIsland" LevelQuest = 1 NameCheckQuest = "Marine Commodore" CFrameQ = CFrame.new(2180, 29, -6740) CFrameMon = CFrame.new(2462, 73, -6789)
+        elseif Level == 1725 or Level <= 1749 then
+            Monster = "Marine Rear Admiral" NameQuest = "MarineTreeIsland" LevelQuest = 2 NameCheckQuest = "Marine Rear Admiral" CFrameQ = CFrame.new(2180, 29, -6740) CFrameMon = CFrame.new(2887, 73, -7198)
+        elseif Level == 1750 or Level <= 1774 then
+            Monster = "Fishman Raider" NameQuest = "DeepForestIsland1" LevelQuest = 1 NameCheckQuest = "Fishman Raider" CFrameQ = CFrame.new(-10584, 332, -8758) CFrameMon = CFrame.new(-10357, 332, -8973)
+        elseif Level == 1775 or Level <= 1799 then
+            Monster = "Fishman Captain" NameQuest = "DeepForestIsland1" LevelQuest = 2 NameCheckQuest = "Fishman Captain" CFrameQ = CFrame.new(-10584, 332, -8758) CFrameMon = CFrame.new(-10994, 332, -8936)
+        elseif Level == 1800 or Level <= 1824 then
+            Monster = "Forest Pirate" NameQuest = "DeepForestIsland2" LevelQuest = 1 NameCheckQuest = "Forest Pirate" CFrameQ = CFrame.new(-13233, 332, -7626) CFrameMon = CFrame.new(-13437, 332, -7916)
+        elseif Level == 1825 or Level <= 1849 then
+            Monster = "Mythological Pirate" NameQuest = "DeepForestIsland2" LevelQuest = 2 NameCheckQuest = "Mythological Pirate" CFrameQ = CFrame.new(-13233, 332, -7626) CFrameMon = CFrame.new(-13535, 471, -6907)
+        elseif Level == 1850 or Level <= 1899 then
+            Monster = "Jungle Pirate" NameQuest = "DeepForestIsland3" LevelQuest = 1 NameCheckQuest = "Jungle Pirate" CFrameQ = CFrame.new(-12684, 391, -9902) CFrameMon = CFrame.new(-12117, 332, -10477)
+        elseif Level == 1900 or Level <= 1924 then
+            Monster = "Musketeer Pirate" NameQuest = "DeepForestIsland3" LevelQuest = 2 NameCheckQuest = "Musketeer Pirate" CFrameQ = CFrame.new(-12684, 391, -9902) CFrameMon = CFrame.new(-13342, 332, -9879)
+        elseif Level == 1925 or Level <= 1974 then
+            Monster = "Reborn Skeleton" NameQuest = "HauntedQuest1" LevelQuest = 1 NameCheckQuest = "Reborn Skeleton" CFrameQ = CFrame.new(-9482, 142, 5565) CFrameMon = CFrame.new(-8786, 142, 6023)
+        elseif Level == 1975 or Level <= 1999 then
+            Monster = "Living Zombie" NameQuest = "HauntedQuest1" LevelQuest = 2 NameCheckQuest = "Living Zombie" CFrameQ = CFrame.new(-9482, 142, 5565) CFrameMon = CFrame.new(-10137, 140, 5932)
+        elseif Level == 2000 or Level <= 2024 then
+            Monster = "Demonic Soul" NameQuest = "HauntedQuest2" LevelQuest = 1 NameCheckQuest = "Demonic Soul" CFrameQ = CFrame.new(-9513, 172, 6079) CFrameMon = CFrame.new(-9507, 172, 6158)
+        elseif Level == 2025 or Level <= 2074 then
+            Monster = "Posessed Mummy" NameQuest = "HauntedQuest2" LevelQuest = 2 NameCheckQuest = "Posessed Mummy" CFrameQ = CFrame.new(-9513, 172, 6079) CFrameMon = CFrame.new(-9582, 6, 6205)
+        elseif Level == 2075 or Level <= 2099 then
+            Monster = "Peanut Scout" NameQuest = "NutsIslandQuest" LevelQuest = 1 NameCheckQuest = "Peanut Scout" CFrameQ = CFrame.new(-2104, 38, -10192) CFrameMon = CFrame.new(-2143, 38, -10355)
+        elseif Level == 2100 or Level <= 2124 then
+            Monster = "Peanut President" NameQuest = "NutsIslandQuest" LevelQuest = 2 NameCheckQuest = "Peanut President" CFrameQ = CFrame.new(-2104, 38, -10192) CFrameMon = CFrame.new(-2143, 38, -10355)
+        elseif Level == 2125 or Level <= 2149 then
+            Monster = "Ice Cream Chef" NameQuest = "IceCreamIslandQuest" LevelQuest = 1 NameCheckQuest = "Ice Cream Chef" CFrameQ = CFrame.new(-824, 66, -10965) CFrameMon = CFrame.new(-641, 66, -11258)
+        elseif Level == 2150 or Level <= 2199 then
+            Monster = "Ice Cream Commander" NameQuest = "IceCreamIslandQuest" LevelQuest = 2 NameCheckQuest = "Ice Cream Commander" CFrameQ = CFrame.new(-824, 66, -10965) CFrameMon = CFrame.new(-641, 66, -11258)
+        elseif Level == 2200 or Level <= 2224 then
+            Monster = "Cookie Crafter" NameQuest = "CakeQuest1" LevelQuest = 1 NameCheckQuest = "Cookie Crafter" CFrameQ = CFrame.new(-2020, 38, -12025) CFrameMon = CFrame.new(-2374, 38, -12119)
+        elseif Level == 2225 or Level <= 2249 then
+            Monster = "Cake Guard" NameQuest = "CakeQuest1" LevelQuest = 2 NameCheckQuest = "Cake Guard" CFrameQ = CFrame.new(-2020, 38, -12025) CFrameMon = CFrame.new(-1595, 38, -12285)
+        elseif Level == 2250 or Level <= 2299 then
+            Monster = "Baking Staff" NameQuest = "CakeQuest2" LevelQuest = 1 NameCheckQuest = "Baking Staff" CFrameQ = CFrame.new(-1926, 38, -12850) CFrameMon = CFrame.new(-1832, 38, -13010)
+        elseif Level == 2300 or Level <= 2324 then
+            Monster = "Head Baker" NameQuest = "CakeQuest2" LevelQuest = 2 NameCheckQuest = "Head Baker" CFrameQ = CFrame.new(-1926, 38, -12850) CFrameMon = CFrame.new(-2125, 38, -12940)
+        elseif Level == 2325 or Level <= 2349 then
+            Monster = "Cocoa Warrior" NameQuest = "ChocQuest1" LevelQuest = 1 NameCheckQuest = "Cocoa Warrior" CFrameQ = CFrame.new(231, 24, -12195) CFrameMon = CFrame.new(231, 24, -12195)
+        elseif Level == 2350 or Level <= 2399 then
+            Monster = "Chocolate Bar Battler" NameQuest = "ChocQuest1" LevelQuest = 2 NameCheckQuest = "Chocolate Bar Battler" CFrameQ = CFrame.new(231, 24, -12195) CFrameMon = CFrame.new(231, 24, -12195)
+        elseif Level == 2400 or Level <= 2424 then
+            Monster = "Sweet Thief" NameQuest = "ChocQuest2" LevelQuest = 1 NameCheckQuest = "Sweet Thief" CFrameQ = CFrame.new(151, 24, -12775) CFrameMon = CFrame.new(151, 24, -12775)
+        elseif Level == 2425 or Level <= 2449 then
+            Monster = "Candy Rebel" NameQuest = "ChocQuest2" LevelQuest = 2 NameCheckQuest = "Candy Rebel" CFrameQ = CFrame.new(151, 24, -12775) CFrameMon = CFrame.new(151, 24, -12775)
+        elseif Level == 2450 or Level <= 2499 then
+            Monster = "Candy Pirate" NameQuest = "CandyQuest1" LevelQuest = 1 NameCheckQuest = "Candy Pirate" CFrameQ = CFrame.new(-1149, 14, -14445) CFrameMon = CFrame.new(-1149, 14, -14445)
+        elseif Level == 2500 or Level <= 2549 then
+            Monster = "Snow Demon" NameQuest = "CandyQuest1" LevelQuest = 2 NameCheckQuest = "Snow Demon" CFrameQ = CFrame.new(-1149, 14, -14445) CFrameMon = CFrame.new(-1149, 14, -14445)
+        elseif Level == 2550 or Level <= 2599 then
+            Monster = "Isle Outlaw" NameQuest = "TikiQuest1" LevelQuest = 1 NameCheckQuest = "Isle Outlaw" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level == 2600 or Level <= 2649 then
+            Monster = "Island Boy" NameQuest = "TikiQuest1" LevelQuest = 2 NameCheckQuest = "Island Boy" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level == 2650 or Level <= 2699 then
+            Monster = "Sun-kissed Warrior" NameQuest = "TikiQuest2" LevelQuest = 1 NameCheckQuest = "Sun-kissed Warrior" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level >= 2700 then
+            Monster = "Isle Champion" NameQuest = "TikiQuest2" LevelQuest = 2 NameCheckQuest = "Isle Champion" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        end
+    end
 end
 
 -- Promo Code Auto Redemption Thread (From LogicMain.txt)
@@ -1645,7 +1761,7 @@ local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, Cust
         local distance = (myHRP.Position - hrp.Position).Magnitude
         if distance > 150 then
             if not tween or tween.PlaybackState ~= Enum.PlaybackState.Playing then
-                tween = Tween(hrp.CFrame * CFrame.new(0, 30, 0), 350)
+                tween = Tween(hrp.CFrame * CFrame.new(0, 11, 0), 350)
             end
         else
             if tween then
@@ -1657,7 +1773,7 @@ local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, Cust
                 AttackRotation = (AttackRotation + 180) % 360
                 LastRotate = tick()
             end
-            myHRP.CFrame = hrp.CFrame * CFrame.new(0, 30, 0) * CFrame.Angles(0, math.rad(AttackRotation), 0)
+            myHRP.CFrame = hrp.CFrame * CFrame.new(0, 11, 0) * CFrame.Angles(0, math.rad(AttackRotation), 0)
             if secondMob then
                 Attack({mainMob, secondMob})
             else
@@ -1857,7 +1973,103 @@ end
 
 local function KaitunWorld2(Quest, QuestTitle, Level)
     CheckInv()
-    if workspace.Enemies:FindFirstChild("Core") or ReplicatedStorage:FindFirstChild("Core") then
+    if Level >= 1500 then
+        title.Text = "Doing Third Sea Puzzle / Transition"
+        local prog = CommF_:InvokeServer("TravelThirdSea", "Progress")
+        if type(prog) == "number" and prog >= 3 then
+            title.Text = "Travel To Third Sea"
+            CommF_:InvokeServer("TravelThirdSea")
+        else
+            -- Bartilo Quest check
+            if CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") ~= 3 then
+                if CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 0 then
+                    if LocalPlayer.PlayerGui.Main.Quest.Visible then 
+                        if string.find(LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text, "50 Swan Pirates") then
+                            if workspace.Enemies:FindFirstChild("Swan Pirate") then
+                                for _, v in pairs(workspace.Enemies:GetChildren()) do
+                                    if v.Name == "Swan Pirate" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                                        SmartMoveAndAttack(v, QuestTitle, Quest, false, "Swan Pirate")
+                                    end
+                                end
+                            else
+                                title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
+                                local t0
+                                if (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
+                                    t0 = Tween(CFrame.new(878, 122, 1235), 350)
+                                elseif (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
+                                    if t0 then t0:Cancel() end
+                                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(878, 122, 1235)
+                                end
+                            end
+                        else
+                            CommF_:InvokeServer("AbandonQuest")
+                        end
+                    else
+                        CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
+                    end
+                elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+                    if workspace.Enemies:FindFirstChild("Jeremy") then
+                        for _, v in pairs(workspace.Enemies:GetChildren()) do
+                            if v.Name == "Jeremy" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                                SmartMoveAndAttack(v, QuestTitle, Quest, false)
+                            end
+                        end
+                    elseif ReplicatedStorage:FindFirstChild("Jeremy") then
+                        local t920
+                        if (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
+                            t920 = Tween(CFrame.new(2099.88159, 448.931, 648.997375), 350)
+                        elseif (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
+                            if t920 then t920:Cancel() end
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(2099.88159, 448.931, 648.997375)
+                        end
+                        CommF_:InvokeServer("SetSpawnPoint")
+                    end
+                elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 2 then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1837.46155, 44.2921753, 1656.1987, 0.999881566, -1.03885048e-22, -0.0153914848, 1.07805858e-22, 1, 2.53909284e-22, 0.0153914848, -2.55538502e-22, 0.999881566)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1836.0, 11, 1714)
+                    task.wait(.5)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1850.49329, 13.1789551, 1750.89685)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1858.87305, 19.3777466, 1712.01807)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1803.94324, 16.5789185, 1750.89685)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1858.55835, 16.8604317, 1724.79541)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1869.54224, 15.987854, 1681.00659)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1800.0979, 16.4978027, 1684.52368)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1819.26343, 14.795166, 1717.90625)
+                    task.wait(1)
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-1813.51843, 14.8604736, 1724.79541)
+                end
+            -- Don Swan / Trevor in Mansion check
+            elseif not CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor") then
+                title.Text = "Talking to Trevor / Don Swan"
+                local tMansion = Tween(CFrame.new(2284, 15, 905), 350)
+                if tMansion then tMansion.Completed:Wait() end
+                CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+            -- Rip Indra Boss at Prison check
+            elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
+                title.Text = "Defeating Rip Indra Boss"
+                if workspace.Enemies:FindFirstChild("rip_indra") then
+                    for _, v in pairs(workspace.Enemies:GetChildren()) do
+                        if v.Name == "rip_indra" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                            SmartMoveAndAttack(v, QuestTitle, Quest, false)
+                        end
+                    end
+                else
+                    Tween(CFrame.new(5308, 2, 474), 350)
+                end
+            else
+                -- Talk to Red Head / Travel to Third Sea
+                title.Text = "Travel To Third Sea (Red Head NPC)"
+                CommF_:InvokeServer("TravelThirdSea")
+            end
+        end
+    elseif workspace.Enemies:FindFirstChild("Core") or ReplicatedStorage:FindFirstChild("Core") then
         if workspace.Enemies:FindFirstChild("Core") then
             for _, v in pairs(workspace.Enemies:GetChildren()) do
                 if v.Name == "Core" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") then
@@ -1966,6 +2178,67 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
     end
 end
 
+local function KaitunWorld3(Quest, QuestTitle, Level)
+    CheckInv()
+    if not Quest.Visible then
+        title.Text = "Auto Farming Level (Sea 3) | Get Quest"
+        local t2
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
+            t2 = Tween(CFrameQ, 350)
+        elseif (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
+            if t2 then t2:Cancel() end
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameQ
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local mobFound = false
+        local mobStartTime = tick()
+        if workspace.Enemies:FindFirstChild(Monster) then
+            for _, v in pairs(workspace.Enemies:GetChildren()) do
+                if v.Name == Monster and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                    if string.find(QuestTitle.Text, NameCheckQuest) then
+                        mobFound = true
+                        -- NoClip & safe positioning 12 studs above mob
+                        pcall(function()
+                            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
+                                    if part:IsA("BasePart") then part.CanCollide = false end
+                                end
+                            end
+                        end)
+                        SmartMoveAndAttack(v, QuestTitle, Quest)
+                    else
+                        CommF_:InvokeServer("AbandonQuest")
+                    end
+                end
+            end
+        end
+        
+        -- Timeout Failsafe: 30 seconds limit if mob not found or player stuck
+        if not mobFound then
+            title.Text = "Auto Farming Level (Sea 3) | Wait For " .. tostring(Monster)
+            local t0
+            if (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
+                t0 = Tween(CFrameMon, 350)
+            elseif (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
+                if t0 then t0:Cancel() end
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameMon
+            end
+            
+            -- Quest stuck failsafe timer
+            if getgenv().QuestStuckTime == nil then
+                getgenv().QuestStuckTime = tick()
+            elseif tick() - getgenv().QuestStuckTime > 30 then
+                CommF_:InvokeServer("AbandonQuest")
+                getgenv().QuestStuckTime = nil
+            end
+        else
+            getgenv().QuestStuckTime = nil
+        end
+    end
+end
+
 -- Melees Progression Data (From LogicMain.txt)
 local Melees = {
     ["Black Leg"] = { NPC = "Dark Step Teacher", Price = { Beli = 150000, Fragments = 0 }, BuyID = "BuyBlackLeg", RequiredMastery = 400, IsCompleted = false, World = 1 },
@@ -2011,31 +2284,53 @@ task.spawn(function()
         if getgenv().Configs.AutoFarmLevel then
             DieWait()
             
-            -- Auto Fruit Pickup & Storage Logic
+            -- High-Tier / God Fruit Strict Whitelist Logic
+            local FruitWhitelist = {
+                ["kitsune"] = true, ["leopard"] = true, ["dragon"] = true, ["dough"] = true,
+                ["t-rex"] = true, ["mammoth"] = true, ["venom"] = true, ["control"] = true,
+                ["spirit"] = true, ["shadow"] = true, ["portal"] = true, ["buddha"] = true,
+                ["blizzard"] = true, ["sound"] = true, ["rumble"] = true, ["magma"] = true, ["light"] = true
+            }
+
+            local function IsWhitelistedFruit(fruitName)
+                if not fruitName then return false end
+                local lowerName = string.lower(fruitName)
+                for key in pairs(FruitWhitelist) do
+                    if string.find(lowerName, key, 1, true) then
+                        return true
+                    end
+                end
+                return false
+            end
+
+            -- Auto Fruit Pickup & Storage Logic (Filtered by Whitelist)
             if getgenv().Configs.AutoStoreFruit then
                 for _, v in workspace:GetChildren() do
                     if string.find(v.Name:lower(), "fruit") and v:IsA("Model") and v:FindFirstChild("Handle") then
-                        local inv = CommF_:InvokeServer("getInventory")
-                        local doesnothave = true
-                        if type(inv) == "table" then
-                            for _, v1 in ipairs(inv) do
-                                if v1.Name == v:GetAttribute("OriginalName") then
-                                    doesnothave = false
-                                    break
+                        local origName = v:GetAttribute("OriginalName") or v.Name
+                        if IsWhitelistedFruit(origName) then
+                            local inv = CommF_:InvokeServer("getInventory")
+                            local doesnothave = true
+                            if type(inv) == "table" then
+                                for _, v1 in ipairs(inv) do
+                                    if v1.Name == origName then
+                                        doesnothave = false
+                                        break
+                                    end
                                 end
                             end
-                        end
-                        if doesnothave and v then
-                            if v:FindFirstChild("Handle") then
-                                if (v.Handle.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                                    local riyu = Tween(v.Handle.CFrame, 350)
-                                    title.Text = "Get " .. v.Name
-                                    if riyu then riyu.Completed:Wait() end
-                                    task.wait(0.25)
-                                elseif (v.Handle.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
-                                    LocalPlayer.Character.HumanoidRootPart.CFrame = v.Handle.CFrame
-                                    title.Text = "Get " .. v.Name
-                                    task.wait(0.1)
+                            if doesnothave and v then
+                                if v:FindFirstChild("Handle") then
+                                    if (v.Handle.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
+                                        local riyu = Tween(v.Handle.CFrame, 350)
+                                        title.Text = "Get " .. v.Name
+                                        if riyu then riyu.Completed:Wait() end
+                                        task.wait(0.25)
+                                    elseif (v.Handle.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
+                                        LocalPlayer.Character.HumanoidRootPart.CFrame = v.Handle.CFrame
+                                        title.Text = "Get " .. v.Name
+                                        task.wait(0.1)
+                                    end
                                 end
                             end
                         end
@@ -2043,36 +2338,45 @@ task.spawn(function()
                 end
                 for _, v in LocalPlayer.Character:GetChildren() do
                     if string.find(v.Name:lower(), "fruit") and v:IsA("Tool") and v:FindFirstChild("Handle") then
-                        local inv = CommF_:InvokeServer("getInventory")
-                        local doesnothave = true
-                        if type(inv) == "table" then
-                            for _, v1 in ipairs(inv) do
-                                if v1.Name == v:GetAttribute("OriginalName") then
-                                    doesnothave = false
-                                    break
+                        local origName = v:GetAttribute("OriginalName") or v.Name
+                        if IsWhitelistedFruit(origName) then
+                            local inv = CommF_:InvokeServer("getInventory")
+                            local doesnothave = true
+                            if type(inv) == "table" then
+                                for _, v1 in ipairs(inv) do
+                                    if v1.Name == origName then
+                                        doesnothave = false
+                                        break
+                                    end
                                 end
                             end
-                        end
-                        if doesnothave and v then
-                            CommF_:InvokeServer("StoreFruit", v:GetAttribute("OriginalName"), v)
+                            if doesnothave and v then
+                                CommF_:InvokeServer("StoreFruit", origName, v)
+                            end
                         end
                     end
                 end
-                for _, v in LocalPlayer.Backpack:GetChildren() do
-                    if string.find(v.Name:lower(), "fruit") and v:IsA("Tool") and v:FindFirstChild("Handle") then
-                        local inv = CommF_:InvokeServer("getInventory")
-                        local doesnothave = true
-                        if type(inv) == "table" then
-                            for _, v1 in ipairs(inv) do
-                                if v1.Name == v:GetAttribute("OriginalName") then
-                                    doesnothave = false
-                                    break
+                local bpStore = LocalPlayer:FindFirstChild("Backpack")
+                if bpStore then
+                    for _, v in bpStore:GetChildren() do
+                        if string.find(v.Name:lower(), "fruit") and v:IsA("Tool") and v:FindFirstChild("Handle") then
+                            local origName = v:GetAttribute("OriginalName") or v.Name
+                            if IsWhitelistedFruit(origName) then
+                                local inv = CommF_:InvokeServer("getInventory")
+                                local doesnothave = true
+                                if type(inv) == "table" then
+                                    for _, v1 in ipairs(inv) do
+                                        if v1.Name == origName then
+                                            doesnothave = false
+                                            break
+                                        end
+                                    end
+                                end
+                                if doesnothave and v then
+                                    EquipName(v.Name)
+                                    CommF_:InvokeServer("StoreFruit", origName, v)
                                 end
                             end
-                        end
-                        if doesnothave and v then
-                            EquipName(v.Name)
-                            CommF_:InvokeServer("StoreFruit", v:GetAttribute("OriginalName"), v)
                         end
                     end
                 end
@@ -2083,16 +2387,21 @@ task.spawn(function()
             local QuestTitle = Quest.Container.QuestTitle.Title
             local CurLevel = LocalPlayer.Data.Level.Value
             local CurMelee = nil
-            for _, v in LocalPlayer.Backpack:GetChildren() do
-                if v:IsA("Tool") and v.ToolTip == "Melee" then
-                    CurMelee = v.Name
-                    break
+            local bpMelee = LocalPlayer:FindFirstChild("Backpack")
+            if bpMelee then
+                for _, v in bpMelee:GetChildren() do
+                    if v:IsA("Tool") and v.ToolTip == "Melee" then
+                        CurMelee = v.Name
+                        break
+                    end
                 end
             end
-            for _, v in LocalPlayer.Character:GetChildren() do
-                if v:IsA("Tool") and v.ToolTip == "Melee" then
-                    CurMelee = v.Name
-                    break
+            if not CurMelee and LocalPlayer.Character then
+                for _, v in LocalPlayer.Character:GetChildren() do
+                    if v:IsA("Tool") and v.ToolTip == "Melee" then
+                        CurMelee = v.Name
+                        break
+                    end
                 end
             end
 
@@ -2163,11 +2472,13 @@ task.spawn(function()
                 end
             end
 
-            -- Execute World Specific Farming Quests
+            -- Execute World Specific Farming Quests    
             if World1 then
                 KaitunWorld1(Quest, QuestTitle, CurLevel)
             elseif World2 then
                 KaitunWorld2(Quest, QuestTitle, CurLevel)
+            elseif World3 then
+                KaitunWorld3(Quest, QuestTitle, CurLevel)
             end
         end
     end
