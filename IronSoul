@@ -10,8 +10,6 @@
 -- ════════════════════════════════════════════════════
 -- 0. SERVICES & CONSTANTS
 -- ════════════════════════════════════════════════════
-task.wait(1)
-
 local IRON_LOBBY_ID     = 117533937949084
 local IRON_BOSS_MAP_ID  = 116456628154258
 local IRON_CAVE_MAP_ID  = 132445869992129
@@ -33,13 +31,15 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
-local player            = Players.LocalPlayer or Players.PlayerAdded:Wait()
-local character         = player.Character or player.CharacterAdded:Wait()
+local player            = Players.LocalPlayer
+local character         = player and player.Character
 local Camera            = workspace.CurrentCamera
 
-player.CharacterAdded:Connect(function(char)
-    character = char
-end)
+if player then
+    player.CharacterAdded:Connect(function(char)
+        character = char
+    end)
+end
 
 -- ════════════════════════════════════════════════════
 -- 1. ANTI-AFK SYSTEM
@@ -1415,24 +1415,32 @@ end
 -- 3. FRAMEWORK & GAME MODULES
 -- ════════════════════════════════════════════════════
 local Framework, TranslationUtil, ForgeUtil, RarityTiers, DataUtil, MaterialUtil
+
+local function safeRequirePath(parent, ...)
+    local current = parent
+    for _, name in ipairs({...}) do
+        if not current then return nil end
+        current = current:FindFirstChild(name)
+    end
+    if current then
+        local ok, mod = pcall(require, current)
+        if ok then return mod end
+    end
+    return nil
+end
+
 pcall(function()
-    Framework       = require(ReplicatedStorage:WaitForChild("Framework", 10))
+    local fw = ReplicatedStorage:FindFirstChild("Framework")
+    if fw then
+        local ok, res = pcall(require, fw)
+        if ok then Framework = res end
+    end
 end)
-pcall(function()
-    ForgeUtil       = require(ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeUtil)
-end)
-pcall(function()
-    DataUtil        = require(ReplicatedStorage.Framework.Systems.DataSystem.DataUtil)
-end)
-pcall(function()
-    MaterialUtil    = require(ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil)
-end)
-pcall(function()
-    TranslationUtil = require(ReplicatedStorage.Framework.Systems.TranslationLib.TranslationUtil)
-end)
-pcall(function()
-    RarityTiers     = require(ReplicatedStorage.Framework.Systems.ItemsSystem.RarityTiers)
-end)
+pcall(function() DataUtil        = safeRequirePath(ReplicatedStorage, "Framework", "Systems", "DataSystem", "DataUtil") end)
+pcall(function() ForgeUtil       = safeRequirePath(ReplicatedStorage, "Framework", "Gameplay", "EquipmentSystem", "ForgeUtil") end)
+pcall(function() MaterialUtil    = safeRequirePath(ReplicatedStorage, "Framework", "Gameplay", "EquipmentSystem", "MaterialUtil") end)
+pcall(function() TranslationUtil = safeRequirePath(ReplicatedStorage, "Framework", "Systems", "TranslationLib", "TranslationUtil") end)
+pcall(function() RarityTiers     = safeRequirePath(ReplicatedStorage, "Framework", "Systems", "ItemsSystem", "RarityTiers") end)
 
 -- ════════════════════════════════════════════════════
 -- 4. CONFIG & STATE ENGINE (LOBBY HUB)
@@ -1546,7 +1554,7 @@ local function getRemote(path)
         local parts = string.split(path, ".")
         local obj = game:GetService(parts[1])
         for i = 2, #parts do
-            obj = obj:WaitForChild(parts[i], 8)
+            obj = obj:WaitForChild(parts[i], 1)
             if not obj then return nil end
         end
         return obj
@@ -1778,38 +1786,96 @@ local function ForceOpenUIWindow(guiName, npcDialogId)
     end)
 end
 
+local function triggerNPCInteraction(targetCF)
+    pcall(function()
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+        -- 1. สแกนหา ProximityPrompt (ปุ่ม E) หรือ ClickDetector บริเวณ NPC
+        if workspace.OverlapParams and targetCF then
+            local params = OverlapParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            if char then params.FilterDescendantsInstances = { char } end
+            local parts = workspace:GetPartBoundsInBox(targetCF, Vector3.new(25, 25, 25), params)
+
+            for _, p in ipairs(parts) do
+                local prompt = p:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if not prompt and p.Parent then
+                    prompt = p.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+                end
+                if prompt then
+                    if type(fireproximityprompt) == "function" then
+                        fireproximityprompt(prompt, 0)
+                        task.wait(0.02)
+                        fireproximityprompt(prompt)
+                    else
+                        pcall(function() prompt:InputHoldBegin() task.wait(0.05) prompt:InputHoldEnd() end)
+                    end
+                end
+
+                local cd = p:FindFirstChildWhichIsA("ClickDetector", true)
+                if cd and type(fireclickdetector) == "function" then
+                    fireclickdetector(cd)
+                end
+            end
+        end
+
+        -- 2. จำลองการกดปุ่ม 'E' ผ่าน VirtualInputManager อัตโนมัติทันที
+        pcall(function()
+            local vim = game:GetService("VirtualInputManager")
+            if vim then
+                vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.05)
+                vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end
+        end)
+    end)
+end
+
 local function OpenForgeGUI()
     teleportWithPhysicsNudge(FORGE_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(FORGE_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenForge", "DialogNpcNormal1|1")
 end
 
 local function OpenPetHatchGUI()
     teleportWithPhysicsNudge(PET_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(PET_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenPetsHatch", "DialogNpcNormal1|1")
 end
 
 local function OpenPetUpgradeGUI()
     teleportWithPhysicsNudge(PET_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(PET_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenPetsFortifyAndUpgrade", "DialogNpcNormal1|1")
 end
 
 local function OpenMiloEnchantGUI()
     teleportWithPhysicsNudge(MILO_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(MILO_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenEnchantment", "DialogNpcNormal1|1")
 end
 
 local function OpenMiloFuseRuneGUI()
     teleportWithPhysicsNudge(MILO_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(MILO_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenEnchantmentFuse", "DialogNpcNormal1|1")
 end
 
 local function OpenEnhanceEquipmentGUI()
     teleportWithPhysicsNudge(FORTIFY_PORTAL_CF)
+    task.wait(0.15)
+    triggerNPCInteraction(FORTIFY_PORTAL_CF)
     task.wait(0.1)
     ForceOpenUIWindow("ScreenFortify", "DialogNpcNormal1|1")
 end
@@ -1925,27 +1991,58 @@ local KNOWN_RACES = {
 local function detectCurrentRace()
     local foundRace = nil
 
-    -- 1. Check DataUtil or Player attributes / values FIRST (Fastest, 0 lag)
+    -- 1. Check DataUtil safely (Parse string and table fields for known races)
     pcall(function()
         if DataUtil then
             local pd = DataUtil:GetPlayerData(player)
-            if pd and pd.Race then
-                local rName = tostring(pd.Race)
-                for _, r in ipairs(KNOWN_RACES) do
-                    if string.find(rName, r) then foundRace = r return end
+            if pd then
+                local raceVal = pd.Race or pd.CurrentRace or pd.RaceData
+                local candidates = {}
+                if type(raceVal) == "string" then
+                    table.insert(candidates, raceVal)
+                elseif type(raceVal) == "table" then
+                    if raceVal.ID then table.insert(candidates, tostring(raceVal.ID)) end
+                    if raceVal.Name then table.insert(candidates, tostring(raceVal.Name)) end
+                    if raceVal.Race then table.insert(candidates, tostring(raceVal.Race)) end
+                    if raceVal.Type then table.insert(candidates, tostring(raceVal.Type)) end
+                    for k, v in pairs(raceVal) do
+                        if type(v) == "string" then table.insert(candidates, v) end
+                    end
                 end
-                foundRace = rName
-                return
+
+                for _, str in ipairs(candidates) do
+                    for _, r in ipairs(KNOWN_RACES) do
+                        if string.find(str, r) then
+                            foundRace = r
+                            return
+                        end
+                    end
+                end
             end
         end
-        local rAttr = player:GetAttribute("Race") or player:GetAttribute("CurrentRace")
-        if rAttr then foundRace = tostring(rAttr) return end
-        local rVal = player:FindFirstChild("Race") or player:FindFirstChild("RaceValue")
-        if rVal and rVal:IsA("StringValue") then foundRace = rVal.Value return end
     end)
     if foundRace then return foundRace end
 
-    -- 2. Scan Character Head Overhead GUI (Scanning Head descendants is 100% accurate for overhead title/race)
+    -- 2. Check Player attributes & Value instances
+    pcall(function()
+        local rAttr = player:GetAttribute("Race") or player:GetAttribute("CurrentRace")
+        if rAttr then
+            local str = tostring(rAttr)
+            for _, r in ipairs(KNOWN_RACES) do
+                if string.find(str, r) then foundRace = r return end
+            end
+        end
+        local rVal = player:FindFirstChild("Race") or player:FindFirstChild("RaceValue")
+        if rVal and rVal:IsA("StringValue") then
+            local str = tostring(rVal.Value)
+            for _, r in ipairs(KNOWN_RACES) do
+                if string.find(str, r) then foundRace = r return end
+            end
+        end
+    end)
+    if foundRace then return foundRace end
+
+    -- 3. Scan Character Head Overhead GUI (Detects "Scholar ★1 Orc" or "Orc" on head)
     pcall(function()
         local char = player.Character
         if char then
@@ -1967,15 +2064,20 @@ local function detectCurrentRace()
     end)
     if foundRace then return foundRace end
 
-    -- 3. Check PlayerGui for ScreenRace or HUD labels
+    -- 4. Scan PlayerGui (MainGui, ScreenBackpack, RaceSpin, ScreenRace, etc.)
     pcall(function()
         local pg = player:FindFirstChildOfClass("PlayerGui")
         if pg then
-            for _, gui in ipairs(pg:GetChildren()) do
-                if gui:IsA("ScreenGui") or gui:IsA("Frame") then
-                    for _, desc in ipairs(gui:GetDescendants()) do
-                        if desc:IsA("TextLabel") and desc.Visible then
-                            local txt = desc.Text or ""
+            local containers = {
+                pg:FindFirstChild("MainGui"),
+                pg:FindFirstChild("MainGuiIgnoreGuiInset"),
+                pg:FindFirstChild("ScreenRace")
+            }
+            for _, parentObj in ipairs(containers) do
+                if parentObj then
+                    for _, desc in ipairs(parentObj:GetDescendants()) do
+                        if desc:IsA("TextLabel") and desc.Text and desc.Text ~= "" then
+                            local txt = desc.Text
                             for _, rName in ipairs(KNOWN_RACES) do
                                 if string.find(txt, rName) then
                                     foundRace = rName
