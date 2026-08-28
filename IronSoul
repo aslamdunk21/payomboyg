@@ -10,6 +10,10 @@
 -- ════════════════════════════════════════════════════
 -- 0. SERVICES & CONSTANTS
 -- ════════════════════════════════════════════════════
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
 local IRON_LOBBY_ID     = 117533937949084
 local IRON_BOSS_MAP_ID  = 116456628154258
 local IRON_CAVE_MAP_ID  = 132445869992129
@@ -31,8 +35,16 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
-repeat task.wait() until Players.LocalPlayer
-local player            = Players.LocalPlayer
+local player = Players.LocalPlayer
+if not player then
+    local count = 0
+    repeat
+        task.wait(0.1)
+        player = Players.LocalPlayer
+        count = count + 1
+    until player or count >= 100
+end
+
 local character         = player and player.Character
 local Camera            = workspace.CurrentCamera
 
@@ -102,28 +114,33 @@ end
 local customAvatarAsset = nil
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
-    local fileName  = "payomboyz_avatar.jpg"
-    
-    pcall(function()
-        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-            local getAsset = getcustomasset or getsynasset
-            local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
-            if not isFileExist then
-                local imageBytes = game:HttpGet(avatarUrl)
-                if imageBytes and #imageBytes > 0 then
-                    writefile(fileName, imageBytes)
+    if player then
+        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
+    else
+        customAvatarAsset = ""
+    end
+
+    task.spawn(function()
+        local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+        local fileName  = "payomboyz_avatar.jpg"
+        
+        pcall(function()
+            if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+                local getAsset = getcustomasset or getsynasset
+                local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
+                if not isFileExist then
+                    local imageBytes = game:HttpGet(avatarUrl)
+                    if imageBytes and #imageBytes > 0 then
+                        writefile(fileName, imageBytes)
+                    end
+                end
+                if typeof(isfile) == "function" and isfile(fileName) then
+                    customAvatarAsset = getAsset(fileName)
                 end
             end
-            if typeof(isfile) == "function" and isfile(fileName) then
-                customAvatarAsset = getAsset(fileName)
-            end
-        end
+        end)
     end)
 
-    if not customAvatarAsset then
-        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. player.UserId .. "&w=150&h=150"
-    end
     return customAvatarAsset
 end
 
