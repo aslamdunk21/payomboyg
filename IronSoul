@@ -10,10 +10,6 @@
 -- ════════════════════════════════════════════════════
 -- 0. SERVICES & CONSTANTS
 -- ════════════════════════════════════════════════════
-if not game:IsLoaded() then
-    pcall(function() game.Loaded:Wait() end)
-end
-
 local IRON_LOBBY_ID     = 117533937949084
 local IRON_BOSS_MAP_ID  = 116456628154258
 local IRON_CAVE_MAP_ID  = 132445869992129
@@ -35,15 +31,8 @@ local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService       = game:GetService("HttpService")
 
-local player = Players.LocalPlayer
-if not player then
-    local count = 0
-    repeat
-        task.wait(0.1)
-        player = Players.LocalPlayer
-        count = count + 1
-    until player or count >= 100
-end
+repeat task.wait() until Players.LocalPlayer
+local player            = Players.LocalPlayer
 
 local character         = player and player.Character
 local Camera            = workspace.CurrentCamera
@@ -1468,7 +1457,7 @@ pcall(function() RarityTiers     = safeRequirePath(ReplicatedStorage, "Framework
 local SETTINGS_FILE = "IronSoulSettings.json"
 
 local Config = {
-    AutoEnterDungeon     = true,
+    AutoEnterDungeon     = false,
     SelectedWorldName    = "ป่าไร้ดาว (World1)",
     SelectedWorldId      = "World1",
     SelectedDifficultyName = "ระดับทดสอบ (Diff 1)",
