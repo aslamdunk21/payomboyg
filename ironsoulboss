@@ -11,7 +11,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local Config = {
-    AutoFarm = false,
+    AutoFarm = true,
     AutoSkill = true,
     AutoAttack = true,
     AutoAvoid = false,
