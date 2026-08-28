@@ -1,34 +1,340 @@
--- ─── ANTI-STUN / ANTI-KNOCKBACK / ANTI-SIT ───
-task.spawn(function()
-    while scriptRunning and task.wait(0.08) do
-        local char = LocalPlayer.Character
-        if not char then continue end
+-- ══════════════════════════════════════════════════════════════════
+-- 🚀 BLOX FRUITS CFRAME BYPASS ENGINE v2
+-- ป้องกันการดึงกลับ (Rubberband) เมื่อบินข้ามโลก
+-- Anti-Cheat: Checkpoint Chunking + Velocity Sync + Physics Suppression
+-- ══════════════════════════════════════════════════════════════════
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+
+-- Configuration
+local CFRAME_BYPASS = {
+    -- ระยะระหว่าง Checkpoint (มาก = บินเร็วแต่มีโอกาสดูดน้อยลง)
+    CheckpointDistance = 100,
+    
+    -- ความเร็วในการบิน ( studs ต่อ วินาที)
+    FlightSpeed = 350,
+    
+    -- เวลารอระหว่าง Checkpoint (วินาที) - น้อย = เร็วแต่เสี่ยง
+    CheckpointDelay = 0.03,
+    
+    -- เปิดใช้งาน Physics Suppression (หยุดการคำนวณฟิสิกส์)
+    EnablePhysicsSuppression = true,
+    
+    -- เปิดใช้งาน Velocity Sync (ทำให้ velocity ตรงกับทิศทาง)
+    EnableVelocitySync = true,
+    
+    -- ระยะ Min ที่ถือว่า "ใกล้ถึงเป้าหมาย" แล้วหยุด
+    MinDistance = 10,
+}
+
+-- State
+local IsFlying = false
+local CurrentTween = nil
+local TargetCF = nil
+
+-- ══════════════════════════════════════════════════════════════════
+-- PHYSICS SUPPRESSION
+-- ══════════════════════════════════════════════════════════════════
+
+local function EnablePhysicsSuppression(enabled)
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    
+    -- Set SimulationRadius ให้มหาศาล (หลบการตรวจสอบ distance)
+    pcall(function()
+        sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+    end)
+    
+    -- ปิดการชนกัน
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+    
+    -- ปิด Sit และ PlatformStand
+    if hum then
+        hum.Sit = false
+        if enabled then
+            hum.PlatformStand = true
+        end
+    end
+    
+    -- ตั้งค่า BodyGyro และ BodyVelocity สำหรับการบิน
+    if enabled and hrp then
+        local bg = hrp:FindFirstChild("_BypassBG")
+        local bv = hrp:FindFirstChild("_BypassBV")
         
-        -- ลบ status effects ทันทีก่อนที่จะล็อกการเคลื่อนไหว
-        for _, effect in ipairs({"Stun", "Busy", "Paralyzed", "Frozen", "Sleeping", "Knockback"}) do
-            local obj = char:FindFirstChild(effect)
-            if obj then
-                if obj:IsA("BoolValue") then obj.Value = false end
-                if obj:IsA("IntValue") then obj.Value = 0 end
-                obj:Destroy()
-            end
+        if not bg then
+            bg = Instance.new("BodyGyro")
+            bg.Name = "_BypassBG"
+            bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+            bg.P = 10000
+            bg.D = 500
+            bg.Parent = hrp
+        else
+            bg.CFrame = hrp.CFrame
         end
         
-        -- บังคับ Sit = false (ป้องกันโดนล็อกท่านั่ง)
-        local humanoid = char:FindFirstChild("Humanoid")
-        if humanoid then
-            if humanoid.Sit then humanoid.Sit = false end
-            if humanoid.PlatformStand then humanoid.PlatformStand = false end
+        if not bv then
+            bv = Instance.new("BodyVelocity")
+            bv.Name = "_BypassBV"
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Velocity = Vector3.zero
+            bv.Parent = hrp
+        else
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        end
+    end
+end
+
+local function DisablePhysicsSuppression()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    
+    -- ลด SimulationRadius กลับปกติ
+    pcall(function()
+        sethiddenproperty(LocalPlayer, "SimulationRadius", 1000)
+    end)
+    
+    -- คืนค่า CanCollide
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+    
+    -- คืนค่า PlatformStand
+    if hum then
+        hum.PlatformStand = false
+    end
+    
+    -- ลบ BodyGyro และ BodyVelocity
+    if hrp then
+        local bg = hrp:FindFirstChild("_BypassBG")
+        local bv = hrp:FindFirstChild("_BypassBV")
+        if bg then bg:Destroy() end
+        if bv then bv:Destroy() end
+    end
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- CHECKPOINT CHUNKING ENGINE
+-- ══════════════════════════════════════════════════════════════════
+
+local function BypassCFrameSafe(targetCF)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    
+    local startPos = hrp.Position
+    local endPos = targetCF.Position
+    local dist = (startPos - endPos).Magnitude
+    
+    -- ถ้าใกล้เกินกว่า MinDistance ก็ CFrame ทันที
+    if dist <= CFRAME_BYPASS.MinDistance then
+        hrp.CFrame = targetCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        return true
+    end
+    
+    -- คำนวณจำนวน Checkpoint
+    local steps = math.ceil(dist / CFRAME_BYPASS.CheckpointDistance)
+    local dirVector = (endPos - startPos).Unit
+    
+    print(string.format("[Bypass] Flight: %.0f studs | Steps: %d | Speed: %d", 
+        dist, steps, CFRAME_BYPASS.FlightSpeed))
+    
+    -- เปิด Physics Suppression
+    if CFRAME_BYPASS.EnablePhysicsSuppression then
+        EnablePhysicsSuppression(true)
+    end
+    
+    IsFlying = true
+    
+    -- บินผ่านแต่ละ Checkpoint
+    for i = 1, steps do
+        if not IsFlying then break end
+        
+        -- คำนวณตำแหน่ง checkpoint
+        local progress = i / steps
+        local checkPos = startPos:Lerp(endPos, progress)
+        
+        -- สร้าง CFrame ใหม่โดยหันไปทางเป้าหมาย
+        local checkCF = CFrame.new(checkPos, endPos)
+        
+        -- วางตำแหน่ง
+        hrp.CFrame = checkCF
+        
+        -- Sink Velocity (จำเป็นสำหรับ Anti-Cheat)
+        if CFRAME_BYPASS.EnableVelocitySync then
+            hrp.AssemblyLinearVelocity = dirVector * CFRAME_BYPASS.FlightSpeed
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        else
+            hrp.AssemblyLinearVelocity = Vector3.zero
         end
         
-        -- ลบ BodyVelocity ที่เกมอาจ inject มา (เช่น knockback)
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            for _, v in ipairs(hrp:GetChildren()) do
-                if v:IsA("BodyVelocity") and v.Name ~= "fixvelo" and v.Name ~= "BringVelocity" then
-                    v:Destroy()
-                end
+        -- รอเล็กน้อย
+        task.wait(CFRAME_BYPASS.CheckpointDelay)
+    end
+    
+    -- วางตำแหน่งสุดท้าย
+    hrp.CFrame = targetCF
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    -- ปิด Physics Suppression
+    if CFRAME_BYPASS.EnablePhysicsSuppression then
+        EnablePhysicsSuppression(false)
+    end
+    
+    IsFlying = false
+    return true
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- TWEEN FLIGHT (ทางเลือก)
+-- ══════════════════════════════════════════════════════════════════
+
+local function TweenFlight(targetCF, speed)
+    speed = speed or CFRAME_BYPASS.FlightSpeed
+    
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local dist = (hrp.Position - targetCF.Position).Magnitude
+    
+    -- ถ้าใกล้เกินไป ใช้ CFrame โดยตรง
+    if dist <= CFRAME_BYPASS.MinDistance then
+        BypassCFrameSafe(targetCF)
+        return nil
+    end
+    
+    -- ยกเลิก Tween เดิม
+    if CurrentTween then
+        pcall(function() CurrentTween:Cancel() end)
+        CurrentTween = nil
+    end
+    
+    -- เตรียม Physics Suppression
+    if CFRAME_BYPASS.EnablePhysicsSuppression then
+        EnablePhysicsSuppression(true)
+    end
+    
+    IsFlying = true
+    TargetCF = targetCF
+    
+    -- สร้าง TweenInfo
+    local tweenInfo = TweenInfo.new(
+        dist / speed,
+        Enum.EasingStyle.Linear
+    )
+    
+    -- สร้าง Tween
+    CurrentTween = TweenService:Create(hrp, tweenInfo, {
+        CFrame = targetCF
+    })
+    
+    -- Start
+    CurrentTween:Play()
+    
+    -- Heartbeat เพื่อ sync Velocity
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if not IsFlying or not CurrentTween or CurrentTween.PlaybackState ~= Enum.PlaybackState.Playing then
+            conn:Disconnect()
+            return
+        end
+        
+        -- คำนวณ Velocity จากทิศทาง
+        local currentPos = hrp.Position
+        local dir = (TargetCF.Position - currentPos).Unit
+        hrp.AssemblyLinearVelocity = dir * speed
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+    
+    -- Cleanup เมื่อเสร็จ
+    CurrentTween.Completed:Connect(function()
+        IsFlying = false
+        CurrentTween = nil
+        TargetCF = nil
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        if CFRAME_BYPASS.EnablePhysicsSuppression then
+            EnablePhysicsSuppression(false)
+        end
+    end)
+    
+    return CurrentTween
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- KEYBIND CONTROL
+-- ══════════════════════════════════════════════════════════════════
+
+local UserInputService = game:GetService("UserInputService")
+local isActive = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Shift + F = Toggle Flight
+    if input.KeyCode == Enum.KeyCode.F and input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.Modifiers and input.Modifiers[Enum.KeyCode.LeftShift] or input.Modifiers and input.Modifiers[Enum.KeyCode.RightShift] then
+            isActive = not isActive
+            EnablePhysicsSuppression(isActive)
+            
+            if isActive then
+                print("[Bypass] Flight Mode: ON")
+            else
+                print("[Bypass] Flight Mode: OFF")
+                DisablePhysicsSuppression()
             end
         end
     end
 end)
+
+-- ══════════════════════════════════════════════════════════════════
+-- ตัวอย่างการใช้งาน
+-- ══════════════════════════════════════════════════════════════════
+
+-- วิธีที่ 1: ใช้ Checkpoint Chunking (แนะนำ - ปลอดภัยกว่า)
+local destination1 = CFrame.new(10000, 200, -5000)
+BypassCFrameSafe(destination1)
+
+-- วิธีที่ 2: ใช้ Tween (เร็วกว่าแต่ว่าเสี่ยง detection)
+local destination2 = CFrame.new(8000, 150, -3000)
+TweenFlight(destination2, 400)
+
+-- วิธีที่ 3: บินไปหาจุดหมายที่มีอยู่แล้วใน workspace
+local function FlyToPart(partName, heightOffset)
+    heightOffset = heightOffset or 50
+    local part = workspace:FindFirstChild(partName)
+    if part and part:IsA("BasePart") then
+        local targetCF = CFrame.new(part.Position.X, part.Position.Y + heightOffset, part.Position.Z)
+        BypassCFrameSafe(targetCF)
+    end
+end
+
+-- ตัวอย่าง: บินไปหา Sea 2 Entrance
+-- FlyToPart("Sea2_Escape_Rock", 100)
+
+return {
+    Bypass = BypassCFrameSafe,
+    TweenFlight = TweenFlight,
+    FlyToPart = FlyToPart,
+    Config = CFRAME_BYPASS,
+    IsActive = function() return isActive end
+}
