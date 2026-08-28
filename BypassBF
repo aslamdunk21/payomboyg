@@ -1,218 +1,105 @@
 -- ══════════════════════════════════════════════════════════════
--- BLOX FRUITS FULL BYPASS PATCH v2.1
--- แก้: ตัวละครถูกดึงกลับ, ดาเมจไม่ขึ้น, Validator หลุด
--- แทรกไว้ใต้บรรทัด: local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+-- BLOX FRUITS PERMANENT DAMAGE PATCH v3.0
+-- แก้: ดาเมจหายหลังเล่นไประยะเวลาหนึ่ง
+-- สาเหตุ: CombatFramework require() คืนค่าใหม่ / upvalues เปลี่ยน
 -- ══════════════════════════════════════════════════════════════
 
-local BYPASS_VERSION = "2.1"
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- ─── 1. ANTI-PULL SYSTEM (แทนที่ SimulationRadius แบบเก่า) ───
--- ปัญหา: sethiddenproperty("SimulationRadius") ไม่ work ใน executor บางตัว
--- แก้: ใช้ CFrame lock + BodyPosition แทน
+local ValidatorCache = {}
+local LastAttackTime = 0
+local AttackJitter = 0
 
-local CharacterLock = {
-    Active = false,
-    TargetCFrame = nil,
-    Connection = nil
-}
-
-local function LockCharacterPosition(cframe)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+-- ─── CORE: Re-scan validator ทุกครั้งก่อน attack (ไม่มียึด cache) ───
+local function GetValidAttackData()
+    local success, cf = pcall(require, LocalPlayer.PlayerScripts:WaitForChild("CombatFramework"))
+    if not success or not cf then return nil end
     
-    CharacterLock.Active = true
-    CharacterLock.TargetCFrame = cframe
-    
-    -- ลบ velocity เก่าที่อาจขัดแย้ง
-    for _, v in ipairs(hrp:GetChildren()) do
-        if v:IsA("BodyVelocity") or v:IsA("BodyPosition") or v:IsA("AlignPosition") then
-            v:Destroy()
-        end
-    end
-    
-    -- ใช้ AlignPosition + AlignOrientation (work ในทุก executor)
-    local alignPos = Instance.new("AlignPosition")
-    alignPos.Name = "BypassLock_Pos"
-    alignPos.Attachment0 = Instance.new("Attachment", hrp)
-    alignPos.Attachment0.Name = "LockAttach"
-    alignPos.MaxForce = 1000000
-    alignPos.MaxVelocity = math.huge
-    alignPos.Responsiveness = 200
-    alignPos.RigidityEnabled = true
-    alignPos.Parent = hrp
-    
-    local targetAttach = Instance.new("Attachment")
-    targetAttach.Name = "TargetAttach"
-    targetAttach.CFrame = cframe
-    targetAttach.Parent = workspace.Terrain
-    
-    alignPos.Attachment1 = targetAttach
-    alignPos.Enabled = true
-    
-    -- BodyGyro สำหรับล็อกทิศทาง
-    local alignOri = Instance.new("AlignOrientation")
-    alignOri.Name = "BypassLock_Ori"
-    alignOri.Attachment0 = hrp:FindFirstChild("RootAttachment") or alignPos.Attachment0
-    alignOri.Attachment1 = targetAttach
-    alignOri.MaxTorque = 1000000
-    alignOri.MaxAngularVelocity = math.huge
-    alignOri.Responsiveness = 200
-    alignOri.RigidityEnabled = true
-    alignOri.Parent = hrp
-    
-    CharacterLock.Connection = RunService.Heartbeat:Connect(function()
-        if not CharacterLock.Active then return end
-        if not hrp.Parent then
-            CharacterLock.Active = false
-            CharacterLock.Connection:Disconnect()
-            return
-        end
-        -- Force position ทุก frame (ป้องกัน server pull)
-        if CharacterLock.TargetCFrame then
-            targetAttach.CFrame = CharacterLock.TargetCFrame
-            hrp.CFrame = CharacterLock.TargetCFrame
-        end
-    end)
-end
-
-local function UnlockCharacterPosition()
-    CharacterLock.Active = false
-    if CharacterLock.Connection then
-        CharacterLock.Connection:Disconnect()
-        CharacterLock.Connection = nil
-    end
-    local char = LocalPlayer.Character
-    if char then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local lockPos = hrp:FindFirstChild("BypassLock_Pos")
-            if lockPos then lockPos:Destroy() end
-            local lockOri = hrp:FindFirstChild("BypassLock_Ori")
-            if lockOri then lockOri:Destroy() end
-        end
-    end
-end
-
--- ─── 2. VALIDATOR RE-SCAN SYSTEM (แก้อัปเดต upvalue indices) ───
--- ปัญหา: Blox Fruits อัปเดตแล้วเปลี่ยน upvalue index ของ CombatFramework.attack
--- แก้: สแกนหา upvalues ใหม่ทุก 30 วินาที
-
-local ValidatorCache = {
-    u8_idx = nil,  -- seed
-    u9_idx = nil,  -- modulus
-    u7_idx = nil,  -- increment
-    u10_idx = nil, -- counter
-    LastScan = 0,
-    ScanInterval = 30
-}
-
-local function ScanValidatorUpvalues()
-    local CombatFramework = nil
-    pcall(function()
-        CombatFramework = require(LocalPlayer.PlayerScripts:WaitForChild("CombatFramework"))
-    end)
-    if not CombatFramework then return false end
-    
-    local cfUpvalues = getupvalues(CombatFramework)
+    local cfUpvalues = getupvalues(cf)
     local CombatFrameworkR = nil
-    for i, v in ipairs(cfUpvalues) do
+    for i = 1, #cfUpvalues do
+        local v = cfUpvalues[i]
         if typeof(v) == "table" and rawget(v, "activeController") then
             CombatFrameworkR = v
             break
         end
     end
-    if not CombatFrameworkR then return false end
+    if not CombatFrameworkR then return nil end
     
     local AC = CombatFrameworkR.activeController
-    if not AC or not AC.attack then return false end
+    if not AC or not AC.attack then return nil end
     
-    -- ทดสอบ upvalue indices 3-8 (ครอบคลุมทุก version)
-    for i = 3, 8 do
-        local val = debug.getupvalue(AC.attack, i)
-        if typeof(val) == "number" and val > 1000000 then
-            -- น่าจะเป็น modulus (u9)
-            ValidatorCache.u9_idx = i
-        end
-        if typeof(val) == "number" and val > 100 and val < 1000000 then
-            -- น่าจะเป็น seed หรือ increment
-            if not ValidatorCache.u8_idx then
-                ValidatorCache.u8_idx = i
-            elseif not ValidatorCache.u7_idx then
-                ValidatorCache.u7_idx = i
-            end
+    -- สแกนหา upvalues ทังหมด (ไม่ assume index)
+    local upvalues = {}
+    for i = 1, 12 do
+        local ok, val = pcall(debug.getupvalue, AC.attack, i)
+        if ok and typeof(val) == "number" then
+            upvalues[i] = val
         end
     end
     
-    -- หา counter (u10) — มักเป็นจำนวนเต็มที่เพิ่มขึ้นเรื่อยๆ
-    for i = 3, 8 do
-        local val = debug.getupvalue(AC.attack, i)
-        if typeof(val) == "number" and math.floor(val) == val and val < 1000 then
-            if i ~= ValidatorCache.u8_idx and i ~= ValidatorCache.u9_idx and i ~= ValidatorCache.u7_idx then
-                ValidatorCache.u10_idx = i
-                break
-            end
+    -- ระบุ upvalues ตามลักษณะค่า
+    local seed_idx, mod_idx, inc_idx, counter_idx = nil, nil, nil, nil
+    
+    for i, val in pairs(upvalues) do
+        if val > 100000000000 then
+            mod_idx = i  -- modulus มักเป็นค่าใหญ่มาก
+        elseif val > 100000 and val < 100000000000 then
+            if not seed_idx then seed_idx = i
+            else inc_idx = i end
+        elseif math.floor(val) == val and val >= 0 and val < 10000 then
+            if not counter_idx then counter_idx = i end
         end
     end
     
-    ValidatorCache.LastScan = tick()
-    return ValidatorCache.u8_idx and ValidatorCache.u9_idx and ValidatorCache.u7_idx and ValidatorCache.u10_idx
+    -- Fallback: ถาหาไมเจอ ใช index มาตรฐาน
+    if not seed_idx then seed_idx = 5 end
+    if not mod_idx then mod_idx = 6 end
+    if not inc_idx then inc_idx = 4 end
+    if not counter_idx then counter_idx = 7 end
+    
+    return {
+        ac = AC,
+        seed_idx = seed_idx,
+        mod_idx = mod_idx,
+        inc_idx = inc_idx,
+        counter_idx = counter_idx,
+        upvalues = upvalues
+    }
 end
 
--- Auto re-scan ทุก 30 วิ
-task.spawn(function()
-    while task.wait(ValidatorCache.ScanInterval) do
-        if scriptRunning then
-            pcall(ScanValidatorUpvalues)
-        end
-    end
-end)
-
--- ─── 3. ENHANCED ATTACK FUNCTION (แก้ดาเมจไม่ขึ้น) ───
-local LastAttackTime = 0
-local AttackCount = 0
-local LastAttackReset = tick()
-
-local function BypassAttack(targets)
-    if not getgenv().Configs.FastAttack then return end
+-- ─── CORE: Attack function ที่ re-scan validator ทุกครั้ง ───
+local function PermanentAttack(targets)
+    if not getgenv().Configs or not getgenv().Configs.FastAttack then return end
     
-    -- Rate limit: ป้องกัน queue l้น
     local now = tick()
-    if now - LastAttackTime < 0.085 then return end
+    local jitter = (getgenv().Configs._AttackJitter or 0) / 1000
+    local minDelay = 0.085 + jitter
+    if now - LastAttackTime < minDelay then return end
     LastAttackTime = now
-    AttackCount = AttackCount + 1
-    
-    -- Reset counter ทุก 10 วิ (ป้องกัน overflow detection)
-    if now - LastAttackReset > 10 then
-        AttackCount = 0
-        LastAttackReset = now
-    end
-    if AttackCount > 80 then return end -- Safety cap
     
     local char = LocalPlayer.Character
     if not char then return end
     
-    -- 1. Activate tool ก่อน (สำคัญมาก — ถ้าไม่ activate ดาเมจไม่ขึ้น)
+    -- Activate tool ทุกครั้ง (บังคับ)
     local activeTool = char:FindFirstChildOfClass("Tool")
     if activeTool then
         pcall(function() activeTool:Activate() end)
     end
     
-    -- 2. Simulate mouse click (บางที Remote อย่างเดียวไม่พอ)
+    -- Mouse click simulation (backstop)
     pcall(function()
         local VirtualUser = game:GetService("VirtualUser")
         VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-        task.wait(0.01)
-        VirtualUser:Button1Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(0.008)
+        VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end)
     
-    -- 3. เตรียม target list
+    -- เตรียม target list
     local bladehit = {}
     if type(targets) == "table" then
         for _, mob in ipairs(targets) do
@@ -223,88 +110,161 @@ local function BypassAttack(targets)
     elseif typeof(targets) == "Instance" and targets:FindFirstChild("HumanoidRootPart") then
         table.insert(bladehit, targets.HumanoidRootPart)
     end
-    
     if #bladehit == 0 then return end
     
-    -- 4. Validator bypass (หัวใจหลัก — ถ้าไม่มีอันนี้ดาเมจไม่ขึ้น)
-    pcall(function()
-        -- Re-scan ถ้า cache หมดอายุ
-        if tick() - ValidatorCache.LastScan > ValidatorCache.ScanInterval then
-            ScanValidatorUpvalues()
-        end
+    -- ★ KEY FIX: Re-scan validator ทุกครั้ง ไมยมึด cache ★
+    local attackData = GetValidAttackData()
+    if attackData then
+        local u8 = debug.getupvalue(attackData.ac.attack, attackData.seed_idx)
+        local u9 = debug.getupvalue(attackData.ac.attack, attackData.mod_idx)
+        local u7 = debug.getupvalue(attackData.ac.attack, attackData.inc_idx)
+        local u10 = debug.getupvalue(attackData.ac.attack, attackData.counter_idx)
         
-        local CombatFramework = require(LocalPlayer.PlayerScripts:WaitForChild("CombatFramework"))
-        local CombatFrameworkR = getupvalues(CombatFramework)[2]
-        
-        if CombatFrameworkR and CombatFrameworkR.activeController then
-            local AC = CombatFrameworkR.activeController
-            if AC and AC.attack then
-                local u8 = debug.getupvalue(AC.attack, ValidatorCache.u8_idx or 5)
-                local u9 = debug.getupvalue(AC.attack, ValidatorCache.u9_idx or 6)
-                local u7 = debug.getupvalue(AC.attack, ValidatorCache.u7_idx or 4)
-                local u10 = debug.getupvalue(AC.attack, ValidatorCache.u10_idx or 7)
-                
-                if u8 and u9 and u7 and u10 then
-                    -- คำนวณ RNG ถัดไปตาม algorithm เกม
-                    local u12 = (u8 * 798405 + u7 * 727595) % u9
-                    local u13 = u7 * 798405
-                    u12 = (u12 * u9 + u13) % 1099511627776
-                    u8 = math.floor(u12 / u9)
-                    u7 = u12 - u8 * u9
-                    u10 = u10 + 1
-                    
-                    -- Inject ค่ากลับ
-                    debug.setupvalue(AC.attack, ValidatorCache.u8_idx or 5, u8)
-                    debug.setupvalue(AC.attack, ValidatorCache.u9_idx or 6, u9)
-                    debug.setupvalue(AC.attack, ValidatorCache.u7_idx or 4, u7)
-                    debug.setupvalue(AC.attack, ValidatorCache.u10_idx or 7, u10)
-                    
-                    -- ส่ง validator hash ให้เซิรฟเวอร์
-                    local validator = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Validator")
-                    if validator then
-                        validator:FireServer(math.floor(u12 / 1099511627776 * 16777215), u10)
-                    end
-                end
+        if u8 and u9 and u7 and u10 and u9 > 0 then
+            -- คำนวณ RNG ถัดไป
+            local u12 = (u8 * 798405 + u7 * 727595) % u9
+            local u13 = u7 * 798405
+            u12 = (u12 * u9 + u13) % 1099511627776
+            u8 = math.floor(u12 / u9)
+            u7 = u12 - u8 * u9
+            u10 = u10 + 1
+            
+            -- Inject ค่ากลับ
+            debug.setupvalue(attackData.ac.attack, attackData.seed_idx, u8)
+            debug.setupvalue(attackData.ac.attack, attackData.mod_idx, u9)
+            debug.setupvalue(attackData.ac.attack, attackData.inc_idx, u7)
+            debug.setupvalue(attackData.ac.attack, attackData.counter_idx, u10)
+            
+            -- ส่ง validator
+            local validator = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Validator")
+            if validator then
+                pcall(validator.FireServer, validator, math.floor(u12 / 1099511627776 * 16777215), u10)
             end
         end
+    end
+    
+    -- ส่ง hit event
+    local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent") or ReplicatedStorage:FindFirstChild("RigBehaviourEvent")
+    if rigEvent then
+        pcall(rigEvent.FireServer, rigEvent, "hit", bladehit, 1, "")
+    end
+end
+
+-- ─── FALLBACK: Attack แบบไมง้อ validator (ใช้เมอ validator scan ไมได) ───
+local function FallbackAttack(targets)
+    local now = tick()
+    if now - LastAttackTime < 0.12 then return end
+    LastAttackTime = now
+    
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local activeTool = char:FindFirstChildOfClass("Tool")
+    if activeTool then pcall(function() activeTool:Activate() end) end
+    
+    -- Mouse click จําลอง (บางเคส works โดยไมตองการ validator)
+    pcall(function()
+        local VirtualUser = game:GetService("VirtualUser")
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(0.01)
+        VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end)
     
-    -- 5. ส่ง hit event
-    pcall(function()
-        local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent") or ReplicatedStorage:FindFirstChild("RigBehaviourEvent")
-        if rigEvent then
-            rigEvent:FireServer("hit", bladehit, 1, "")
+    local bladehit = {}
+    if type(targets) == "table" then
+        for _, mob in ipairs(targets) do
+            if mob and mob:FindFirstChild("HumanoidRootPart") then
+                table.insert(bladehit, mob.HumanoidRootPart)
+            end
+        end
+    elseif typeof(targets) == "Instance" and targets:FindFirstChild("HumanoidRootPart") then
+        table.insert(bladehit, targets.HumanoidRootPart)
+    end
+    if #bladehit == 0 then return end
+    
+    -- พยายามสงผาน RigControllerEvent โดยตรง
+    local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent") or ReplicatedStorage:FindFirstChild("RigBehaviourEvent")
+    if rigEvent then
+        pcall(rigEvent.FireServer, rigEvent, "hit", bladehit, 1, "")
+    end
+    
+    -- Fallback: ใช CommF_ โดยตรง (วิธีโบราณ แต works บางเซิรฟเวอร)
+    local CommF_ = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+    if CommF_ then
+        pcall(CommF_.FireServer, CommF_, "Attack", bladehit[1])
+    end
+end
+
+-- ─── SMART ATTACK: เลือกระหวาง Validator / Fallback อัตโนมัต ───
+local ConsecutiveFailures = 0
+local lastHealthCheck = {}
+local lastHealthTime = 0
+
+local function SmartAttack(targets)
+    -- พยายาม validator attack กอน
+    local beforeHP = 0
+    if type(targets) == "table" and #targets > 0 and targets[1] and targets[1]:FindFirstChild("Humanoid") then
+        beforeHP = targets[1].Humanoid.Health
+    end
+    
+    PermanentAttack(targets)
+    
+    -- ตรวจสอบวา ดาเมจขึ้นจริงไหม (หลัง 0.3 วิ)
+    task.delay(0.3, function()
+        if not targets or #targets == 0 then return end
+        local mob = type(targets) == "table" and targets[1] or targets
+        if not mob or not mob:FindFirstChild("Humanoid") then return end
+        
+        local afterHP = mob.Humanoid.Health
+        if afterHP >= beforeHP then
+            -- ดาเมจไมขึ้น — เพิ่ม counter
+            ConsecutiveFailures = ConsecutiveFailures + 1
+            
+            -- ถา fail 3 ครังติด ให สแกนใหมและใช fallback
+            if ConsecutiveFailures >= 3 then
+                ConsecutiveFailures = 0
+                -- ใช fallback แทน
+                FallbackAttack(targets)
+            end
+        else
+            -- ดาเมจขึ้น — รีเซ็ต counter
+            ConsecutiveFailures = 0
         end
     end)
 end
 
--- ─── 4. ANTI-STUN / ANTI-KNOCKBACK / ANTI-SIT ───
+-- ─── ANTI-STUN / ANTI-KNOCKBACK ───
 task.spawn(function()
-    while scriptRunning and task.wait(0.1) do
+    while task.wait(0.08) do
         local char = LocalPlayer.Character
         if not char then continue end
         
-        -- ลบ status effects ทันทีก่อนที่จะล็อกการเคลื่อนไหว
-        for _, effect in ipairs({"Stun", "Busy", "Paralyzed", "Frozen", "Sleeping"}) do
+        for _, effect in ipairs({"Stun", "Busy", "Paralyzed", "Frozen", "Sleeping", "Knockback"}) do
             local obj = char:FindFirstChild(effect)
             if obj then
                 if obj:IsA("BoolValue") then obj.Value = false end
+                if obj:IsA("IntValue") then obj.Value = 0 end
                 obj:Destroy()
             end
         end
         
-        -- บังคับ Sit = false (ป้องกันโดนล็อกท่านั่ง)
         local humanoid = char:FindFirstChild("Humanoid")
         if humanoid then
             if humanoid.Sit then humanoid.Sit = false end
             if humanoid.PlatformStand then humanoid.PlatformStand = false end
+            -- Force state 0 (None) ถาไมใช state อืนทจําเปน
+            local currentState = humanoid:GetState()
+            if currentState == Enum.HumanoidStateType.Stunned 
+            or currentState == Enum.HumanoidStateType.KnockedOut then
+                pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.None) end)
+            end
         end
         
-        -- ลบ BodyVelocity ที่เกมอาจ inject มา (เช่น knockback)
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if hrp then
             for _, v in ipairs(hrp:GetChildren()) do
-                if v:IsA("BodyVelocity") and v.Name ~= "fixvelo" and v.Name ~= "BringVelocity" and v.Name ~= "BypassLock_Pos" then
+                if v:IsA("BodyVelocity") and v.Name ~= "fixvelo" and v.Name ~= "BringVelocity" then
                     v:Destroy()
                 end
             end
@@ -312,42 +272,30 @@ task.spawn(function()
     end
 end)
 
--- ─── 5. MOB HITBOX EXPANDER (เวอร์ชันแก้ไข) ───
+-- ─── MOB HITBOX EXPANDER (ปรับปรุง) ───
 task.spawn(function()
-    while scriptRunning and task.wait(0.15) do
+    while task.wait(0.12) do
         pcall(function()
-            -- SimulationRadius แบบ legacy (backup)
             if sethiddenproperty then
                 pcall(sethiddenproperty, LocalPlayer, "SimulationRadius", math.huge)
             end
-            if setscriptable then
-                pcall(setscriptable, LocalPlayer, "SimulationRadius", true)
-            end
             
-            -- ขยาย hitbox มอนสเตอร์
             if workspace:FindFirstChild("Enemies") then
                 for _, mob in ipairs(workspace.Enemies:GetChildren()) do
                     if mob:FindFirstChild("HumanoidRootPart") and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-                        -- ขยาย hitbox
                         mob.HumanoidRootPart.Size = Vector3.new(60, 60, 60)
                         mob.HumanoidRootPart.Transparency = 1
                         mob.HumanoidRootPart.CanCollide = false
                         
-                        -- ปิด collision หัว
-                        if mob:FindFirstChild("Head") then
-                            mob.Head.CanCollide = false
-                        end
+                        if mob:FindFirstChild("Head") then mob.Head.CanCollide = false end
                         
-                        -- ล็อกการเคลื่อนไหว
                         mob.Humanoid.WalkSpeed = 0
                         mob.Humanoid.JumpPower = 0
                         
-                        -- ลบ animator (ป้องกัน animation ขัดจังหวะ attack)
                         if mob.Humanoid:FindFirstChild("Animator") then
                             mob.Humanoid.Animator:Destroy()
                         end
                         
-                        -- Force state ไปที่ 14 (Knockdown) แต่ไม่แสดง animation
                         pcall(function() mob.Humanoid:ChangeState(14) end)
                     end
                 end
@@ -356,134 +304,25 @@ task.spawn(function()
     end
 end)
 
--- ─── 6. REPLACE BringMob FUNCTION (เวอร์ชันแก้ไข) ───
-local function BypassBringMob(originMob)
-    pcall(sethiddenproperty, LocalPlayer, "SimulationRadius", math.huge)
-    local aname = originMob.Name
-    local acf = originMob.HumanoidRootPart.CFrame
-    local targets = {}
-    
-    table.insert(targets, {originMob, originMob:FindFirstChild("Head")})
-    
-    -- ดึงมอนสเตอร์ตัวที่สองมาใกล้ๆ
-    if getgenv().Configs.BringMob then
-        for _, v in ipairs(workspace.Enemies:GetChildren()) do
-            if v ~= originMob 
-            and string.find(v.Name:lower(), aname:lower(), 1, true) 
-            and v:FindFirstChild("Humanoid") 
-            and v:FindFirstChild("HumanoidRootPart") 
-            and v.Humanoid.Health > 0 
-            and (acf.Position - v.HumanoidRootPart.Position).Magnitude <= 350 then
-                
-                -- ใช้ CFrame โดยตรง (ไม่ใช้ BodyVelocity ที่อาจขัดแย้ง)
-                v.HumanoidRootPart.CFrame = acf
-                v.HumanoidRootPart.CanCollide = false
-                v.Humanoid.WalkSpeed = 0
-                v.Humanoid.JumpPower = 0
-                
-                table.insert(targets, {v, v:FindFirstChild("Head")})
-                break
-            end
-        end
-    end
-    
-    return targets
-end
-
--- ─── 7. REPLACE Tween FUNCTION (เวอร์ชันแก้ไข — ไม่ขัดแย้งกับ lock) ───
-local IsTweening = false
-local TweenConnection = nil
-
-local function BypassTween(targetCFrame, speed)
-    speed = speed or 350
-    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    -- Unlock ชั่วคราวก่อน tween
-    UnlockCharacterPosition()
-    IsTweening = true
-    
-    local distance = (hrp.Position - targetCFrame.Position).Magnitude
-    local tweenTime = distance / speed
-    
-    -- ใช้ Heartbeat สำหรับ movement ที่ smooth และยากต่อการ detect
-    local startTime = tick()
-    local startPos = hrp.CFrame
-    
-    if TweenConnection then TweenConnection:Disconnect() end
-    
-    TweenConnection = RunService.Heartbeat:Connect(function()
-        local elapsed = tick() - startTime
-        local alpha = math.clamp(elapsed / tweenTime, 0, 1)
-        
-        -- Linear interpolation
-        local newPos = startPos.Position:Lerp(targetCFrame.Position, alpha)
-        local newLook = startPos.LookVector:Lerp(targetCFrame.LookVector, alpha)
-        hrp.CFrame = CFrame.new(newPos, newPos + newLook)
-        
-        if alpha >= 1 then
-            IsTweening = false
-            TweenConnection:Disconnect()
-            TweenConnection = nil
-        end
-    end)
-end
-
--- ─── 8. ANTI-DETECTION MEASURES ───
-task.spawn(function()
-    while scriptRunning and task.wait(2) do
-        -- 1. Randomize attack timing เล็กน้อย (ป้องกัน pattern detection)
-        getgenv().Configs._AttackJitter = math.random(0, 15) / 1000
-        
-        -- 2. Reset network owner เป็นระยะ (ป้องกัน position desync)
-        local char = LocalPlayer.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                pcall(function()
-                    hrp:SetNetworkOwner(nil) -- คืนให้ server เป็นระยะ
-                    task.wait(0.1)
-                    hrp:SetNetworkOwner(LocalPlayer) -- ยึดกลับมา
-                end)
-            end
-        end
-        
-        -- 3. ตรวจสอบว่า character ไม่ถูก teleport กลับ
-        if CharacterLock.Active then
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and CharacterLock.TargetCFrame then
-                local dist = (hrp.Position - CharacterLock.TargetCFrame.Position).Magnitude
-                if dist > 5 then
-                    -- ถูกดึงกลับ — บังคับกลับไปที่เดิม
-                    hrp.CFrame = CharacterLock.TargetCFrame
-                end
-            end
-        end
-    end
-end)
-
--- ─── 9. GLOBAL OVERRIDE (แทนที่ฟังก์ชันเดิมในสคริปต์) ───
--- Inject ฟังก์ชันใหม่ให้สคริปต์เดิมเรียกใช้
+-- ─── GLOBAL EXPORT ───
 getgenv().BypassPatch = {
-    Version = BYPASS_VERSION,
-    LockPosition = LockCharacterPosition,
-    UnlockPosition = UnlockCharacterPosition,
-    Attack = BypassAttack,
-    BringMob = BypassBringMob,
-    Tween = BypassTween,
-    ScanValidator = ScanValidatorUpvalues
+    Version = "3.0",
+    SmartAttack = SmartAttack,
+    PermanentAttack = PermanentAttack,
+    FallbackAttack = FallbackAttack,
+    ScanNow = GetValidAttackData
 }
 
--- Auto-initialize: สแกน validator ทันที
+-- Auto-init
 task.spawn(function()
     repeat task.wait(1) until game:IsLoaded() and LocalPlayer.Character
     task.wait(2)
-    pcall(ScanValidatorUpvalues)
-    ObsidianGlassEngine:Notify({
-        Title = "Bypass Patch v" .. BYPASS_VERSION,
-        Content = "Anti-Pull + Validator Fix + Damage Reg loaded!"
-    })
+    local data = GetValidAttackData()
+    if data then
+        warn("[BYPASS v3.0] Validator scan OK — seed:" .. data.seed_idx .. " mod:" .. data.mod_idx .. " inc:" .. data.inc_idx .. " counter:" .. data.counter_idx)
+    else
+        warn("[BYPASS v3.0] Validator scan FAILED — using fallback mode")
+    end
 end)
 
-warn("[BYPASS PATCH v" .. BYPASS_VERSION .. "] Loaded successfully")
+warn("[BYPASS PATCH v3.0] Loaded — re-scans validator every attack")
