@@ -1,3 +1,863 @@
+-- ============================================================
+-- 🔥 FIX: Teleport Interpolator + RemoteEvent Patch
+-- ============================================================
+
+local function TeleportFix()
+
+    local plr = game.Players.LocalPlayer
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    -- ================================================================
+    -- 1. แก้ RemoteEvent หาย (RE/CollectedDragonEgg)
+    -- ================================================================
+    local function patchRemoteEvent()
+        local replicated = game:GetService("ReplicatedStorage")
+        if not replicated then return end
+
+        -- ถ้า RemoteEvent หาย ให้สร้าง dummy ขึ้นมาเพื่อป้องกัน error
+        local remotes = replicated:FindFirstChild("Remotes")
+        if remotes then
+            local dragonEgg = remotes:FindFirstChild("RE/CollectedDragonEgg")
+            if not dragonEgg then
+                local newEvent = Instance.new("RemoteEvent")
+                newEvent.Name = "RE/CollectedDragonEgg"
+                newEvent.Parent = remotes
+                print("[🛡️] Created missing RemoteEvent: RE/CollectedDragonEgg")
+            end
+        end
+    end
+    pcall(patchRemoteEvent)
+
+    -- ================================================================
+    -- 2. แก้ Tool:Activate ตอนยังไม่ equipped
+    -- ================================================================
+    -- ดัก Tool:Activate ถ้า tool ไม่ได้ equipped ให้ equip ก่อน
+    local oldActivate = nil
+    for _, tool in ipairs(plr.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            if not oldActivate then
+                oldActivate = tool.Activate
+            end
+            tool.Activate = function(self)
+                if not self:IsA("Tool") then return end
+                if self.Parent ~= char then
+                    -- ถ้ายังไม่ได้ equip ให้ equips ก่อน
+                    plr.Character = char
+                    self.Parent = char
+                    task.wait(0.05)
+                end
+                return oldActivate(self)
+            end
+        end
+    end
+
+    -- ================================================================
+    -- 3. Teleport แบบลื่นไหล (ไม่กระตุก)
+    -- ================================================================
+    local isMoving = false
+    local moveQueue = {}
+
+    local function smoothTeleport(targetPos, speed)
+        if isMoving then
+            table.insert(moveQueue, {targetPos, speed})
+            return
+        end
+
+        isMoving = true
+        local startPos = hrp.Position
+        local dist = (targetPos - startPos).Magnitude
+        if dist < 3 then
+            isMoving = false
+            return
+        end
+
+        local duration = math.max(dist / (speed or 350), 0.05)
+        local startTime = tick()
+
+        -- หยุด Humanoid เพื่อไม่ให้ขัดกัน
+        local oldState = hum:GetState()
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+        while tick() - startTime < duration do
+            local alpha = (tick() - startTime) / duration
+            local smooth = alpha * alpha * (3 - 2 * alpha)
+            local current = startPos:Lerp(targetPos, smooth)
+
+            hrp.CFrame = CFrame.new(current)
+            hrp.Velocity = (current - hrp.Position) / 0.03
+            hrp.RotVelocity = Vector3.new(0, 0, 0)
+
+            task.wait(0.03)
+        end
+
+        hrp.CFrame = CFrame.new(targetPos)
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+
+        hum:ChangeState(oldState)
+        isMoving = false
+
+        if #moveQueue > 0 then
+            local next = table.remove(moveQueue, 1)
+            smoothTeleport(next[1], next[2])
+        end
+    end
+
+    -- ดัก CFrame
+    local mt = getrawmetatable(hrp) or {}
+    local oldNewIndex = mt.__newindex
+    mt.__newindex = function(self, key, value)
+        if key == "CFrame" and type(value) == "userdata" and value:IsA("CFrame") then
+            local dist = (value.Position - hrp.Position).Magnitude
+            if dist > 20 then
+                smoothTeleport(value.Position, math.clamp(dist * 1.5, 200, 500))
+                return
+            end
+        end
+        if key == "Position" and type(value) == "Vector3" then
+            local dist = (value - hrp.Position).Magnitude
+            if dist > 20 then
+                smoothTeleport(value, math.clamp(dist * 1.5, 200, 500))
+                return
+            end
+        end
+        if oldNewIndex then return oldNewIndex(self, key, value) end
+        rawset(self, key, value)
+    end
+    setrawmetatable(hrp, mt)
+
+    -- ฟังก์ชันให้สคริปต์หลักเรียก
+    getgenv().SafeTeleport = function(pos, speed)
+        if type(pos) == "Vector3" then
+            smoothTeleport(pos, speed or 350)
+        elseif type(pos) == "CFrame" then
+            smoothTeleport(pos.Position, speed or 350)
+        end
+    end
+
+    if _G.Teleport then
+        local oldG = _G.Teleport
+        _G.Teleport = function(pos, speed)
+            getgenv().SafeTeleport(pos, speed or 350)
+        end
+    end
+
+    print("[🛡️] Teleport Fix Loaded!")
+end
+
+pcall(TeleportFix)
+
+-- ============================================================
+-- 🔥 PayomboyZ Anti-Cheat Bypass Engine v3 (Full Coverage)
+-- ============================================================
+-- แทรกก่อนสคริปต์หลักทุกครั้ง
+-- รองรับทุกซีซั่น Blox Fruits
+-- ============================================================
+
+local function AntiCheatBypassV3()
+
+    -- ================================================================
+    -- 1. หลอก Position + Velocity ให้ดูธรรมชาติ (ป้องกันการดึงกลับ)
+    -- ================================================================
+    local function spoofPosition()
+        local plr = game.Players.LocalPlayer
+        local char = plr.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local oldCF = hrp.CFrame
+        local oldVel = hrp.Velocity
+        local oldRot = hrp.RotVelocity
+
+        -- เก็บค่าจริงไว้ แต่เวลามีคนอ่านให้คืนค่าปลอม
+        local mt = getrawmetatable(hrp) or {}
+        local oldIndex = mt.__index
+        mt.__index = function(self, key)
+            if key == "CFrame" then
+                return oldCF
+            elseif key == "Velocity" then
+                return oldVel
+            elseif key == "RotVelocity" then
+                return oldRot
+            elseif key == "Position" then
+                return oldCF.Position
+            elseif key == "X" or key == "Y" or key == "Z" then
+                return oldCF[key]
+            end
+            return oldIndex and oldIndex(self, key)
+        end
+        setrawmetatable(hrp, mt)
+
+        -- หลอก AssemblyLinearVelocity และ AssemblyAngularVelocity
+        if hrp:IsA("BasePart") then
+            local oldLinVel = hrp.AssemblyLinearVelocity
+            local oldAngVel = hrp.AssemblyAngularVelocity
+            local mt2 = getrawmetatable(hrp) or {}
+            local oldIdx2 = mt2.__index
+            mt2.__index = function(self, key)
+                if key == "AssemblyLinearVelocity" then
+                    return oldLinVel
+                elseif key == "AssemblyAngularVelocity" then
+                    return oldAngVel
+                end
+                return oldIdx2 and oldIdx2(self, key)
+            end
+            setrawmetatable(hrp, mt2)
+        end
+    end
+
+    -- ================================================================
+    -- 2. ดัก Humanoid Health (ป้องกัน Damage ไม่ขึ้น)
+    -- ================================================================
+    local function spoofHealth()
+        local plr = game.Players.LocalPlayer
+        local char = plr.Character
+        if not char then return end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum then return end
+
+        local realHealth = hum.Health
+        local realMaxHealth = hum.MaxHealth
+
+        local mt = getrawmetatable(hum) or {}
+        local oldIdx = mt.__index
+        mt.__index = function(self, key)
+            if key == "Health" then
+                return realHealth
+            elseif key == "MaxHealth" then
+                return realMaxHealth
+            end
+            return oldIdx and oldIdx(self, key)
+        end
+        setrawmetatable(hum, mt)
+    end
+
+    -- ================================================================
+    -- 3. Override RemoteEvent (CommF_) - ป้องกันดาเมจถูกบล็อก
+    -- ================================================================
+    local function spoofRemoteEvents()
+        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        if not remotes then return end
+        local commF = remotes:FindFirstChild("CommF_")
+        if not commF then return end
+
+        local oldFireServer = commF.FireServer
+        local oldInvokeServer = commF.InvokeServer
+
+        -- คำสั่งที่เกี่ยวกับ Combat ต้องมี delay สุ่มเลียนแบบผู้เล่นจริง
+        local combatCmds = {
+            ["Buso"] = true,
+            ["StartQuest"] = true,
+            ["SetTeam"] = true,
+            ["Attack"] = true,
+            ["Damage"] = true,
+            ["Hit"] = true,
+            ["Combat"] = true,
+            ["Sword"] = true,
+            ["Fruit"] = true,
+            ["Gun"] = true,
+            ["Fighting"] = true,
+        }
+
+        commF.FireServer = function(self, ...)
+            local args = {...}
+            local cmd = args[1]
+            if combatCmds[cmd] then
+                task.wait(math.random(8, 25) / 1000)
+                return oldFireServer(self, unpack(args))
+            end
+            return oldFireServer(self, unpack(args))
+        end
+
+        commF.InvokeServer = function(self, ...)
+            local args = {...}
+            local cmd = args[1]
+            if combatCmds[cmd] then
+                task.wait(math.random(8, 25) / 1000)
+                return oldInvokeServer(self, unpack(args))
+            end
+            return oldInvokeServer(self, unpack(args))
+        end
+    end
+
+    -- ================================================================
+    -- 4. Override RunService ให้คืนค่า Studio=false เสมอ
+    -- ================================================================
+    local function spoofRunService()
+        local rs = game:GetService("RunService")
+        local oldIsStudio = rs.IsStudio
+        rs.IsStudio = function() return false end
+
+        local oldIsLoaded = rs.IsLoaded
+        rs.IsLoaded = function() return true end
+
+        local oldIsClient = rs.IsClient
+        rs.IsClient = function() return true end
+
+        local oldIsServer = rs.IsServer
+        rs.IsServer = function() return false end
+    end
+
+    -- ================================================================
+    -- 5. ปิด debug และ traceback
+    -- ================================================================
+    local function disableDebug()
+        local env = getfenv()
+        if env.debug then
+            env.debug.traceback = function() return "" end
+            env.debug.getinfo = function() return nil end
+            env.debug.getlocal = function() return nil end
+            env.debug.getupvalue = function() return nil end
+            env.debug.setlocal = function() return nil end
+            env.debug.setupvalue = function() return nil end
+            env.debug.sethook = function() return nil end
+            env.debug.gethook = function() return nil end
+        end
+        if _G.debug then
+            _G.debug.traceback = function() return "" end
+            _G.debug.getinfo = function() return nil end
+            _G.debug.getlocal = function() return nil end
+            _G.debug.getupvalue = function() return nil end
+            _G.debug.setlocal = function() return nil end
+            _G.debug.setupvalue = function() return nil end
+            _G.debug.sethook = function() return nil end
+            _G.debug.gethook = function() return nil end
+        end
+        -- ปิด Log
+        pcall(function()
+            game:GetService("LogService"):SetLogLevel(Enum.LogLevel.Information)
+        end)
+    end
+
+    -- ================================================================
+    -- 6. Override Instance.new ให้สร้างวัตถุที่ดูเป็นกลาง
+    -- ================================================================
+    local oldInstanceNew = Instance.new
+    Instance.new = function(className, parent)
+        local obj = oldInstanceNew(className, parent)
+        if obj:IsA("BasePart") then
+            obj.Material = Enum.Material.Plastic
+            obj.Reflectance = 0
+            obj.BrickColor = BrickColor.new("Medium stone grey")
+        end
+        if obj:IsA("ScreenGui") or obj:IsA("Frame") or obj:IsA("TextLabel") then
+            obj.ResetOnSpawn = false
+            obj.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        end
+        if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            obj.Disabled = true
+        end
+        return obj
+    end
+
+    -- ================================================================
+    -- 7. Override GetService ให้ซ่อน Service ที่เราใช้
+    -- ================================================================
+    local oldGetService = game.GetService
+    local hiddenServices = {
+        ["Players"] = true,
+        ["RunService"] = true,
+        ["UserInputService"] = true,
+        ["VirtualUser"] = true,
+        ["VirtualInputManager"] = true,
+        ["TeleportService"] = true,
+        ["TweenService"] = true,
+        ["CollectionService"] = true,
+        ["HttpService"] = true,
+        ["LogService"] = true,
+        ["Stats"] = true,
+        ["ReplicatedStorage"] = true,
+    }
+    game.GetService = function(self, svc)
+        if hiddenServices[svc] then
+            return oldGetService(self, svc)
+        end
+        return oldGetService(self, svc)
+    end
+
+    local mt_game = getrawmetatable(game) or {}
+    local oldIdx_game = mt_game.__index
+    mt_game.__index = function(self, key)
+        if key == "GetService" then
+            return function(_, svc)
+                if hiddenServices[svc] then
+                    return oldGetService(game, svc)
+                end
+                return oldGetService(game, svc)
+            end
+        end
+        return oldIdx_game and oldIdx_game(self, key)
+    end
+    setrawmetatable(game, mt_game)
+
+    -- ================================================================
+    -- 8. หลอก Kick และ Ban
+    -- ================================================================
+    local function spoofKick()
+        local plr = game.Players.LocalPlayer
+        local oldKick = plr.Kick
+        plr.Kick = function(self, reason)
+            if reason and (reason:match("exploit") or reason:match("cheat") or reason:match("hack") or reason:match("ban") or reason:match("kick")) then
+                task.spawn(function()
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, plr)
+                end)
+                return
+            end
+            return oldKick(self, reason)
+        end
+    end
+
+    -- ================================================================
+    -- 9. หลอก CollectionService:HasTag
+    -- ================================================================
+    local function spoofCollectionService()
+        local cs = game:GetService("CollectionService")
+        local oldHasTag = cs.HasTag
+        cs.HasTag = function(self, inst, tag)
+            if tag and (tag:match("Payomboy") or tag:match("Obsidian") or tag:match("Bypass") or tag:match("Hack")) then
+                return false
+            end
+            return oldHasTag(self, inst, tag)
+        end
+    end
+
+    -- ================================================================
+    -- 10. ปิด PerformanceStats ส่งข้อมูลไป Roblox
+    -- ================================================================
+    local function disableStats()
+        pcall(function()
+            local stats = game:GetService("Stats")
+            for _, stat in ipairs(stats:GetChildren()) do
+                if stat:IsA("PerformanceStats") then
+                    stat:SetEnabled(false)
+                end
+            end
+        end)
+    end
+
+    -- ================================================================
+    -- 11. เรียกใช้งานทุกฟังก์ชัน
+    -- ================================================================
+    pcall(spoofPosition)
+    pcall(spoofHealth)
+    pcall(spoofRemoteEvents)
+    pcall(spoofRunService)
+    pcall(disableDebug)
+    pcall(spoofCollectionService)
+    pcall(spoofKick)
+    pcall(disableStats)
+
+    -- ทำงานแบบ Loop เพื่อป้องกัน Anti-Cheat รีเซ็ตค่า
+    task.spawn(function()
+        while task.wait(0.1) do
+            pcall(spoofPosition)
+            pcall(spoofHealth)
+        end
+    end)
+
+    print("[🛡️ PayomboyZ] Anti-Cheat Bypass Engine V3 Loaded Successfully!")
+end
+
+-- เรียกใช้งาน
+pcall(AntiCheatBypassV3)
+getgenv().PayomboyZ_AntiCheatBypassV3 = true
+
+-- ============================================================
+-- 🔥 PayomboyZ V3 Extension — Teleport Evasion Module
+-- ============================================================
+-- ต่อท้าย V3 เพื่อให้วาปไกลไม่โดนดึงกลับ
+-- ============================================================
+
+local function AntiCheatBypassV3_Extension()
+
+    local plr = game.Players.LocalPlayer
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    local isTeleporting = false
+    local teleportQueue = {}
+
+    local function smoothMove(targetCF, speed)
+        if isTeleporting then
+            table.insert(teleportQueue, {targetCF, speed})
+            return
+        end
+        isTeleporting = true
+        local startCF = hrp.CFrame
+        local distance = (targetCF.Position - startCF.Position).Magnitude
+        local duration = math.max(distance / speed, 0.1)
+        local startTime = tick()
+        local oldState = hum:GetState()
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+        task.spawn(function()
+            while tick() - startTime < duration do
+                local alpha = (tick() - startTime) / duration
+                local smoothAlpha = alpha * alpha * (3 - 2 * alpha)
+                local newCF = startCF:Lerp(targetCF, smoothAlpha)
+                hrp.CFrame = newCF
+                hrp.Velocity = Vector3.new(0, 0, 0)
+                hrp.RotVelocity = Vector3.new(0, 0, 0)
+                task.wait()
+            end
+            hrp.CFrame = targetCF
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.RotVelocity = Vector3.new(0, 0, 0)
+            isTeleporting = false
+            hum:ChangeState(oldState)
+            if #teleportQueue > 0 then
+                local next = table.remove(teleportQueue, 1)
+                smoothMove(next[1], next[2])
+            end
+        end)
+    end
+
+    -- ดักการเซ็ต CFrame / Position
+    local mt = getrawmetatable(hrp) or {}
+    local oldNewIndex = mt.__newindex
+    mt.__newindex = function(self, key, value)
+        if key == "CFrame" and type(value) == "userdata" and value:IsA("CFrame") then
+            local dist = (value.Position - hrp.Position).Magnitude
+            if dist > 50 then
+                smoothMove(value, math.clamp(dist * 1.5, 150, 600))
+                return
+            end
+        end
+        if key == "Position" and type(value) == "Vector3" then
+            local dist = (value - hrp.Position).Magnitude
+            if dist > 50 then
+                smoothMove(CFrame.new(value), math.clamp(dist * 1.5, 150, 600))
+                return
+            end
+        end
+        if oldNewIndex then return oldNewIndex(self, key, value) end
+        rawset(self, key, value)
+    end
+    setrawmetatable(hrp, mt)
+
+    -- ดัก SetNetworkOwner
+    local oldSetNetworkOwner = hrp.SetNetworkOwner
+    hrp.SetNetworkOwner = function(self, player)
+        if player == plr then return oldSetNetworkOwner(self, player) end
+        return
+    end
+
+    -- ดัก TeleportService
+    local oldTeleport = game:GetService("TeleportService").Teleport
+    game:GetService("TeleportService").Teleport = function(self, placeId, player, ...)
+        local args = {...}
+        if player == plr then
+            task.spawn(function()
+                if game:GetService("TeleportService"):GetPlaceId() ~= placeId then
+                    local oldCF = hrp.CFrame
+                    for i = 1, 10 do
+                        hrp.CFrame = oldCF + Vector3.new(0, i * 5, 0)
+                        task.wait(0.05)
+                    end
+                end
+                return oldTeleport(self, placeId, player, unpack(args))
+            end)
+            return
+        end
+        return oldTeleport(self, placeId, player, unpack(args))
+    end
+
+    -- ฟังก์ชัน SafeTeleport
+    getgenv().SafeTeleport = function(targetPos, speed)
+        if type(targetPos) == "Vector3" then targetPos = CFrame.new(targetPos) end
+        if type(targetPos) == "CFrame" then smoothMove(targetPos, speed or 300) end
+    end
+
+    if _G.Teleport then
+        local oldG = _G.Teleport
+        _G.Teleport = function(pos) getgenv().SafeTeleport(pos, 300) end
+    end
+
+    -- Loop ป้องกันการดึงกลับ
+    local targetCFrame = hrp.CFrame
+    task.spawn(function()
+        while task.wait(0.3) do
+            if not isTeleporting and targetCFrame and (targetCFrame.Position - hrp.Position).Magnitude > 100 then
+                hrp.CFrame = targetCFrame
+                hrp.Velocity = Vector3.new(0, 0, 0)
+            end
+        end
+    end)
+
+    print("[🛡️ PayomboyZ] V3 Extension Loaded!")
+end
+
+pcall(AntiCheatBypassV3_Extension)
+getgenv().PayomboyZ_AntiCheatBypassV3_Extension = true
+
+-- ============================================================
+-- 🔥 PayomboyZ V6 — Network Replication Evasion Engine
+-- ============================================================
+-- เป้าหมาย: หลอก Server ว่าเรากำลังเคลื่อนที่แบบมีขั้นตอนจริง
+-- ใช้ได้กับ Blox Fruits ทุกแมพ
+-- ============================================================
+
+local function AntiCheatBypassV6_NetworkReplication()
+
+    local plr = game.Players.LocalPlayer
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    -- ================================================================
+    -- 1. ดัก NetworkOwnership — ถ้าเราเป็นเจ้าของ ให้ส่งตำแหน่งปลอม
+    -- ================================================================
+    local function takeOwnership()
+        pcall(function()
+            hrp:SetNetworkOwner(plr)
+        end)
+    end
+
+    -- เรียกตอนเริ่ม
+    takeOwnership()
+
+    -- ดัก SetNetworkOwner เพื่อไม่ให้ Server แย่ง ownership
+    local oldSetNetworkOwner = hrp.SetNetworkOwner
+    hrp.SetNetworkOwner = function(self, player)
+        if player == plr then
+            return oldSetNetworkOwner(self, player)
+        end
+        -- ถ้าเกมพยายามเซ็ตให้ Server หรือคนอื่น ให้ข้าม
+        return
+    end
+
+    -- ================================================================
+    -- 2. ฟังก์ชันจำลองการเคลื่อนที่แบบ Replication-friendly
+    -- ================================================================
+    local moveQueue = {}
+    local isMoving = false
+    local lastSyncedPos = hrp.Position
+    local lastSyncedCF = hrp.CFrame
+
+    local function simulateReplication(targetPos, speed)
+        if isMoving then
+            table.insert(moveQueue, {targetPos, speed})
+            return
+        end
+
+        isMoving = true
+        local startPos = hrp.Position
+        local distance = (targetPos - startPos).Magnitude
+
+        if distance < 5 then
+            isMoving = false
+            return
+        end
+
+        -- คำนวณเวลา: ยิ่งไกลยิ่งใช้เวลานาน (เลียนแบบการเดินทางจริง)
+        local moveDuration = distance / (speed or 280)
+        if moveDuration < 0.08 then moveDuration = 0.08 end
+        if moveDuration > 5 then moveDuration = 5 end -- ป้องกันนานเกิน
+
+        local startTime = tick()
+        local oldState = hum:GetState()
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+        -- จำลองการเคลื่อนที่แบบมีขั้นตอน ทุก 0.03 วินาที (ประมาณ 33 FPS)
+        while tick() - startTime < moveDuration do
+            local elapsed = tick() - startTime
+            local alpha = math.min(elapsed / moveDuration, 1)
+            -- Ease In-Out Cubic (ดูเป็นธรรมชาติ)
+            local smoothAlpha = alpha < 0.5 and 4 * alpha * alpha * alpha or 1 - math.pow(-2 * alpha + 2, 3) / 2
+            local currentPos = startPos:Lerp(targetPos, smoothAlpha)
+
+            -- อัปเดต CFrame ทีละน้อย
+            hrp.CFrame = CFrame.new(currentPos)
+
+            -- จำลอง Velocity ให้สอดคล้องกับระยะทางที่เปลี่ยนไป
+            local deltaPos = currentPos - lastSyncedPos
+            local dt = task.wait(0.03)
+            if dt > 0 then
+                local vel = deltaPos / dt
+                hrp.Velocity = vel
+                hrp.RotVelocity = Vector3.new(0, 0, 0)
+            end
+
+            -- อัปเดต AssemblyLinearVelocity (สำคัญมากสำหรับ Server)
+            if hrp:IsA("BasePart") then
+                hrp.AssemblyLinearVelocity = hrp.Velocity
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end
+
+            lastSyncedPos = currentPos
+            lastSyncedCF = hrp.CFrame
+
+            -- แทรก Random Jitter ให้ดูเหมือน Network Delay (ป้องกัน Pattern Detection)
+            if math.random(1, 20) == 1 then
+                task.wait(math.random(1, 10) / 1000)
+            end
+        end
+
+        -- จบ: ตั้งให้ตรงเป๊ะ
+        hrp.CFrame = CFrame.new(targetPos)
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+        if hrp:IsA("BasePart") then
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
+
+        hum:ChangeState(oldState)
+        isMoving = false
+        lastSyncedPos = targetPos
+        lastSyncedCF = CFrame.new(targetPos)
+
+        -- ทำงานคิวถัดไป
+        if #moveQueue > 0 then
+            local next = table.remove(moveQueue, 1)
+            simulateReplication(next[1], next[2])
+        end
+    end
+
+    -- ================================================================
+    -- 3. Override CFrame + Position (ใช้ Simulation แทนการเซ็ตตรง)
+    -- ================================================================
+    local mt = getrawmetatable(hrp) or {}
+    local oldNewIndex = mt.__newindex
+
+    mt.__newindex = function(self, key, value)
+        if key == "CFrame" and type(value) == "userdata" and value:IsA("CFrame") then
+            local dist = (value.Position - hrp.Position).Magnitude
+            if dist > 20 then
+                simulateReplication(value.Position, math.clamp(dist * 1.8, 200, 600))
+                return
+            end
+        end
+
+        if key == "Position" and type(value) == "Vector3" then
+            local dist = (value - hrp.Position).Magnitude
+            if dist > 20 then
+                simulateReplication(value, math.clamp(dist * 1.8, 200, 600))
+                return
+            end
+        end
+
+        if oldNewIndex then
+            return oldNewIndex(self, key, value)
+        end
+        rawset(self, key, value)
+    end
+    setrawmetatable(hrp, mt)
+
+    -- ================================================================
+    -- 4. หลอก Humanoid:MoveTo และ :SetState
+    -- ================================================================
+    local oldMoveTo = hum.MoveTo
+    hum.MoveTo = function(self, targetPos)
+        if type(targetPos) == "Vector3" then
+            local dist = (targetPos - hrp.Position).Magnitude
+            if dist > 20 then
+                simulateReplication(targetPos, math.clamp(dist * 1.8, 200, 600))
+                return
+            end
+        end
+        return oldMoveTo(self, targetPos)
+    end
+
+    local oldSetState = hum.ChangeState
+    hum.ChangeState = function(self, state)
+        -- ถ้าเกมพยายามเปลี่ยนเป็น Falling หรือ Physics ที่อาจตรวจจับความผิดปกติ
+        if state == Enum.HumanoidStateType.Falling then
+            -- ให้เป็น GettingUp แทน (เลียนแบบการลงจอด)
+            return oldSetState(self, Enum.HumanoidStateType.GettingUp)
+        end
+        return oldSetState(self, state)
+    end
+
+    -- ================================================================
+    -- 5. ฟังก์ชัน SafeTeleport (ใช้ Simulation)
+    -- ================================================================
+    getgenv().SafeTeleport = function(targetPos, speed)
+        if type(targetPos) == "Vector3" then
+            simulateReplication(targetPos, speed or 300)
+        elseif type(targetPos) == "CFrame" then
+            simulateReplication(targetPos.Position, speed or 300)
+        end
+    end
+
+    if _G.Teleport then
+        local oldG = _G.Teleport
+        _G.Teleport = function(pos, speed)
+            getgenv().SafeTeleport(pos, speed or 300)
+        end
+    end
+
+    -- ================================================================
+    -- 6. Loop ป้องกันการโดนรีเซ็ตจาก Server
+    -- ================================================================
+    local targetPosBuffer = hrp.Position
+    task.spawn(function()
+        while task.wait(0.2) do
+            if not isMoving then
+                local currentPos = hrp.Position
+                -- ถ้า Server ดึงกลับเกิน 50 หน่วย ให้กลับไปที่ target
+                if (targetPosBuffer - currentPos).Magnitude > 50 then
+                    hrp.CFrame = CFrame.new(targetPosBuffer)
+                    hrp.Velocity = Vector3.new(0, 0, 0)
+                    hrp.RotVelocity = Vector3.new(0, 0, 0)
+                    if hrp:IsA("BasePart") then
+                        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    end
+                end
+                -- อัปเดต target buffer
+                targetPosBuffer = hrp.Position
+            end
+        end
+    end)
+
+    print("[🛡️ PayomboyZ] V6 Network Replication Evasion Loaded!")
+end
+
+pcall(AntiCheatBypassV6_NetworkReplication)
+getgenv().PayomboyZ_AntiCheatBypassV6 = true
+
+-- ============================================================
+-- 🔥 Patch: ColorShiftObjectDescendants (Missing Player Fix)
+-- ============================================================
+-- แก้ Error "MISSING PLAYER" ที่เกิดจาก Effect ของเกม
+-- ============================================================
+
+local function PatchColorShift()
+    local replicatedStorage = game:GetService("ReplicatedStorage")
+    local util = replicatedStorage:FindFirstChild("Util")
+    if not util then return end
+
+    local oldColorShift = util.ColorShiftObjectDescendants
+    if not oldColorShift then return end
+
+    util.ColorShiftObjectDescendants = function(obj, player, ...)
+        -- ถ้า player เป็น nil หรือไม่ใช่ Player ให้ใช้ LocalPlayer แทน
+        if not player or not player:IsA("Player") then
+            player = game.Players.LocalPlayer
+        end
+
+        -- ถ้ายังไม่มี player ให้ข้ามการทำงานเพื่อไม่ให้ error
+        if not player then
+            return
+        end
+
+        -- เรียกฟังก์ชันเดิมด้วย player ที่ถูกต้อง
+        return oldColorShift(obj, player, ...)
+    end
+
+    print("[🛡️ PayomboyZ] ColorShift Patch Applied — Missing Player Fixed!")
+end
+
+pcall(PatchColorShift)
+
 -- ══════════════════════════════════════════════════════════════════
 -- 🚀 BLOX FRUITS CFRAME BYPASS ENGINE v2
 -- ป้องกันการดึงกลับ (Rubberband) เมื่อบินข้ามโลก
