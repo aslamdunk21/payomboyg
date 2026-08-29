@@ -1,0 +1,315 @@
+-- ============================================================
+-- 🔥 PayomboyZ Anti-Cheat Bypass Engine v3 (Full Coverage)
+-- ============================================================
+-- แทรกก่อนสคริปต์หลักทุกครั้ง
+-- รองรับทุกซีซั่น Blox Fruits
+-- ============================================================
+
+local function AntiCheatBypassV3()
+
+    -- ================================================================
+    -- 1. หลอก Position + Velocity ให้ดูธรรมชาติ (ป้องกันการดึงกลับ)
+    -- ================================================================
+    local function spoofPosition()
+        local plr = game.Players.LocalPlayer
+        local char = plr.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local oldCF = hrp.CFrame
+        local oldVel = hrp.Velocity
+        local oldRot = hrp.RotVelocity
+
+        -- เก็บค่าจริงไว้ แต่เวลามีคนอ่านให้คืนค่าปลอม
+        local mt = getrawmetatable(hrp) or {}
+        local oldIndex = mt.__index
+        mt.__index = function(self, key)
+            if key == "CFrame" then
+                return oldCF
+            elseif key == "Velocity" then
+                return oldVel
+            elseif key == "RotVelocity" then
+                return oldRot
+            elseif key == "Position" then
+                return oldCF.Position
+            elseif key == "X" or key == "Y" or key == "Z" then
+                return oldCF[key]
+            end
+            return oldIndex and oldIndex(self, key)
+        end
+        setrawmetatable(hrp, mt)
+
+        -- หลอก AssemblyLinearVelocity และ AssemblyAngularVelocity
+        if hrp:IsA("BasePart") then
+            local oldLinVel = hrp.AssemblyLinearVelocity
+            local oldAngVel = hrp.AssemblyAngularVelocity
+            local mt2 = getrawmetatable(hrp) or {}
+            local oldIdx2 = mt2.__index
+            mt2.__index = function(self, key)
+                if key == "AssemblyLinearVelocity" then
+                    return oldLinVel
+                elseif key == "AssemblyAngularVelocity" then
+                    return oldAngVel
+                end
+                return oldIdx2 and oldIdx2(self, key)
+            end
+            setrawmetatable(hrp, mt2)
+        end
+    end
+
+    -- ================================================================
+    -- 2. ดัก Humanoid Health (ป้องกัน Damage ไม่ขึ้น)
+    -- ================================================================
+    local function spoofHealth()
+        local plr = game.Players.LocalPlayer
+        local char = plr.Character
+        if not char then return end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum then return end
+
+        local realHealth = hum.Health
+        local realMaxHealth = hum.MaxHealth
+
+        local mt = getrawmetatable(hum) or {}
+        local oldIdx = mt.__index
+        mt.__index = function(self, key)
+            if key == "Health" then
+                return realHealth
+            elseif key == "MaxHealth" then
+                return realMaxHealth
+            end
+            return oldIdx and oldIdx(self, key)
+        end
+        setrawmetatable(hum, mt)
+    end
+
+    -- ================================================================
+    -- 3. Override RemoteEvent (CommF_) - ป้องกันดาเมจถูกบล็อก
+    -- ================================================================
+    local function spoofRemoteEvents()
+        local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        if not remotes then return end
+        local commF = remotes:FindFirstChild("CommF_")
+        if not commF then return end
+
+        local oldFireServer = commF.FireServer
+        local oldInvokeServer = commF.InvokeServer
+
+        -- คำสั่งที่เกี่ยวกับ Combat ต้องมี delay สุ่มเลียนแบบผู้เล่นจริง
+        local combatCmds = {
+            ["Buso"] = true,
+            ["StartQuest"] = true,
+            ["SetTeam"] = true,
+            ["Attack"] = true,
+            ["Damage"] = true,
+            ["Hit"] = true,
+            ["Combat"] = true,
+            ["Sword"] = true,
+            ["Fruit"] = true,
+            ["Gun"] = true,
+            ["Fighting"] = true,
+        }
+
+        commF.FireServer = function(self, ...)
+            local args = {...}
+            local cmd = args[1]
+            if combatCmds[cmd] then
+                task.wait(math.random(8, 25) / 1000)
+                return oldFireServer(self, unpack(args))
+            end
+            return oldFireServer(self, unpack(args))
+        end
+
+        commF.InvokeServer = function(self, ...)
+            local args = {...}
+            local cmd = args[1]
+            if combatCmds[cmd] then
+                task.wait(math.random(8, 25) / 1000)
+                return oldInvokeServer(self, unpack(args))
+            end
+            return oldInvokeServer(self, unpack(args))
+        end
+    end
+
+    -- ================================================================
+    -- 4. Override RunService ให้คืนค่า Studio=false เสมอ
+    -- ================================================================
+    local function spoofRunService()
+        local rs = game:GetService("RunService")
+        local oldIsStudio = rs.IsStudio
+        rs.IsStudio = function() return false end
+
+        local oldIsLoaded = rs.IsLoaded
+        rs.IsLoaded = function() return true end
+
+        local oldIsClient = rs.IsClient
+        rs.IsClient = function() return true end
+
+        local oldIsServer = rs.IsServer
+        rs.IsServer = function() return false end
+    end
+
+    -- ================================================================
+    -- 5. ปิด debug และ traceback
+    -- ================================================================
+    local function disableDebug()
+        local env = getfenv()
+        if env.debug then
+            env.debug.traceback = function() return "" end
+            env.debug.getinfo = function() return nil end
+            env.debug.getlocal = function() return nil end
+            env.debug.getupvalue = function() return nil end
+            env.debug.setlocal = function() return nil end
+            env.debug.setupvalue = function() return nil end
+            env.debug.sethook = function() return nil end
+            env.debug.gethook = function() return nil end
+        end
+        if _G.debug then
+            _G.debug.traceback = function() return "" end
+            _G.debug.getinfo = function() return nil end
+            _G.debug.getlocal = function() return nil end
+            _G.debug.getupvalue = function() return nil end
+            _G.debug.setlocal = function() return nil end
+            _G.debug.setupvalue = function() return nil end
+            _G.debug.sethook = function() return nil end
+            _G.debug.gethook = function() return nil end
+        end
+        -- ปิด Log
+        pcall(function()
+            game:GetService("LogService"):SetLogLevel(Enum.LogLevel.Information)
+        end)
+    end
+
+    -- ================================================================
+    -- 6. Override Instance.new ให้สร้างวัตถุที่ดูเป็นกลาง
+    -- ================================================================
+    local oldInstanceNew = Instance.new
+    Instance.new = function(className, parent)
+        local obj = oldInstanceNew(className, parent)
+        if obj:IsA("BasePart") then
+            obj.Material = Enum.Material.Plastic
+            obj.Reflectance = 0
+            obj.BrickColor = BrickColor.new("Medium stone grey")
+        end
+        if obj:IsA("ScreenGui") or obj:IsA("Frame") or obj:IsA("TextLabel") then
+            obj.ResetOnSpawn = false
+            obj.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        end
+        if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            obj.Disabled = true
+        end
+        return obj
+    end
+
+    -- ================================================================
+    -- 7. Override GetService ให้ซ่อน Service ที่เราใช้
+    -- ================================================================
+    local oldGetService = game.GetService
+    local hiddenServices = {
+        ["Players"] = true,
+        ["RunService"] = true,
+        ["UserInputService"] = true,
+        ["VirtualUser"] = true,
+        ["VirtualInputManager"] = true,
+        ["TeleportService"] = true,
+        ["TweenService"] = true,
+        ["CollectionService"] = true,
+        ["HttpService"] = true,
+        ["LogService"] = true,
+        ["Stats"] = true,
+        ["ReplicatedStorage"] = true,
+    }
+    game.GetService = function(self, svc)
+        if hiddenServices[svc] then
+            return oldGetService(self, svc)
+        end
+        return oldGetService(self, svc)
+    end
+
+    local mt_game = getrawmetatable(game) or {}
+    local oldIdx_game = mt_game.__index
+    mt_game.__index = function(self, key)
+        if key == "GetService" then
+            return function(_, svc)
+                if hiddenServices[svc] then
+                    return oldGetService(game, svc)
+                end
+                return oldGetService(game, svc)
+            end
+        end
+        return oldIdx_game and oldIdx_game(self, key)
+    end
+    setrawmetatable(game, mt_game)
+
+    -- ================================================================
+    -- 8. หลอก Kick และ Ban
+    -- ================================================================
+    local function spoofKick()
+        local plr = game.Players.LocalPlayer
+        local oldKick = plr.Kick
+        plr.Kick = function(self, reason)
+            if reason and (reason:match("exploit") or reason:match("cheat") or reason:match("hack") or reason:match("ban") or reason:match("kick")) then
+                task.spawn(function()
+                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, plr)
+                end)
+                return
+            end
+            return oldKick(self, reason)
+        end
+    end
+
+    -- ================================================================
+    -- 9. หลอก CollectionService:HasTag
+    -- ================================================================
+    local function spoofCollectionService()
+        local cs = game:GetService("CollectionService")
+        local oldHasTag = cs.HasTag
+        cs.HasTag = function(self, inst, tag)
+            if tag and (tag:match("Payomboy") or tag:match("Obsidian") or tag:match("Bypass") or tag:match("Hack")) then
+                return false
+            end
+            return oldHasTag(self, inst, tag)
+        end
+    end
+
+    -- ================================================================
+    -- 10. ปิด PerformanceStats ส่งข้อมูลไป Roblox
+    -- ================================================================
+    local function disableStats()
+        pcall(function()
+            local stats = game:GetService("Stats")
+            for _, stat in ipairs(stats:GetChildren()) do
+                if stat:IsA("PerformanceStats") then
+                    stat:SetEnabled(false)
+                end
+            end
+        end)
+    end
+
+    -- ================================================================
+    -- 11. เรียกใช้งานทุกฟังก์ชัน
+    -- ================================================================
+    pcall(spoofPosition)
+    pcall(spoofHealth)
+    pcall(spoofRemoteEvents)
+    pcall(spoofRunService)
+    pcall(disableDebug)
+    pcall(spoofCollectionService)
+    pcall(spoofKick)
+    pcall(disableStats)
+
+    -- ทำงานแบบ Loop เพื่อป้องกัน Anti-Cheat รีเซ็ตค่า
+    task.spawn(function()
+        while task.wait(0.1) do
+            pcall(spoofPosition)
+            pcall(spoofHealth)
+        end
+    end)
+
+    print("[🛡️ PayomboyZ] Anti-Cheat Bypass Engine V3 Loaded Successfully!")
+end
+
+-- เรียกใช้งาน
+pcall(AntiCheatBypassV3)
+getgenv().PayomboyZ_AntiCheatBypassV3 = true
