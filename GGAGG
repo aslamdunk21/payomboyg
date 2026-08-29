@@ -586,12 +586,18 @@ function Engine:CreateUI()
     tabContainer.BackgroundTransparency = 1
     tabContainer.ScrollBarThickness = 2
     tabContainer.ScrollBarImageColor3 = COLORS.primary
+    tabContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    tabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
     tabContainer.Parent = sidebar
 
     local tabLayout = Instance.new("UIListLayout")
     tabLayout.Padding = UDim.new(0, 6)
     tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
     tabLayout.Parent = tabContainer
+
+    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tabContainer.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 20)
+    end)
 
     -- Main Content Area
     local mainContent = Instance.new("Frame")
@@ -768,6 +774,8 @@ function Engine:CreateTab(name, icon)
     page.BackgroundTransparency = 1
     page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = COLORS.primary
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
     page.Visible = false
     page.Parent = mainContent
 
@@ -776,26 +784,32 @@ function Engine:CreateTab(name, icon)
     pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
     pageLayout.Parent = page
 
+    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 24)
+    end)
+
     tabBtn.MouseButton1Click:Connect(function()
         playClickSound()
         for _, otherBtn in pairs(self.UI.TabButtons) do
             otherBtn.BackgroundColor3 = COLORS.surface
             otherBtn.TextColor3 = COLORS.textMuted
-            otherBtn.UIStroke.Transparency = 0.8
+            if otherBtn:FindFirstChildOfClass("UIStroke") then
+                otherBtn:FindFirstChildOfClass("UIStroke").Transparency = 0.8
+            end
         end
         for _, otherPage in pairs(self.UI.Tabs) do
             otherPage.Visible = false
         end
         tabBtn.BackgroundColor3 = COLORS.primary
         tabBtn.TextColor3 = COLORS.text
-        tabBtn.UIStroke.Transparency = 0.2
+        tbStroke.Transparency = 0.2
         page.Visible = true
     end)
 
     if #self.UI.Tabs == 0 then
         tabBtn.BackgroundColor3 = COLORS.primary
         tabBtn.TextColor3 = COLORS.text
-        tabBtn.UIStroke.Transparency = 0.2
+        tbStroke.Transparency = 0.2
         page.Visible = true
     end
 
@@ -2741,6 +2755,9 @@ function Engine:Init()
 end
 
 -- Run initialization safely
-pcall(function()
+local ok, err = pcall(function()
     Engine:Init()
 end)
+if not ok then
+    warn("[GAG Payomboyz Engine Init Error]:", tostring(err))
+end
