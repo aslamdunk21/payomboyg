@@ -39,7 +39,7 @@ local IsGAG1 = (CurrentPlaceId == PLACE_IDS.GAG1) or (workspace:FindFirstChild("
 local IsGAG2 = (CurrentPlaceId == PLACE_IDS.GAG2) or (workspace:FindFirstChild("Gardens") ~= nil)
 local MapName = IsGAG1 and "GAG 1 (Grow a Garden)" or (IsGAG2 and "GAG 2 (Grow a Garden 2)" or "GAG Multiverse (Fallback)")
 
--- 🎨 Christmas Color Palette Spec
+-- 🎨 Christmas Color Palette Spec (Primary Emerald Green with Red Accents)
 local COLORS = {
     backdrop = Color3.fromRGB(10, 20, 14),        -- Dark Pine Green Ground
     shell = Color3.fromRGB(14, 28, 20),           -- Glass Window Background
@@ -48,23 +48,23 @@ local COLORS = {
     glassRaised = Color3.fromRGB(28, 56, 38),     -- Raised Surface
     userPanel = Color3.fromRGB(18, 36, 24),       -- Profile Card Panel
     surface = Color3.fromRGB(24, 48, 32),         -- Widget Inactive
-    surfaceRaised = Color3.fromRGB(38, 78, 50),   -- Widget Active
-    surfaceHover = Color3.fromRGB(52, 105, 68),   -- Widget Hover
+    surfaceRaised = Color3.fromRGB(38, 78, 50),   -- Widget Active Green
+    surfaceHover = Color3.fromRGB(52, 105, 68),   -- Widget Hover Green
     surfacePressed = Color3.fromRGB(18, 38, 24),  -- Widget Pressed
     input = Color3.fromRGB(12, 24, 16),           -- Input Box BG
-    inputFocus = Color3.fromRGB(24, 48, 30),      -- Input Focused
-    divider = Color3.fromRGB(230, 35, 45),        -- Christmas Red Accent
-    primary = Color3.fromRGB(230, 35, 45),        -- Bright Santa Red (#E6232D)
-    primaryHover = Color3.fromRGB(255, 65, 75),   -- Red Hover
-    primaryPressed = Color3.fromRGB(180, 20, 30), -- Red Pressed
-    secondary = Color3.fromRGB(46, 224, 140),     -- Neon Emerald Green (#2EE08C)
+    inputFocus = Color3.fromRGB(46, 224, 140),    -- Input Focused (Emerald Green)
+    divider = Color3.fromRGB(220, 30, 40),        -- Christmas Red Accent Line
+    primary = Color3.fromRGB(46, 224, 140),        -- Primary Emerald Green (#2EE08C)
+    primaryHover = Color3.fromRGB(75, 240, 165),   -- Emerald Hover
+    primaryPressed = Color3.fromRGB(30, 180, 110), -- Emerald Pressed
+    secondary = Color3.fromRGB(220, 30, 40),     -- Christmas Red Highlight Accent
     text = Color3.fromRGB(255, 255, 255),        -- Pure Snow White
     textMuted = Color3.fromRGB(230, 245, 235),   -- Soft Snow White
     textFaint = Color3.fromRGB(180, 215, 190),   -- Soft Pine White
-    cyan = Color3.fromRGB(46, 224, 140),         -- Neon Emerald Green
+    cyan = Color3.fromRGB(46, 224, 140),         -- Neon Emerald Green Accent Text
     success = Color3.fromRGB(46, 224, 140),      -- Success Green
     warning = Color3.fromRGB(255, 200, 50),      -- Gold Candle
-    danger = Color3.fromRGB(240, 50, 50),        -- Bright Santa Red
+    danger = Color3.fromRGB(230, 35, 45),        -- Santa Red
     disabled = Color3.fromRGB(35, 45, 38),
 }
 
@@ -309,23 +309,96 @@ function Engine:CreateUI()
     shellStroke.Transparency = 0.25
     shellStroke.Parent = shell
 
-    -- 📌 Top Right Window Controls (Minimize & Close Buttons)
+    -- 📌 Solid Opaque White Top Bar Header (Snow Cap Roof & Draggable Bar)
+    local topBar = Instance.new("Frame")
+    topBar.Name = "SnowCapTopBar"
+    topBar.Size = UDim2.new(1, 0, 0, 42)
+    topBar.Position = UDim2.new(0, 0, 0, 0)
+    topBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- 100% Solid Opaque Snow White
+    topBar.BackgroundTransparency = 0
+    topBar.BorderSizePixel = 0
+    topBar.ZIndex = 50
+    topBar.Parent = shell
+
+    local tbCorner = Instance.new("UICorner")
+    tbCorner.CornerRadius = UDim.new(0, 18)
+    tbCorner.Parent = topBar
+
+    local tbBottomFill = Instance.new("Frame")
+    tbBottomFill.Size = UDim2.new(1, 0, 0, 12)
+    tbBottomFill.Position = UDim2.new(0, 0, 1, -12)
+    tbBottomFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    tbBottomFill.BorderSizePixel = 0
+    tbBottomFill.ZIndex = 50
+    tbBottomFill.Parent = topBar
+
+    local topTitle = Instance.new("TextLabel")
+    topTitle.Size = UDim2.new(1, -110, 1, 0)
+    topTitle.Position = UDim2.new(0, 16, 0, 0)
+    topTitle.BackgroundTransparency = 1
+    topTitle.Text = "❄️ 🎄 GAG MULTIVERSE AUTOMATION ENGINE (PAYOMBOYZ) 🎄 ❄️"
+    topTitle.TextColor3 = Color3.fromRGB(215, 25, 35) -- Bold Christmas Red
+    topTitle.Font = Enum.Font.FredokaOne
+    topTitle.TextSize = 13
+    topTitle.TextXAlignment = Enum.TextXAlignment.Left
+    topTitle.ZIndex = 51
+    topTitle.Parent = topBar
+
+    -- 📌 Window Dragging Engine (Enable smooth dragging for main UI shell)
+    local isDraggingShell = false
+    local dragInput, dragStart, startPos
+
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingShell = true
+            dragStart = input.Position
+            startPos = shell.Position
+
+            local con
+            con = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    isDraggingShell = false
+                    if con then con:Disconnect() end
+                end
+            end)
+        end
+    end)
+
+    topBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and isDraggingShell then
+            local delta = input.Position - dragStart
+            shell.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    -- 📌 Top Right Window Controls (Minimize & Close Buttons inside Solid White Top Bar)
     local topControls = Instance.new("Frame")
     topControls.Name = "TopWindowControls"
-    topControls.Size = UDim2.new(0, 80, 0, 36)
-    topControls.Position = UDim2.new(1, -92, 0, 10)
+    topControls.Size = UDim2.new(0, 80, 0, 32)
+    topControls.Position = UDim2.new(1, -90, 0, 5)
     topControls.BackgroundTransparency = 1
     topControls.ZIndex = 100
-    topControls.Parent = shell
+    topControls.Parent = topBar
 
     local minBtn = Instance.new("TextButton")
     minBtn.Name = "MinimizeBtn"
-    minBtn.Size = UDim2.fromOffset(34, 32)
-    minBtn.Position = UDim2.new(0, 0, 0, 2)
-    minBtn.BackgroundColor3 = COLORS.surface
+    minBtn.Size = UDim2.fromOffset(34, 30)
+    minBtn.Position = UDim2.new(0, 0, 0, 1)
+    minBtn.BackgroundColor3 = Color3.fromRGB(238, 242, 246)
     minBtn.BorderSizePixel = 0
     minBtn.Text = "─"
-    minBtn.TextColor3 = COLORS.text
+    minBtn.TextColor3 = Color3.fromRGB(30, 30, 30)
     minBtn.Font = Enum.Font.GothamBold
     minBtn.TextSize = 14
     minBtn.Parent = topControls
@@ -333,6 +406,11 @@ function Engine:CreateUI()
     local minCorner = Instance.new("UICorner")
     minCorner.CornerRadius = UDim.new(0, 8)
     minCorner.Parent = minBtn
+
+    local minStroke = Instance.new("UIStroke")
+    minStroke.Color = Color3.fromRGB(220, 28, 38)
+    minStroke.Thickness = 1
+    minStroke.Parent = minBtn
 
     minBtn.MouseButton1Click:Connect(function()
         playClickSound()
@@ -345,12 +423,12 @@ function Engine:CreateUI()
 
     local closeBtn = Instance.new("TextButton")
     closeBtn.Name = "CloseBtn"
-    closeBtn.Size = UDim2.fromOffset(34, 32)
-    closeBtn.Position = UDim2.new(0, 42, 0, 2)
-    closeBtn.BackgroundColor3 = COLORS.primary
+    closeBtn.Size = UDim2.fromOffset(34, 30)
+    closeBtn.Position = UDim2.new(0, 42, 0, 1)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(220, 28, 38) -- Santa Red
     closeBtn.BorderSizePixel = 0
     closeBtn.Text = "✕"
-    closeBtn.TextColor3 = COLORS.text
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     closeBtn.Font = Enum.Font.GothamBold
     closeBtn.TextSize = 14
     closeBtn.Parent = topControls
@@ -423,7 +501,8 @@ function Engine:CreateUI()
     -- Left Sidebar Panel
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
-    sidebar.Size = UDim2.new(0, 245, 1, 0)
+    sidebar.Size = UDim2.new(0, 245, 1, -42)
+    sidebar.Position = UDim2.new(0, 0, 0, 42)
     sidebar.BackgroundColor3 = COLORS.userPanel
     sidebar.BackgroundTransparency = 0.20
     sidebar.BorderSizePixel = 0
@@ -517,8 +596,8 @@ function Engine:CreateUI()
     -- Main Content Area
     local mainContent = Instance.new("Frame")
     mainContent.Name = "MainContent"
-    mainContent.Size = UDim2.new(1, -245, 1, 0)
-    mainContent.Position = UDim2.new(0, 245, 0, 0)
+    mainContent.Size = UDim2.new(1, -245, 1, -42)
+    mainContent.Position = UDim2.new(0, 245, 0, 42)
     mainContent.BackgroundTransparency = 1
     mainContent.ZIndex = 3
     mainContent.Parent = shell
