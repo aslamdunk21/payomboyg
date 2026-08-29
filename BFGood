@@ -1,3 +1,186 @@
+-- ══════════════════════════════════════════════════════════════════
+-- 🚀 FLIGHT ENGINE V6 - HYBRID (BodyVelocity + CFrame Nudge)
+-- แก้ปัญหากระตุกและเด้งกลับ 8541+ studs
+-- โดย BluezyGPT สำหรับ BZMEMBER
+-- ══════════════════════════════════════════════════════════════════
+
+local RunService = game:GetService("RunService") -- เพิ่มบรรทัดนี้ก่อน
+
+local FlightV6 = {
+    IsFlying = false,
+    BodyVel = nil,
+    BodyGyro = nil,
+    Target = nil,
+    Speed = 300,
+    ChunkSize = 25,
+    TotalSteps = 0,
+}
+
+local function CleanupFlightV6()
+    if FlightV6.BodyVel and FlightV6.BodyVel.Parent then
+        FlightV6.BodyVel:Destroy()
+    end
+    if FlightV6.BodyGyro and FlightV6.BodyGyro.Parent then
+        FlightV6.BodyGyro:Destroy()
+    end
+    FlightV6.BodyVel = nil
+    FlightV6.BodyGyro = nil
+    FlightV6.IsFlying = false
+    FlightV6.Target = nil
+    pcall(function()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp:SetNetworkOwner(nil)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+end
+
+local function TweenV6(target, speed)
+    speed = speed or 300
+    FlightV6.Speed = speed
+    
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local distance = (hrp.Position - target.Position).Magnitude
+    if distance <= 15 then
+        hrp.CFrame = target
+        return nil
+    end
+
+    CleanupFlightV6()
+
+    pcall(function() hrp:SetNetworkOwner(LocalPlayer) end)
+
+    local chunkSize = 25
+    local steps = math.ceil(distance / chunkSize)
+    FlightV6.TotalSteps = steps
+    FlightV6.Target = target
+    FlightV6.IsFlying = true
+
+    print(string.format("[Flight V6] เริ่มบิน: %d studs | Steps: %d | Speed: %d", 
+        math.floor(distance), steps, speed))
+
+    FlightV6.BodyVel = Instance.new("BodyVelocity")
+    FlightV6.BodyVel.Name = "FlightVelocityV6"
+    FlightV6.BodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    FlightV6.BodyVel.P = 12500
+    FlightV6.BodyVel.Velocity = (target.Position - hrp.Position).Unit * speed
+    FlightV6.BodyVel.Parent = hrp
+
+    FlightV6.BodyGyro = Instance.new("BodyGyro")
+    FlightV6.BodyGyro.Name = "FlightGyroV6"
+    FlightV6.BodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    FlightV6.BodyGyro.P = 10000
+    FlightV6.BodyGyro.D = 500
+    FlightV6.BodyGyro.CFrame = CFrame.lookAt(hrp.Position, target.Position)
+    FlightV6.BodyGyro.Parent = hrp
+
+    task.spawn(function()
+        local startTime = tick()
+        
+        while FlightV6.IsFlying and scriptRunning do
+            pcall(function()
+                local c = LocalPlayer.Character
+                local h = c and c:FindFirstChild("HumanoidRootPart")
+                if not h or not h.Parent then
+                    CleanupFlightV6()
+                    return
+                end
+
+                local toTarget = target.Position - h.Position
+                local dist = toTarget.Magnitude
+
+                if dist <= 15 then
+                    h.CFrame = target
+                    print(string.format("[Flight V6] ถึงแล้ว! ใช้เวลา %.1f วิ", tick() - startTime))
+                    CleanupFlightV6()
+                    return
+                end
+
+                local dir = toTarget.Unit
+
+                if FlightV6.BodyVel and FlightV6.BodyVel.Parent then
+                    FlightV6.BodyVel.Velocity = dir * speed
+                end
+
+                if dist > chunkSize then
+                    local stepPos = h.Position + dir * chunkSize
+                    h.CFrame = CFrame.new(stepPos) * CFrame.lookAt(stepPos, stepPos + dir)
+                else
+                    h.CFrame = target
+                end
+
+                h.AssemblyLinearVelocity = dir * speed
+                h.AssemblyAngularVelocity = Vector3.zero
+                h.CanCollide = false
+            end)
+            
+            task.wait(1/60)
+        end
+    end)
+
+    return true
+end
+
+local function SafeBypassCFrameV6(targetCFrame)
+    local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local dist = (hrp.Position - targetCFrame.Position).Magnitude
+    if dist <= 15 then
+        hrp.CFrame = targetCFrame
+        return
+    end
+
+    TweenV6(targetCFrame, 300)
+    
+    while FlightV6.IsFlying do
+        task.wait(0.1)
+    end
+end
+
+-- Anti-Rubberband Handler
+local AntiRBS = {
+    LastValidPos = nil,
+    PullbackCount = 0,
+}
+
+RunService.Heartbeat:Connect(function()
+    if not scriptRunning or not FlightV6.IsFlying then return end
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp or not hrp.Parent then return end
+        
+        local currentPos = hrp.Position
+        
+        if AntiRBS.LastValidPos then
+            local actualDelta = (currentPos - AntiRBS.LastValidPos).Magnitude
+            
+            if actualDelta < 5 and FlightV6.BodyVel and FlightV6.BodyVel.Parent then
+                AntiRBS.PullbackCount = AntiRBS.PullbackCount + 1
+                
+                if AntiRBS.PullbackCount >= 3 then
+                    if FlightV6.Target then
+                        local dir = (FlightV6.Target.Position - currentPos).Unit
+                        hrp.CFrame = CFrame.new(currentPos + dir * 25) * CFrame.lookAt(currentPos, FlightV6.Target.Position)
+                        hrp.AssemblyLinearVelocity = dir * 300
+                    end
+                end
+            else
+                AntiRBS.PullbackCount = 0
+            end
+        end
+        
+        AntiRBS.LastValidPos = currentPos
+    end)
+end)
+
 loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
 
 -- Re-entrancy Cleanup: terminate previous execution threads
@@ -78,7 +261,14 @@ local MaxLevel = game:GetAttribute("LEVEL_CAP") or 2800
 local IsSaber = false
 local IsPoleV1 = false
 local IsPoleV2 = false
-local Entrance = {}
+local Entrance = {
+    Vector3.new(-4607.82, 872.54, -1667.55), -- Sky 1 Portal
+    Vector3.new(-7894.62, 5545.49, -380.41),  -- Upper Sky / Thunder God Portal (God Enel)
+    Vector3.new(61163.85, 11.67, 1819.78),   -- Sea 2 Mansion Entrance
+    Vector3.new(-11993.58, 334.85, -8844.21), -- Sea 3 Castle Entrance
+    Vector3.new(5314.58, 25.42, -92.54),     -- Sea 1 Prison
+    Vector3.new(-5085.23, 314.52, -3137.85)  -- Skylands Entrance
+}
 
 -- Safe Parent GUI Resolver
 local function GetSafeParentGui()
@@ -278,7 +468,7 @@ local function SafeBypassCFrame(targetCFrame)
 end
 
 local function Tween(target, speed)
-    speed = speed or 350
+    speed = speed or 300
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
@@ -295,7 +485,7 @@ local function Tween(target, speed)
         return nil
     end
 
-    -- Smart Entrance Teleport
+    -- Smart Entrance Teleport (Uses Blox Fruits Server Gates to prevent Anti-Cheat rubberbands)
     local closestEntrance = nil
     local minEntranceDist = math.huge
     for _, entrancePos in ipairs(Entrance) do
@@ -306,7 +496,7 @@ local function Tween(target, speed)
         end
     end
 
-    if closestEntrance and minEntranceDist < 800 and distance > 1000 and (hrp.Position - closestEntrance).Magnitude > 250 and (tick() - LastEntranceTime > 3) then
+    if closestEntrance and minEntranceDist < 2500 and distance > 1000 and (hrp.Position - closestEntrance).Magnitude > 250 and (tick() - LastEntranceTime > 3) then
         LastEntranceTime = tick()
         IsTweening = true
         if CurrentActiveTween then
@@ -314,7 +504,7 @@ local function Tween(target, speed)
             CurrentActiveTween = nil
         end
         pcall(function() CommF_:InvokeServer("requestEntrance", closestEntrance) end)
-        task.wait(0.2)
+        task.wait(0.3)
         character = LocalPlayer.Character
         hrp = character and character:FindFirstChild("HumanoidRootPart")
         if not hrp then return nil end
@@ -382,20 +572,75 @@ local function IsOwn(name)
     return k or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(name))
 end
 
-local function EquipWeapon(type)
+local function MatchesWeaponType(v, wType)
+    if not (v and v:IsA("Tool")) then return false end
+    local tt = v.ToolTip or ""
+    if wType == "Blox Fruit" or wType == "Fruit" then
+        return tt == "Blox Fruit" or tt == "Demon Fruit" or string.find(v.Name:lower(), "fruit") ~= nil or v:FindFirstChild("Fruit") ~= nil
+    elseif wType == "Melee" then
+        return tt == "Melee"
+    elseif wType == "Sword" then
+        return tt == "Sword"
+    elseif wType == "Gun" then
+        return tt == "Gun"
+    end
+    return false
+end
+
+local function EquipWeapon(wType)
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
+    wType = wType or getgenv().Configs.SelectWeapon or "Melee"
+    
     for _, v in pairs(LocalPlayer.Character:GetChildren()) do
-        if v:IsA("Tool") and v.ToolTip == type then
-            return
+        if MatchesWeaponType(v, wType) then
+            return v
         end
     end
+    
     local bp = LocalPlayer:FindFirstChild("Backpack")
-    if not bp then return end
-    for _, v in pairs(bp:GetChildren()) do
-        if v:IsA("Tool") and v.ToolTip == type then
-            LocalPlayer.Character.Humanoid:EquipTool(v)
-            break
+    if bp then
+        for _, v in pairs(bp:GetChildren()) do
+            if MatchesWeaponType(v, wType) then
+                LocalPlayer.Character.Humanoid:EquipTool(v)
+                return v
+            end
         end
+    end
+    
+    if wType ~= "Melee" then
+        for _, v in pairs(LocalPlayer.Character:GetChildren()) do
+            if v:IsA("Tool") and v.ToolTip == "Melee" then return v end
+        end
+        if bp then
+            for _, v in pairs(bp:GetChildren()) do
+                if v:IsA("Tool") and v.ToolTip == "Melee" then
+                    LocalPlayer.Character.Humanoid:EquipTool(v)
+                    return v
+                end
+            end
+        end
+    end
+end
+
+local lastSkillCastTime = 0
+local function AutoSkillUse()
+    local now = os.clock()
+    if now - lastSkillCastTime < 0.6 then return end
+    lastSkillCastTime = now
+    
+    local wType = getgenv().Configs.SelectWeapon or "Melee"
+    if wType == "Blox Fruit" or wType == "Sword" then
+        task.spawn(function()
+            pcall(function()
+                local keys = {Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}
+                for _, key in ipairs(keys) do
+                    VirtualInputManager:SendKeyEvent(true, key, false, game)
+                    task.wait(0.03)
+                    VirtualInputManager:SendKeyEvent(false, key, false, game)
+                    task.wait(0.03)
+                end
+            end)
+        end)
     end
 end
 
@@ -603,7 +848,7 @@ local function BringMob(a)
 end
 
 -- ======================================================================================
--- 📊 TOP HUD STATUS BANNER
+-- 📊 TOP-RIGHT HUD STATUS WIDGET (Compact Stats, Quest & Mob HP)
 -- ======================================================================================
 
 DestroyExistingUI("Obsidian_HUD_Status")
@@ -620,72 +865,84 @@ if not parentOk or not ScreenGui.Parent then
 end
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 500, 0, 75)
-frame.Position = UDim2.new(0.5, -250, 0, 30)
+frame.Size = UDim2.new(0, 260, 0, 110)
+frame.Position = UDim2.new(1, -270, 0, 15)
 frame.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
-frame.BackgroundTransparency = 0.2
+frame.BackgroundTransparency = 0.25
 frame.Parent = ScreenGui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
+corner.CornerRadius = UDim.new(0, 12)
 corner.Parent = frame
 
 local edge = Instance.new("UIStroke")
 edge.Color = Color3.fromRGB(255, 45, 85)
 edge.Thickness = 1.5
+edge.Transparency = 0.3
 edge.Parent = frame
 
-local layout = Instance.new("UIListLayout")
-layout.Parent = frame
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.VerticalAlignment = Enum.VerticalAlignment.Center
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 5)
+local headerLabel = Instance.new("TextLabel")
+headerLabel.Size = UDim2.new(1, -20, 0, 22)
+headerLabel.Position = UDim2.new(0, 10, 0, 5)
+headerLabel.BackgroundTransparency = 1
+headerLabel.Text = "📊 KAITUN STATUS"
+headerLabel.Font = Enum.Font.GothamBold
+headerLabel.TextSize = 12
+headerLabel.TextColor3 = Color3.fromRGB(255, 45, 85)
+headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+headerLabel.Parent = frame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 30)
+title.Size = UDim2.new(1, -20, 0, 18)
+title.Position = UDim2.new(0, 10, 0, 28)
 title.BackgroundTransparency = 1
-title.Text = "Idling"
+title.Text = "Status: Idling"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 18
+title.TextSize = 11
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.LayoutOrder = 1
+title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
 local subtitle = Instance.new("TextLabel")
-subtitle.Size = UDim2.new(1, -20, 0, 25)
+subtitle.Size = UDim2.new(1, -20, 0, 16)
+subtitle.Position = UDim2.new(0, 10, 0, 46)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "No Subtask"
+subtitle.Text = "Quest: No Subtask"
 subtitle.Font = Enum.Font.GothamSemibold
-subtitle.TextSize = 14
+subtitle.TextSize = 10
 subtitle.TextColor3 = Color3.fromRGB(242, 218, 228)
-subtitle.LayoutOrder = 2
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
 subtitle.Parent = frame
 
+local mobHpLabel = Instance.new("TextLabel")
+mobHpLabel.Size = UDim2.new(1, -20, 0, 16)
+mobHpLabel.Position = UDim2.new(0, 10, 0, 64)
+mobHpLabel.BackgroundTransparency = 1
+mobHpLabel.Text = "Mob HP: N/A"
+mobHpLabel.Font = Enum.Font.GothamBold
+mobHpLabel.TextSize = 10
+mobHpLabel.TextColor3 = Color3.fromRGB(46, 224, 140)
+mobHpLabel.TextXAlignment = Enum.TextXAlignment.Left
+mobHpLabel.Parent = frame
+
 local TimeL = Instance.new("TextLabel")
-TimeL.Size = UDim2.new(0, 500, 0, 25)
-TimeL.Position = UDim2.new(0.5, -250, 0, 0)
-TimeL.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
-TimeL.BackgroundTransparency = 0.2
-TimeL.Text = ""
+TimeL.Size = UDim2.new(1, -20, 0, 16)
+TimeL.Position = UDim2.new(0, 10, 0, 82)
+TimeL.BackgroundTransparency = 1
+TimeL.Text = "Level: -- | Beli: --"
 TimeL.Font = Enum.Font.GothamBold
-TimeL.TextSize = 13
-TimeL.TextColor3 = Color3.fromRGB(255, 55, 85)
-TimeL.Parent = ScreenGui
-
-local TimeC = Instance.new("UICorner")
-TimeC.CornerRadius = UDim.new(0, 8)
-TimeC.Parent = TimeL
-
-local TimeS = Instance.new("UIStroke")
-TimeS.Color = Color3.fromRGB(255, 45, 85)
-TimeS.Thickness = 1.5
-TimeS.Parent = TimeL
+TimeL.TextSize = 10
+TimeL.TextColor3 = Color3.fromRGB(255, 185, 70)
+TimeL.TextXAlignment = Enum.TextXAlignment.Left
+TimeL.Parent = frame
 
 task.spawn(function()
-    while task.wait(1) do
-        local t = os.date("*t")
-        TimeL.Text = string.format("%02d:%02d:%02d  |  %s, %s %d, %d", t.hour, t.min, t.sec, os.date("%A"), os.date("%B"), t.day, t.year)
+    while scriptRunning and task.wait(0.5) do
+        pcall(function()
+            local lvl = (LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 0
+            local beli = (LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli")) and LocalPlayer.Data.Beli.Value or 0
+            TimeL.Text = string.format("Level: %d  |  💰 $ %s", lvl, tostring(beli):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", ""))
+        end)
     end
 end)
 
@@ -882,7 +1139,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local function updateScale()
         if camera and camera.ViewportSize then
             local vp = camera.ViewportSize
-            local targetWidth, targetHeight = 920, 600
+            local targetWidth, targetHeight = 600, 380
             local scaleX = (vp.X - 24) / targetWidth
             local scaleY = (vp.Y - 24) / targetHeight
             uiScale.Scale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
@@ -894,7 +1151,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local shell = Instance.new("Frame")
     shell.Name = "MainShell"
-    shell.Size = UDim2.fromOffset(920, 600)
+    shell.Size = UDim2.fromOffset(600, 380)
     shell.AnchorPoint = Vector2.new(0.5, 0.5)
     shell.Position = UDim2.new(0.5, 0, 0.5, 0)
     shell.BackgroundColor3 = COLORS.shell
@@ -902,6 +1159,20 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     shell.BorderSizePixel = 0
     shell.ClipsDescendants = true
     shell.Parent = gui
+
+    -- Auto-close UI window after 5 minutes (300s) to keep screen clean for AFK kaitun
+    task.delay(300, function()
+        pcall(function()
+            if shell and shell.Parent then
+                shell.Visible = false
+                ObsidianGlassEngine:Notify({
+                    Title = "Kaitun System",
+                    Content = "Auto-closed UI window after 5 mins. Press 'K' or Right-Ctrl to reopen.",
+                    Duration = 6
+                })
+            end
+        end)
+    end)
 
     local shellCorner = Instance.new("UICorner")
     shellCorner.CornerRadius = UDim.new(0, 18)
@@ -1098,7 +1369,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     -- Left Sidebar Panel
     local userPanel = Instance.new("Frame")
     userPanel.Name = "UserPanel"
-    userPanel.Size = UDim2.new(0, 240, 1, 0)
+    userPanel.Size = UDim2.new(0, 180, 1, 0)
     userPanel.BackgroundColor3 = COLORS.userPanel
     userPanel.BackgroundTransparency = 0.20
     userPanel.BorderSizePixel = 0
@@ -1106,8 +1377,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     userPanel.Parent = shell
 
     local avatarFrame = Instance.new("Frame")
-    avatarFrame.Size = UDim2.fromOffset(44, 44)
-    avatarFrame.Position = UDim2.new(0, 14, 0, 14)
+    avatarFrame.Size = UDim2.fromOffset(36, 36)
+    avatarFrame.Position = UDim2.new(0, 10, 0, 10)
     avatarFrame.BackgroundColor3 = COLORS.glassDeep
     avatarFrame.BorderSizePixel = 0
     avatarFrame.ZIndex = 10
@@ -1125,39 +1396,39 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     avatarImg.Parent = avatarFrame
 
     local displayNameLabel = Instance.new("TextLabel")
-    displayNameLabel.Size = UDim2.new(1, -75, 0, 18)
-    displayNameLabel.Position = UDim2.new(0, 66, 0, 15)
+    displayNameLabel.Size = UDim2.new(1, -55, 0, 16)
+    displayNameLabel.Position = UDim2.new(0, 52, 0, 10)
     displayNameLabel.BackgroundTransparency = 1
     displayNameLabel.Text = LocalPlayer.DisplayName
     displayNameLabel.TextColor3 = COLORS.text
     displayNameLabel.Font = Enum.Font.GothamBold
-    displayNameLabel.TextSize = 13
+    displayNameLabel.TextSize = 11
     displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
     displayNameLabel.ZIndex = 10
     displayNameLabel.Parent = userPanel
 
     local usernameLabel = Instance.new("TextLabel")
-    usernameLabel.Size = UDim2.new(1, -75, 0, 14)
-    usernameLabel.Position = UDim2.new(0, 66, 0, 33)
+    usernameLabel.Size = UDim2.new(1, -55, 0, 14)
+    usernameLabel.Position = UDim2.new(0, 52, 0, 26)
     usernameLabel.BackgroundTransparency = 1
     usernameLabel.Text = "@" .. LocalPlayer.Name
     usernameLabel.TextColor3 = COLORS.textMuted
     usernameLabel.Font = Enum.Font.Gotham
-    usernameLabel.TextSize = 10
+    usernameLabel.TextSize = 9
     usernameLabel.TextXAlignment = Enum.TextXAlignment.Left
     usernameLabel.ZIndex = 10
     usernameLabel.Parent = userPanel
 
     local logoutBtn = Instance.new("TextButton")
     logoutBtn.Name = "LogoutButton"
-    logoutBtn.Size = UDim2.fromOffset(62, 24)
-    logoutBtn.Position = UDim2.new(1, -74, 0, 20)
+    logoutBtn.Size = UDim2.fromOffset(50, 20)
+    logoutBtn.Position = UDim2.new(1, -58, 0, 12)
     logoutBtn.BackgroundColor3 = COLORS.surfacePressed
     logoutBtn.BackgroundTransparency = 0.20
     logoutBtn.Text = "Log out"
     logoutBtn.TextColor3 = COLORS.danger
     logoutBtn.Font = Enum.Font.GothamBold
-    logoutBtn.TextSize = 11
+    logoutBtn.TextSize = 10
     logoutBtn.ZIndex = 12
     logoutBtn.Parent = userPanel
 
@@ -1205,8 +1476,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local tabScroll = Instance.new("ScrollingFrame")
     tabScroll.Name = "VerticalTabScroll"
-    tabScroll.Size = UDim2.new(1, -20, 1, -120)
-    tabScroll.Position = UDim2.new(0, 10, 0, 70)
+    tabScroll.Size = UDim2.new(1, -16, 1, -60)
+    tabScroll.Position = UDim2.new(0, 8, 0, 52)
     tabScroll.BackgroundTransparency = 1
     tabScroll.ScrollBarThickness = 3
     tabScroll.ScrollBarImageColor3 = COLORS.cyan
@@ -1227,8 +1498,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     -- Right Main Panel
     local mainPanel = Instance.new("Frame")
     mainPanel.Name = "MainPanel"
-    mainPanel.Size = UDim2.new(1, -240, 1, 0)
-    mainPanel.Position = UDim2.new(0, 240, 0, 0)
+    mainPanel.Size = UDim2.new(1, -180, 1, 0)
+    mainPanel.Position = UDim2.new(0, 180, 0, 0)
     mainPanel.BackgroundTransparency = 1
     mainPanel.ZIndex = 5
     mainPanel.Parent = shell
@@ -1500,6 +1771,82 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             end)
         end
 
+        function TabObj:AddDropdown(dCfg)
+            local dNameTH = dCfg.NameTH or dCfg.Name or "Dropdown"
+            local dNameEN = dCfg.NameEN or dCfg.Name or "Dropdown"
+            local options = dCfg.Options or {}
+            local defaultVal = dCfg.Default or (options[1] or "")
+            local callback = dCfg.Callback or function() end
+
+            local card = Instance.new("Frame")
+            card.Size = UDim2.new(1, -10, 0, 44)
+            card.BackgroundColor3 = COLORS.glassDeep
+            card.BackgroundTransparency = 0.2
+            card.Parent = pageScroll
+
+            local cCorner = Instance.new("UICorner")
+            cCorner.CornerRadius = UDim.new(0, 8)
+            cCorner.Parent = card
+
+            local cLabel = Instance.new("TextLabel")
+            cLabel.Size = UDim2.new(1, -145, 1, 0)
+            cLabel.Position = UDim2.new(0, 12, 0, 0)
+            cLabel.BackgroundTransparency = 1
+            cLabel.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and dNameTH or dNameEN)
+            cLabel.TextColor3 = COLORS.text
+            cLabel.Font = Enum.Font.GothamBold
+            cLabel.TextSize = 12
+            cLabel.TextXAlignment = Enum.TextXAlignment.Left
+            cLabel.Parent = card
+
+            table.insert(ObsidianGlassEngine.LangElements, {
+                instance = cLabel,
+                th = dNameTH,
+                en = dNameEN
+            })
+
+            local selectBtn = Instance.new("TextButton")
+            selectBtn.Size = UDim2.fromOffset(125, 28)
+            selectBtn.Position = UDim2.new(1, -133, 0.5, -14)
+            selectBtn.BackgroundColor3 = COLORS.surfaceRaised
+            selectBtn.Text = defaultVal
+            selectBtn.TextColor3 = COLORS.primary
+            selectBtn.Font = Enum.Font.GothamBold
+            selectBtn.TextSize = 12
+            selectBtn.Parent = card
+
+            local sCorner = Instance.new("UICorner")
+            sCorner.CornerRadius = UDim.new(0, 6)
+            sCorner.Parent = selectBtn
+
+            local sStroke = Instance.new("UIStroke")
+            sStroke.Color = COLORS.primary
+            sStroke.Thickness = 1
+            sStroke.Transparency = 0.4
+            sStroke.Parent = selectBtn
+
+            local selectedIdx = 1
+            for i, opt in ipairs(options) do
+                if opt == defaultVal then
+                    selectedIdx = i
+                    break
+                end
+            end
+
+            selectBtn.MouseButton1Click:Connect(function()
+                playClickSound()
+                selectedIdx = selectedIdx + 1
+                if selectedIdx > #options then
+                    selectedIdx = 1
+                end
+                local newSel = options[selectedIdx]
+                selectBtn.Text = newSel
+                pcall(callback, newSel)
+            end)
+
+            return selectBtn
+        end
+
         return TabObj
     end
 
@@ -1522,6 +1869,21 @@ local QuestTab = Window:CreateTab({ NameTH = "🧩 ปริศนา & เค�
 local FruitTab = Window:CreateTab({ NameTH = "🍎 ผลไม้ & ไอเทม", NameEN = "🍎 Fruits & Items", Icon = "" })
 local StatsTab = Window:CreateTab({ NameTH = "📊 อัปสเตตัส (Auto Stats)", NameEN = "📊 Auto Stats", Icon = "" })
 local MiscTab = Window:CreateTab({ NameTH = "⚡ ตั้งค่า & อื่นๆ", NameEN = "⚡ Misc & Options", Icon = "" })
+
+MainTab:AddDropdown({
+    NameTH = "เลือกสายอาวุธฟาร์ม (Select Weapon Build)",
+    NameEN = "Select Weapon Build",
+    Options = {"Melee", "Blox Fruit", "Sword", "Gun"},
+    Default = getgenv().Configs.SelectWeapon or "Melee",
+    Callback = function(v)
+        getgenv().Configs.SelectWeapon = v
+        ObsidianGlassEngine:Notify({
+            Title = "Weapon Build",
+            Content = "เปลี่ยนสายฟาร์มเป็น: " .. v .. " (ระบบอัปสเตตัสจะปรับตามสายนี้)",
+            Duration = 4
+        })
+    end
+})
 
 MainTab:AddToggle({
     NameTH = "ออโต้ฟาร์มเลเวล (Auto Farm Level)",
@@ -1591,6 +1953,14 @@ FruitTab:AddToggle({
     NameEN = "Auto Buy Random Fruit (Cousin)",
     Default = getgenv().Configs.AutoRandomFruit,
     Callback = function(v) getgenv().Configs.AutoRandomFruit = v end
+})
+
+StatsTab:AddDropdown({
+    NameTH = "เลือกสายที่จะให้อัปสเตตัส (Stat Build)",
+    NameEN = "Stat Build Allocation",
+    Options = {"Melee", "Blox Fruit", "Sword", "Gun"},
+    Default = getgenv().Configs.SelectWeapon or "Melee",
+    Callback = function(v) getgenv().Configs.SelectWeapon = v end
 })
 
 StatsTab:AddToggle({
@@ -1910,7 +2280,12 @@ local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, Cust
     local tween = nil
 
     repeat task.wait()
-        title.Text = "Auto Farming Level | Kill " .. mainMob.Name
+        title.Text = "Status: Kill " .. mainMob.Name
+        if mobHpLabel and humanoid then
+            pcall(function()
+                mobHpLabel.Text = string.format("Mob HP: %d / %d", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth))
+            end)
+        end
         
         if not secondMob and getgenv().Configs.BringMob then
             secondMob = GetNearestMob(mainMob, 350)
@@ -1949,6 +2324,7 @@ local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, Cust
             end
             
             EquipWeapon(getgenv().Configs.SelectWeapon or "Melee")
+            AutoSkillUse()
             myHRP.CFrame = CFrame.lookAt(targetPos, hrp.Position)
 
             -- บินถึงมอนแล้วตีทันทีต่อเนื่อง
@@ -2071,6 +2447,11 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         end
     elseif Level >= 200 and getgenv().Configs.Pole and not IsPoleV1 and (ReplicatedStorage:FindFirstChild("Thunder God") or workspace.Enemies:FindFirstChild("Thunder God")) then
         title.Text = "Get Pole | Kill Thunder God"
+        local myPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
+        if myPos and myPos.Y < 4000 then
+            pcall(function() CommF_:InvokeServer("requestEntrance", Vector3.new(-7894.62, 5545.49, -380.41)) end)
+            task.wait(0.3)
+        end
         if workspace.Enemies:FindFirstChild("Thunder God") then
             for _, v in workspace.Enemies:GetChildren() do
                 if v.Name == "Thunder God" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
@@ -2080,7 +2461,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         elseif ReplicatedStorage:FindFirstChild("Thunder God") then
             local t920
             if (CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t920 = Tween(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 350)
+                t920 = Tween(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 300)
             elseif (CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t920 then t920:Cancel() end
                 SafeBypassCFrame(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125))
@@ -2653,13 +3034,82 @@ end)
 task.spawn(function()
     while scriptRunning and task.wait(1.5) do
         if getgenv().Configs.AutoStats and LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Points") and LocalPlayer.Data.Points.Value > 0 then
-            local Melee = LocalPlayer.Data.Stats.Melee.Level.Value
-            local Defense = LocalPlayer.Data.Stats.Defense.Level.Value
             pcall(function()
-                CommF_:InvokeServer("AddPoint", "Melee", LocalPlayer.Data.Level.Value * 2 - Melee)
-                CommF_:InvokeServer("AddPoint", "Defense", LocalPlayer.Data.Level.Value - Defense)
-                if Melee == MaxLevel and Defense == MaxLevel then
-                    CommF_:InvokeServer("AddPoint", "Sword", LocalPlayer.Data.Level.Value * 3 - MaxLevel * 2)
+                local pts = LocalPlayer.Data.Points.Value
+                local mode = getgenv().Configs.SelectWeapon or "Melee"
+                local stats = LocalPlayer.Data.Stats
+
+                if mode == "Blox Fruit" then
+                    local fruitLvl = stats["Demon Fruit"].Level.Value
+                    local defLvl = stats.Defense.Level.Value
+                    local meleeLvl = stats.Melee.Level.Value
+
+                    if fruitLvl < MaxLevel then
+                        local addFruit = math.min(pts, math.ceil(pts * 0.5))
+                        CommF_:InvokeServer("AddPoint", "Demon Fruit", addFruit)
+                        pts = pts - addFruit
+                    end
+                    if pts > 0 and defLvl < MaxLevel then
+                        local addDef = math.min(pts, math.ceil(pts * 0.6))
+                        CommF_:InvokeServer("AddPoint", "Defense", addDef)
+                        pts = pts - addDef
+                    end
+                    if pts > 0 and meleeLvl < MaxLevel then
+                        CommF_:InvokeServer("AddPoint", "Melee", pts)
+                    end
+                elseif mode == "Sword" then
+                    local swordLvl = stats.Sword.Level.Value
+                    local defLvl = stats.Defense.Level.Value
+                    local meleeLvl = stats.Melee.Level.Value
+
+                    if swordLvl < MaxLevel then
+                        local addSword = math.min(pts, math.ceil(pts * 0.5))
+                        CommF_:InvokeServer("AddPoint", "Sword", addSword)
+                        pts = pts - addSword
+                    end
+                    if pts > 0 and defLvl < MaxLevel then
+                        local addDef = math.min(pts, math.ceil(pts * 0.6))
+                        CommF_:InvokeServer("AddPoint", "Defense", addDef)
+                        pts = pts - addDef
+                    end
+                    if pts > 0 and meleeLvl < MaxLevel then
+                        CommF_:InvokeServer("AddPoint", "Melee", pts)
+                    end
+                elseif mode == "Gun" then
+                    local gunLvl = stats.Gun.Level.Value
+                    local defLvl = stats.Defense.Level.Value
+                    local meleeLvl = stats.Melee.Level.Value
+
+                    if gunLvl < MaxLevel then
+                        local addGun = math.min(pts, math.ceil(pts * 0.5))
+                        CommF_:InvokeServer("AddPoint", "Gun", addGun)
+                        pts = pts - addGun
+                    end
+                    if pts > 0 and defLvl < MaxLevel then
+                        local addDef = math.min(pts, math.ceil(pts * 0.6))
+                        CommF_:InvokeServer("AddPoint", "Defense", addDef)
+                        pts = pts - addDef
+                    end
+                    if pts > 0 and meleeLvl < MaxLevel then
+                        CommF_:InvokeServer("AddPoint", "Melee", pts)
+                    end
+                else
+                    local meleeLvl = stats.Melee.Level.Value
+                    local defLvl = stats.Defense.Level.Value
+
+                    if meleeLvl < MaxLevel then
+                        local addMelee = math.min(pts, math.ceil(pts * 0.65))
+                        CommF_:InvokeServer("AddPoint", "Melee", addMelee)
+                        pts = pts - addMelee
+                    end
+                    if pts > 0 and defLvl < MaxLevel then
+                        local addDef = math.min(pts, pts)
+                        CommF_:InvokeServer("AddPoint", "Defense", addDef)
+                        pts = pts - addDef
+                    end
+                    if pts > 0 then
+                        CommF_:InvokeServer("AddPoint", "Sword", pts)
+                    end
                 end
             end)
         end
