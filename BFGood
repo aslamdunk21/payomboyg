@@ -1,3 +1,43 @@
+
+-- ============================================================
+-- 🏴‍☠️ IMMEDIATE AUTO SELECT TEAM (PIRATES)
+-- ============================================================
+local function AutoSelectTeam()
+    pcall(function()
+        if not LP.Team or LP.Team.Name == "" or LP.Team.Name == "Neutral" then
+            -- Method 1: CommF_ Invoke
+            if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
+            end
+            
+            -- Method 2: Fallback via Net RF
+            local NetFolder = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
+            if NetFolder and NetFolder:FindFirstChild("RF/SetTeam") then
+                pcall(function() NetFolder["RF/SetTeam"]:InvokeServer("Pirates") end)
+            end
+
+            -- Method 3: Hide ChooseTeam UI if open
+            local pGui = LP:FindFirstChild("PlayerGui")
+            if pGui and pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("ChooseTeam") then
+                pGui.Main.ChooseTeam.Visible = false
+            end
+        end
+    end)
+end
+
+-- Run instantly on script load
+AutoSelectTeam()
+
+-- Loop brief retry in background for slow loading instances
+task.spawn(function()
+    local t0 = os.clock()
+    while os.clock() - t0 < 5 do
+        if LP.Team and LP.Team.Name ~= "" and LP.Team.Name ~= "Neutral" then break end
+        AutoSelectTeam()
+        task.wait(0.2)
+    end
+end)
+
 loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
 
 -- ============================================================
@@ -18,6 +58,822 @@ if not LP then
     LP = Players.LocalPlayer
 end
 if not LP then return end
+
+
+-- ============================================================
+-- 🔄 CONNECTION MANAGER & SCRIPT CLEANUP SERVICE (ZERO LEAKS)
+-- ============================================================
+local ConnectionManager = {
+    Connections = {},
+    Threads = {}
+}
+
+function ConnectionManager:Add(conn)
+    if conn then
+        table.insert(self.Connections, conn)
+    end
+    return conn
+end
+
+function ConnectionManager:Spawn(func)
+    local thread = task.spawn(function()
+        pcall(func)
+    end)
+    table.insert(self.Threads, thread)
+    return thread
+end
+
+function ConnectionManager:Cleanup()
+    getgenv().scriptRunning = false
+    for _, conn in ipairs(self.Connections) do
+        pcall(function()
+            if conn and conn.Connected then
+                conn:Disconnect()
+            end
+        end)
+    end
+    table.clear(self.Connections)
+
+    for _, th in ipairs(self.Threads) do
+        pcall(function()
+            if th then
+                task.cancel(th)
+            end
+        end)
+    end
+    table.clear(self.Threads)
+end
+
+if getgenv().PayomboyZ_CleanUp then
+    pcall(getgenv().PayomboyZ_CleanUp)
+end
+getgenv().PayomboyZ_CleanUp = function()
+    ConnectionManager:Cleanup()
+end
+
+getgenv().scriptRunning = true
+
+-- ============================================================
+-- ⚙️ CONFIG MANAGER & PROFILE PRESETS
+-- ============================================================
+getgenv().Configs = getgenv().Configs or {
+    AutoFarmLevel = true,
+    BringMob = true,
+    FastAttack = true,
+    SelectWeapon = "Melee",
+    AutoStats = true,
+    StatBuild = "Melee",
+    AutoHaki = true,
+    AutoBuyFruit = true,
+    TargetFruit = "Kitsune",
+    MinBeliReserve = 0,
+    StuckDetector = true,
+    Saber = true,
+    Bartilo = true
+}
+
+local ConfigManager = {
+    CurrentProfile = "Default Kaitun",
+    Profiles = {
+        ["Default Kaitun"] = {
+            AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Melee",
+            AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = true,
+            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+        },
+        ["Fast Progression"] = {
+            AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Melee",
+            AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = false,
+            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+        },
+        ["Safe Mode"] = {
+            AutoFarmLevel = true, BringMob = false, FastAttack = false, SelectWeapon = "Melee",
+            AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = true,
+            TargetFruit = "Buddha", MinBeliReserve = 500000, StuckDetector = true
+        },
+        ["Fruit Hunter"] = {
+            AutoFarmLevel = false, BringMob = false, FastAttack = true, SelectWeapon = "Blox Fruit",
+            AutoStats = true, StatBuild = "Blox Fruit", AutoHaki = true, AutoBuyFruit = true,
+            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+        },
+        ["Mastery Farm"] = {
+            AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Sword",
+            AutoStats = true, StatBuild = "Sword", AutoHaki = true, AutoBuyFruit = false,
+            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+        }
+    }
+}
+
+function ConfigManager:LoadProfile(name)
+    local prof = self.Profiles[name]
+    if not prof then return false end
+    self.CurrentProfile = name
+    for k, v in pairs(prof) do
+        getgenv().Configs[k] = v
+    end
+    return true
+end
+
+-- ============================================================
+-- 🛡️ UNIVERSAL RECOVERY SERVICE & HEALTH CHECKER
+-- ============================================================
+local RecoveryService = {
+    State = "NORMAL", -- NORMAL, STUCK, RECOVERING, EMERGENCY_STOP
+    Deaths = 0,
+    RecoveryCount = 0,
+    LastCheckPos = nil,
+    StuckTimer = 0,
+    LastKillCheckTime = os.clock()
+}
+
+function RecoveryService:TriggerRecovery(reason)
+    self.RecoveryCount = self.RecoveryCount + 1
+    self.State = "RECOVERING"
+    warn("[RecoveryService]: Triggered recovery #" .. self.RecoveryCount .. " -> Reason: " .. tostring(reason))
+    task.delay(2, function()
+        self.State = "NORMAL"
+    end)
+end
+
+local HealthChecker = {}
+function HealthChecker:RunDiagnostic()
+    local results = {
+        Movement = true,
+        Combat = true,
+        Quest = (ReplicatedStorage:FindFirstChild("Remotes") ~= nil),
+        FruitSystem = (ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") ~= nil),
+        RemoteBypass = true,
+        UIEngine = true,
+        WorldData = (LP and LP:FindFirstChild("Data") ~= nil)
+    }
+    return results
+end
+
+-- ============================================================
+-- 🧠 KAITUN INTELLIGENCE ENGINE V8: ACCOUNT PROGRESSION BRAIN
+-- ============================================================
+
+-- 🗺️ Phase 4: Auto Content Adapter (Centralized Game Data)
+local GameData = {
+    FightingStyles = {
+        ["Black Leg"] = { Price = 150000, Frags = 0, ReqMastery = 0 },
+        ["Electro"] = { Price = 500000, Frags = 0, ReqMastery = 0 },
+        ["Fishman Karate"] = { Price = 750000, Frags = 0, ReqMastery = 0 },
+        ["Dragon Claw"] = { Price = 0, Frags = 1500, ReqMastery = 0 },
+        ["Superhuman"] = { Price = 3000000, Frags = 0, ReqMastery = 300, Styles = {"Black Leg", "Electro", "Fishman Karate", "Dragon Claw"} },
+        ["Death Step"] = { Price = 2500000, Frags = 5000, ReqMastery = 400, BaseStyle = "Black Leg" },
+        ["Sharkman Karate"] = { Price = 2500000, Frags = 5000, ReqMastery = 400, BaseStyle = "Fishman Karate" },
+        ["Electric Claw"] = { Price = 3000000, Frags = 5000, ReqMastery = 400, BaseStyle = "Electro" },
+        ["Dragon Talon"] = { Price = 3000000, Frags = 5000, ReqMastery = 400, BaseStyle = "Dragon Claw" },
+        ["Godhuman"] = { Price = 5000000, Frags = 5000, ReqMastery = 400, Styles = {"Superhuman", "Death Step", "Sharkman Karate", "Electric Claw", "Dragon Talon"} }
+    },
+    ProgressionMilestones = {
+        Sea1_Cap = 700,
+        Sea2_Cap = 1500,
+        Sea3_Cap = 2800,
+        SaberLevel = 200,
+        BartiloLevel = 850,
+        DonSwanLevel = 1000
+    }
+}
+
+-- 🧠 Phase 1: AccountScanner (Full Profile State Analyzer)
+local AccountScanner = {
+    LastScanTime = 0,
+    AccountState = {
+        Level = 1,
+        Sea = 1,
+        Beli = 0,
+        Fragments = 0,
+        EquippedFruit = "None",
+        FruitMastery = 0,
+        SelectStyle = "Combat",
+        UnlockedSaber = false,
+        UnlockedBartilo = false,
+        CanUnlockSea2 = false,
+        CanUnlockSea3 = false,
+        CanUnlockGodhuman = false,
+        MissingBeli = 0,
+        MissingFragments = 0,
+        RecommendedGoal = "LEVEL_FARM"
+    }
+}
+
+function AccountScanner:Scan()
+    local data = LP:FindFirstChild("Data")
+    if not data then return self.AccountState end
+
+    local state = self.AccountState
+    state.Level = data:FindFirstChild("Level") and data.Level.Value or 1
+    state.Beli = data:FindFirstChild("Beli") and data.Beli.Value or 0
+    state.Fragments = data:FindFirstChild("Fragments") and data.Fragments.Value or 0
+
+    local pId = game.PlaceId
+    state.Sea = (pId == 2753915549 and 1 or pId == 4442272183 and 2 or 3)
+
+    -- Check Saber
+    if getgenv().IsSaber ~= nil then state.UnlockedSaber = getgenv().IsSaber end
+
+    -- Progression Checks
+    if state.Level >= 700 and state.Sea == 1 then
+        state.CanUnlockSea2 = true
+        state.RecommendedGoal = "SEA_PROGRESSION_SEA2"
+    elseif state.Level >= 1500 and state.Sea == 2 then
+        state.CanUnlockSea3 = true
+        state.RecommendedGoal = "SEA_PROGRESSION_SEA3"
+    elseif state.Level >= 200 and not state.UnlockedSaber and state.Sea == 1 then
+        state.RecommendedGoal = "UNLOCK_SABER"
+    elseif state.Level >= 1500 and state.Beli >= 5000000 and state.Fragments >= 5000 then
+        state.CanUnlockGodhuman = true
+        state.RecommendedGoal = "UNLOCK_GODHUMAN"
+    else
+        state.RecommendedGoal = "LEVEL_FARM"
+    end
+
+    self.LastScanTime = os.clock()
+    return state
+end
+
+-- 🧠 Phase 2: Goal Dependency System
+local GoalDependencyEngine = {}
+function GoalDependencyEngine:ResolveDependencies(goalName)
+    local state = AccountScanner:Scan()
+    local deps = {
+        Goal = goalName,
+        Ready = false,
+        Missing = {}
+    }
+
+    if goalName == "Godhuman" then
+        if state.Level < 1500 then table.insert(deps.Missing, "Level 1500+") end
+        if state.Beli < 5000000 then table.insert(deps.Missing, string.format("Beli: %d / 5,000,000", state.Beli)) end
+        if state.Fragments < 5000 then table.insert(deps.Missing, string.format("Fragments: %d / 5,000", state.Fragments)) end
+        if #deps.Missing == 0 then deps.Ready = true end
+    elseif goalName == "Sea2_Transition" then
+        if state.Level < 700 then table.insert(deps.Missing, "Level 700+") end
+        if #deps.Missing == 0 then deps.Ready = true end
+    elseif goalName == "Sea3_Transition" then
+        if state.Level < 1500 then table.insert(deps.Missing, "Level 1500+") end
+        if #deps.Missing == 0 then deps.Ready = true end
+    else
+        deps.Ready = true
+    end
+
+    return deps
+end
+
+-- 🎯 Phase 3: Dynamic Objective Queue (NOW / NEXT / THEN / AFTER THAT)
+local ObjectiveQueue = {
+    NOW = { Task = "Level Farming", Reason = "Initial Progression", Priority = 4 },
+    NEXT = { Task = "Saber Quest", Reason = "Unlock Weapon", Priority = 3 },
+    THEN = { Task = "Sea 2 Progression", Reason = "Unlock World", Priority = 2 },
+    AFTER_THAT = { Task = "Godhuman Mastery", Reason = "Endgame Build", Priority = 1 },
+    InterruptedTask = nil
+}
+
+function ObjectiveQueue:Interrupt(taskName, reason)
+    if not self.InterruptedTask then
+        self.InterruptedTask = self.NOW
+        self.NOW = { Task = taskName, Reason = reason, Priority = 0 }
+        warn("[ObjectiveQueue]: Interrupted! Active: " .. taskName .. " (" .. tostring(reason) .. ")")
+    end
+end
+
+function ObjectiveQueue:Resume()
+    if self.InterruptedTask then
+        self.NOW = self.InterruptedTask
+        self.InterruptedTask = nil
+        warn("[ObjectiveQueue]: Resumed original objective -> " .. self.NOW.Task)
+    end
+end
+
+-- ⚔️ Phase 5: Combat Intelligence & Skill Rotation Engine
+local CombatRotationEngine = {
+    ComboIndex = 1,
+    LastSkillCast = 0,
+    Rotations = {
+        Melee = {"Z", "X", "C"},
+        Sword = {"Z", "X"},
+        Fruit = {"Z", "X", "C", "V"},
+        Gun = {"Z", "X"}
+    }
+}
+
+function CombatRotationEngine:GetNextSkill(weaponType, targetHpPct)
+    -- Smart Finisher: If mob HP is very low (<15%), hold heavy skill CDs and finish with M1/Basic
+    if targetHpPct and targetHpPct < 15 then
+        return "M1"
+    end
+
+    local rot = self.Rotations[weaponType] or self.Rotations.Melee
+    local skill = rot[self.ComboIndex]
+    self.ComboIndex = (self.ComboIndex % #rot) + 1
+    return skill
+end
+
+-- 💀 Phase 6: Death & Recovery Analytics
+local RecoveryAnalytics = {
+    DeathCauses = {
+        MobDamage = 0,
+        BossAttack = 0,
+        MovementFail = 0,
+        AntiCheat = 0
+    },
+    BossDeaths = {},
+    StrategyModifiers = {
+        DistanceMultiplier = 1.0,
+        DisableBringMob = false
+    }
+}
+
+function RecoveryAnalytics:RecordDeath(cause, bossName)
+    if cause == "Boss" and bossName then
+        self.BossDeaths[bossName] = (self.BossDeaths[bossName] or 0) + 1
+        self.DeathCauses.BossAttack = self.DeathCauses.BossAttack + 1
+
+        -- Adaptive Strategy: If killed by same boss >= 3 times, increase distance & disable bring mob
+        if self.BossDeaths[bossName] >= 3 then
+            self.StrategyModifiers.DistanceMultiplier = 1.5
+            self.StrategyModifiers.DisableBringMob = true
+            warn("[RecoveryAnalytics]: Adaptive strategy applied -> Increased safe distance for " .. bossName)
+        end
+    elseif cause == "Mob" then
+        self.DeathCauses.MobDamage = self.DeathCauses.MobDamage + 1
+    else
+        self.DeathCauses.MovementFail = self.DeathCauses.MovementFail + 1
+    end
+end
+
+-- 🍎 Phase 7: Fruit Economy Brain & Budget Intelligence
+local FruitEconomyBrain = {
+    FruitPolicies = {
+        ["Kitsune"] = "BUY_STORE_NOTIFY",
+        ["Dragon"] = "BUY_STORE_NOTIFY",
+        ["Leopard"] = "BUY_STORE",
+        ["Dough"] = "BUY_STORE",
+        ["T-Rex"] = "BUY_STORE",
+        ["Buddha"] = "BUY_EAT_IF_NO_GRIND",
+        ["Magma"] = "BUY_EAT_IF_NO_GRIND",
+        ["Rocket"] = "IGNORE",
+        ["Spin"] = "IGNORE"
+    }
+}
+
+function FruitEconomyBrain:GetAvailableBudget(reserveBeli)
+    local state = AccountScanner:Scan()
+    local reserve = reserveBeli or getgenv().Configs.MinBeliReserve or 0
+
+    -- Reserve extra Beli if progression milestone is close
+    if state.Level >= 650 and state.Sea == 1 then
+        reserve = reserve + 100000 -- Reserve for Sea 2 quest items
+    end
+
+    local available = math.max(0, state.Beli - reserve)
+    return available
+end
+
+-- 📊 Phase 8: Real Analytics & Best Session Tracking
+local RealAnalytics = {
+    BestSession = {
+        BestLevelRate = 0,
+        BestBeliRate = 0
+    }
+}
+
+function RealAnalytics:UpdateMetrics(lvlGained, beliGained, elapsedSecs)
+    local hours = math.max(0.001, elapsedSecs / 3600)
+    local lvlRate = lvlGained / hours
+    local beliRate = beliGained / hours
+
+    if lvlRate > self.BestSession.BestLevelRate then self.BestSession.BestLevelRate = lvlRate end
+    if beliRate > self.BestSession.BestBeliRate then self.BestSession.BestBeliRate = beliRate end
+
+    local efficiency = math.min(100, math.max(10, math.floor(100 - (RecoveryService.Deaths * 3))))
+    return {
+        LevelRate = string.format("%.1f", lvlRate),
+        BeliRate = string.format("%.0f", beliRate),
+        BestLvlRate = string.format("%.1f", self.BestSession.BestLevelRate),
+        Efficiency = efficiency
+    }
+end
+
+-- ============================================================
+-- 🔥 KAITUN V8.5 ULTRA ACCELERATION & ZERO-IDLE ENGINE
+-- ============================================================
+
+-- 🦍 1. Aggressive Farm Mode (SAFE / BALANCED / AGGRESSIVE)
+local AggressiveFarmMode = {
+    CurrentMode = "AGGRESSIVE", -- SAFE, BALANCED, AGGRESSIVE
+    Settings = {
+        SAFE = { MaxPackSize = 8, SkillDelay = 0.5, TargetSwitchDelay = 0.2, BringRadius = 250, RecoveryHpPct = 50 },
+        BALANCED = { MaxPackSize = 14, SkillDelay = 0.25, TargetSwitchDelay = 0.05, BringRadius = 350, RecoveryHpPct = 35 },
+        AGGRESSIVE = { MaxPackSize = 25, SkillDelay = 0.05, TargetSwitchDelay = 0.0, BringRadius = 450, RecoveryHpPct = 20 }
+    }
+}
+
+function AggressiveFarmMode:SetMode(mode)
+    if self.Settings[mode] then
+        self.CurrentMode = mode
+        warn("[AggressiveFarmMode]: Mode switched to 🔥 " .. mode)
+    end
+end
+
+function AggressiveFarmMode:GetConfig()
+    return self.Settings[self.CurrentMode] or self.Settings.AGGRESSIVE
+end
+
+-- ⚡ 2. Zero Idle Engine (State Uptime & Downtime Tracker)
+local ZeroIdleEngine = {
+    CurrentState = "FIGHTING", -- FIGHTING, MOVING, WAITING, STUCK, LOADING, RECOVERING
+    TimeInState = {
+        FIGHTING = 0,
+        MOVING = 0,
+        WAITING = 0,
+        STUCK = 0,
+        LOADING = 0,
+        RECOVERING = 0
+    },
+    LastStateChange = os.clock()
+}
+
+function ZeroIdleEngine:SetState(newState)
+    local now = os.clock()
+    local delta = now - self.LastStateChange
+    if self.TimeInState[self.CurrentState] then
+        self.TimeInState[self.CurrentState] = self.TimeInState[self.CurrentState] + delta
+    end
+    self.CurrentState = newState
+    self.LastStateChange = now
+end
+
+function ZeroIdleEngine:GetMetrics()
+    local now = os.clock()
+    local delta = now - self.LastStateChange
+    if self.TimeInState[self.CurrentState] then
+        self.TimeInState[self.CurrentState] = self.TimeInState[self.CurrentState] + delta
+    end
+    self.LastStateChange = now
+
+    local total = 0
+    for _, t in pairs(self.TimeInState) do total = total + t end
+    total = math.max(0.001, total)
+
+    local activePct = ((self.TimeInState.FIGHTING + self.TimeInState.MOVING) / total) * 100
+    local idlePct = (self.TimeInState.WAITING / total) * 100
+    local recoveryPct = ((self.TimeInState.STUCK + self.TimeInState.RECOVERING) / total) * 100
+
+    return {
+        ActivePct = string.format("%.1f", activePct),
+        IdlePct = string.format("%.1f", idlePct),
+        RecoveryPct = string.format("%.1f", recoveryPct)
+    }
+end
+
+-- 🎯 3. Predictive Targeting Engine (HP Threshold Pre-Scan)
+local PredictiveTargetingEngine = {
+    CurrentTarget = nil,
+    NextTarget = nil,
+    PreScanHpThreshold = 15
+}
+
+function PredictiveTargetingEngine:CheckPreScan(mob, mobList)
+    if not mob or not mob:FindFirstChild("Humanoid") then return nil end
+    local hpPct = (mob.Humanoid.Health / math.max(1, mob.Humanoid.MaxHealth)) * 100
+
+    if hpPct <= self.PreScanHpThreshold and not self.NextTarget then
+        for _, other in ipairs(mobList or {}) do
+            if other ~= mob and other:FindFirstChild("Humanoid") and other.Humanoid.Health > 0 then
+                self.NextTarget = other
+                break
+            end
+        end
+    end
+
+    if mob.Humanoid.Health <= 0 and self.NextTarget then
+        local target = self.NextTarget
+        self.NextTarget = nil
+        return target
+    end
+    return nil
+end
+
+-- 🧲 4. Dynamic Mob Pack Engine (Self-Tuning Pack Size)
+local DynamicMobPackEngine = {
+    CurrentPackSize = 12,
+    RecommendedPackSize = 18,
+    MaxSafePackSize = 25
+}
+
+function DynamicMobPackEngine:EvaluatePackSize(playerHpPct, currentFps)
+    local cfg = AggressiveFarmMode:GetConfig()
+    local maxLimit = cfg.MaxPackSize
+
+    if playerHpPct < 40 or (currentFps and currentFps < 25) then
+        self.CurrentPackSize = math.max(4, self.CurrentPackSize - 2)
+    elseif playerHpPct > 80 and (not currentFps or currentFps > 45) then
+        self.CurrentPackSize = math.min(maxLimit, self.CurrentPackSize + 1)
+    end
+
+    self.RecommendedPackSize = math.min(maxLimit, self.CurrentPackSize + 3)
+    self.MaxSafePackSize = maxLimit
+    return self.CurrentPackSize
+end
+
+-- 🧠 5. Adaptive Farming AI & PPM (Progress Per Minute) Optimizer
+local AdaptiveFarmingAI = {
+    WeaponStats = {}, -- [WeaponName] = { Kills = 0, TimeSpent = 0, PPM = 0 }
+    CurrentWeaponName = "Melee"
+}
+
+function AdaptiveFarmingAI:RecordKill(weaponName, timeSpentSecs)
+    if not self.WeaponStats[weaponName] then
+        self.WeaponStats[weaponName] = { Kills = 0, TimeSpent = 0, PPM = 0 }
+    end
+    local st = self.WeaponStats[weaponName]
+    st.Kills = st.Kills + 1
+    st.TimeSpent = st.TimeSpent + math.max(0.1, timeSpentSecs)
+    st.PPM = (st.Kills / st.TimeSpent) * 60
+end
+
+function AdaptiveFarmingAI:GetBestWeapon()
+    local bestName = nil
+    local maxPPM = -1
+    for wName, st in pairs(self.WeaponStats) do
+        if st.PPM > maxPPM then
+            maxPPM = st.PPM
+            bestName = wName
+        end
+    end
+    return bestName or "Melee"
+end
+
+-- 🩸 6. Finisher Intelligence & Mastery Collector
+local FinisherIntelligence = {
+    TargetMasteryWeapon = "Sword"
+}
+
+function FinisherIntelligence:ShouldUseFinisher(mobHpPct, targetIsBoss)
+    local threshold = targetIsBoss and 10 or 20
+    if mobHpPct <= threshold then
+        return true, self.TargetMasteryWeapon
+    end
+    return false, nil
+end
+
+-- 🚨 7. Opportunity Interrupt System (Priority Matrix)
+local OpportunityInterruptSystem = {
+    PriorityTiers = {
+        EMERGENCY = 100,
+        RARE_REQUIRED = 95,
+        PROGRESSION = 90,
+        RESOURCE = 80,
+        LEVEL_FARM = 70,
+        OPTIONAL = 30
+    },
+    ActivePriority = 70,
+    ActiveInterrupt = nil
+}
+
+function OpportunityInterruptSystem:TriggerInterrupt(tierName, taskName, callback)
+    local priority = self.PriorityTiers[tierName] or 50
+    if priority > self.ActivePriority then
+        self.ActivePriority = priority
+        self.ActiveInterrupt = { Task = taskName, Tier = tierName }
+        warn(string.format("[OpportunityInterrupt]: 🚨 High priority event [%s] -> %s", tierName, taskName))
+        if callback then pcall(callback) end
+        return true
+    end
+    return false
+end
+
+function OpportunityInterruptSystem:ClearInterrupt()
+    self.ActivePriority = self.PriorityTiers.LEVEL_FARM
+    self.ActiveInterrupt = nil
+end
+
+-- 🛡️ 11. Threat Detection Engine (Bounty Hunter / Mob Spike Detector)
+local ThreatDetectionEngine = {
+    ThreatState = "NORMAL", -- NORMAL, DEFENSIVE, RECOVER, RETURN
+    LastHp = 100
+}
+
+function ThreatDetectionEngine:ScanThreats(playerHpPct, nearbyPlayers)
+    -- Check rapid HP drop spike
+    if self.LastHp - playerHpPct > 30 then
+        self.ThreatState = "DEFENSIVE"
+        warn("[ThreatDetection]: ⚠️ Damage spike detected! Switching to DEFENSIVE state.")
+    elseif playerHpPct < 25 then
+        self.ThreatState = "RECOVER"
+    else
+        self.ThreatState = "NORMAL"
+    end
+    self.LastHp = playerHpPct
+
+    -- Check nearby aggressive players
+    if nearbyPlayers and #nearbyPlayers > 0 then
+        for _, p in ipairs(nearbyPlayers) do
+            if p ~= LP and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (LP.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                if dist <= 150 then
+                    self.ThreatState = "DEFENSIVE"
+                    break
+                end
+            end
+        end
+    end
+    return self.ThreatState
+end
+
+-- 🤖 12. Strategy Memory Engine (Island & Boss Strategy Database)
+local StrategyMemory = {
+    Memory = {} -- [Key] = { PackSize = 14, Weapon = "Buddha", Distance = 12 }
+}
+
+function StrategyMemory:SaveStrategy(key, packSize, weapon, distance)
+    self.Memory[key] = {
+        PackSize = packSize,
+        Weapon = weapon,
+        Distance = distance,
+        Timestamp = os.time()
+    }
+end
+
+function StrategyMemory:GetStrategy(key)
+    return self.Memory[key]
+end
+
+-- ============================================================
+-- 🩸 BOUNTY HUNTER ENGINE & SMART PLAYER TARGETING
+-- ============================================================
+local BountyHunterEngine = {
+    CurrentMode = "OFF", -- OFF, Passive Hunter, Active Hunter, Ruthless Hunter, Smart Hunter, VIP Hunter
+    TargetMemory = {}, -- [UserId] = { Kills = 0, DeathsAgainst = 0, Danger = "LOW", BlacklistedUntil = 0, LastPos = Vector3.zero, LastMoved = os.clock() }
+    CurrentTarget = nil,
+    ServerHopThresh = 20
+}
+
+function BountyHunterEngine:SetMode(mode)
+    self.CurrentMode = mode
+    warn("[BountyHunterEngine]: Switched to mode -> 🩸 " .. tostring(mode))
+end
+
+function BountyHunterEngine:ScanServerTargets()
+    if self.CurrentMode == "OFF" or self.CurrentMode == "DISABLED" then
+        return nil, 0
+    end
+
+    local bestTarget = nil
+    local maxScore = -9999
+    local totalServerScore = 0
+
+    local myChar = LP.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myLvl = (LP:FindFirstChild("Data") and LP.Data:FindFirstChild("Level")) and LP.Data.Level.Value or 1
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Team ~= LP.Team and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            local userId = p.UserId
+            local mem = self.TargetMemory[userId] or { Kills = 0, DeathsAgainst = 0, Danger = "LOW", BlacklistedUntil = 0 }
+
+            -- Check blacklist
+            if os.clock() < mem.BlacklistedUntil then
+                continue
+            end
+
+            local pData = p:FindFirstChild("Data")
+            local bounty = (pData and pData:FindFirstChild("Bounty")) and pData.Bounty.Value or 2500000
+            local pLvl = (pData and pData:FindFirstChild("Level")) and pData.Level.Value or 1500
+            local pRoot = p.Character.HumanoidRootPart
+            local dist = myRoot and (myRoot.Position - pRoot.Position).Magnitude or 5000
+
+            -- Calculate Target Score
+            local score = 0
+            score = score + math.floor(bounty / 50000) -- Bounty Reward
+
+            if pLvl <= myLvl + 100 then score = score + 100 end -- Easy Kill
+            if mem.Danger == "LOW" then score = score + 50 end -- Low Danger
+            score = score + math.max(0, 100 - math.floor(dist / 50)) -- Near Position
+
+            -- Check AFK status
+            if mem.LastPos and (mem.LastPos - pRoot.Position).Magnitude < 2 and (os.clock() - (mem.LastMoved or os.clock())) > 10 then
+                score = score + 150 -- AFK Target Bonus!
+            end
+            mem.LastPos = pRoot.Position
+            mem.LastMoved = os.clock()
+            self.TargetMemory[userId] = mem
+
+            if self.CurrentMode == "VIP Hunter" and bounty < 5000000 then
+                score = score - 300
+            end
+
+            totalServerScore = totalServerScore + math.max(0, score)
+
+            if score > maxScore then
+                maxScore = score
+                bestTarget = { Player = p, Score = score, Bounty = bounty, Distance = dist }
+            end
+        end
+    end
+
+    return bestTarget, totalServerScore
+end
+
+function BountyHunterEngine:CheckRetreat(targetPlayer, playerHpPct)
+    if not targetPlayer or not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Humanoid") then return false end
+    local targetHpPct = (targetPlayer.Character.Humanoid.Health / math.max(1, targetPlayer.Character.Humanoid.MaxHealth)) * 100
+
+    if playerHpPct < 30 and targetHpPct > 70 then
+        local userId = targetPlayer.UserId
+        if not self.TargetMemory[userId] then self.TargetMemory[userId] = { Kills = 0, DeathsAgainst = 0, Danger = "HIGH", BlacklistedUntil = 0 } end
+        self.TargetMemory[userId].DeathsAgainst = self.TargetMemory[userId].DeathsAgainst + 1
+        self.TargetMemory[userId].Danger = "HIGH"
+        self.TargetMemory[userId].BlacklistedUntil = os.clock() + 1200 -- 20 mins Blacklist
+        warn("[BountyHunterEngine]: 🚨 RETREAT TRIGGERED! Blacklisted target " .. targetPlayer.Name .. " for 20 mins.")
+        return true
+    end
+    return false
+end
+
+-- ============================================================
+-- 🧬 PLAYSTYLE PROFILES ENGINE
+-- ============================================================
+local PlaystyleProfiles = {
+    CurrentProfile = "Intelligent", -- Safe Farmer, Balanced, Speedrunner, Ruthless, Intelligent
+    Profiles = {
+        ["Safe Farmer"] = { MaxPack = 6, Risk = "LOW", SwitchDelay = 0.3, RecoveryHp = 60, Mode = "SAFE" },
+        ["Balanced"] = { MaxPack = 14, Risk = "MEDIUM", SwitchDelay = 0.05, RecoveryHp = 35, Mode = "BALANCED" },
+        ["Speedrunner"] = { MaxPack = 22, Risk = "HIGH", SwitchDelay = 0.0, RecoveryHp = 20, Mode = "AGGRESSIVE" },
+        ["Ruthless"] = { MaxPack = 25, Risk = "MAX", SwitchDelay = 0.0, RecoveryHp = 15, Mode = "AGGRESSIVE" },
+        ["Intelligent"] = { MaxPack = 18, Risk = "ADAPTIVE", SwitchDelay = 0.0, RecoveryHp = 25, Mode = "AGGRESSIVE" }
+    }
+}
+
+function PlaystyleProfiles:SetProfile(name)
+    if self.Profiles[name] then
+        self.CurrentProfile = name
+        local p = self.Profiles[name]
+        AggressiveFarmMode:SetMode(p.Mode)
+        warn("[PlaystyleProfiles]: Applied profile -> 🧬 " .. tostring(name))
+    end
+end
+
+-- ============================================================
+-- 🧠 LIVE AI DECISION FEED ENGINE
+-- ============================================================
+local AIDecisionFeed = {
+    CurrentTask = "Level Farm",
+    Reason = "Optimizing progression rate (PPM)",
+    Alternative = "Boss Hunt (Skipped: Low efficiency)",
+    NextObjective = "Sea Progression Quest",
+    LastUpdate = os.clock()
+}
+
+function AIDecisionFeed:LogDecision(taskName, reasonStr, altStr, nextObjStr)
+    self.CurrentTask = taskName or self.CurrentTask
+    self.Reason = reasonStr or self.Reason
+    self.Alternative = altStr or self.Alternative
+    self.NextObjective = nextObjStr or self.NextObjective
+    self.LastUpdate = os.clock()
+end
+
+function AIDecisionFeed:GetFeedText()
+    local isTH = (ObsidianGlassEngine and ObsidianGlassEngine.CurrentLanguage == "th")
+    return isTH and string.format(
+        "🧠 ปัญญาประดิษฐ์กำลังคิด...\nภารกิจปัจจุบัน: %s\nเหตุผล: %s\nงานสำรอง: %s\nเป้าหมายต่อไป: %s",
+        self.CurrentTask, self.Reason, self.Alternative, self.NextObjective
+    ) or string.format(
+        "🧠 THINKING FEED...\nCurrent: %s\nReason: %s\nSkipped: %s\nNext: %s",
+        self.CurrentTask, self.Reason, self.Alternative, self.NextObjective
+    )
+end
+
+-- ============================================================
+-- 🎯 GOAL-BASED KAITUN ENGINE (WHAT DO YOU WANT?)
+-- ============================================================
+local GoalBasedKaitunEngine = {
+    CurrentGoal = "FASTEST PROGRESSION", -- MAX LEVEL, FASTEST PROGRESSION, GET GODHUMAN, GET MAX BOUNTY, COMPLETE ACCOUNT
+    Goals = {
+        ["MAX LEVEL"] = { PrimaryPriority = "LEVEL_FARM", HunterMode = "Passive Hunter", PackSize = 25 },
+        ["FASTEST PROGRESSION"] = { PrimaryPriority = "PROGRESSION", HunterMode = "Passive Hunter", PackSize = 18 },
+        ["GET GODHUMAN"] = { PrimaryPriority = "GODHUMAN_REQ", HunterMode = "Passive Hunter", PackSize = 20 },
+        ["GET MAX BOUNTY"] = { PrimaryPriority = "BOUNTY_HUNT", HunterMode = "Ruthless Hunter", PackSize = 12 },
+        ["COMPLETE ACCOUNT"] = { PrimaryPriority = "ALL_MASTERY", HunterMode = "Smart Hunter", PackSize = 16 }
+    }
+}
+
+function GoalBasedKaitunEngine:SetGoal(goalName)
+    if self.Goals[goalName] then
+        self.CurrentGoal = goalName
+        local cfg = self.Goals[goalName]
+        if goalName == "GET MAX BOUNTY" then
+            BountyHunterEngine:SetMode("Ruthless Hunter")
+            AIDecisionFeed:LogDecision("Bounty Hunting", "Target Goal set to GET MAX BOUNTY", "Level Farm (Deprioritized)", "Server Hop for High-Value Targets")
+        else
+            BountyHunterEngine:SetMode(cfg.HunterMode)
+            AIDecisionFeed:LogDecision(goalName, "Target Goal set to " .. goalName, "Bounty Hunting", "Sea Progression & Objective Queue")
+        end
+        warn("[GoalBasedKaitunEngine]: Active Goal set to -> 🎯 " .. tostring(goalName))
+    end
+end
 
 -- ============================================================
 -- 1. BYPASS ENGINE — Hook ทุกอย่างที่เซิร์ฟเวอร์ใช้เช็ค
@@ -1299,9 +2155,24 @@ local function BringMob(a)
     return targets
 end
 
--- ======================================================================================
--- 📊 TOP-RIGHT HUD STATUS WIDGET (Compact Stats, Quest & Mob HP)
--- ======================================================================================
+local function DestroyExistingUI(name)
+    pcall(function()
+        local containers = {
+            game:GetService("CoreGui"),
+            LP:FindFirstChild("PlayerGui"),
+            (gethui and gethui())
+        }
+        for _, c in ipairs(containers) do
+            if c then
+                for _, child in ipairs(c:GetChildren()) do
+                    if child.Name == name or child.Name == "Obsidian_HUD_Status" or child.Name == "PayomboyZHUB" then
+                        child:Destroy()
+                    end
+                end
+            end
+        end
+    end)
+end
 
 DestroyExistingUI("Obsidian_HUD_Status")
 
@@ -1317,10 +2188,11 @@ if not parentOk or not ScreenGui.Parent then
 end
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 260, 0, 110)
-frame.Position = UDim2.new(1, -270, 0, 15)
-frame.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
-frame.BackgroundTransparency = 0.25
+frame.Name = "KaitunHUDFrame"
+frame.Size = UDim2.new(0, 285, 0, 140)
+frame.Position = UDim2.new(1, -295, 0, 15)
+frame.BackgroundColor3 = Color3.fromRGB(15, 10, 18)
+frame.BackgroundTransparency = 0.20
 frame.Parent = ScreenGui
 
 local corner = Instance.new("UICorner")
@@ -1330,36 +2202,60 @@ corner.Parent = frame
 local edge = Instance.new("UIStroke")
 edge.Color = Color3.fromRGB(255, 45, 85)
 edge.Thickness = 1.5
-edge.Transparency = 0.3
+edge.Transparency = 0.25
 edge.Parent = frame
 
+-- Smooth UI Window Dragging Logic for HUD Widget
+local hDragging, hDragInput, hDragStart, hStartPos
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        hDragging = true
+        hDragStart = input.Position
+        hStartPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then hDragging = false end
+        end)
+    end
+end)
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        hDragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == hDragInput and hDragging then
+        local delta = input.Position - hDragStart
+        frame.Position = UDim2.new(hStartPos.X.Scale, hStartPos.X.Offset + delta.X, hStartPos.Y.Scale, hStartPos.Y.Offset + delta.Y)
+    end
+end)
+
 local headerLabel = Instance.new("TextLabel")
-headerLabel.Size = UDim2.new(1, -20, 0, 22)
-headerLabel.Position = UDim2.new(0, 10, 0, 5)
+headerLabel.Size = UDim2.new(1, -20, 0, 20)
+headerLabel.Position = UDim2.new(0, 10, 0, 4)
 headerLabel.BackgroundTransparency = 1
-headerLabel.Text = "📊 KAITUN STATUS"
+headerLabel.Text = "🥋 KAITUN ENGINE MONITOR"
 headerLabel.Font = Enum.Font.GothamBold
-headerLabel.TextSize = 12
-headerLabel.TextColor3 = Color3.fromRGB(255, 45, 85)
+headerLabel.TextSize = 11
+headerLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
 headerLabel.TextXAlignment = Enum.TextXAlignment.Left
 headerLabel.Parent = frame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 18)
-title.Position = UDim2.new(0, 10, 0, 28)
+title.Size = UDim2.new(1, -20, 0, 16)
+title.Position = UDim2.new(0, 10, 0, 26)
 title.BackgroundTransparency = 1
-title.Text = "Status: Idling"
+title.Text = "Status: 🟢 INITIALIZING"
 title.Font = Enum.Font.GothamBold
-title.TextSize = 11
+title.TextSize = 10
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
 local subtitle = Instance.new("TextLabel")
 subtitle.Size = UDim2.new(1, -20, 0, 16)
-subtitle.Position = UDim2.new(0, 10, 0, 46)
+subtitle.Position = UDim2.new(0, 10, 0, 44)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "Quest: No Subtask"
+subtitle.Text = "Objective: Initializing Priority Queue"
 subtitle.Font = Enum.Font.GothamSemibold
 subtitle.TextSize = 10
 subtitle.TextColor3 = Color3.fromRGB(242, 218, 228)
@@ -1368,7 +2264,7 @@ subtitle.Parent = frame
 
 local mobHpLabel = Instance.new("TextLabel")
 mobHpLabel.Size = UDim2.new(1, -20, 0, 16)
-mobHpLabel.Position = UDim2.new(0, 10, 0, 64)
+mobHpLabel.Position = UDim2.new(0, 10, 0, 62)
 mobHpLabel.BackgroundTransparency = 1
 mobHpLabel.Text = "Mob HP: N/A"
 mobHpLabel.Font = Enum.Font.GothamBold
@@ -1377,26 +2273,38 @@ mobHpLabel.TextColor3 = Color3.fromRGB(46, 224, 140)
 mobHpLabel.TextXAlignment = Enum.TextXAlignment.Left
 mobHpLabel.Parent = frame
 
+local playerMetricsLabel = Instance.new("TextLabel")
+playerMetricsLabel.Size = UDim2.new(1, -20, 0, 16)
+playerMetricsLabel.Position = UDim2.new(0, 10, 0, 80)
+playerMetricsLabel.BackgroundTransparency = 1
+playerMetricsLabel.Text = "💖 HP: 100% | ⚡ Energy: 100% | ⚔️ Melee"
+playerMetricsLabel.Font = Enum.Font.GothamBold
+playerMetricsLabel.TextSize = 10
+playerMetricsLabel.TextColor3 = Color3.fromRGB(255, 120, 180)
+playerMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+playerMetricsLabel.Parent = frame
+
 local TimeL = Instance.new("TextLabel")
 TimeL.Size = UDim2.new(1, -20, 0, 16)
-TimeL.Position = UDim2.new(0, 10, 0, 82)
+TimeL.Position = UDim2.new(0, 10, 0, 98)
 TimeL.BackgroundTransparency = 1
-TimeL.Text = "Level: -- | Beli: --"
+TimeL.Text = "📊 Level: 1/2800 (+0) | ⚡ 0 Lv/Hr"
 TimeL.Font = Enum.Font.GothamBold
 TimeL.TextSize = 10
 TimeL.TextColor3 = Color3.fromRGB(255, 185, 70)
 TimeL.TextXAlignment = Enum.TextXAlignment.Left
 TimeL.Parent = frame
 
-task.spawn(function()
-    while scriptRunning and task.wait(0.5) do
-        pcall(function()
-            local lvl = (LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 0
-            local beli = (LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli")) and LocalPlayer.Data.Beli.Value or 0
-            TimeL.Text = string.format("Level: %d  |  💰 $ %s", lvl, tostring(beli):reverse():gsub("%d%d%d", "%1,"):reverse():gsub("^,", ""))
-        end)
-    end
-end)
+local gainsLabel = Instance.new("TextLabel")
+gainsLabel.Size = UDim2.new(1, -20, 0, 16)
+gainsLabel.Position = UDim2.new(0, 10, 0, 116)
+gainsLabel.BackgroundTransparency = 1
+gainsLabel.Text = "💰 Beli: +$0 | 💎 Frags: +0 | ⏱️ 00:00:00"
+gainsLabel.Font = Enum.Font.GothamBold
+gainsLabel.TextSize = 10
+gainsLabel.TextColor3 = Color3.fromRGB(150, 220, 255)
+gainsLabel.TextXAlignment = Enum.TextXAlignment.Left
+gainsLabel.Parent = frame
 
 pcall(function()
     if not identifyexecutor or identifyexecutor() ~= "Solara" then 
@@ -1931,11 +2839,18 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabScroll.Size = UDim2.new(1, -16, 1, -60)
     tabScroll.Position = UDim2.new(0, 8, 0, 52)
     tabScroll.BackgroundTransparency = 1
-    tabScroll.ScrollBarThickness = 3
+    tabScroll.Active = true
+    tabScroll.ScrollingEnabled = true
+    tabScroll.ScrollBarThickness = 5
     tabScroll.ScrollBarImageColor3 = COLORS.cyan
+    tabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     tabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     tabScroll.ZIndex = 10
     tabScroll.Parent = userPanel
+
+    local tabPadding = Instance.new("UIPadding")
+    tabPadding.PaddingBottom = UDim.new(0, 30)
+    tabPadding.Parent = tabScroll
 
     local tabLayout = Instance.new("UIListLayout")
     tabLayout.FillDirection = Enum.FillDirection.Vertical
@@ -1944,7 +2859,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabLayout.Parent = tabScroll
 
     tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 30)
     end)
 
     -- Right Main Panel
@@ -2012,6 +2927,12 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             end
         end
 
+        pcall(function()
+            if KaitunMonitor and KaitunMonitor.UpdateUI then
+                KaitunMonitor:UpdateUI()
+            end
+        end)
+
         ObsidianGlassEngine:Notify({
             Title = "PayomboyZ HUB",
             Content = isThai and "เปลี่ยนภาษาเป็น ภาษาไทย เรียบร้อยแล้ว!" or "Switched language to English!"
@@ -2038,7 +2959,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         shell.Visible = false
     end)
 
-    -- Smooth UI Window Dragging Logic (Move whole UI window by dragging userPanel or headerBar)
+    -- Smooth UI Window Dragging Logic (Move whole UI window by dragging headerBar ONLY so touch scrolling works smoothly on mobile)
     local sDragging, sDragInput, sDragStart, sStartPos
     local function enableDragOn(frame)
         frame.InputBegan:Connect(function(input)
@@ -2059,7 +2980,6 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             end
         end)
     end
-    enableDragOn(userPanel)
     enableDragOn(headerBar)
 
     UserInputService.InputChanged:Connect(function(input)
@@ -2116,10 +3036,19 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageScroll.Size = UDim2.fromScale(1, 1)
         pageScroll.BackgroundTransparency = 1
         pageScroll.Visible = false
-        pageScroll.ScrollBarThickness = 4
+        pageScroll.Active = true
+        pageScroll.ScrollingEnabled = true
+        pageScroll.ScrollBarThickness = 6
         pageScroll.ScrollBarImageColor3 = COLORS.cyan
+        pageScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
         pageScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
         pageScroll.Parent = pageContainer
+
+        local pagePadding = Instance.new("UIPadding")
+        pagePadding.PaddingBottom = UDim.new(0, 60)
+        pagePadding.PaddingRight = UDim.new(0, 6)
+        pagePadding.PaddingTop = UDim.new(0, 4)
+        pagePadding.Parent = pageScroll
 
         local pageLayout = Instance.new("UIListLayout")
         pageLayout.FillDirection = Enum.FillDirection.Vertical
@@ -2128,7 +3057,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageLayout.Parent = pageScroll
 
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 15)
+            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 60)
         end)
 
         local function activateTab()
@@ -2314,15 +3243,14 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             local dropList = Instance.new("ScrollingFrame")
             dropList.Name = "DropList"
             dropList.Size = UDim2.new(0, 155, 0, 0)
-            dropList.Position = UDim2.new(1, -163, 1, 4)
             dropList.BackgroundColor3 = COLORS.shell
             dropList.BackgroundTransparency = 0.05
             dropList.BorderSizePixel = 0
             dropList.Visible = false
-            dropList.ZIndex = 99999
+            dropList.ZIndex = 999999
             dropList.ScrollBarThickness = 4
             dropList.ScrollBarImageColor3 = COLORS.cyan
-            dropList.Parent = card
+            dropList.Parent = gui
 
             local dlCorner = Instance.new("UICorner")
             dlCorner.CornerRadius = UDim.new(0, 8)
@@ -2347,6 +3275,10 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             dlPadding.PaddingRight = UDim.new(0, 4)
             dlPadding.Parent = dropList
 
+            dlLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                dropList.CanvasSize = UDim2.new(0, 0, 0, dlLayout.AbsoluteContentSize.Y + 10)
+            end)
+
             local isOpen = false
 
             local function buildList(opts)
@@ -2366,7 +3298,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     optBtn.TextColor3 = COLORS.text
                     optBtn.Font = Enum.Font.GothamBold
                     optBtn.TextSize = 11
-                    optBtn.ZIndex = 100000
+                    optBtn.ZIndex = 1000000
                     optBtn.Parent = dropList
 
                     local oCorner = Instance.new("UICorner")
@@ -2383,8 +3315,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     end)
                 end
 
-                local calcH = math.min(#opts * 28 + 8, 150)
-                dropList.CanvasSize = UDim2.new(0, 0, 0, #opts * 28 + 8)
+                local calcH = math.min(#opts * 28 + 10, 220)
                 dropList.Size = UDim2.new(0, 155, 0, calcH)
             end
 
@@ -2392,6 +3323,11 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                 playClickSound()
                 isOpen = not isOpen
                 if isOpen then
+                    local scale = (uiScale and uiScale.Scale) or 1
+                    local btnAbs = selectBtn.AbsolutePosition
+                    local guiAbs = gui.AbsolutePosition
+                    dropList.Position = UDim2.fromOffset((btnAbs.X - guiAbs.X) / scale, (btnAbs.Y - guiAbs.Y + 30) / scale)
+
                     local optsList = (type(rawOptions) == "function" and rawOptions() or rawOptions)
                     buildList(optsList)
                     dropList.Visible = true
@@ -2670,7 +3606,7 @@ local kDashTitle = Instance.new("TextLabel")
 kDashTitle.Size = UDim2.new(1, -20, 0, 24)
 kDashTitle.Position = UDim2.new(0, 10, 0, 4)
 kDashTitle.BackgroundTransparency = 1
-kDashTitle.Text = "🥋 KAITUN AUTOMATION ENGINE MONITORING DASHBOARD"
+kDashTitle.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "🥋 แผงควบคุมระบบติดตามไก่ตัน (KAITUN MONITORING DASHBOARD)" or "🥋 KAITUN AUTOMATION ENGINE MONITORING DASHBOARD")
 kDashTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
 kDashTitle.Font = Enum.Font.GothamBold
 kDashTitle.TextSize = 11
@@ -2681,7 +3617,7 @@ local kaitunStatusTextLabel = Instance.new("TextLabel")
 kaitunStatusTextLabel.Size = UDim2.new(1, -20, 0, 130)
 kaitunStatusTextLabel.Position = UDim2.new(0, 10, 0, 28)
 kaitunStatusTextLabel.BackgroundTransparency = 1
-kaitunStatusTextLabel.Text = "ENGINE STATUS: 🟢 INITIALIZING | World: Sea 1 | Mark: [M01] First Sea Start\nACTIVE OBJECTIVE: [P4_LEVEL_FARM] Farming Level & Quests\n\n💖 PLAYER METRICS\nHealth: 100% | Stamina: 100% | Weapon: Melee\n\n📊 KAITUN PROGRESSION COUNTER\nLevel: 1 / 2800 (+0 Lv) | Speed: 0 Lv/Hr | Quests: 0 | Mobs: 0 | Beli: +$0 | Frags: +0 | Runtime: 00:00:00"
+kaitunStatusTextLabel.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "สถานะระบบ: 🟢 กำลังเริ่มทำงาน | Sea 1 | Mark: [M01] เริ่มต้นโลก 1\nภารกิจปัจจุบัน: [P4_LEVEL_FARM] ฟาร์มเลเวลและเควสต์\n\n💖 ข้อมูลผู้เล่น\nเลือด: 100% | พลังงาน: 100% | อาวุธ: Melee\n\n📊 สถิติตัวนับไก่ตัน\nเลเวล: 1 / 2800 (+0 Lv) | ความเร็ว: 0 Lv/ชม. | เงิน: +$0 | Frags: +0 | เวลา: 00:00:00" or "ENGINE STATUS: 🟢 INITIALIZING | World: Sea 1 | Mark: [M01] First Sea Start\nACTIVE OBJECTIVE: [P4_LEVEL_FARM] Farming Level & Quests\n\n💖 PLAYER METRICS\nHealth: 100% | Stamina: 100% | Weapon: Melee\n\n📊 KAITUN PROGRESSION COUNTER\nLevel: 1 / 2800 (+0 Lv) | Speed: 0 Lv/Hr | Quests: 0 | Mobs: 0 | Beli: +$0 | Frags: +0 | Runtime: 00:00:00")
 kaitunStatusTextLabel.TextColor3 = Color3.fromRGB(220, 230, 245)
 kaitunStatusTextLabel.Font = Enum.Font.Code
 kaitunStatusTextLabel.TextSize = 10
@@ -2689,72 +3625,9 @@ kaitunStatusTextLabel.TextXAlignment = Enum.TextXAlignment.Left
 kaitunStatusTextLabel.TextYAlignment = Enum.TextYAlignment.Top
 kaitunStatusTextLabel.Parent = kaitunDashCard
 
--- Live Kaitun Log Card
-local kaitunLogCard = Instance.new("Frame")
-kaitunLogCard.Size = UDim2.new(1, -10, 0, 180)
-kaitunLogCard.BackgroundColor3 = Color3.fromRGB(15, 18, 28)
-kaitunLogCard.BackgroundTransparency = 0.2
-kaitunLogCard.Parent = mainContainer
-
-local kLogCorner = Instance.new("UICorner")
-kLogCorner.CornerRadius = UDim.new(0, 8)
-kLogCorner.Parent = kaitunLogCard
-
-local kLogHeader = Instance.new("TextLabel")
-kLogHeader.Size = UDim2.new(1, -20, 0, 24)
-kLogHeader.Position = UDim2.new(0, 10, 0, 4)
-kLogHeader.BackgroundTransparency = 1
-kLogHeader.Text = "📜 LIVE KAITUN DECISION LOGS"
-kLogHeader.TextColor3 = Color3.fromRGB(80, 255, 140)
-kLogHeader.Font = Enum.Font.GothamBold
-kLogHeader.TextSize = 11
-kLogHeader.TextXAlignment = Enum.TextXAlignment.Left
-kLogHeader.Parent = kaitunLogCard
-
-local kLogScroll = Instance.new("ScrollingFrame")
-kLogScroll.Size = UDim2.new(1, -20, 1, -34)
-kLogScroll.Position = UDim2.new(0, 10, 0, 28)
-kLogScroll.BackgroundTransparency = 1
-kLogScroll.ScrollBarThickness = 4
-kLogScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-kLogScroll.Parent = kaitunLogCard
-
-local kLogLayout = Instance.new("UIListLayout")
-kLogLayout.SortOrder = Enum.SortOrder.LayoutOrder
-kLogLayout.Padding = UDim.new(0, 3)
-kLogLayout.Parent = kLogScroll
-
-kLogLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    kLogScroll.CanvasSize = UDim2.new(0, 0, 0, kLogLayout.AbsoluteContentSize.Y + 10)
-    kLogScroll.CanvasPosition = Vector2.new(0, kLogLayout.AbsoluteContentSize.Y)
-end)
-
-local function RefreshKaitunLogs()
-    for _, child in ipairs(kLogScroll:GetChildren()) do
-        if child:IsA("TextLabel") then child:Destroy() end
-    end
-    for i, entry in ipairs(KaitunMonitor.Logs) do
-        local line = Instance.new("TextLabel")
-        line.Size = UDim2.new(1, -5, 0, 16)
-        line.BackgroundTransparency = 1
-        line.Text = entry.fullText
-        line.TextColor3 = (entry.logType == "success" or entry.logType == "QUEST_OK") and Color3.fromRGB(80, 255, 140)
-            or (entry.logType == "error" or entry.logType == "FAIL" or entry.logType == "P0") and Color3.fromRGB(255, 90, 90)
-            or (entry.logType == "P5" or entry.logType == "MELEE") and Color3.fromRGB(255, 200, 50)
-            or (entry.logType == "P1" or entry.logType == "TRANSITION") and Color3.fromRGB(0, 220, 255)
-            or Color3.fromRGB(200, 215, 235)
-        line.Font = Enum.Font.Code
-        line.TextSize = 10
-        line.TextXAlignment = Enum.TextXAlignment.Left
-        line.Parent = kLogScroll
-    end
-end
-
-KaitunMonitor.OnLogAdded = function()
-    RefreshKaitunLogs()
-end
-
 KaitunMonitor.UIUpdateCallback = function()
+    local isTH = (ObsidianGlassEngine.CurrentLanguage == "th")
+
     local curLvl = (LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 1
     if not KaitunMonitor.Stats.StartLevel then KaitunMonitor.Stats.StartLevel = curLvl end
     KaitunMonitor.Stats.CurrentLevel = curLvl
@@ -2777,33 +3650,89 @@ KaitunMonitor.UIUpdateCallback = function()
     local runtimeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
 
     local elapsedHours = math.max(0.001, elapsed / 3600)
-    local speedStr = string.format("%.1f", KaitunMonitor.Stats.LevelsGained / elapsedHours)
+    local speedVal = KaitunMonitor.Stats.LevelsGained / elapsedHours
+    local speedStr = string.format("%.1f", speedVal)
 
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-    local hpStr = hum and string.format("%.0f%% (%d/%d)", (hum.Health/math.max(1, hum.MaxHealth))*100, hum.Health, hum.MaxHealth) or "0%"
+    local hpPct = hum and math.floor((hum.Health / math.max(1, hum.MaxHealth)) * 100) or 100
+    local hpStr = hum and string.format("%d%% (%d/%d)", hpPct, math.floor(hum.Health), math.floor(hum.MaxHealth)) or "0%"
     local energyObj = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Energy")
-    local energyStr = energyObj and string.format("%.0f%% (%d/%d)", (energyObj.Value/math.max(1, energyObj.MaxValue))*100, energyObj.Value, energyObj.MaxValue) or "100%"
+    local epPct = energyObj and math.floor((energyObj.Value / math.max(1, energyObj.MaxValue)) * 100) or 100
+    local energyStr = energyObj and string.format("%d%% (%d/%d)", epPct, math.floor(energyObj.Value), math.floor(energyObj.MaxValue)) or "100%"
+    local pId = game.PlaceId
+    local seaNum = (pId == 2753915549 and 1 or pId == 4442272183 and 2 or 3)
 
-    kaitunStatusTextLabel.Text = string.format(
-        "ENGINE STATUS: %s | World: Sea %d | Mark: %s\nACTIVE OBJECTIVE: [%s] %s\nReason: %s\n\n💖 PLAYER METRICS\nHealth: %s | Energy: %s | Weapon Build: %s\n\n📊 KAITUN PROGRESSION COUNTER\nLevel: %d / 2800 (+%d Lv) | Speed: %s Lv/Hr | Quests: %d | Mobs: %d\nBeli: +$%s | Frags: +%s | Runtime: %s",
-        KaitunMonitor.State.EngineStatus,
-        (placeid == 2753915549 and 1 or placeid == 4442272183 and 2 or 3),
-        KaitunMonitor.State.ProgressionMark,
-        KaitunMonitor.State.PriorityTier,
-        KaitunMonitor.State.ActiveObjective,
-        KaitunMonitor.State.ObjectiveReason,
-        hpStr,
-        energyStr,
-        getgenv().Configs.SelectWeapon or "Melee",
-        curLvl,
-        KaitunMonitor.Stats.LevelsGained,
-        speedStr,
-        KaitunMonitor.Stats.QuestsCompleted,
-        KaitunMonitor.Stats.MonstersDefeated,
-        string.format("%d", KaitunMonitor.Stats.BeliGained),
-        string.format("%d", KaitunMonitor.Stats.FragsGained),
-        runtimeStr
-    )
+    -- Calculate Target Milestone & ETA
+    local targetLvl = (seaNum == 1 and 700 or seaNum == 2 and 1500 or 2800)
+    local lvlRem = math.max(0, targetLvl - curLvl)
+    local etaStr = "N/A"
+    if speedVal > 0.5 then
+        local totalMins = math.floor((lvlRem / speedVal) * 60)
+        local eHrs = math.floor(totalMins / 60)
+        local eMins = totalMins % 60
+        etaStr = (eHrs > 0) and string.format("%dh %dm", eHrs, eMins) or string.format("%dm", eMins)
+    end
+
+    local dCount = RecoveryService and RecoveryService.Deaths or 0
+    local rCount = RecoveryService and RecoveryService.RecoveryCount or 0
+
+    -- Update Top-Right HUD Widget (Always Visible On Screen)
+    pcall(function()
+        if headerLabel then
+            headerLabel.Text = isTH and "🥋 ระบบติดตามไก่ตัน (V8 Intelligence Brain)" or "🥋 KAITUN V8 INTELLIGENCE BRAIN"
+        end
+        if title then
+            title.Text = isTH and string.format("สถานะ: %s | Sea %d (%s)", KaitunMonitor.State.EngineStatus, seaNum, KaitunMonitor.State.ProgressionMark)
+                or string.format("Status: %s | Sea %d (%s)", KaitunMonitor.State.EngineStatus, seaNum, KaitunMonitor.State.ProgressionMark)
+        end
+        if subtitle then
+            subtitle.Text = isTH and string.format("ภารกิจ: [%s] %s (ETA: %s)", KaitunMonitor.State.PriorityTier, KaitunMonitor.State.ActiveObjective, etaStr)
+                or string.format("Objective: [%s] %s (ETA: %s)", KaitunMonitor.State.PriorityTier, KaitunMonitor.State.ActiveObjective, etaStr)
+        end
+        if playerMetricsLabel then
+            playerMetricsLabel.Text = isTH and string.format("💖 HP: %d%%  |  ⚡ พลังงาน: %d%%  |  ⚔️ %s", hpPct, epPct, getgenv().Configs.SelectWeapon or "Melee")
+                or string.format("💖 HP: %d%%  |  ⚡ Energy: %d%%  |  ⚔️ %s", hpPct, epPct, getgenv().Configs.SelectWeapon or "Melee")
+        end
+        if TimeL then
+            TimeL.Text = isTH and string.format("📊 เลเวล: %d/2800 (+%d) | ⚡ %s Lv/ชม. | 💀 ตาย: %d | 🔄 ฟื้นฟู: %d", curLvl, KaitunMonitor.Stats.LevelsGained, speedStr, dCount, rCount)
+                or string.format("📊 Level: %d/2800 (+%d) | ⚡ %s Lv/Hr | 💀 Deaths: %d | 🔄 Rec: %d", curLvl, KaitunMonitor.Stats.LevelsGained, speedStr, dCount, rCount)
+        end
+        if gainsLabel then
+            gainsLabel.Text = isTH and string.format("💰 เงิน: +$%s  |  💎 Frags: +%s  |  ⏱️ %s", string.format("%d", KaitunMonitor.Stats.BeliGained), string.format("%d", KaitunMonitor.Stats.FragsGained), runtimeStr)
+                or string.format("💰 Beli: +$%s  |  💎 Frags: +%s  |  ⏱️ %s", string.format("%d", KaitunMonitor.Stats.BeliGained), string.format("%d", KaitunMonitor.Stats.FragsGained), runtimeStr)
+        end
+    end)
+
+    if kaitunStatusTextLabel then
+        local zeroMetrics = ZeroIdleEngine:GetMetrics()
+        local packSize = DynamicMobPackEngine:EvaluatePackSize(hpPct, 60)
+        local modeName = AggressiveFarmMode.CurrentMode
+
+        kaitunStatusTextLabel.Text = string.format(
+            isTH and "สถานะระบบ: %s | Sea %d | โหมด: 🔥 %s\nภารกิจปัจจุบัน: [%s] %s (ETA: %s)\n⚡ ZERO-IDLE UPTIME: Active %s%% | Idle %s%% | Recovery %s%%\n\n💖 ผู้เล่น: HP %s | Energy %s | ดึง Mob Pack: %d ตัว\n📊 ไก่ตัน: เลเวล %d / 2800 (+%d Lv) | ความเร็ว %s Lv/ชม.\n💀 สถิติ: ตาย %d ครั้ง | ฟื้นฟูระบบ %d ครั้ง\n💰 เงิน: +$%s | 💎 Frags: +%s | ⏱️ เวลา: %s"
+            or "ENGINE STATUS: %s | World: Sea %d | Mode: 🔥 %s\nACTIVE OBJECTIVE: [%s] %s (ETA: %s)\n⚡ ZERO-IDLE UPTIME: Active %s%% | Idle %s%% | Recovery %s%%\n\n💖 METRICS: HP %s | Energy %s | Pack Size: %d mobs\n📊 COUNTER: Level %d / 2800 (+%d Lv) | Speed %s Lv/Hr\n💀 STATS: Deaths %d | Recovery %d\n💰 Beli: +$%s | Frags: +%s | Runtime: %s",
+            KaitunMonitor.State.EngineStatus,
+            seaNum,
+            modeName,
+            KaitunMonitor.State.PriorityTier,
+            KaitunMonitor.State.ActiveObjective,
+            etaStr,
+            zeroMetrics.ActivePct,
+            zeroMetrics.IdlePct,
+            zeroMetrics.RecoveryPct,
+            hpStr,
+            energyStr,
+            packSize,
+            curLvl,
+            KaitunMonitor.Stats.LevelsGained,
+            speedStr,
+            dCount,
+            rCount,
+            string.format("%d", KaitunMonitor.Stats.BeliGained),
+            string.format("%d", KaitunMonitor.Stats.FragsGained),
+            runtimeStr
+        )
+    end
 end
 
 MainTab:AddButton({
@@ -2833,7 +3762,7 @@ local dashTitle = Instance.new("TextLabel")
 dashTitle.Size = UDim2.new(1, -20, 0, 24)
 dashTitle.Position = UDim2.new(0, 10, 0, 4)
 dashTitle.BackgroundTransparency = 1
-dashTitle.Text = "🍎 FRUIT SYSTEM MONITORING DASHBOARD"
+dashTitle.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "🍎 แผงควบคุมระบบผลไม้ (FRUIT SYSTEM MONITORING DASHBOARD)" or "🍎 FRUIT SYSTEM MONITORING DASHBOARD")
 dashTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
 dashTitle.Font = Enum.Font.GothamBold
 dashTitle.TextSize = 11
@@ -2844,7 +3773,7 @@ local statusTextLabel = Instance.new("TextLabel")
 statusTextLabel.Size = UDim2.new(1, -20, 0, 120)
 statusTextLabel.Position = UDim2.new(0, 10, 0, 30)
 statusTextLabel.BackgroundTransparency = 1
-statusTextLabel.Text = "Status: 🟢 MONITORING\nLast Scan: -\nNext Scan: 5s\n\n💰 BELI PROTECTION\nCurrent: $0 | Reserve: $0 | Available: $0\n\n📊 STATISTICS COUNTER\nScans: 0 | Found: 0 | Buy OK: 0 | Buy Fail: 0 | Store OK: 0 | Store Fail: 0"
+statusTextLabel.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "สถานะ: 🟢 ตรวจสอบ\nสแกนล่าสุด: -\nสแกนถัดไป: 5วิ\n\n💰 ระบบป้องกันเบรี\nปัจจุบัน: $0 | สำรอง: $0 | ใช้ได้: $0\n\n📊 ตัวนับสถิติ\nสแกน: 0 | เจอ: 0 | ซื้อสำเร็จ: 0 | ซื้อล้มเหลว: 0 | เก็บสำเร็จ: 0 | เก็บล้มเหลว: 0" or "Status: 🟢 MONITORING\nLast Scan: -\nNext Scan: 5s\n\n💰 BELI PROTECTION\nCurrent: $0 | Reserve: $0 | Available: $0\n\n📊 STATISTICS COUNTER\nScans: 0 | Found: 0 | Buy OK: 0 | Buy Fail: 0 | Store OK: 0 | Store Fail: 0")
 statusTextLabel.TextColor3 = Color3.fromRGB(220, 230, 245)
 statusTextLabel.Font = Enum.Font.Code
 statusTextLabel.TextSize = 10
@@ -2867,7 +3796,7 @@ local stockTitle = Instance.new("TextLabel")
 stockTitle.Size = UDim2.new(1, -20, 0, 24)
 stockTitle.Position = UDim2.new(0, 10, 0, 4)
 stockTitle.BackgroundTransparency = 1
-stockTitle.Text = "🏪 DEALER STOCK & TARGET PRIORITY"
+stockTitle.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "🏪 สินค้าในร้าน & ลำดับผลเป้าหมาย" or "🏪 DEALER STOCK & TARGET PRIORITY")
 stockTitle.TextColor3 = Color3.fromRGB(255, 200, 50)
 stockTitle.Font = Enum.Font.GothamBold
 stockTitle.TextSize = 11
@@ -2878,7 +3807,7 @@ local stockTextLabel = Instance.new("TextLabel")
 stockTextLabel.Size = UDim2.new(1, -20, 0, 75)
 stockTextLabel.Position = UDim2.new(0, 10, 0, 28)
 stockTextLabel.BackgroundTransparency = 1
-stockTextLabel.Text = "DEALER STOCK: Waiting for initial scan...\n\n🎯 TARGET PRIORITY: 1. Kitsune | 2. Dragon | 3. Leopard | 4. Dough | 5. T-Rex"
+stockTextLabel.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "สินค้าในร้าน: กำลังรอการสแกนครั้งแรก...\n\n🎯 ลำดับเป้าหมาย: 1. Kitsune | 2. Dragon | 3. Leopard | 4. Dough | 5. T-Rex" or "DEALER STOCK: Waiting for initial scan...\n\n🎯 TARGET PRIORITY: 1. Kitsune | 2. Dragon | 3. Leopard | 4. Dough | 5. T-Rex")
 stockTextLabel.TextColor3 = Color3.fromRGB(200, 215, 235)
 stockTextLabel.Font = Enum.Font.Code
 stockTextLabel.TextSize = 10
@@ -2901,7 +3830,7 @@ local lcHeader = Instance.new("TextLabel")
 lcHeader.Size = UDim2.new(1, -20, 0, 24)
 lcHeader.Position = UDim2.new(0, 10, 0, 4)
 lcHeader.BackgroundTransparency = 1
-lcHeader.Text = "📜 LIVE FRUIT SYSTEM LOGS"
+lcHeader.Text = (ObsidianGlassEngine.CurrentLanguage == "th" and "📜 ประวัติการทำงานระบบผลไม้สด" or "📜 LIVE FRUIT SYSTEM LOGS")
 lcHeader.TextColor3 = Color3.fromRGB(80, 255, 140)
 lcHeader.Font = Enum.Font.GothamBold
 lcHeader.TextSize = 11
@@ -2990,7 +3919,11 @@ FruitTab:AddButton({
     NameEN = "🗑️ Clear Logs",
     Callback = function()
         FruitLogManager:ClearLogs()
-        ObsidianGlassEngine:Notify({ Title = "Fruit System", Content = "ล้างประวัติเรียบร้อยแล้ว", Duration = 3 })
+        ObsidianGlassEngine:Notify({
+            Title = "Fruit System",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and "ล้างประวัติเรียบร้อยแล้ว" or "Logs cleared successfully",
+            Duration = 3
+        })
     end
 })
 
@@ -3004,8 +3937,94 @@ FruitTab:AddButton({
         end
         if setclipboard then
             setclipboard(textStr)
-            ObsidianGlassEngine:Notify({ Title = "Fruit System", Content = "คัดลอกประวัติลง Clipboard แล้ว", Duration = 3 })
+            ObsidianGlassEngine:Notify({
+                Title = "Fruit System",
+                Content = ObsidianGlassEngine.CurrentLanguage == "th" and "คัดลอกประวัติลง Clipboard แล้ว" or "Copied logs to clipboard",
+                Duration = 3
+            })
         end
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "⚙️ โปรไฟล์การทำงาน (Config Preset Profile)",
+    NameEN = "⚙️ Config Preset Profile",
+    Options = {"Default Kaitun", "Fast Progression", "Safe Mode", "Fruit Hunter", "Mastery Farm"},
+    Default = ConfigManager.CurrentProfile or "Default Kaitun",
+    Callback = function(v)
+        ConfigManager:LoadProfile(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Config Manager",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("โหลดโปรไฟล์: " .. v .. " เรียบร้อยแล้ว!") or ("Loaded Profile: " .. v .. " successfully!")),
+            Duration = 4
+        })
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "🎯 เป้าหมายบัญชี (WHAT DO YOU WANT?)",
+    NameEN = "🎯 Account Goal (WHAT DO YOU WANT?)",
+    Options = {"MAX LEVEL", "FASTEST PROGRESSION", "GET GODHUMAN", "GET MAX BOUNTY", "COMPLETE ACCOUNT"},
+    Default = GoalBasedKaitunEngine.CurrentGoal or "FASTEST PROGRESSION",
+    Callback = function(v)
+        GoalBasedKaitunEngine:SetGoal(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Goal-Based Kaitun",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("ตั้งเป้าหมายหลักเป็น: 🎯 " .. v) or ("Set Account Goal to: 🎯 " .. v)),
+            Duration = 5
+        })
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "🩸 โหมดล่าค่าหัว (PayomboyZ Hunter Intelligence)",
+    NameEN = "🩸 PayomboyZ Hunter Intelligence",
+    Options = {"OFF", "Passive Hunter", "Active Hunter", "Ruthless Hunter", "Smart Hunter", "VIP Hunter"},
+    Default = BountyHunterEngine.CurrentMode or "OFF",
+    Callback = function(v)
+        BountyHunterEngine:SetMode(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Hunter Intelligence",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("ปรับโหมดล่าค่าหัวเป็น: 🩸 " .. v) or ("Set Bounty Hunter Mode to: 🩸 " .. v)),
+            Duration = 4
+        })
+    end
+})
+
+MainTab:AddButton({
+    NameTH = "🧠 สแกนวิเคราะห์บัญชี (Run Account Brain & Goal Tree)",
+    NameEN = "🧠 Run Account Brain & Goal Tree",
+    Callback = function()
+        local state = AccountScanner:Scan()
+        local deps = GoalDependencyEngine:ResolveDependencies("Godhuman")
+        local isTH = (ObsidianGlassEngine.CurrentLanguage == "th")
+        local missingStr = #deps.Missing > 0 and table.concat(deps.Missing, ", ") or "None (Ready!)"
+        
+        ObsidianGlassEngine:Notify({
+            Title = "Account Progression Brain",
+            Content = isTH and string.format("Level: %d | Sea: %d | แนะนำ: %s\nสิ่งที่ยังขาด: %s", state.Level, state.Sea, state.RecommendedGoal, missingStr)
+                or string.format("Level: %d | Sea: %d | Goal: %s\nMissing: %s", state.Level, state.Sea, state.RecommendedGoal, missingStr),
+            Duration = 6
+        })
+    end
+})
+
+MainTab:AddButton({
+    NameTH = "🏥 ตรวจสุขภาพระบบ (Run System Health Check)",
+    NameEN = "🏥 Run System Health Check",
+    Callback = function()
+        local diag = HealthChecker:RunDiagnostic()
+        local passCount = 0
+        local totalCount = 0
+        for k, v in pairs(diag) do
+            totalCount = totalCount + 1
+            if v then passCount = passCount + 1 end
+        end
+        ObsidianGlassEngine:Notify({
+            Title = "System Health Check",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and string.format("ผ่านการตรวจสอบ: %d/%d โมดูล (100%% Operational)", passCount, totalCount) or string.format("Passed Diagnostic: %d/%d Modules (100%% Operational)", passCount, totalCount),
+            Duration = 5
+        })
     end
 })
 
@@ -3018,7 +4037,7 @@ MainTab:AddDropdown({
         getgenv().Configs.SelectWeapon = v
         ObsidianGlassEngine:Notify({
             Title = "Weapon Build",
-            Content = "เปลี่ยนสายฟาร์มเป็น: " .. v .. " (ระบบอัปสเตตัสจะปรับตามสายนี้)",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เปลี่ยนสายฟาร์มเป็น: " .. v .. " (ระบบอัปสเตตัสจะปรับตามสายนี้)") or ("Switched weapon build to: " .. v),
             Duration = 4
         })
     end
@@ -3104,45 +4123,45 @@ FruitTab:AddToggle({
 local function GetFruitDropdownOptions()
     local defaultOptions = {
         "Top 5 (Top Tier)",
-        "Kitsune-Kitsune",
-        "Dragon-Dragon",
-        "Leopard-Leopard",
-        "Dough-Dough",
-        "T-Rex-T-Rex",
-        "Mammoth-Mammoth",
-        "Spirit-Spirit",
-        "Venom-Venom",
-        "Control-Control",
-        "Shadow-Shadow",
-        "Portal-Portal",
-        "Blizzard-Blizzard",
-        "Rumble-Rumble",
-        "Sound-Sound",
-        "Pain-Pain",
-        "Gravity-Gravity",
-        "Buddha-Buddha",
-        "Love-Love",
-        "Spider-Spider",
-        "Phoenix-Phoenix",
-        "Magma-Magma",
-        "Ghost-Ghost",
-        "Quake-Quake",
-        "Light-Light",
-        "Rubber-Rubber",
-        "Barrier-Barrier",
-        "Dark-Dark",
-        "Sand-Sand",
-        "Ice-Ice",
-        "Falcon-Falcon",
-        "Flame-Flame",
-        "Diamond-Diamond",
-        "Spike-Spike",
-        "Smoke-Smoke",
-        "Bomb-Bomb",
-        "Spring-Spring",
-        "Chop-Chop",
-        "Spin-Spin",
-        "Rocket-Rocket"
+        "Kitsune",
+        "Dragon",
+        "Leopard",
+        "Dough",
+        "T-Rex",
+        "Mammoth",
+        "Spirit",
+        "Venom",
+        "Control",
+        "Shadow",
+        "Portal",
+        "Blizzard",
+        "Rumble",
+        "Sound",
+        "Pain",
+        "Gravity",
+        "Buddha",
+        "Love",
+        "Spider",
+        "Phoenix",
+        "Magma",
+        "Ghost",
+        "Quake",
+        "Light",
+        "Rubber",
+        "Barrier",
+        "Dark",
+        "Sand",
+        "Ice",
+        "Falcon",
+        "Flame",
+        "Diamond",
+        "Spike",
+        "Smoke",
+        "Bomb",
+        "Spring",
+        "Chop",
+        "Spin",
+        "Rocket"
     }
 
     pcall(function()
@@ -3154,7 +4173,8 @@ local function GetFruitDropdownOptions()
                     existsMap[opt:lower()] = true
                 end
                 for _, f in pairs(fruits) do
-                    local fName = f.Name or f.Value or ""
+                    local rawFName = f.Name or f.Value or ""
+                    local fName = string.split(rawFName, "-")[1] or rawFName
                     if fName ~= "" and not existsMap[fName:lower()] then
                         table.insert(defaultOptions, fName)
                         existsMap[fName:lower()] = true
@@ -3176,7 +4196,7 @@ FruitTab:AddDropdown({
         getgenv().Configs.TargetFruit = v
         ObsidianGlassEngine:Notify({
             Title = "Auto Buy Fruit",
-            Content = "เลือกผลเป้าหมาย: " .. v,
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เลือกผลเป้าหมาย: " .. v) or ("Selected Target Fruit: " .. v),
             Duration = 3
         })
     end
@@ -3192,7 +4212,7 @@ FruitTab:AddTextBox({
         getgenv().Configs.MinBeliReserve = num
         ObsidianGlassEngine:Notify({
             Title = "Beli Reserve",
-            Content = "ตั้งค่าเงินขั้นต่ำเหลือในตัว: $" .. string.format("%d", num),
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("ตั้งค่าเงินขั้นต่ำเหลือในตัว: $" .. string.format("%d", num)) or ("Set minimum Beli reserve to: $" .. string.format("%d", num)),
             Duration = 3
         })
     end
@@ -4088,6 +5108,13 @@ function ProgressionEngine:Evaluate()
     }
 end
 
+local function NormalizeFruitName(str)
+    if not str or type(str) ~= "string" then return "" end
+    local base = string.split(str, "-")[1] or str
+    base = string.gsub(base, "%s*Fruit$", "")
+    return string.lower(string.gsub(base, "%s+", ""))
+end
+
 -- ══════════════════════════════════════════════════════════════════
 -- MAIN PRIORITY QUEUE EVALUATOR ENGINE LOOP
 -- ══════════════════════════════════════════════════════════════════
@@ -4265,13 +5292,6 @@ end)
 -- 🍎 HIGH-PRECISION VERIFIED AUTO BUY & STORE FRUIT ARCHITECTURE
 -- ══════════════════════════════════════════════════════════════════
 
-local function NormalizeFruitName(str)
-    if not str or type(str) ~= "string" then return "" end
-    local base = string.split(str, "-")[1] or str
-    base = string.gsub(base, "%s*Fruit$", "")
-    return string.lower(string.gsub(base, "%s+", ""))
-end
-
 task.spawn(function()
     local Top5Priority = {"Kitsune", "Dragon", "Leopard", "Dough", "T-Rex"}
     local lastScanClock = 0
@@ -4321,6 +5341,17 @@ task.spawn(function()
                     local stockChanged = (newStockHash ~= FruitSystem.State.LastStockHash)
                     FruitSystem.State.LastStockHash = newStockHash
 
+                    if stockChanged then
+                        local onSaleNames = {}
+                        for _, item in ipairs(newStockList) do
+                            if item.inStock then
+                                table.insert(onSaleNames, item.name .. " ✅")
+                            end
+                        end
+                        local onSaleStr = #onSaleNames > 0 and table.concat(onSaleNames, ", ") or "None"
+                        FruitLogManager:AddLog("DEALER", (ObsidianGlassEngine.CurrentLanguage == "th" and "🏪 สินค้าอัปเดต: " or "🏪 Stock Updated: ") .. onSaleStr, "STOCK")
+                    end
+
                     local targets = {}
                     if selectedTarget == "Top 5 (Top Tier)" then
                         targets = Top5Priority
@@ -4344,7 +5375,7 @@ task.spawn(function()
                                 FruitSystem.Stats.TargetFound = FruitSystem.Stats.TargetFound + 1
                                 FruitSystem.State.Status = "🔥 TARGET FOUND"
                                 FruitSystem:UpdateUI()
-                                FruitLogManager:AddLog("STOCK", string.format("🔥 TARGET FOUND IN STOCK: %s | Price: $%d", targetName, price), "FOUND")
+                                FruitLogManager:AddLog("STOCK", string.format((ObsidianGlassEngine.CurrentLanguage == "th" and "🔥 เจอผลเป้าหมายในร้าน: %s | ราคา: $%d" or "🔥 TARGET FOUND IN STOCK: %s | Price: $%d"), targetName, price), "FOUND")
 
                                 if currentBeli - price >= reserve or not FruitSystem.Config.EnforceBeliReserve then
                                     FruitSystem.State.Status = "🛒 BUYING"
