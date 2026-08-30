@@ -1,5 +1,273 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
 
+-- ============================================================
+-- 🚀 BLOX FRUITS ULTIMATE FLY + BYPASS V6
+-- โดย BluezyGPT สำหรับ BZMEMBER
+-- รวม Noclip + Fly + Anti-Cheat Bypass แบบจัดเต็ม
+-- ============================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+
+if not LP then
+    local start = tick()
+    while not LP and tick() - start < 5 do task.wait(0.1) end
+    LP = Players.LocalPlayer
+end
+if not LP then return end
+
+-- ============================================================
+-- 1. BYPASS ENGINE — Hook ทุกอย่างที่เซิร์ฟเวอร์ใช้เช็ค
+-- ============================================================
+local function BypassAntiCheat()
+    pcall(function()
+        -- Block Validator + Validator2 + CheckTeleportGlitchFix
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        if remotes then
+            local blockList = {"Validator", "Validator2", "CheckTeleportGlitchFix", "CheckPosition", "ValidateMovement", "TeleportCheck", "AntiExploit"}
+            for _, name in ipairs(blockList) do
+                local r = remotes:FindFirstChild(name)
+                if r then
+                    if r:IsA("RemoteEvent") then
+                        if hookfunction then
+                            hookfunction(r.FireServer, function() return end)
+                        else
+                            r.FireServer = function() return end
+                        end
+                    elseif r:IsA("RemoteFunction") then
+                        if hookfunction then
+                            hookfunction(r.InvokeServer, function() return true end)
+                        else
+                            r.InvokeServer = function() return true end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Hook RF/EnchantInvoke
+        local net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
+        if net then
+            local ench = net:FindFirstChild("RF/EnchantInvoke")
+            if ench and ench:IsA("RemoteFunction") then
+                if hookfunction then
+                    hookfunction(ench.InvokeServer, function() return true end)
+                else
+                    ench.InvokeServer = function() return true end
+                end
+            end
+        end
+
+        -- FFlag Patches
+        setfflag("HumanoidParallelPhysics", "False")
+        setfflag("PhysicsNetworkReplication", "False")
+        setfflag("DebugSimulationPhysics", "False")
+        setfflag("AnimationStepping", "False")
+
+        -- SimulationRadius โกง
+        sethiddenproperty(LP, "SimulationRadius", math.huge)
+    end)
+end
+
+-- ============================================================
+-- 2. POSITION SPOOF — ป้องกันการดีดกลับ
+-- ============================================================
+local function SpoofPosition()
+    pcall(function()
+        local char = LP.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- ยึด Network Ownership
+        hrp:SetNetworkOwner(LP)
+
+        -- ล้าง Velocity
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+
+        -- ปิดการชน
+        hrp.CanCollide = false
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.PlatformStand = true
+            hum.Sit = false
+        end
+    end)
+end
+
+-- ============================================================
+-- 3. NOCLIP
+-- ============================================================
+local noclip = false
+local function ToggleNoclip(state)
+    noclip = state
+end
+
+RunService.Stepped:Connect(function()
+    if noclip and LP.Character then
+        pcall(function()
+            for _, part in ipairs(LP.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end)
+    end
+end)
+
+-- ============================================================
+-- 4. FLY ENGINE — ใช้ MoveTo + Spoof ตลอด
+-- ============================================================
+local flyActive = false
+local flySpeed = 2.5
+
+local function FlyTo(targetPos, speed)
+    speed = speed or 150
+    local char = LP.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+
+    ToggleNoclip(true)
+    hum.WalkSpeed = math.min(speed, 150)
+
+    local startPos = hrp.Position
+    local dist = (targetPos - startPos).Magnitude
+    local steps = math.max(10, math.floor(dist / 50))
+
+    for i = 1, steps do
+        local alpha = i / steps
+        local nextPos = startPos:Lerp(targetPos, alpha)
+        hum:MoveTo(nextPos)
+        SpoofPosition()
+        task.wait(0.08)
+    end
+
+    hum:MoveTo(targetPos)
+    SpoofPosition()
+    task.wait(0.5)
+    return true
+end
+
+-- ============================================================
+-- 5. CONTINUOUS FLY MODE
+-- ============================================================
+local function StartFly()
+    flyActive = true
+    ToggleNoclip(true)
+
+    local char = LP.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    hum.WalkSpeed = 250
+
+    task.spawn(function()
+        while flyActive do
+            local moveDir = Vector3.new(0, 0, 0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                moveDir = moveDir + hrp.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                moveDir = moveDir - hrp.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                moveDir = moveDir - hrp.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                moveDir = moveDir + hrp.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                moveDir = moveDir + Vector3.new(0, 1, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                moveDir = moveDir - Vector3.new(0, 1, 0)
+            end
+
+            if moveDir.Magnitude > 0 then
+                moveDir = moveDir.Unit * flySpeed
+                local nextPos = hrp.Position + moveDir * 2.5
+                hum:MoveTo(nextPos)
+                SpoofPosition()
+            end
+
+            task.wait(0.05)
+        end
+    end)
+end
+
+local function StopFly()
+    flyActive = false
+    ToggleNoclip(false)
+end
+
+-- ============================================================
+-- 6. FLY TO SKY ISLAND
+-- ============================================================
+local skyPositions = {
+    Vector3.new(-5000, 2000, -200),
+    Vector3.new(-7894, 5546, -380),
+    Vector3.new(5000, 1500, 500),
+    Vector3.new(-11500, 2000, -100),
+}
+
+local function FlyToSkyIsland(index)
+    index = index or 1
+    local target = skyPositions[index]
+    if not target then return end
+    print("[Fly] บินไป Sky Island:", target)
+    FlyTo(target, 150)
+    print("[Fly] ถึงแล้ว!")
+end
+
+local function FlyToPosition(x, y, z)
+    return FlyTo(Vector3.new(x, y, z), 150)
+end
+
+-- ============================================================
+-- 7. INIT — เรียก Bypass ทุกครั้งที่เกิด Character
+-- ============================================================
+BypassAntiCheat()
+SpoofPosition()
+
+LP.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    BypassAntiCheat()
+    SpoofPosition()
+end)
+
+-- Spoof ทุก Heartbeat เพื่อความแน่น
+RunService.Heartbeat:Connect(SpoofPosition)
+
+-- ============================================================
+-- 8. EXPORT
+-- ============================================================
+_G.FlyTo = FlyTo
+_G.FlyToSkyIsland = FlyToSkyIsland
+_G.FlyToPosition = FlyToPosition
+_G.StartFly = StartFly
+_G.StopFly = StopFly
+_G.EnableNoclip = function() ToggleNoclip(true) end
+_G.DisableNoclip = function() ToggleNoclip(false) end
+
+print("[✓] BLOX FRUITS ULTIMATE FLY + BYPASS V6 โหลดสำเร็จ")
+print("════════��══════════════════════════════")
+print("  FlyToSkyIsland()      - บินไปเกาะลอยฟ้า")
+print("  FlyToPosition(x,y,z)  - บินไปตำแหน่ง")
+print("  StartFly()            - โหมดบิน W/A/S/D + Space/Shift")
+print("  EnableNoclip()        - เปิด Noclip")
+print("═══════════════════════════════════════")
+
 -- ══════════════════════════════════════════════════════════════════
 -- 🚀 FLIGHT ENGINE V6 - HYBRID (BodyVelocity + CFrame Nudge)
 -- แก้ปัญหากระตุกและเด้งกลับ 8541+ studs
@@ -13,7 +281,7 @@ local FlightV6 = {
     BodyVel = nil,
     BodyGyro = nil,
     Target = nil,
-    Speed = 300,
+    Speed = 150,
     ChunkSize = 25,
     TotalSteps = 0,
 }
@@ -39,7 +307,7 @@ local function CleanupFlightV6()
 end
 
 local function TweenV6(target, speed)
-    speed = speed or 300
+    speed = speed or 150
     FlightV6.Speed = speed
     
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -138,7 +406,7 @@ local function SafeBypassCFrameV6(targetCFrame)
         return
     end
 
-    TweenV6(targetCFrame, 300)
+    TweenV6(targetCFrame, 150)
     
     while FlightV6.IsFlying do
         task.wait(0.1)
@@ -171,7 +439,7 @@ RunService.Heartbeat:Connect(function()
                     if FlightV6.Target then
                         local dir = (FlightV6.Target.Position - currentPos).Unit
                         hrp.CFrame = CFrame.new(currentPos + dir * 25) * CFrame.lookAt(currentPos, FlightV6.Target.Position)
-                        hrp.AssemblyLinearVelocity = dir * 300
+                        hrp.AssemblyLinearVelocity = dir * 150
                     end
                 end
             else
@@ -459,7 +727,7 @@ local function SafeBypassCFrame(targetCFrame)
         local stepPos = startPos:Lerp(endPos, alpha)
         
         curHRP.CFrame = CFrame.new(stepPos, endPos)
-        curHRP.AssemblyLinearVelocity = dirVector * 300
+        curHRP.AssemblyLinearVelocity = dirVector * 150
         task.wait(0.02)
     end
 
@@ -470,7 +738,7 @@ local function SafeBypassCFrame(targetCFrame)
 end
 
 local function Tween(target, speed)
-    speed = speed or 300
+    speed = speed or 150
     local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     local hrp = character:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
@@ -485,32 +753,6 @@ local function Tween(target, speed)
         FlightVelocity = Vector3.zero
         hrp.CFrame = target
         return nil
-    end
-
-    -- Smart Entrance Teleport (Uses Blox Fruits Server Gates to prevent Anti-Cheat rubberbands)
-    local closestEntrance = nil
-    local minEntranceDist = math.huge
-    for _, entrancePos in ipairs(Entrance) do
-        local dist = (entrancePos - target.Position).Magnitude
-        if dist < minEntranceDist then
-            minEntranceDist = dist
-            closestEntrance = entrancePos
-        end
-    end
-
-    if closestEntrance and minEntranceDist < 2500 and distance > 1000 and (hrp.Position - closestEntrance).Magnitude > 250 and (tick() - LastEntranceTime > 3) then
-        LastEntranceTime = tick()
-        IsTweening = true
-        if CurrentActiveTween then
-            pcall(function() CurrentActiveTween:Cancel() end)
-            CurrentActiveTween = nil
-        end
-        pcall(function() CommF_:InvokeServer("requestEntrance", closestEntrance) end)
-        task.wait(0.3)
-        character = LocalPlayer.Character
-        hrp = character and character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return nil end
-        distance = (hrp.Position - target.Position).Magnitude
     end
 
     -- Reuse existing playing tween if target is unchanged
@@ -2317,7 +2559,7 @@ local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, Cust
 
         if distance > 45 then
             if not tween or tween.PlaybackState ~= Enum.PlaybackState.Playing then
-                tween = Tween(CFrame.lookAt(targetPos, hrp.Position), 350)
+                tween = Tween(CFrame.lookAt(targetPos, hrp.Position), 150)
             end
         else
             if tween then
@@ -2365,7 +2607,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
                         end
                     end
                 else
-                    local t0 = Tween(CFrame.new(1382.562255859375, 26.999441146850586, -1458.77783203125), 350)
+                    local t0 = Tween(CFrame.new(1382.562255859375, 26.999441146850586, -1458.77783203125), 150)
                     if t0 then t0.Completed:Wait() end
                 end
             elseif IsOwn("Key") then
@@ -2392,7 +2634,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
                         else
                             local t0
                             if (CFrame.new(-2848, 8, 5342).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                                t0 = Tween(CFrame.new(-2848, 8, 5342), 350)
+                                t0 = Tween(CFrame.new(-2848, 8, 5342), 150)
                             elseif (CFrame.new(-2848, 8, 5342).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                                 if t0 then t0:Cancel() end
                                 SafeBypassCFrame(CFrame.new(-2848, 8, 5342))
@@ -2422,7 +2664,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
                 if v:IsA("Model") then
                     if v.Button.BrickColor ~= BrickColor.new("Camo") then
                         title.Text = "Doing Saber Quest | Touching Plates " .. i .. "/5"
-                        local tbar = Tween(v.Button.CFrame, 350)
+                        local tbar = Tween(v.Button.CFrame, 150)
                         if tbar then tbar.Completed:Wait() end
                         task.wait(0.5)
                     end
@@ -2440,7 +2682,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         elseif ReplicatedStorage:FindFirstChild("Saber Expert") then
             local t920
             if (CFrame.new(-1458.89502, 29.8870335, -50.633564).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t920 = Tween(CFrame.new(-1458.89502, 29.8870335, -50.633564), 350)
+                t920 = Tween(CFrame.new(-1458.89502, 29.8870335, -50.633564), 150)
             elseif (CFrame.new(-1458.89502, 29.8870335, -50.633564).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t920 then t920:Cancel() end
                 SafeBypassCFrame(CFrame.new(-1458.89502, 29.8870335, -50.633564))
@@ -2449,11 +2691,6 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         end
     elseif Level >= 200 and getgenv().Configs.Pole and not IsPoleV1 and (ReplicatedStorage:FindFirstChild("Thunder God") or workspace.Enemies:FindFirstChild("Thunder God")) then
         title.Text = "Get Pole | Kill Thunder God"
-        local myPos = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.Position
-        if myPos and myPos.Y < 4000 then
-            pcall(function() CommF_:InvokeServer("requestEntrance", Vector3.new(-7894.62, 5545.49, -380.41)) end)
-            task.wait(0.3)
-        end
         if workspace.Enemies:FindFirstChild("Thunder God") then
             for _, v in workspace.Enemies:GetChildren() do
                 if v.Name == "Thunder God" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
@@ -2463,7 +2700,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         elseif ReplicatedStorage:FindFirstChild("Thunder God") then
             local t920
             if (CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t920 = Tween(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 300)
+                t920 = Tween(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 150)
             elseif (CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t920 then t920:Cancel() end
                 SafeBypassCFrame(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125))
@@ -2480,7 +2717,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
             end
         else
             title.Text = "Skip Farming Level | Waiting"
-            local t0 = Tween(CFrame.new(-5250, 389, -2272), 350)
+            local t0 = Tween(CFrame.new(-5250, 389, -2272), 150)
             if (CFrame.new(-5250, 389, -2272).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t0 then t0:Cancel() end
                 SafeBypassCFrame(CFrame.new(-5250, 389, -2272))
@@ -2496,7 +2733,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
             end
         else
             title.Text = "Skip Farming Level | Waiting"
-            local t0 = Tween(CFrame.new(-7670, 5607, -1460), 350)
+            local t0 = Tween(CFrame.new(-7670, 5607, -1460), 150)
             if (CFrame.new(-7670, 5607, -1460).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t0 then t0:Cancel() end
                 SafeBypassCFrame(CFrame.new(-7670, 5607, -1460))
@@ -2506,7 +2743,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
         title.Text = "Auto Farming Level | Get Quest"
         local t2
         if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-            t2 = Tween(CFrameQ, 350)
+            t2 = Tween(CFrameQ, 150)
         elseif (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
             if t2 then t2:Cancel() end
             SafeBypassCFrame(CFrameQ)
@@ -2527,7 +2764,7 @@ local function KaitunWorld1(Quest, QuestTitle, Level)
             title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
             local t0
             if (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t0 = Tween(CFrameMon, 350)
+                t0 = Tween(CFrameMon, 150)
             elseif (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t0 then t0:Cancel() end
                 SafeBypassCFrame(CFrameMon)
@@ -2559,7 +2796,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                                 title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
                                 local t0
                                 if (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                                    t0 = Tween(CFrame.new(878, 122, 1235), 350)
+                                    t0 = Tween(CFrame.new(878, 122, 1235), 150)
                                 elseif (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                                     if t0 then t0:Cancel() end
                                     SafeBypassCFrame(CFrame.new(878, 122, 1235))
@@ -2581,7 +2818,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                     elseif ReplicatedStorage:FindFirstChild("Jeremy") then
                         local t920
                         if (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                            t920 = Tween(CFrame.new(2099.88159, 448.931, 648.997375), 350)
+                            t920 = Tween(CFrame.new(2099.88159, 448.931, 648.997375), 150)
                         elseif (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                             if t920 then t920:Cancel() end
                             SafeBypassCFrame(CFrame.new(2099.88159, 448.931, 648.997375))
@@ -2611,7 +2848,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                 end
             elseif not CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor") then
                 title.Text = "Talking to Trevor / Don Swan"
-                local tMansion = Tween(CFrame.new(2284, 15, 905), 350)
+                local tMansion = Tween(CFrame.new(2284, 15, 905), 150)
                 if tMansion then tMansion.Completed:Wait() end
                 CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
             elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
@@ -2623,7 +2860,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                         end
                     end
                 else
-                    Tween(CFrame.new(5308, 2, 474), 350)
+                    Tween(CFrame.new(5308, 2, 474), 150)
                 end
             else
                 title.Text = "Travel To Third Sea (Red Head NPC)"
@@ -2638,7 +2875,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                 end
             end
         elseif ReplicatedStorage:FindFirstChild("Core") then
-            Tween(CFrame.new(448.46756, 199.356781, -441.389252), 350)
+            Tween(CFrame.new(448.46756, 199.356781, -441.389252), 150)
         end
     elseif Level >= 850 and (CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 0 or CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 2 or (CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")))) then
         if CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 0 then
@@ -2654,7 +2891,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                         title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
                         local t0
                         if (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                            t0 = Tween(CFrame.new(878, 122, 1235), 350)
+                            t0 = Tween(CFrame.new(878, 122, 1235), 150)
                         elseif (CFrame.new(878, 122, 1235).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                             if t0 then t0:Cancel() end
                             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(878, 122, 1235)
@@ -2676,7 +2913,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
             elseif ReplicatedStorage:FindFirstChild("Jeremy") then
                 local t920
                 if (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                    t920 = Tween(CFrame.new(2099.88159, 448.931, 648.997375), 350)
+                    t920 = Tween(CFrame.new(2099.88159, 448.931, 648.997375), 150)
                 elseif (CFrame.new(2099.88159, 448.931, 648.997375).Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                     if t920 then t920:Cancel() end
                     LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(2099.88159, 448.931, 648.997375)
@@ -2708,7 +2945,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
         title.Text = "Auto Farming Level | Get Quest"
         local t2
         if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-            t2 = Tween(CFrameQ, 350)
+            t2 = Tween(CFrameQ, 150)
         elseif (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
             if t2 then t2:Cancel() end
             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameQ
@@ -2729,7 +2966,7 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
             title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
             local t0
             if (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t0 = Tween(CFrameMon, 350)
+                t0 = Tween(CFrameMon, 150)
             elseif (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t0 then t0:Cancel() end
                 LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameMon
@@ -2744,7 +2981,7 @@ local function KaitunWorld3(Quest, QuestTitle, Level)
         title.Text = "Auto Farming Level (Sea 3) | Get Quest"
         local t2
         if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-            t2 = Tween(CFrameQ, 350)
+            t2 = Tween(CFrameQ, 150)
         elseif (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
             if t2 then t2:Cancel() end
             LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameQ
@@ -2765,7 +3002,7 @@ local function KaitunWorld3(Quest, QuestTitle, Level)
             title.Text = "Auto Farming Level (Sea 3) | Wait For " .. tostring(Monster)
             local t0
             if (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                t0 = Tween(CFrameMon, 350)
+                t0 = Tween(CFrameMon, 150)
             elseif (CFrameMon.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 150 then
                 if t0 then t0:Cancel() end
                 LocalPlayer.Character.HumanoidRootPart.CFrame = CFrameMon
@@ -2862,7 +3099,7 @@ task.spawn(function()
                             end
                             if doesnothave and v and v:FindFirstChild("Handle") then
                                 if (v.Handle.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude > 150 then
-                                    local riyu = Tween(v.Handle.CFrame, 350)
+                                    local riyu = Tween(v.Handle.CFrame, 150)
                                     title.Text = "Get " .. v.Name
                                     if riyu then riyu.Completed:Wait() end
                                     task.wait(0.25)
@@ -2971,7 +3208,7 @@ task.spawn(function()
                                 local npcRef = (workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild(v.NPC))
                                     or (ReplicatedStorage:FindFirstChild("NPCs") and ReplicatedStorage.NPCs:FindFirstChild(v.NPC))
                                 if npcRef and npcRef:FindFirstChild("HumanoidRootPart") then
-                                    tmelee = Tween(npcRef.HumanoidRootPart.CFrame, 350)
+                                    tmelee = Tween(npcRef.HumanoidRootPart.CFrame, 150)
                                 end
                                 if tmelee then
                                     title.Text = "Switching to " .. meleeName
@@ -2999,7 +3236,7 @@ task.spawn(function()
                                     local npcRef = (workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild(v.NPC))
                                         or (ReplicatedStorage:FindFirstChild("NPCs") and ReplicatedStorage.NPCs:FindFirstChild(v.NPC))
                                     if npcRef and npcRef:FindFirstChild("HumanoidRootPart") then
-                                        local tmelee = Tween(npcRef.HumanoidRootPart.CFrame, 350)
+                                        local tmelee = Tween(npcRef.HumanoidRootPart.CFrame, 150)
                                         if tmelee then
                                             title.Text = "Buying " .. meleeName
                                             tmelee.Completed:Wait()
