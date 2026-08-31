@@ -194,6 +194,7 @@ local VVIPRouter = {
     [88838868041067] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoultower", Keywords = {"Iron Soul"} },
     [91584731222940] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
     [130098968673165] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
+    [119524374829397] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
 }
 
 -- ส่งออกข้อมูล Router ไปยัง Global Environment เพื่อให้ Start.txt และ Waiting.txt ดึงข้อมูลได้ทันที
