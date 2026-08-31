@@ -95,6 +95,10 @@ local ObsidianGlassEngine = { Options = {} }
 local Fluent = ObsidianGlassEngine
 local Options = ObsidianGlassEngine.Options
 
+local uiScale = nil
+local userScaleMultiplier = 1.0
+local updateUIScale = function() end
+
 local function playClickSound()
     pcall(function()
         local sound = Instance.new("Sound")
@@ -286,8 +290,24 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     gui.DisplayOrder = 99999
     gui.Parent = parentGui
 
-    local uiScale = Instance.new("UIScale")
-    uiScale.Scale = 1.0
+    uiScale = Instance.new("UIScale")
+    
+    -- 📱 AUTOMATIC MOBILE RESPONSIVE SCALING ENGINE
+    local camera = workspace.CurrentCamera
+    updateUIScale = function()
+        if camera and camera.ViewportSize and uiScale then
+            local vp = camera.ViewportSize
+            local targetWidth, targetHeight = 920, 600
+            local scaleX = (vp.X - 24) / targetWidth
+            local scaleY = (vp.Y - 24) / targetHeight
+            local autoScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
+            uiScale.Scale = autoScale * userScaleMultiplier
+        end
+    end
+    updateUIScale()
+    if camera then
+        camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateUIScale)
+    end
     uiScale.Parent = gui
 
     local shell = Instance.new("Frame")
@@ -1815,7 +1835,8 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             shell.Visible = not shell.Visible
         elseif input.KeyCode == Enum.KeyCode.F then
             playClickSound()
-            uiScale.Scale = (uiScale.Scale == 1.0) and 0.85 or 1.0
+            userScaleMultiplier = (userScaleMultiplier == 1.0) and 0.85 or 1.0
+            updateUIScale()
         end
     end)
 
@@ -3827,9 +3848,8 @@ local UIScaleSlider = Tabs.Settings:AddSlider("UIScaleSlider", {
 })
 
 UIScaleSlider:OnChanged(function(val)
-    if uiScale then
-        uiScale.Scale = tonumber(val) or 1.0
-    end
+    userScaleMultiplier = tonumber(val) or 1.0
+    updateUIScale()
 end)
 
 Tabs.Settings:AddSection("ระบบเซิร์ฟเวอร์ & การเชื่อมต่อ (Server Options)")
