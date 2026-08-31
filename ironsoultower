@@ -3391,183 +3391,249 @@ SystemTab:AddButton({
     end
 })
 
--- TAB 5: Live Status
+-- ════════════════════════════════════════════════
+-- ENDLESS TOWER TOP-RIGHT GLASSMORPHIC TELEMETRY HUD OVERLAY
+-- ════════════════════════════════════════════════
+local hudGui = Instance.new("ScreenGui")
+hudGui.Name = "IronSoul_EndlessTopRightHUD"
+hudGui.ResetOnSpawn = false
+hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+pcall(function()
+    if gethui then
+        hudGui.Parent = gethui()
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(hudGui)
+        hudGui.Parent = CoreGui
+    else
+        hudGui.Parent = CoreGui
+    end
+end)
+if not hudGui.Parent then hudGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Outer Window Frame (Crimson/Magenta Glass Theme for Endless Tower)
+local hudFrame = Instance.new("Frame")
+hudFrame.Size = UDim2.new(0, 325, 0, 245)
+hudFrame.Position = UDim2.new(1, -340, 0, 15)
+hudFrame.BackgroundColor3 = Color3.fromRGB(18, 9, 14)
+hudFrame.BackgroundTransparency = 0.15
+hudFrame.BorderSizePixel = 0
+hudFrame.Active = true
+hudFrame.Draggable = true
+hudFrame.Parent = hudGui
+
+local hudCorner = Instance.new("UICorner")
+hudCorner.CornerRadius = UDim.new(0, 10)
+hudCorner.Parent = hudFrame
+
+local hudStroke = Instance.new("UIStroke")
+hudStroke.Color = Color3.fromRGB(255, 60, 110)
+hudStroke.Thickness = 1.5
+hudStroke.Transparency = 0.25
+hudStroke.Parent = hudFrame
+
+-- Title Header Bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 32)
+titleBar.BackgroundColor3 = Color3.fromRGB(35, 12, 22)
+titleBar.BackgroundTransparency = 0.2
+titleBar.BorderSizePixel = 0
+titleBar.Parent = hudFrame
+
+local tbCorner = Instance.new("UICorner")
+tbCorner.CornerRadius = UDim.new(0, 10)
+tbCorner.Parent = titleBar
+
+local hudTitleLabel = Instance.new("TextLabel")
+hudTitleLabel.Size = UDim2.new(1, -60, 1, 0)
+hudTitleLabel.Position = UDim2.new(0, 10, 0, 0)
+hudTitleLabel.BackgroundTransparency = 1
+hudTitleLabel.Text = "🏰 ENDLESS TOWER TELEMETRY HUD"
+hudTitleLabel.TextColor3 = Color3.fromRGB(255, 180, 210)
+hudTitleLabel.Font = Enum.Font.GothamBold
+hudTitleLabel.TextSize = 11
+hudTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+hudTitleLabel.Parent = titleBar
+
+local liveBadge = Instance.new("TextLabel")
+liveBadge.Size = UDim2.new(0, 48, 0, 18)
+liveBadge.Position = UDim2.new(1, -54, 0, 7)
+liveBadge.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+liveBadge.BackgroundTransparency = 0.2
+liveBadge.Text = "● LIVE"
+liveBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
+liveBadge.Font = Enum.Font.GothamBold
+liveBadge.TextSize = 9.5
+liveBadge.Parent = titleBar
+
+local lbCorner = Instance.new("UICorner")
+lbCorner.CornerRadius = UDim.new(0, 4)
+lbCorner.Parent = liveBadge
+
+-- Body Container
+local bodyFrame = Instance.new("Frame")
+bodyFrame.Size = UDim2.new(1, -16, 1, -40)
+bodyFrame.Position = UDim2.new(0, 8, 0, 36)
+bodyFrame.BackgroundTransparency = 1
+bodyFrame.Parent = hudFrame
+
+-- 1. Automation State Badge
+local hudActionBadge = Instance.new("TextLabel")
+hudActionBadge.Size = UDim2.new(1, 0, 0, 20)
+hudActionBadge.Position = UDim2.new(0, 0, 0, 0)
+hudActionBadge.BackgroundTransparency = 1
+hudActionBadge.Text = "🌾 สถานะ: สแตนด์บาย (Idle)"
+hudActionBadge.TextColor3 = COLORS.primary
+hudActionBadge.Font = Enum.Font.GothamBold
+hudActionBadge.TextSize = 11
+hudActionBadge.TextXAlignment = Enum.TextXAlignment.Left
+hudActionBadge.Parent = bodyFrame
+
+-- 2. Target & Combat Box
+local targetBox = Instance.new("Frame")
+targetBox.Size = UDim2.new(1, 0, 0, 76)
+targetBox.Position = UDim2.new(0, 0, 0, 24)
+targetBox.BackgroundColor3 = Color3.fromRGB(28, 12, 20)
+targetBox.BackgroundTransparency = 0.3
+targetBox.BorderSizePixel = 0
+targetBox.Parent = bodyFrame
+
+local tbBoxCorner = Instance.new("UICorner")
+tbBoxCorner.CornerRadius = UDim.new(0, 6)
+tbBoxCorner.Parent = targetBox
+
+local hudTargetName = Instance.new("TextLabel")
+hudTargetName.Size = UDim2.new(1, -12, 0, 16)
+hudTargetName.Position = UDim2.new(0, 6, 0, 4)
+hudTargetName.BackgroundTransparency = 1
+hudTargetName.Text = "🎯 ศัตรูเป้าหมาย: -"
+hudTargetName.TextColor3 = Color3.fromRGB(255, 255, 255)
+hudTargetName.Font = Enum.Font.GothamBold
+hudTargetName.TextSize = 10.5
+hudTargetName.TextXAlignment = Enum.TextXAlignment.Left
+hudTargetName.Parent = targetBox
+
+local hudHpBarBg = Instance.new("Frame")
+hudHpBarBg.Size = UDim2.new(1, -12, 0, 14)
+hudHpBarBg.Position = UDim2.new(0, 6, 0, 24)
+hudHpBarBg.BackgroundColor3 = Color3.fromRGB(45, 20, 30)
+hudHpBarBg.BorderSizePixel = 0
+hudHpBarBg.Parent = targetBox
+
+local hudHpBarCorner = Instance.new("UICorner")
+hudHpBarCorner.CornerRadius = UDim.new(0, 4)
+hudHpBarCorner.Parent = hudHpBarBg
+
+local hudHpBarFill = Instance.new("Frame")
+hudHpBarFill.Size = UDim2.new(0, 0, 1, 0)
+hudHpBarFill.BackgroundColor3 = COLORS.success
+hudHpBarFill.BorderSizePixel = 0
+hudHpBarFill.Parent = hudHpBarBg
+
+local hudHpFillCorner = Instance.new("UICorner")
+hudHpFillCorner.CornerRadius = UDim.new(0, 4)
+hudHpFillCorner.Parent = hudHpBarFill
+
+local hudHpBarText = Instance.new("TextLabel")
+hudHpBarText.Size = UDim2.fromScale(1, 1)
+hudHpBarText.BackgroundTransparency = 1
+hudHpBarText.Text = "❤️ HP: -"
+hudHpBarText.TextColor3 = Color3.fromRGB(255, 255, 255)
+hudHpBarText.Font = Enum.Font.GothamBold
+hudHpBarText.TextSize = 9
+hudHpBarText.ZIndex = 5
+hudHpBarText.Parent = hudHpBarBg
+
+local hudTargetSub = Instance.new("TextLabel")
+hudTargetSub.Size = UDim2.new(1, -12, 0, 30)
+hudTargetSub.Position = UDim2.new(0, 6, 0, 42)
+hudTargetSub.BackgroundTransparency = 1
+hudTargetSub.Text = "📏 ระยะห่าง: -  |  ⚠️ ระยะอันตราย: -\n🛡️ ตำแหน่ง: -"
+hudTargetSub.TextColor3 = Color3.fromRGB(242, 218, 228)
+hudTargetSub.Font = Enum.Font.Gotham
+hudTargetSub.TextSize = 9.5
+hudTargetSub.TextXAlignment = Enum.TextXAlignment.Left
+hudTargetSub.Parent = targetBox
+
+-- 3. Endless Floor & Card Status Box
+local floorBox = Instance.new("Frame")
+floorBox.Size = UDim2.new(1, 0, 0, 36)
+floorBox.Position = UDim2.new(0, 0, 0, 106)
+floorBox.BackgroundColor3 = Color3.fromRGB(30, 12, 22)
+floorBox.BackgroundTransparency = 0.3
+floorBox.BorderSizePixel = 0
+floorBox.Parent = bodyFrame
+
+local fbCorner = Instance.new("UICorner")
+fbCorner.CornerRadius = UDim.new(0, 6)
+fbCorner.Parent = floorBox
+
+local hudFloorText = Instance.new("TextLabel")
+hudFloorText.Size = UDim2.new(1, -12, 1, 0)
+hudFloorText.Position = UDim2.new(0, 6, 0, 0)
+hudFloorText.BackgroundTransparency = 1
+hudFloorText.Text = "🏰 ชั้นหอคอย: Floor 1  |  🃏 Auto Card: เปิดใช้งาน\n🔄 โหมดหลังจบดัน: เล่นอีกรอบ (Play Again)"
+hudFloorText.TextColor3 = Color3.fromRGB(255, 210, 230)
+hudFloorText.Font = Enum.Font.Gotham
+hudFloorText.TextSize = 9.5
+hudFloorText.TextXAlignment = Enum.TextXAlignment.Left
+hudFloorText.Parent = floorBox
+
+-- 4. Diagnostics & Performance Grid Box
+local diagBox = Instance.new("Frame")
+diagBox.Size = UDim2.new(1, 0, 0, 52)
+diagBox.Position = UDim2.new(0, 0, 0, 148)
+diagBox.BackgroundColor3 = Color3.fromRGB(25, 10, 18)
+diagBox.BackgroundTransparency = 0.3
+diagBox.BorderSizePixel = 0
+diagBox.Parent = bodyFrame
+
+local dbCorner = Instance.new("UICorner")
+dbCorner.CornerRadius = UDim.new(0, 6)
+dbCorner.Parent = diagBox
+
+local hudDiagText = Instance.new("TextLabel")
+hudDiagText.Size = UDim2.new(1, -12, 1, 0)
+hudDiagText.Position = UDim2.new(0, 6, 0, 0)
+hudDiagText.BackgroundTransparency = 1
+hudDiagText.Text = "💓 Ticks: 0  |  🎯 Scans: 0  |  🃏 Cards Picked: 0\n⚡ FPS: --  |  📶 Ping: -- ms  |  ⚠️ Dangers: 0"
+hudDiagText.TextColor3 = Color3.fromRGB(220, 175, 195)
+hudDiagText.Font = Enum.Font.Gotham
+hudDiagText.TextSize = 9.5
+hudDiagText.TextXAlignment = Enum.TextXAlignment.Left
+hudDiagText.Parent = diagBox
+
+-- FPS & Ping Monitor Loop
+local lastFpsTick = os.clock()
+local frameCount = 0
+local currentFps = 60
+local currentPing = 0
+
+connect(RunService.RenderStepped, function()
+    frameCount += 1
+    local now = os.clock()
+    if now - lastFpsTick >= 1.0 then
+        currentFps = math.floor(frameCount / (now - lastFpsTick))
+        frameCount = 0
+        lastFpsTick = now
+        pcall(function()
+            local StatsService = game:GetService("Stats")
+            currentPing = math.floor(StatsService.Network.ServerStatsItem["Data Ping"]:GetValue())
+        end)
+    end
+end)
+
+-- TAB 5: Live Status (Updated to HUD Toggle & Overview)
 local StatusTab = Window:AddTab({ Title = "📊 สถานะการทำงาน" })
+StatusTab:AddSection("ENDLESS TOWER TELEMETRY HUD OVERLAY")
 
-StatusTab:AddSection("REALTIME MONITORING DASHBOARD")
-
--- Target & Combat Panel
-local targetCard = Instance.new("Frame")
-targetCard.Size = UDim2.new(1, -6, 0, 115)
-targetCard.BackgroundColor3 = COLORS.glassDeep
-targetCard.BackgroundTransparency = 0.18
-targetCard.BorderSizePixel = 0
-targetCard.Parent = StatusTab.page
-
-local tcCorner = Instance.new("UICorner")
-tcCorner.CornerRadius = UDim.new(0, 8)
-tcCorner.Parent = targetCard
-
-local tcStroke = Instance.new("UIStroke")
-tcStroke.Color = COLORS.cyan
-tcStroke.Thickness = 1
-tcStroke.Transparency = 0.4
-tcStroke.Parent = targetCard
-
-local targetHeader = Instance.new("TextLabel")
-targetHeader.Size = UDim2.new(1, -20, 0, 18)
-targetHeader.Position = UDim2.new(0, 10, 0, 6)
-targetHeader.BackgroundTransparency = 1
-targetHeader.Text = "🎯 TARGET & COMBAT MONITOR (ข้อมูลศัตรู & การต่อสู้)"
-targetHeader.TextColor3 = COLORS.cyan
-targetHeader.Font = Enum.Font.GothamBold
-targetHeader.TextSize = 11
-targetHeader.TextXAlignment = Enum.TextXAlignment.Left
-targetHeader.Parent = targetCard
-
-local targetNameLabel = Instance.new("TextLabel")
-targetNameLabel.Size = UDim2.new(1, -20, 0, 18)
-targetNameLabel.Position = UDim2.new(0, 10, 0, 24)
-targetNameLabel.BackgroundTransparency = 1
-targetNameLabel.Text = "🎯 ศัตรูเป้าหมาย: -"
-targetNameLabel.TextColor3 = COLORS.text
-targetNameLabel.Font = Enum.Font.GothamBold
-targetNameLabel.TextSize = 12
-targetNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetNameLabel.Parent = targetCard
-
--- Health Bar Frame
-local hpBarBg = Instance.new("Frame")
-hpBarBg.Size = UDim2.new(1, -20, 0, 18)
-hpBarBg.Position = UDim2.new(0, 10, 0, 44)
-hpBarBg.BackgroundColor3 = COLORS.input
-hpBarBg.BorderSizePixel = 0
-hpBarBg.Parent = targetCard
-
-local hpBarCorner = Instance.new("UICorner")
-hpBarCorner.CornerRadius = UDim.new(0, 5)
-hpBarCorner.Parent = hpBarBg
-
-local hpBarFill = Instance.new("Frame")
-hpBarFill.Size = UDim2.new(0, 0, 1, 0)
-hpBarFill.BackgroundColor3 = COLORS.success
-hpBarFill.BorderSizePixel = 0
-hpBarFill.Parent = hpBarBg
-
-local hpFillCorner = Instance.new("UICorner")
-hpFillCorner.CornerRadius = UDim.new(0, 5)
-hpFillCorner.Parent = hpBarFill
-
-local hpBarText = Instance.new("TextLabel")
-hpBarText.Size = UDim2.fromScale(1, 1)
-hpBarText.BackgroundTransparency = 1
-hpBarText.Text = "❤️ HP: -"
-hpBarText.TextColor3 = Color3.fromRGB(255, 255, 255)
-hpBarText.Font = Enum.Font.GothamBold
-hpBarText.TextSize = 10
-hpBarText.ZIndex = 5
-hpBarText.Parent = hpBarBg
-
-local targetDetailsLabel = Instance.new("TextLabel")
-targetDetailsLabel.Size = UDim2.new(1, -20, 0, 44)
-targetDetailsLabel.Position = UDim2.new(0, 10, 0, 66)
-targetDetailsLabel.BackgroundTransparency = 1
-targetDetailsLabel.Text = "📏 ระยะห่าง: -  |  🛡️ โหมดตำแหน่ง: -\n⚠️ ระยะอันตราย: -"
-targetDetailsLabel.TextColor3 = COLORS.textMuted
-targetDetailsLabel.Font = Enum.Font.Gotham
-targetDetailsLabel.TextSize = 10
-targetDetailsLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetDetailsLabel.Parent = targetCard
-
--- Automation Status Card
-local actionCard = Instance.new("Frame")
-actionCard.Size = UDim2.new(1, -6, 0, 75)
-actionCard.BackgroundColor3 = COLORS.glassDeep
-actionCard.BackgroundTransparency = 0.18
-actionCard.BorderSizePixel = 0
-actionCard.Parent = StatusTab.page
-
-local acCorner = Instance.new("UICorner")
-acCorner.CornerRadius = UDim.new(0, 8)
-acCorner.Parent = actionCard
-
-local acStroke = Instance.new("UIStroke")
-acStroke.Color = COLORS.primary
-acStroke.Thickness = 1
-acStroke.Transparency = 0.4
-acStroke.Parent = actionCard
-
-local actionHeader = Instance.new("TextLabel")
-actionHeader.Size = UDim2.new(1, -20, 0, 18)
-actionHeader.Position = UDim2.new(0, 10, 0, 6)
-actionHeader.BackgroundTransparency = 1
-actionHeader.Text = "📌 AUTOMATION STATE & STAGE CONTROL"
-actionHeader.TextColor3 = COLORS.cyan
-actionHeader.Font = Enum.Font.GothamBold
-actionHeader.TextSize = 11
-actionHeader.TextXAlignment = Enum.TextXAlignment.Left
-actionHeader.Parent = actionCard
-
-local actionStatusBadge = Instance.new("TextLabel")
-actionStatusBadge.Size = UDim2.new(1, -20, 0, 22)
-actionStatusBadge.Position = UDim2.new(0, 10, 0, 24)
-actionStatusBadge.BackgroundTransparency = 1
-actionStatusBadge.Text = "🌾 สถานะ: สแตนด์บาย (Idle)"
-actionStatusBadge.TextColor3 = COLORS.primary
-actionStatusBadge.Font = Enum.Font.GothamBold
-actionStatusBadge.TextSize = 12
-actionStatusBadge.TextXAlignment = Enum.TextXAlignment.Left
-actionStatusBadge.Parent = actionCard
-
-local portalStatusLabel = Instance.new("TextLabel")
-portalStatusLabel.Size = UDim2.new(1, -20, 0, 20)
-portalStatusLabel.Position = UDim2.new(0, 10, 0, 48)
-portalStatusLabel.BackgroundTransparency = 1
-portalStatusLabel.Text = "🌀 ประตูทางออก: กำลังสแกนหาประตูใกล้เคียง..."
-portalStatusLabel.TextColor3 = COLORS.textMuted
-portalStatusLabel.Font = Enum.Font.Gotham
-portalStatusLabel.TextSize = 10
-portalStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-portalStatusLabel.Parent = actionCard
-
--- Diagnostics Card
-local diagCard = Instance.new("Frame")
-diagCard.Size = UDim2.new(1, -6, 0, 85)
-diagCard.BackgroundColor3 = COLORS.glassDeep
-diagCard.BackgroundTransparency = 0.18
-diagCard.BorderSizePixel = 0
-diagCard.Parent = StatusTab.page
-
-local dcCorner = Instance.new("UICorner")
-dcCorner.CornerRadius = UDim.new(0, 8)
-dcCorner.Parent = diagCard
-
-local dcStroke = Instance.new("UIStroke")
-dcStroke.Color = COLORS.glassRaised
-dcStroke.Thickness = 1
-dcStroke.Parent = diagCard
-
-local diagHeader = Instance.new("TextLabel")
-diagHeader.Size = UDim2.new(1, -20, 0, 18)
-diagHeader.Position = UDim2.new(0, 10, 0, 6)
-diagHeader.BackgroundTransparency = 1
-diagHeader.Text = "🔍 DIAGNOSTICS & SYSTEM PERFORMANCE"
-diagHeader.TextColor3 = COLORS.cyan
-diagHeader.Font = Enum.Font.GothamBold
-diagHeader.TextSize = 11
-diagHeader.TextXAlignment = Enum.TextXAlignment.Left
-diagHeader.Parent = diagCard
-
-local diagGridLabel = Instance.new("TextLabel")
-diagGridLabel.Size = UDim2.new(1, -20, 0, 52)
-diagGridLabel.Position = UDim2.new(0, 10, 0, 24)
-diagGridLabel.BackgroundTransparency = 1
-diagGridLabel.Text = "💓 Ticks (Heartbeat): 0  |  🎯 Target Scans: 0\n🌀 Portal Scans: 0  |  ⚠️ Danger Scans: 0"
-diagGridLabel.TextColor3 = COLORS.textMuted
-diagGridLabel.Font = Enum.Font.Gotham
-diagGridLabel.TextSize = 10
-diagGridLabel.TextXAlignment = Enum.TextXAlignment.Left
-diagGridLabel.Parent = diagCard
+StatusTab:AddButton({
+    Title = "👁️ เปิด / ปิด Telemetry HUD (มุมขวาบน)",
+    Desc = "สลับการแสดงผลหน้าจอติดตามสถานะหอคอยมุมขวาบนของหน้าจอ",
+    Callback = function()
+        hudGui.Enabled = not hudGui.Enabled
+    end
+})
 
 -- Function to sync UI values when loadSettings runs
 local function syncUIElements()
@@ -3593,6 +3659,37 @@ local function syncUIElements()
     end)
 end
 
+local function detectCurrentFloor()
+    local fl = nil
+    pcall(function()
+        fl = workspace:GetAttribute("Floor") or workspace:GetAttribute("EndlessFloor") or workspace:GetAttribute("Stage")
+    end)
+    if not fl then
+        pcall(function()
+            fl = player:GetAttribute("EndlessFloor") or player:GetAttribute("Floor") or player:GetAttribute("Stage")
+        end)
+    end
+    if not fl then
+        pcall(function()
+            local pg = player:FindFirstChildOfClass("PlayerGui")
+            if pg then
+                for _, g in ipairs(pg:GetChildren()) do
+                    if g:IsA("ScreenGui") and g.Enabled then
+                        for _, v in ipairs(g:GetDescendants()) do
+                            if v:IsA("TextLabel") and v.Visible and v.Text:find("Floor") then
+                                local num = v.Text:match("Floor%s*(%d+)") or v.Text:match("(%d+)")
+                                if num then fl = tonumber(num) break end
+                            end
+                        end
+                    end
+                    if fl then break end
+                end
+            end
+        end)
+    end
+    return fl or 1
+end
+
 local function updateStatusPanel()
     pcall(function()
         local distanceText =
@@ -3604,68 +3701,94 @@ local function updateStatusPanel()
         local dangerText =
             State.DangerDistance < math.huge
             and string.format("%.1f Studs", State.DangerDistance)
-            or "-"
+            or "Safe"
 
         local rawName = tostring(State.LastTargetName or "-")
         local cleanTargetName = rawName
         if rawName ~= "-" then
             local clean = string.gsub(rawName, "%-%x+.*$", "")
             if clean ~= "" then cleanTargetName = clean end
-            if #cleanTargetName > 28 then
-                cleanTargetName = string.sub(cleanTargetName, 1, 25) .. "..."
+            if #cleanTargetName > 24 then
+                cleanTargetName = string.sub(cleanTargetName, 1, 22) .. "..."
             end
         end
 
-        targetNameLabel.Text = "🎯 ศัตรูเป้าหมาย: " .. cleanTargetName
+        hudTargetName.Text = "🎯 ศัตรูเป้าหมาย: " .. cleanTargetName
 
         if State.TargetHealthPercent > 0 then
-            hpBarFill.Size = UDim2.new(hpPct / 100, 0, 1, 0)
-            hpBarText.Text = string.format("❤️ HP: %.0f%%", hpPct)
+            hudHpBarFill.Size = UDim2.new(hpPct / 100, 0, 1, 0)
+            hudHpBarText.Text = string.format("❤️ HP: %.0f%%", hpPct)
             if hpPct > 50 then
-                hpBarFill.BackgroundColor3 = COLORS.success
+                hudHpBarFill.BackgroundColor3 = COLORS.success
             elseif hpPct > 20 then
-                hpBarFill.BackgroundColor3 = COLORS.warning
+                hudHpBarFill.BackgroundColor3 = COLORS.warning
             else
-                hpBarFill.BackgroundColor3 = COLORS.danger
+                hudHpBarFill.BackgroundColor3 = COLORS.danger
             end
         else
-            hpBarFill.Size = UDim2.new(0, 0, 1, 0)
-            hpBarText.Text = "❤️ HP: -"
+            hudHpBarFill.Size = UDim2.new(0, 0, 1, 0)
+            hudHpBarText.Text = "❤️ HP: -"
         end
 
-        local posModeText = Config.UndergroundMode and "มุดใต้ดิน (Underground)" or "ลอยเหนือหัว (Above)"
-        targetDetailsLabel.Text = string.format("📏 ระยะห่าง: %s  |  🛡️ โหมดตำแหน่ง: %s\n⚠️ ระยะอันตราย: %s",
-            distanceText, posModeText, dangerText)
+        local currentHeight = Config.UndergroundMode and Config.UndergroundHeight or Config.AboveHeight
+        local posModeText = Config.UndergroundMode
+            and string.format("มุดใต้ดิน (-%d Studs)", currentHeight)
+            or string.format("ลอยเหนือหัว (+%d Studs)", currentHeight)
+
+        hudTargetSub.Text = string.format("📏 ระยะห่าง: %s  |  ⚠️ อันตราย: %s\n🛡️ ตำแหน่ง: %s",
+            distanceText, dangerText, posModeText)
 
         local actStr = tostring(State.CurrentAction or "Idle")
         local icon = "🌾"
+        local badgeColor = COLORS.warning
+
         if actStr == "Farming" then
-            icon = "🌾"
-            actStr = "กำลังฟาร์มมอนสเตอร์ (Farming)"
+            icon = "⚔️"
+            actStr = "กำลังเคลียร์ชั้นมอนสเตอร์ (Farming Floor)"
+            badgeColor = COLORS.success
+        elseif actStr == "Selecting Bonus Card" then
+            icon = "🃏"
+            actStr = "กำลังเลือกการ์ดโบนัส (Selecting Card)"
+            badgeColor = COLORS.cyan
         elseif actStr == "Portal" then
             icon = "🌀"
-            actStr = "กำลังเคลื่อนที่เข้าประตูทางออก (Portal Exit)"
+            actStr = "กำลังไปประตูขึ้นชั้นถัดไป (Next Floor Exit)"
+            badgeColor = COLORS.cyan
+        elseif actStr == "Play Again" then
+            icon = "🔄"
+            actStr = "จบหอคอย: กำลังเริ่มเล่นอีกรอบ (Play Again)"
+            badgeColor = COLORS.cyan
+        elseif actStr == "Return to Lobby" then
+            icon = "🏠"
+            actStr = "จบหอคอย: กำลังกลับล็อบบี้ (Return Lobby)"
+            badgeColor = COLORS.warning
         elseif actStr == "Recovering" then
             icon = "⚡"
             actStr = "กำลังฟื้นฟูระบบ (Recovering)"
+            badgeColor = COLORS.warning
         elseif actStr == "Emergency Escape" then
             icon = "🚨"
             actStr = "ถอยหลบฉุกเฉิน (Emergency Escape)"
+            badgeColor = COLORS.danger
         else
             icon = "💤"
             actStr = "สแตนด์บาย (Idle)"
-        end
-        actionStatusBadge.Text = icon .. " สถานะ: " .. actStr
-
-        if State.Portal and State.Portal.PrimaryPart then
-            local distP = (State.Root.Position - State.Portal.PrimaryPart.Position).Magnitude
-            portalStatusLabel.Text = string.format("🌀 ประตูทางออก: สแกนพบประตู (ระยะ %.1f Studs)", distP)
-        else
-            portalStatusLabel.Text = "🌀 ประตูทางออก: กำลังสแกนหาประตูใกล้เคียง..."
+            badgeColor = COLORS.textMuted
         end
 
-        diagGridLabel.Text = string.format("💓 Ticks (Heartbeat): %d  |  🎯 Target Scans: %d\n🌀 Portal Scans: %d  |  ⚠️ Danger Scans: %d",
-            State.Stats.Heartbeats, State.Stats.TargetScans, State.Stats.PortalScans, State.Stats.DangerScans)
+        hudActionBadge.Text = icon .. " " .. actStr
+        hudActionBadge.TextColor3 = badgeColor
+
+        local currentFloor = detectCurrentFloor()
+        local cardStatusText = Config.AutoBonusCard and "เปิดใช้งาน (Auto Card)" or "ปิดใช้งาน"
+        local afterRunText = Config.AfterRunMode == "Again" and "เล่นอีกรอบ (Play Again)" or "กลับล็อบบี้ (Lobby)"
+        hudFloorText.Text = string.format("🏰 ชั้นหอคอย: Floor %s  |  🃏 เลือกการ์ด: %s\n🔄 หลังจบหอคอย: %s",
+            tostring(currentFloor), cardStatusText, afterRunText)
+
+        local cardsPickedCount = State.Stats and State.Stats.CardsPicked or 0
+        hudDiagText.Text = string.format("💓 Ticks: %d  |  🎯 Scans: %d  |  🃏 Cards Picked: %d\n⚡ FPS: %d  |  📶 Ping: %d ms  |  ⚠️ Dangers: %d",
+            State.Stats.Heartbeats, State.Stats.TargetScans, cardsPickedCount,
+            currentFps, currentPing, State.Stats.DangerScans)
     end)
 end
 
@@ -3844,8 +3967,12 @@ local function unload()
     disconnectList(Connections)
 
     pcall(function()
+        if hudGui then hudGui:Destroy() end
         local pGui = (typeof(gethui) == "function") and gethui() or CoreGui
         if not pGui then pGui = playerGui end
+        if pGui:FindFirstChild("IronSoul_EndlessTopRightHUD") then
+            pGui.IronSoul_EndlessTopRightHUD:Destroy()
+        end
         if pGui:FindFirstChild("ObsidianGlass2_UI") then
             pGui.ObsidianGlass2_UI:Destroy()
         end
