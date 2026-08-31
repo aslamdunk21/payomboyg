@@ -17,13 +17,14 @@ local Config = {
     AutoAvoid = false,
     AutoProgressStage = true,
     AutoReturnToLobby = true,
+    -- AfterRunMode: "Lobby" = กลับล็อบบี้, "Again" = เล่นอีกรอบ
+    AfterRunMode = "Lobby",
     SaveSettings = true,
     PerformanceMode = false,
     Debug = false,
     SafeMode = true,
     EmergencyEscape = true,
 
-    -- UI theme accent (RGB table keeps settings JSON-safe).
     AccentColor = {92, 82, 145},
 
     OrbitRadius = 6,
@@ -32,6 +33,13 @@ local Config = {
     AboveHeight = 8,
     UndergroundHeight = 8,
     UndergroundMode = true,
+    -- Adaptive height: ปรับความสูงอัตโนมัติเมื่อรับดาเมจหนัก
+    AdaptiveHeight = true,
+    AdaptiveHeightStep = 4,
+    AdaptiveHeightMax = 30,
+    AdaptiveHeightMin = 2,
+    -- ดาเมจ threshold ที่จะ trigger adaptive height (% of max HP)
+    DamageAdaptThreshold = 0.12,
 
     KillAuraRadius = 45,
 
@@ -45,6 +53,8 @@ local Config = {
     DoorOpenWait = 0.90,
     ExitSearchRadius = 600,
     ExitRetryDelay = 0.75,
+    -- Portal stuck detection
+    PortalStuckTimeout = 4.0,
 
     MovementInterval = 1 / 30,
     AttackInterval = 0.10,
@@ -228,6 +238,8 @@ local function loadSettings()
 end
 
 local lastReturnLobbyTime = 0
+-- _G bridge: sync AfterRunMode กับ src_irs.txt
+_G.IronSoul_AfterRunMode = Config.AfterRunMode
 
 local function returnToLobby()
     pcall(function()
@@ -239,40 +251,93 @@ local function returnToLobby()
     end)
 end
 
-local function isSettlementScreenVisible()
-    local sGui = playerGui:FindFirstChild("ScreenSettlement") 
-        or playerGui:FindFirstChild("Settlement") 
-        or playerGui:FindFirstChild("SettlementGUI")
-
-    if sGui then
-        if sGui:IsA("ScreenGui") then
-            if sGui.Enabled then
-                local hasVisibleChild = false
-                for _, child in ipairs(sGui:GetChildren()) do
-                    if child:IsA("GuiObject") and child.Visible then
-                        hasVisibleChild = true
+local function playAgain()
+    -- เปิด ScreenSettlement ก่อน แล้วหา Play Again button
+    pcall(function()
+        local taskRE = ReplicatedStorage:FindFirstChild("Framework", true)
+        if taskRE then
+            taskRE = taskRE:FindFirstChild("TaskSystem", true)
+            if taskRE then taskRE = taskRE:FindFirstChild("TaskRE") end
+        end
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement")
+            task.wait(0.5)
+        end
+        -- หา Play Again button แล้วคลิก
+        local found = false
+        for _, child in ipairs(playerGui:GetDescendants()) do
+            if child:IsA("TextButton") or child:IsA("ImageButton") then
+                local n = string.lower(child.Name .. (child:IsA("TextButton") and child.Text or ""))
+                if n:find("again") or n:find("replay") or n:find("restart") or n:find("playagain") then
+                    if child.Visible then
+                        pcall(function() child:Activate() end)
+                        found = true
                         break
                     end
                 end
-                if hasVisibleChild then return true end
+            end
+        end
+        if not found then
+            -- fallback: ExitSettlement ก็ยังดีกว่าค้าง
+            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+            local gamePlayerRE = remotes and remotes:FindFirstChild("GamePlayerRE")
+            if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
+        end
+    end)
+end
+
+local function handleAfterRun()
+    -- sync _G ก่อนทำงาน เผื่อ src_irs.txt เปลี่ยน mode
+    if _G.IronSoul_AfterRunMode then
+        Config.AfterRunMode = _G.IronSoul_AfterRunMode
+    end
+    if Config.AfterRunMode == "Again" then
+        playAgain()
+    else
+        returnToLobby()
+    end
+end
+
+-- Settlement detector: ตรวจสอบจากหลายสัญญาณ (multi-signal)
+local function isSettlementScreenVisible()
+    local signals = 0
+
+    -- Signal 1: ScreenSettlement GUI
+    local sGui = playerGui:FindFirstChild("ScreenSettlement")
+        or playerGui:FindFirstChild("Settlement")
+        or playerGui:FindFirstChild("SettlementGUI")
+    if sGui then
+        if sGui:IsA("ScreenGui") and sGui.Enabled then
+            for _, child in ipairs(sGui:GetChildren()) do
+                if child:IsA("GuiObject") and child.Visible then signals += 1; break end
             end
         elseif sGui:IsA("GuiObject") and sGui.Visible then
-            return true
+            signals += 1
         end
     end
 
-    for _, child in ipairs(playerGui:GetChildren()) do
+    -- Signal 2: Return to Lobby / Play Again button visible anywhere
+    for _, child in ipairs(playerGui:GetDescendants()) do
         if child.Name ~= "ObsidianGlass2_UI" and child.Name ~= "ObsidianGlass_NotifHolder" then
-            local returnBtn = child:FindFirstChild("Return to lobby", true) 
-                or child:FindFirstChild("ReturnToLobby", true)
-                or child:FindFirstChild("Return to Lobby", true)
-            if returnBtn and returnBtn:IsA("GuiObject") and returnBtn.Visible then
-                return true
+            if child:IsA("TextButton") or child:IsA("ImageButton") then
+                local n = string.lower(child.Name)
+                local t = child:IsA("TextButton") and string.lower(child.Text) or ""
+                if (n:find("return") or n:find("lobby") or n:find("again") or
+                    t:find("return") or t:find("lobby") or t:find("again")) and child.Visible then
+                    signals += 1
+                    break
+                end
             end
         end
     end
 
-    return false
+    -- Signal 3: Game phase = Settlement via _G
+    if _G.IronSoul_Phase == "Settlement" or _G.IronSoul_Phase == "SETTLEMENT" then
+        signals += 1
+    end
+
+    -- 2 สัญญาณขึ้นไป = confirmed
+    return signals >= 2
 end
 
 
@@ -408,26 +473,45 @@ end
 
 local function installHealthWatcher()
     local humanoid = State.Humanoid
-
-    if not humanoid then
-        return
-    end
+    if not humanoid then return end
 
     local previous = humanoid.Health
 
     connectCharacter(humanoid.HealthChanged, function(health)
-        if health < previous then
+        local delta = previous - health -- ดาเมจที่รับ
+        if delta > 0 then
             State.LastDamageTime = os.clock()
 
-            if Config.AutoAvoid then
-                State.CurrentAction = "Avoiding Attack"
+            -- Adaptive Height Engine
+            if Config.AdaptiveHeight and humanoid.MaxHealth > 0 then
+                local dmgPct = delta / humanoid.MaxHealth
+                if dmgPct >= Config.DamageAdaptThreshold then
+                    -- บินอยู่ → บินสูงขึ้น | มุดดินอยู่ → ลึกลงอีก
+                    if Config.UndergroundMode then
+                        Config.UndergroundHeight = math.min(
+                            Config.AdaptiveHeightMax,
+                            Config.UndergroundHeight + Config.AdaptiveHeightStep
+                        )
+                    else
+                        Config.AboveHeight = math.min(
+                            Config.AdaptiveHeightMax,
+                            Config.AboveHeight + Config.AdaptiveHeightStep
+                        )
+                    end
+                    -- คืนค่าหลัง 8 วินาที
+                    local savedUG = Config.UndergroundHeight
+                    local savedAB = Config.AboveHeight
+                    task.delay(8, function()
+                        if not State.Unloaded then
+                            Config.UndergroundHeight = math.max(Config.AdaptiveHeightMin, savedUG - Config.AdaptiveHeightStep)
+                            Config.AboveHeight       = math.max(Config.AdaptiveHeightMin, savedAB - Config.AdaptiveHeightStep)
+                        end
+                    end)
+                end
             end
 
-            if Config.EmergencyEscape then
-                task.spawn(function()
-                    emergencyEscape("Emergency Escape")
-                end)
-            end
+            if Config.AutoAvoid then State.CurrentAction = "Avoiding Attack" end
+            if Config.EmergencyEscape then task.spawn(function() emergencyEscape("Emergency Escape") end) end
         end
 
         previous = health
@@ -1171,23 +1255,30 @@ end
 
 
 local function teleportNearPortal()
-    if not State.Root then
-        return
-    end
+    if not State.Root then return end
 
     local portal, score = findBestPortalOnly()
-
-    if not portal or score < 2 then
-        return
-    end
+    if not portal or score < 2 then return end
 
     State.Portal = portal
     State.PortalScore = score
 
-    local position =
-        portal.Position - portal.CFrame.LookVector * 8
+    local approach = portal.Position - portal.CFrame.LookVector * 8
+    travelToPosition(approach, portal.Position)
+    task.wait(0.25)
 
-    travelToPosition(position, portal.Position)
+    -- ตรวจสอบว่าวาปสำเร็จไหม (stuck detection)
+    if State.Root and (State.Root.Position - approach).Magnitude > 20 then
+        -- ยังไม่ถึง: ยืนๆสักพักแล้ว teleport ใหม่
+        task.wait(0.5)
+        pcall(function()
+            State.Root.CFrame = CFrame.new(approach)
+            State.Root.AssemblyLinearVelocity = Vector3.zero
+        end)
+        task.wait(0.3)
+        -- nudge เข้าไปในประตูเลย
+        travelToPosition(portal.Position, portal.Position + portal.CFrame.LookVector)
+    end
 end
 
 
@@ -3544,14 +3635,23 @@ connect(RunService.Heartbeat, function(dt)
         updateStatusPanel()
     end
 
-    if Config.AutoReturnToLobby and isSettlementScreenVisible() then
+    if isSettlementScreenVisible() then
         local now = tick()
-        if now - lastReturnLobbyTime >= 1.5 then
+        if now - lastReturnLobbyTime >= 2.0 then
             lastReturnLobbyTime = now
-            State.CurrentAction = "Return to Lobby"
-            returnToLobby()
+            State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
+            -- export phase ให้ src_irs.txt รู้
+            _G.IronSoul_Phase = "Settlement"
+            if Config.AutoReturnToLobby then
+                task.spawn(handleAfterRun)
+            end
         end
         return
+    else
+        -- clear settlement phase
+        if _G.IronSoul_Phase == "Settlement" then
+            _G.IronSoul_Phase = "LOBBY"
+        end
     end
 
     if not Config.AutoFarm then
