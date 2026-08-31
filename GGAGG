@@ -3849,12 +3849,33 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
             return
         end
 
+        -- 🔍 Check Target Recipient Username & Fetch Roblox UID + Avatar Image
+        local targetUserId = nil
+        local targetDisplayName = recipient
+        
+        local checkOk, uidResult = pcall(function()
+            return Players:GetUserIdFromNameAsync(recipient)
+        end)
+
+        if checkOk and tonumber(uidResult) then
+            targetUserId = tonumber(uidResult)
+            pcall(function()
+                local infos = UserService:GetUserInfosByUserIdsAsync({targetUserId})
+                if infos and infos[1] and infos[1].DisplayName then
+                    targetDisplayName = infos[1].DisplayName
+                end
+            end)
+        else
+            Engine:Notify({ Title = "ตรวจสอบผู้รับล้มเหลว ❌", Content = "❌ ไม่พบ Username นี้ใน Roblox! กรุณาตรวจสอบชื่อผู้รับให้ถูกต้อง" })
+            return
+        end
+
         -- Render Confirmation Modal Pop-up (Top level modal parented to ScreenGui)
         local confirmModal = Instance.new("Frame")
-        confirmModal.Size = UDim2.new(0, 400, 0, 220)
+        confirmModal.Size = UDim2.new(0, 440, 0, 250)
         confirmModal.AnchorPoint = Vector2.new(0.5, 0.5)
         confirmModal.Position = UDim2.new(0.5, 0, 0.5, 0)
-        confirmModal.BackgroundColor3 = Color3.fromRGB(26, 18, 20)
+        confirmModal.BackgroundColor3 = Color3.fromRGB(24, 16, 18)
         confirmModal.BorderSizePixel = 0
         confirmModal.ZIndex = 100000
         confirmModal.Parent = gui
@@ -3868,8 +3889,9 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         cmStroke.Thickness = 1.5
         cmStroke.Parent = confirmModal
 
+        -- Top Title
         local cmTitle = Instance.new("TextLabel")
-        cmTitle.Size = UDim2.new(1, -24, 0, 30)
+        cmTitle.Size = UDim2.new(1, -32, 0, 24)
         cmTitle.Position = UDim2.new(0, 16, 0, 12)
         cmTitle.BackgroundTransparency = 1
         cmTitle.Text = "🎄 Confirm Send Trade Mail"
@@ -3880,21 +3902,100 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         cmTitle.ZIndex = 100001
         cmTitle.Parent = confirmModal
 
+        -- Profile Card Container (Avatar + User info)
+        local profileCard = Instance.new("Frame")
+        profileCard.Size = UDim2.new(1, -32, 0, 90)
+        profileCard.Position = UDim2.new(0, 16, 0, 42)
+        profileCard.BackgroundColor3 = Color3.fromRGB(34, 22, 26)
+        profileCard.ZIndex = 100001
+        profileCard.Parent = confirmModal
+
+        local pcCorn = Instance.new("UICorner")
+        pcCorn.CornerRadius = UDim.new(0, 10)
+        pcCorn.Parent = profileCard
+
+        local pcStroke = Instance.new("UIStroke")
+        pcStroke.Color = Color3.fromRGB(70, 40, 48)
+        pcStroke.Thickness = 1
+        pcStroke.Parent = profileCard
+
+        -- Avatar Headshot Image
+        local avatarImg = Instance.new("ImageLabel")
+        avatarImg.Size = UDim2.new(0, 68, 0, 68)
+        avatarImg.Position = UDim2.new(0, 11, 0, 11)
+        avatarImg.BackgroundColor3 = Color3.fromRGB(20, 12, 14)
+        avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(targetUserId) .. "&w=150&h=150"
+        avatarImg.ZIndex = 100002
+        avatarImg.Parent = profileCard
+
+        local avCorn = Instance.new("UICorner")
+        avCorn.CornerRadius = UDim.new(0, 34)
+        avCorn.Parent = avatarImg
+
+        local avStroke = Instance.new("UIStroke")
+        avStroke.Color = Color3.fromRGB(220, 38, 38)
+        avStroke.Thickness = 2
+        avStroke.Parent = avatarImg
+
+        -- User Details Text
+        local lblDisplayName = Instance.new("TextLabel")
+        lblDisplayName.Size = UDim2.new(1, -95, 0, 20)
+        lblDisplayName.Position = UDim2.new(0, 90, 0, 12)
+        lblDisplayName.BackgroundTransparency = 1
+        lblDisplayName.Text = targetDisplayName
+        lblDisplayName.TextColor3 = Color3.fromRGB(255, 255, 255)
+        lblDisplayName.Font = Enum.Font.GothamBold
+        lblDisplayName.TextSize = 13
+        lblDisplayName.TextXAlignment = Enum.TextXAlignment.Left
+        lblDisplayName.ZIndex = 100002
+        lblDisplayName.Parent = profileCard
+
+        local lblUsername = Instance.new("TextLabel")
+        lblUsername.Size = UDim2.new(1, -95, 0, 16)
+        lblUsername.Position = UDim2.new(0, 90, 0, 34)
+        lblUsername.BackgroundTransparency = 1
+        lblUsername.Text = "@" .. recipient
+        lblUsername.TextColor3 = Color3.fromRGB(200, 170, 175)
+        lblUsername.Font = Enum.Font.Gotham
+        lblUsername.TextSize = 11
+        lblUsername.TextXAlignment = Enum.TextXAlignment.Left
+        lblUsername.ZIndex = 100002
+        lblUsername.Parent = profileCard
+
+        local lblUid = Instance.new("TextLabel")
+        lblUid.Size = UDim2.new(1, -95, 0, 16)
+        lblUid.Position = UDim2.new(0, 90, 0, 54)
+        lblUid.BackgroundTransparency = 1
+        lblUid.Text = "🆔 User ID: " .. tostring(targetUserId)
+        lblUid.TextColor3 = Color3.fromRGB(255, 215, 0)
+        lblUid.Font = Enum.Font.GothamBold
+        lblUid.TextSize = 10
+        lblUid.TextXAlignment = Enum.TextXAlignment.Left
+        lblUid.ZIndex = 100002
+        lblUid.Parent = profileCard
+
+        -- Items Summary Info
+        local totalValSum = 0
+        for _, it in ipairs(selectedList) do
+            totalValSum = totalValSum + (it.Value or 0)
+        end
+
         local cmSub = Instance.new("TextLabel")
-        cmSub.Size = UDim2.new(1, -24, 0, 20)
-        cmSub.Position = UDim2.new(0, 16, 0, 44)
+        cmSub.Size = UDim2.new(1, -32, 0, 36)
+        cmSub.Position = UDim2.new(0, 16, 0, 140)
         cmSub.BackgroundTransparency = 1
-        cmSub.Text = string.format("Target: %s  •  Items: %d selected", recipient, #selectedList)
-        cmSub.TextColor3 = Color3.fromRGB(200, 170, 175)
-        cmSub.Font = Enum.Font.Gotham
+        cmSub.Text = string.format("📦 เลือกไอเทม: %d รายการ  •  💰 รวมมูลค่า: %s Sheckles", #selectedList, Engine:FormatMoney(totalValSum))
+        cmSub.TextColor3 = Color3.fromRGB(240, 220, 225)
+        cmSub.Font = Enum.Font.GothamMedium
         cmSub.TextSize = 11
         cmSub.TextXAlignment = Enum.TextXAlignment.Left
         cmSub.ZIndex = 100001
         cmSub.Parent = confirmModal
 
+        -- Action Buttons
         local btnConfirmSend = Instance.new("TextButton")
-        btnConfirmSend.Size = UDim2.new(0, 160, 0, 36)
-        btnConfirmSend.Position = UDim2.new(1, -176, 1, -48)
+        btnConfirmSend.Size = UDim2.new(0, 180, 0, 36)
+        btnConfirmSend.Position = UDim2.new(1, -196, 1, -48)
         btnConfirmSend.BackgroundColor3 = Color3.fromRGB(220, 38, 38) -- Santa Red Confirm
         btnConfirmSend.Text = "Confirm Send 🚀"
         btnConfirmSend.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -3908,10 +4009,10 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         csCorn.Parent = btnConfirmSend
 
         local btnCancelSend = Instance.new("TextButton")
-        btnCancelSend.Size = UDim2.new(0, 150, 0, 36)
+        btnCancelSend.Size = UDim2.new(0, 170, 0, 36)
         btnCancelSend.Position = UDim2.new(0, 16, 1, -48)
         btnCancelSend.BackgroundColor3 = Color3.fromRGB(45, 30, 35)
-        btnCancelSend.Text = "ยกเลิก"
+        btnCancelSend.Text = "Cancel"
         btnCancelSend.TextColor3 = Color3.fromRGB(220, 200, 205)
         btnCancelSend.Font = Enum.Font.GothamBold
         btnCancelSend.TextSize = 12
