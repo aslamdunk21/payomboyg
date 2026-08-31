@@ -3443,7 +3443,7 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
     closeBtn.Size = UDim2.new(0, 26, 0, 26)
     closeBtn.Position = UDim2.new(1, -34, 0, 7)
     closeBtn.BackgroundTransparency = 1
-    closeBtn.Text = "✕"
+    closeBtn.Text = "X"
     closeBtn.TextColor3 = Color3.fromRGB(255, 180, 180)
     closeBtn.Font = Enum.Font.GothamBold
     closeBtn.TextSize = 13
