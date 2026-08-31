@@ -1,3 +1,7 @@
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
@@ -8,7 +12,17 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+if not player then
+    pcall(function()
+        player = Players:FindFirstChildOfClass("Player") or Players.PlayerAdded:Wait()
+    end)
+    while not player do
+        task.wait(0.1)
+        player = Players.LocalPlayer
+    end
+end
+
+local playerGui = player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui")
 
 local Config = {
     AutoFarm = true,
@@ -17,13 +31,14 @@ local Config = {
     AutoAvoid = false,
     AutoProgressStage = true,
     AutoReturnToLobby = true,
+    -- AfterRunMode: "Lobby" = กลับล็อบบี้, "Again" = เล่นอีกรอบ
+    AfterRunMode = "Lobby",
     SaveSettings = true,
     PerformanceMode = false,
     Debug = false,
     SafeMode = true,
     EmergencyEscape = true,
 
-    -- UI theme accent (RGB table keeps settings JSON-safe).
     AccentColor = {92, 82, 145},
 
     OrbitRadius = 6,
@@ -32,6 +47,12 @@ local Config = {
     AboveHeight = 8,
     UndergroundHeight = 8,
     UndergroundMode = true,
+    -- Adaptive height engine
+    AdaptiveHeight = true,
+    AdaptiveHeightStep = 4,
+    AdaptiveHeightMax = 30,
+    AdaptiveHeightMin = 2,
+    DamageAdaptThreshold = 0.12,
 
     KillAuraRadius = 45,
 
@@ -45,6 +66,7 @@ local Config = {
     DoorOpenWait = 0.90,
     ExitSearchRadius = 600,
     ExitRetryDelay = 0.75,
+    PortalStuckTimeout = 4.0,
 
     MovementInterval = 1 / 30,
     AttackInterval = 0.10,
@@ -228,51 +250,90 @@ local function loadSettings()
 end
 
 local lastReturnLobbyTime = 0
+_G.IronSoul_AfterRunMode = Config.AfterRunMode
 
 local function returnToLobby()
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         local gamePlayerRE = remotes and remotes:FindFirstChild("GamePlayerRE")
-        if gamePlayerRE then
-            gamePlayerRE:FireServer("ExitSettlement")
-        end
+        if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
     end)
 end
 
-local function isSettlementScreenVisible()
-    local sGui = playerGui:FindFirstChild("ScreenSettlement") 
-        or playerGui:FindFirstChild("Settlement") 
-        or playerGui:FindFirstChild("SettlementGUI")
-
-    if sGui then
-        if sGui:IsA("ScreenGui") then
-            if sGui.Enabled then
-                local hasVisibleChild = false
-                for _, child in ipairs(sGui:GetChildren()) do
-                    if child:IsA("GuiObject") and child.Visible then
-                        hasVisibleChild = true
-                        break
+-- คลิก button จริงๆใน Settlement GUI (cross-server: remote ยิงไม่ได้)
+local function clickSettlementButton(mode)
+    -- รอให้ GUI โหลดสักพักก่อนสแกน
+    task.wait(1.0)
+    local keywords = mode == "Again"
+        and {"again", "replay", "restart", "playagain", "อีกครั้ง"}
+        or  {"lobby", "return", "exit", "ล็อบบี้", "กลับ"}
+    for _, child in ipairs(playerGui:GetDescendants()) do
+        if child:IsA("TextButton") or child:IsA("ImageButton") then
+            if child.Visible and child.Active then
+                local combined = string.lower(
+                    child.Name ..
+                    (child:IsA("TextButton") and child.Text or "")
+                )
+                for _, kw in ipairs(keywords) do
+                    if combined:find(kw, 1, true) then
+                        pcall(function() child:Activate() end)
+                        task.wait(0.1)
+                        -- fire mouse click เป็น fallback
+                        pcall(function()
+                            local uis = game:GetService("UserInputService")
+                            local vum = game:GetService("VirtualInputManager")
+                            local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                            task.wait(0.05)
+                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                        end)
+                        return true
                     end
                 end
-                if hasVisibleChild then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function handleAfterRun()
+    if _G.IronSoul_AfterRunMode then Config.AfterRunMode = _G.IronSoul_AfterRunMode end
+    local clicked = clickSettlementButton(Config.AfterRunMode)
+    if not clicked then
+        -- fallback: ยิง remote ExitSettlement
+        returnToLobby()
+    end
+end
+
+-- Multi-signal settlement detector
+local function isSettlementScreenVisible()
+    local signals = 0
+    local sGui = playerGui:FindFirstChild("ScreenSettlement")
+        or playerGui:FindFirstChild("Settlement")
+        or playerGui:FindFirstChild("SettlementGUI")
+    if sGui then
+        if sGui:IsA("ScreenGui") and sGui.Enabled then
+            for _, c in ipairs(sGui:GetChildren()) do
+                if c:IsA("GuiObject") and c.Visible then signals += 1; break end
             end
         elseif sGui:IsA("GuiObject") and sGui.Visible then
-            return true
+            signals += 1
         end
     end
-
-    for _, child in ipairs(playerGui:GetChildren()) do
+    for _, child in ipairs(playerGui:GetDescendants()) do
         if child.Name ~= "ObsidianGlass2_UI" and child.Name ~= "ObsidianGlass_NotifHolder" then
-            local returnBtn = child:FindFirstChild("Return to lobby", true) 
-                or child:FindFirstChild("ReturnToLobby", true)
-                or child:FindFirstChild("Return to Lobby", true)
-            if returnBtn and returnBtn:IsA("GuiObject") and returnBtn.Visible then
-                return true
+            if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
+                local n = string.lower(child.Name)
+                local t = child:IsA("TextButton") and string.lower(child.Text) or ""
+                if n:find("lobby") or n:find("again") or n:find("return")
+                    or t:find("lobby") or t:find("again") or t:find("return") then
+                    signals += 1; break
+                end
             end
         end
     end
-
-    return false
+    if _G.IronSoul_Phase == "Settlement" then signals += 1 end
+    return signals >= 2
 end
 
 
@@ -290,7 +351,7 @@ end
 
 pcall(loadSettings)
 
--- Default AutoFarm to true for seamless dungeon start.
+-- Default AutoFarm to true for seamless Endless Tower start.
 Config.AutoFarm = true
 _G.AutoFarm = true
 
@@ -408,31 +469,36 @@ end
 
 local function installHealthWatcher()
     local humanoid = State.Humanoid
-
-    if not humanoid then
-        return
-    end
-
+    if not humanoid then return end
     local previous = humanoid.Health
-
     connectCharacter(humanoid.HealthChanged, function(health)
-        if health < previous then
+        local delta = previous - health
+        if delta > 0 then
             State.LastDamageTime = os.clock()
-
-            if Config.AutoAvoid then
-                State.CurrentAction = "Avoiding Attack"
+            -- Adaptive Height Engine
+            if Config.AdaptiveHeight and humanoid.MaxHealth > 0 then
+                local dmgPct = delta / humanoid.MaxHealth
+                if dmgPct >= Config.DamageAdaptThreshold then
+                    if Config.UndergroundMode then
+                        Config.UndergroundHeight = math.min(Config.AdaptiveHeightMax, Config.UndergroundHeight + Config.AdaptiveHeightStep)
+                    else
+                        Config.AboveHeight = math.min(Config.AdaptiveHeightMax, Config.AboveHeight + Config.AdaptiveHeightStep)
+                    end
+                    local savedUG = Config.UndergroundHeight
+                    local savedAB = Config.AboveHeight
+                    task.delay(8, function()
+                        if not State.Unloaded then
+                            Config.UndergroundHeight = math.max(Config.AdaptiveHeightMin, savedUG - Config.AdaptiveHeightStep)
+                            Config.AboveHeight = math.max(Config.AdaptiveHeightMin, savedAB - Config.AdaptiveHeightStep)
+                        end
+                    end)
+                end
             end
-
-            if Config.EmergencyEscape then
-                task.spawn(function()
-                    emergencyEscape("Emergency Escape")
-                end)
-            end
+            if Config.AutoAvoid then State.CurrentAction = "Avoiding Attack" end
+            if Config.EmergencyEscape then task.spawn(function() emergencyEscape("Emergency Escape") end) end
         end
-
         previous = health
-        State.TargetHealthPercent =
-            State.TargetHumanoid
+        State.TargetHealthPercent = State.TargetHumanoid
             and State.TargetHumanoid.MaxHealth > 0
             and math.clamp(State.TargetHumanoid.Health / State.TargetHumanoid.MaxHealth, 0, 1) * 100
             or 0
@@ -1380,17 +1446,19 @@ local orbitRayParams = RaycastParams.new()
 orbitRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function getGroundY(position)
-    if not State.TargetModel or not State.Character then
+    if not State.Character then
         return nil
     end
 
-    orbitRayParams.FilterDescendantsInstances = {
-        State.TargetModel,
-        State.Character,
-    }
+    local filter = { State.Character }
+    if State.TargetModel then
+        table.insert(filter, State.TargetModel)
+    end
 
-    local rayOrigin = position + Vector3.new(0, 80, 0)
-    local rayDirection = Vector3.new(0, -400, 0)
+    orbitRayParams.FilterDescendantsInstances = filter
+
+    local rayOrigin = position + Vector3.new(0, 100, 0)
+    local rayDirection = Vector3.new(0, -500, 0)
 
     local result = workspace:Raycast(
         rayOrigin,
@@ -1482,15 +1550,31 @@ local function lockCombatPosition()
 
     if not desiredCFrame or not State.Character or not State.Root then
         setUndergroundPhysics(false)
-        if State.Root then
-            -- Anti-Void Fall Protection: Restore character position if dropping below floor level
-            if State.Root.Position.Y < -50 or (State.GroundY and State.Root.Position.Y < (State.GroundY - 3)) then
+        if State.Root and State.Humanoid then
+            pcall(function()
+                State.Humanoid.PlatformStand = false
+                State.Humanoid.AutoRotate = true
+            end)
+
+            -- เมื่อไม่มีมอนสเตอร์ / รอมอนชุดใหม่: วางตัวละครกลับมายืนบนพื้นทันที ป้องกันการร่วงหรือตกใต้ดิน
+            local currentPos = State.Root.Position
+            local gY = getGroundY(currentPos) or State.GroundY
+            if gY and gY > -150 then
                 pcall(function()
-                    local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 4) or 10
-                    State.Root.CFrame = CFrame.new(State.Root.Position.X, targetY, State.Root.Position.Z)
+                    State.GroundY = gY
+                    State.Root.CFrame = CFrame.new(currentPos.X, gY + 3.5, currentPos.Z)
                     State.Root.AssemblyLinearVelocity = Vector3.zero
                     State.Root.AssemblyAngularVelocity = Vector3.zero
                 end)
+            else
+                if currentPos.Y < -50 then
+                    pcall(function()
+                        local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 3.5) or 10
+                        State.Root.CFrame = CFrame.new(currentPos.X, targetY, currentPos.Z)
+                        State.Root.AssemblyLinearVelocity = Vector3.zero
+                        State.Root.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
             end
         end
         return
@@ -1520,6 +1604,48 @@ local function updateOrbit(dt)
     end
 
     lockCombatPosition()
+end
+
+local lastStartCheck = 0
+local function checkAutoStartExtraWeapon()
+    local now = tick()
+    if now - lastStartCheck < 0.5 then return end
+    lastStartCheck = now
+
+    pcall(function()
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "ObsidianGlass2_UI" and gui.Name ~= "ObsidianGlass_NotifHolder" then
+                for _, desc in ipairs(gui:GetDescendants()) do
+                    if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+                        local btnText = desc:IsA("TextButton") and desc.Text or ""
+                        local childText = desc:FindFirstChildOfClass("TextLabel") and desc:FindFirstChildOfClass("TextLabel").Text or ""
+                        if btnText == "Start" or childText == "Start" or desc.Name == "Start" or desc.Name == "StartButton" or desc.Name:lower():find("start") then
+                            if typeof(firesignal) == "function" then
+                                pcall(function() firesignal(desc.MouseButton1Click) end)
+                            end
+                            pcall(function()
+                                VirtualInputManager:SendMouseButtonEvent(
+                                    desc.AbsolutePosition.X + desc.AbsoluteSize.X / 2,
+                                    desc.AbsolutePosition.Y + desc.AbsoluteSize.Y / 2,
+                                    0, true, game, 1
+                                )
+                                task.wait(0.05)
+                                VirtualInputManager:SendMouseButtonEvent(
+                                    desc.AbsolutePosition.X + desc.AbsoluteSize.X / 2,
+                                    desc.AbsolutePosition.Y + desc.AbsoluteSize.Y / 2,
+                                    0, false, game, 1
+                                )
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    pcall(function()
+        local matchRE = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
+        if matchRE then matchRE:FireServer("Start") end
+    end)
 end
 
 local function updateKillAura()
@@ -2283,7 +2409,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabLayout.Parent = tabScroll
 
     tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        task.defer(function()
+            pcall(function()
+                if tabScroll and tabLayout then
+                    tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+                end
+            end)
+        end)
     end)
 
     local statusCard = Instance.new("Frame")
@@ -2547,7 +2679,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageLayout.Parent = pageScroll
 
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+            task.defer(function()
+                pcall(function()
+                    if pageScroll and pageLayout then
+                        pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+                    end
+                end)
+            end)
         end)
 
         local function activateTab()
@@ -3536,6 +3674,8 @@ connect(RunService.Heartbeat, function(dt)
         return
     end
 
+    checkAutoStartExtraWeapon()
+
     State.Stats.Heartbeats += 1
 
     State.StatusTimer += dt
@@ -3544,14 +3684,19 @@ connect(RunService.Heartbeat, function(dt)
         updateStatusPanel()
     end
 
-    if Config.AutoReturnToLobby and isSettlementScreenVisible() then
+    if isSettlementScreenVisible() then
         local now = tick()
-        if now - lastReturnLobbyTime >= 1.5 then
+        if now - lastReturnLobbyTime >= 2.0 then
             lastReturnLobbyTime = now
-            State.CurrentAction = "Return to Lobby"
-            returnToLobby()
+            State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
+            _G.IronSoul_Phase = "Settlement"
+            if Config.AutoReturnToLobby then
+                task.spawn(handleAfterRun)
+            end
         end
         return
+    else
+        if _G.IronSoul_Phase == "Settlement" then _G.IronSoul_Phase = "LOBBY" end
     end
 
     if not Config.AutoFarm then
@@ -3722,13 +3867,126 @@ end
 
 _G.IronSoulUnload = unload
 
+-- ════════════════════════════════════════
+-- ENDLESS TOWER — AUTONOMOUS SYSTEMS
+-- 1) Auto-click Start on weapon select screen
+-- 2) Auto-pick power card every 5 floors
+-- ════════════════════════════════════════
+
+-- หาและคลิก button ตาม keyword list
+local function clickFirstVisible(keywords)
+    for _, child in ipairs(playerGui:GetDescendants()) do
+        if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
+            local combined = string.lower(
+                child.Name .. (child:IsA("TextButton") and child.Text or "")
+            )
+            for _, kw in ipairs(keywords) do
+                if combined:find(kw, 1, true) then
+                    pcall(function() child:Activate() end)
+                    pcall(function()
+                        local vum = game:GetService("VirtualInputManager")
+                        local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                        vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                        task.wait(0.05)
+                        vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                    end)
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- พาวเยอร์หน้าเลือกอาวุธ (Start screen) สังเกตจาก button "Start" / "เริ่ม"
+local _startScreenHandled = false
+task.spawn(function()
+    task.wait(3) -- รอ GUI โหลด
+    while not State.Unloaded do
+        if not _startScreenHandled then
+            local clicked = clickFirstVisible({"start", "เริ่ม", "begin", "ready"})
+            if clicked then
+                _startScreenHandled = true
+                ObsidianGlassEngine:Notify({
+                    Title = "Endless Tower",
+                    Content = "กดปุ่ม Start อัตโนมัติแล้ว!",
+                    Duration = 3
+                })
+            end
+        end
+        task.wait(1.5)
+    end
+end)
+
+-- Power card selector ทุก 5 ชั้น: ตรวจหน้าต่างเลือกพลัง และคลิกตัวแรก
+local _lastPowerPickTime = 0
+task.spawn(function()
+    while not State.Unloaded do
+        task.wait(1)
+        -- ตรวจหน้าต่างเลือกพลัง (ScreenPowerSelect / PowerCard / FloorReward)
+        local powerGui = playerGui:FindFirstChild("ScreenPowerSelect")
+            or playerGui:FindFirstChild("PowerSelect")
+            or playerGui:FindFirstChild("FloorReward")
+            or playerGui:FindFirstChild("SkillSelect")
+        local hasPowerScreen = powerGui and (
+            (powerGui:IsA("ScreenGui") and powerGui.Enabled) or
+            (powerGui:IsA("GuiObject") and powerGui.Visible)
+        )
+        -- Fallback: หา button ที่มีคำว่า power/skill/ability
+        if not hasPowerScreen then
+            for _, child in ipairs(playerGui:GetDescendants()) do
+                if (child:IsA("Frame") or child:IsA("ScreenGui")) and child.Visible then
+                    local n = string.lower(child.Name)
+                    if n:find("power") or n:find("skill") or n:find("ability") or n:find("reward") then
+                        hasPowerScreen = true; break
+                    end
+                end
+            end
+        end
+        if hasPowerScreen and (tick() - _lastPowerPickTime) > 3 then
+            _lastPowerPickTime = tick()
+            -- คลิกตัวเลือกแรกที่เจอ
+            local picked = false
+            for _, child in ipairs(playerGui:GetDescendants()) do
+                if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible and child.Active then
+                    local n = string.lower(child.Name)
+                    local t = child:IsA("TextButton") and string.lower(child.Text) or ""
+                    -- เลือกปุ่มที่เป็น card/option ไม่ใช่ close/back
+                    if not (n:find("close") or n:find("back") or n:find("cancel") or t:find("back") or t:find("close")) then
+                        if n:find("card") or n:find("power") or n:find("skill") or n:find("choice") or n:find("option")
+                            or t:find("select") or t:find("choose") or t:find("เลือก") then
+                            pcall(function() child:Activate() end)
+                            pcall(function()
+                                local vum = game:GetService("VirtualInputManager")
+                                local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                                vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                                task.wait(0.05)
+                                vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                            end)
+                            picked = true
+                            break
+                        end
+                    end
+                end
+            end
+            if picked then
+                ObsidianGlassEngine:Notify({
+                    Title = "Endless Tower",
+                    Content = "เลือกพลังพิเศษอัตโนมัติแล้ว!",
+                    Duration = 3
+                })
+            end
+        end
+    end
+end)
+
 syncUIElements()
 updateStatusPanel()
 
 ObsidianGlassEngine:Notify({
     Title = "Iron Soul Engine",
-    Content = "โหลด Obsidian Glassmorphic 2 UI (ภาษาไทย) เรียบร้อยแล้ว!",
+    Content = "โหลด Endless Tower Engine เรียบร้อยแล้ว!",
     Duration = 4
 })
 
-print("[IronSoul] Loaded with Obsidian Glassmorphic 2 Engine (Thai Localized)")
+print("[IronSoul] Endless Tower Engine Loaded")
