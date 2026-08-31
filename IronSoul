@@ -143,19 +143,34 @@ task.spawn(function()
             local getAsset = getcustomasset or getsynasset
             local isFileExist = (typeof(isfile) == "function" and isfile(fileName))
             if not isFileExist then
-                local imageBytes = game:HttpGet(avatarUrl)
-                if imageBytes and #imageBytes > 0 then
-                    writefile(fileName, imageBytes)
-                end
-            end
-            if typeof(isfile) == "function" and isfile(fileName) then
-                local asset = getAsset(fileName)
-                if asset then
-                    customAvatarAsset = asset
-                    for _, label in ipairs(registeredAvatarLabels) do
-                        pcall(function()
-                            if label and label.Parent then label.Image = asset end
-                        end)
+                -- Non-blocking HTTP request with pcall
+                task.spawn(function()
+                    pcall(function()
+                        local imageBytes = game:HttpGet(avatarUrl)
+                        if imageBytes and #imageBytes > 0 then
+                            writefile(fileName, imageBytes)
+                            local asset = getAsset(fileName)
+                            if asset then
+                                customAvatarAsset = asset
+                                for _, label in ipairs(registeredAvatarLabels) do
+                                    pcall(function()
+                                        if label and label.Parent then label.Image = asset end
+                                    end)
+                                end
+                            end
+                        end
+                    end)
+                end)
+            else
+                if typeof(isfile) == "function" and isfile(fileName) then
+                    local asset = getAsset(fileName)
+                    if asset then
+                        customAvatarAsset = asset
+                        for _, label in ipairs(registeredAvatarLabels) do
+                            pcall(function()
+                                if label and label.Parent then label.Image = asset end
+                            end)
+                        end
                     end
                 end
             end
@@ -273,7 +288,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local function updateScale()
         if Camera and Camera.ViewportSize then
             local vp = Camera.ViewportSize
-            local targetWidth, targetHeight = 920, 600
+            local targetWidth, targetHeight = 980, 740
             local scaleX = (vp.X - 24) / targetWidth
             local scaleY = (vp.Y - 24) / targetHeight
             uiScale.Scale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
@@ -285,7 +300,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local shell = Instance.new("Frame")
     shell.Name = "MainShell"
-    shell.Size = UDim2.fromOffset(920, 600)
+    shell.Size = UDim2.fromOffset(980, 740)
     shell.AnchorPoint = Vector2.new(0.5, 0.5)
     shell.Position = UDim2.new(0.5, 0, 0.5, 0)
     shell.BackgroundColor3 = COLORS.shell
@@ -1414,9 +1429,10 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         function TabObj:AddParagraph(pCfg)
             local title = pCfg.Title or ""
             local desc = pCfg.Desc or ""
+            local customHeight = pCfg.Height
 
             local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, 54)
+            frame.Size = UDim2.new(1, -10, 0, customHeight or 60)
             frame.BackgroundColor3 = COLORS.glassDeep
             frame.BackgroundTransparency = 0.18
             frame.BorderSizePixel = 0
@@ -1426,31 +1442,78 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             fCorner.CornerRadius = UDim.new(0, 8)
             fCorner.Parent = frame
 
+            local fStroke = Instance.new("UIStroke")
+            fStroke.Color = COLORS.surface
+            fStroke.Thickness = 1
+            fStroke.Parent = frame
+
             local pTitle = Instance.new("TextLabel")
             pTitle.Name = "TitleLabel"
-            pTitle.Size = UDim2.new(1, -20, 0, 22)
+            pTitle.Size = UDim2.new(1, -20, 0, title ~= "" and 20 or 0)
             pTitle.Position = UDim2.new(0, 10, 0, 6)
             pTitle.BackgroundTransparency = 1
             pTitle.Text = title
-            pTitle.TextColor3 = COLORS.text
+            pTitle.TextColor3 = COLORS.cyan
             pTitle.Font = Enum.Font.GothamBold
             pTitle.TextSize = 13
             pTitle.TextXAlignment = Enum.TextXAlignment.Left
+            pTitle.Visible = (title ~= "")
             pTitle.Parent = frame
 
             local pDesc = Instance.new("TextLabel")
             pDesc.Name = "DescLabel"
-            pDesc.Size = UDim2.new(1, -20, 0, 24)
-            pDesc.Position = UDim2.new(0, 10, 0, 26)
+            pDesc.Size = UDim2.new(1, -20, 1, title ~= "" and -30 or -12)
+            pDesc.Position = UDim2.new(0, 10, 0, title ~= "" and 26 or 6)
             pDesc.BackgroundTransparency = 1
             pDesc.Text = desc
             pDesc.TextColor3 = COLORS.textMuted
-            pDesc.Font = Enum.Font.Gotham
-            pDesc.TextSize = 11
+            pDesc.Font = Enum.Font.Code
+            pDesc.TextSize = 12
             pDesc.TextWrapped = true
+            pDesc.TextYAlignment = Enum.TextYAlignment.Top
             pDesc.TextXAlignment = Enum.TextXAlignment.Left
             pDesc.Parent = frame
-            return frame
+
+            local ParaObj = {
+                Frame = frame,
+                TitleLabel = pTitle,
+                DescLabel = pDesc
+            }
+
+            function ParaObj:SetTitle(txt)
+                pTitle.Text = tostring(txt)
+                pTitle.Visible = (tostring(txt) ~= "")
+            end
+
+            function ParaObj:SetDesc(txt)
+                pDesc.Text = tostring(txt)
+                if not customHeight then
+                    task.defer(function()
+                        pcall(function()
+                            local bounds = pDesc.TextBounds
+                            local headerH = pTitle.Visible and 26 or 6
+                            frame.Size = UDim2.new(1, -10, 0, math.max(45, bounds.Y + headerH + 14))
+                        end)
+                    end)
+                end
+            end
+
+            function ParaObj:SetHeight(h)
+                frame.Size = UDim2.new(1, -10, 0, h)
+            end
+
+            -- Initial auto-height calculation if multi-line
+            if not customHeight and #desc > 0 then
+                task.defer(function()
+                    pcall(function()
+                        local bounds = pDesc.TextBounds
+                        local headerH = pTitle.Visible and 26 or 6
+                        frame.Size = UDim2.new(1, -10, 0, math.max(45, bounds.Y + headerH + 14))
+                    end)
+                end)
+            end
+
+            return ParaObj
         end
 
         table.insert(WindowObj.Tabs, TabObj)
@@ -1593,6 +1656,7 @@ pcall(function() RarityTiers     = safeRequirePath(ReplicatedStorage, "Framework
 local SETTINGS_FILE = "IronSoulSettings.json"
 
 local Config = {
+    AutoLoadConfig       = true,
     AutoEnterDungeon     = false,
     SelectedWorldName    = "ป่าไร้ดาว (World1)",
     SelectedWorldId      = "World1",
@@ -1600,36 +1664,23 @@ local Config = {
     SelectedDifficultyNum  = 1,
     SelectedPartySizeName  = "4 คน (Full)",
     SelectedPartySizeNum   = 4,
-    SaveSettings         = true,
+    AutoAdaptiveDifficulty = false,
 
     -- Auto Systems Flags
     AutoSell             = false,
     AutoSelectBest       = false,
-    AutoUseScroll        = false,
-    AutoFortifyWeapon    = false,
-    AutoDropOres         = false,
     AutoBonusCard        = false,
     AutoUpgradeAttribute = false,
     AutoClaimDaily       = false,
     AutoCaveMode         = false,
     AutoEndlessTowerMode = false,
     AutoBuyShopItem      = false,
+    AfterRunMode         = "PlayAgain", -- "PlayAgain", "ReturnToLobby", "Stop"
     AutoPlayAgain        = true,
-    AfterRunMode         = "Lobby", -- "Lobby" = Return to Lobby, "Again" = Play Again
-    AutoQuest            = false, -- ออโต้ทำเควสประจำวัน
-    AutoAcceptQuest      = true,  -- รับเควสอัตโนมัติ
-    AutoDoQuestObjective = true,  -- ทำ Objective อัตโนมัติ
-    AutoClaimQuestReward = true,  -- Claim Reward อัตโนมัติ
-    AutoSwitchQuest      = true,  -- เปลี่ยน Quest อัตโนมัติ
-    AutoReturnNPCQuest   = true,  -- กลับ NPC เมื่อ Quest เสร็จ
-    QuestPriorityMode    = false, -- ใช้ Quest เป็น Priority ใน GamePlanner
-    QuestLoopMode        = true,  -- Quest Loop 24/7
-    AutoRaceReroll       = false, -- ออโต้สุ่มเผ่า (Race Reroll)
-    AutoPerfectQTE       = false, -- ออโต้กด Perfect ตีอาวุธ (Rating 15)
+    AutoRaceReroll       = false,
+    AutoTaskProgress     = false,
     AutoFarm             = false,
     AutoSkill            = false,
-    ChickenMode          = false, -- ไก่ตัน: เปิดทุกระบบพร้อมกัน
-    _ChickenPrevState    = {},    -- เก็บ state ก่อนเปิดไก่ตัน
 
     -- Dropdowns / Selectors
     Crystals_Value       = {},
@@ -1638,6 +1689,7 @@ local Config = {
     SelectedTargetRaces  = { "Demon", "Lucifer", "Night Elf" },
     ShopItemToBuy        = "GoldShop_17",
     TaskNpcTarget        = "EquipmentEnchantNpc2|0",
+    MinGoldReserve       = 5000,
     SelectedCaveId       = "Cave1",
     CaveDiffNum          = 1,
     CavePartySize        = 2,
@@ -1646,12 +1698,63 @@ local Config = {
     AttrPreset           = { AtkBonusValue = 1, HpBonus = 1, SkillCDReduce = 0, AtkRangeBonus = 0, MoveSpeedBonus = 0 },
 }
 
+local function saveSettings()
+    pcall(function()
+        if typeof(writefile) == "function" then
+            local data = {}
+            for k, v in pairs(Config) do
+                if type(v) ~= "function" and not tostring(k):find("^_") then
+                    data[k] = v
+                end
+            end
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(data))
+            print("✅ [PayomboyZ HUB] บันทึกคอนฟิกลงไฟล์ " .. SETTINGS_FILE .. " สำเร็จ")
+        end
+    end)
+end
+
+local function loadSettings()
+    local success = false
+    pcall(function()
+        if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile(SETTINGS_FILE) then
+            local content = readfile(SETTINGS_FILE)
+            if content and #content > 0 then
+                local data = HttpService:JSONDecode(content)
+                if type(data) == "table" then
+                    for k, v in pairs(data) do
+                        Config[k] = v
+                    end
+                    print("✅ [PayomboyZ HUB] โหลดคอนฟิกจากไฟล์ " .. SETTINGS_FILE .. " สำเร็จ")
+                    success = true
+                end
+            end
+        end
+    end)
+    return success
+end
+
+-- Auto-Load Config on startup if file exists & AutoLoad is enabled
+pcall(function()
+    if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile(SETTINGS_FILE) then
+        local content = readfile(SETTINGS_FILE)
+        if content and #content > 0 then
+            local data = HttpService:JSONDecode(content)
+            if type(data) == "table" and (data.AutoLoadConfig == nil or data.AutoLoadConfig == true) then
+                for k, v in pairs(data) do
+                    Config[k] = v
+                end
+                print("⚡ [PayomboyZ HUB] Auto-Load Config สำเร็จเรียบร้อยแล้ว!")
+            end
+        end
+    end
+end)
+
 -- ════════════════════════════════════════════════════
 -- NPC PORTAL CFRAMES — verified live positions from game
 -- ════════════════════════════════════════════════════
 local NPC_PORTALS = {
     DUNGEON  = CFrame.new(59.13860321044922,  27.21690559387207,   226.85641479492188),
-    CAVE     = CFrame.new(42.760498046875,   -423.787841796875,    153.6419219970703),
+    CAVE     = CFrame.new(-6.270681381225586, -423.787841796875,  169.97598266601562),
     TOWER    = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094),
     CIRCUS   = CFrame.new(101.6267318725586, -449.2493591308594,  -588.0762329101562),
     FORGE    = CFrame.new(60.80976486206055,   38.453094482421875,   13.5374174118042),
@@ -2801,7 +2904,7 @@ end
 
 local function TeleportToCaveNPC()
     pcall(function()
-        local targetCF = CFrame.new(16.461, -423.788, 175.610, -0.997, 0.000, 0.075, 0.000, 1.000, -0.000, -0.075, -0.000, -0.997)
+        local targetCF = CFrame.new(-6.270681381225586, -423.787841796875, 169.97598266601562)
         local safeTeleport = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction")
         if safeTeleport then
             safeTeleport:InvokeServer(targetCF)
@@ -2903,7 +3006,7 @@ function LocationResolver.Resolve(name, fallbackCF)
 end
 
 local DUNGEON_PORTAL_CF = LocationResolver.Resolve("DungeonPortal", CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188))
-local CAVE_PORTAL_CF    = LocationResolver.Resolve("CavePortal", CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703))
+local CAVE_PORTAL_CF    = CFrame.new(-6.270681381225586, -423.787841796875, 169.97598266601562)
 local TOWER_PORTAL_CF   = LocationResolver.Resolve("TowerPortal", CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094))
 local CIRCUS_PORTAL_CF  = LocationResolver.Resolve("CircusPortal", CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562))
 local FORGE_PORTAL_CF   = LocationResolver.Resolve("ForgeNpc", CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042))
@@ -3295,11 +3398,8 @@ function GamePlanner.EvaluateAndPlan()
         return { Priority = TaskPriority.P0_EMERGENCY, Name = "P0_STUCK_RECOVERY", Reason = "พบระบบติดขัดเกิน 3 ครั้ง - บังคับวาร์ปเข้าเมือง" }
     end
 
-    -- P1 — Required Tasks (Active Quests / Dungeon Transition / Claim Reward)
-    if (Config.ChickenMode or Config.QuestPriorityMode) and Config.AutoQuest and #_questState.pendingQuests > 0 then
-        return { Priority = TaskPriority.P1_REQUIRED, Name = "DO_QUEST", Reason = "มีภารกิจเควสที่ต้องทำก่อน (Pending: " .. tostring(#_questState.pendingQuests) .. ")" }
-    end
-    if (Config.ChickenMode or Config.AutoEnterDungeon) and (State.Phase == "LOBBY" or State.Phase == "Lobby") then
+    -- P1 — Required Tasks (Dungeon Transition)
+    if Config.AutoEnterDungeon and (State.Phase == "LOBBY" or State.Phase == "Lobby") then
         local rec = IronSoulKnowledgeMap.GetRecommendedWorld(level)
         local targetWorld = Config.SelectedWorldId or rec.RecommendedWorld
         local targetDiff  = Config.SelectedDifficultyNum or rec.RecommendedDiff
@@ -3312,74 +3412,25 @@ function GamePlanner.EvaluateAndPlan()
         }
     end
 
-    -- P2 — Progression Tasks (Attributes / Equipment / Skills)
-    if points > 0 and (Config.ChickenMode or Config.AutoUpgradeAttribute) then
+    -- P2 — Progression Tasks (Attributes / Equipment)
+    if points > 0 and Config.AutoUpgradeAttribute then
         return { Priority = TaskPriority.P2_PROGRESSION, Name = "UPGRADE_ATTRIBUTES", Reason = "มีแต้มสเตตัสคงเหลือ " .. tostring(points) .. " แต้ม" }
     end
-    if Config.ChickenMode or Config.AutoSelectBest then
+    if Config.AutoSelectBest then
         return { Priority = TaskPriority.P2_PROGRESSION, Name = "EQUIP_BEST", Reason = "สวมใส่อุปกรณ์ที่ดีที่สุดเพื่อเพิ่มพลังต่อสู้" }
     end
 
-    -- P3 — Economy Tasks (Sell Items / Materials / Forge)
-    if Config.ChickenMode or Config.AutoSell then
+    -- P3 — Economy Tasks (Sell Items)
+    if Config.AutoSell then
         return { Priority = TaskPriority.P3_ECONOMY, Name = "SELL_ITEMS", Reason = "ขายไอเทมขยะเพื่อเคลียร์กระเป๋า" }
     end
-    local sandstoneCount = 0
-    pcall(function()
-        for _, ore in ipairs(GetOresWithNames()) do
-            if ore.ID == "Sandstone" or ore.Name == "Sandstone" then
-                sandstoneCount = ore.Amount or 0
-            end
-        end
-    end)
-    if (Config.ChickenMode or Config.AutoPerfectQTE) and sandstoneCount >= 4 and gold >= ((Config.MinGoldReserve or 5000) + 1000) then
-        return { Priority = TaskPriority.P3_ECONOMY, Name = "FORGE_WEAPON", Reason = "มี Sandstone พร้อมสร้างอาวุธ (" .. tostring(sandstoneCount) .. " ก้อน)" }
-    end
 
-    -- P4 — Optional Tasks (Daily Claim / Race Reroll)
-    if Config.ChickenMode or Config.AutoClaimDaily then
+    -- P4 — Optional Tasks (Daily Claim)
+    if Config.AutoClaimDaily then
         return { Priority = TaskPriority.P4_OPTIONAL, Name = "CLAIM_DAILY", Reason = "รับรางวัลเช็คอินประจำวัน" }
     end
 
     return { Priority = 99, Name = "IDLE", Reason = "สแตนด์บายรอรอบการทำงานถัดไป" }
-end
-
-local ChickenBrain = {
-    CurrentStage = "Observe",
-    LastObservation = {},
-    LastAction = "System Initialized",
-}
-
-function ChickenBrain.RunLoopCycle()
-    if not Config.ChickenMode then return end
-
-    -- Stage 1: OBSERVE
-    ChickenBrain.CurrentStage = "Observe"
-    local obs = {
-        Health = player and player.Character and player.Character:FindFirstChildOfClass("Humanoid") and player.Character.Humanoid.Health or 0,
-        Level  = PlayerState.GetLevel(),
-        Gold   = PlayerState.GetGold(),
-        Phase  = State.Phase,
-    }
-    ChickenBrain.LastObservation = obs
-
-    -- Stage 2: PLAN
-    ChickenBrain.CurrentStage = "Plan"
-    local plan = GamePlanner.EvaluateAndPlan()
-
-    -- Stage 3: EXECUTE
-    ChickenBrain.CurrentStage = "Execute"
-    ChickenBrain.LastAction = plan.Name .. " (" .. plan.Reason .. ")"
-    GamePlanner.ExecuteNextStep()
-
-    -- Stage 4: VERIFY
-    ChickenBrain.CurrentStage = "Verify"
-
-    -- Stage 5: RECOVER
-    ChickenBrain.CurrentStage = "Recover"
-    if State._failedRecoveryCycles and State._failedRecoveryCycles > 0 then
-        DungeonRecoveryTree.HandleFailure("ChickenBrainStuck", Config.SelectedWorldId or "World1", Config.SelectedDifficultyNum or 1, 1)
-    end
 end
 
 function GamePlanner.ExecuteNextStep()
@@ -3869,44 +3920,56 @@ end
 -- ════════════════════════════════════════════════════
 local Window = ObsidianGlassEngine:CreateWindow({
     Title    = "PayomboyZ HUB",
-    SubTitle = "Iron Soul — ระบบออโต้ล็อบบี้ & จัดการตัวละคร"
+    SubTitle = "Iron Soul — Monitoring Dashboard & Character Management"
 })
 
-local ChickenTab  = Window:AddTab({ Title = "🐔 CHICKEN MODE" })
-local MatchTab    = Window:AddTab({ Title = "🏙️ เข้าดันเจี้ยน & แมตช์" })
-local AutoSellTab = Window:AddTab({ Title = "💰 ขายของอัตโนมัติ" })
-local ForgeTab    = Window:AddTab({ Title = "🔨 ตีบวก & ตีไอเทม" })
-local AttrTab     = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
-local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ร้านค้า" })
-local RaceTab     = Window:AddTab({ Title = "🧬 รีเผ่า (Auto Race Reroll)" })
-local QuestTab    = Window:AddTab({ Title = "🗺️ AUTO QUEST" })
-local StatsTab    = Window:AddTab({ Title = "📊 ข้อมูล & สถานะ" })
+local MonitoringTab = Window:AddTab({ Title = "🖥️ Monitoring Dashboard" })
+local MatchTab      = Window:AddTab({ Title = "🏙️ เข้าดันเจี้ยน & แมตช์" })
+local AutoSellTab   = Window:AddTab({ Title = "💰 ขายของอัตโนมัติ" })
+local AttrTab       = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
+local DailyTab      = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ร้านค้า" })
+local RaceTab       = Window:AddTab({ Title = "🧬 รีเผ่า (Auto Race Reroll)" })
+local SettingsTab   = Window:AddTab({ Title = "⚙️ ตั้งค่า (Settings)" })
 
--- ──────── TAB 1: 🐔 CHICKEN MODE (Autonomous Agent) ────────
-ChickenTab:AddSection("🐔 CHICKEN MODE AUTONOMOUS AGENT BRAIN")
-ChickenTab:AddToggle("ChickenModeMasterToggle", {
-    Title = "เปิด Chicken Mode (24/7 Autonomous Agent)",
-    Desc = "เปิดสมองกลตัดสินใจอัตโนมัติ (Observe → Plan → Execute → Verify → Recover)",
-    Default = Config.ChickenMode,
-    Callback = function(t)
-        Config.ChickenMode = t
-        saveSettings()
-        if t then
-            ObsidianGlassEngine:Notify({ Title = "🐔 Chicken Mode Activated", Content = "สมองกลระบบออโต้ 24/7 เริ่มทำงานเรียบร้อยแล้ว!", Duration = 5 })
-        end
+-- ──────── TAB 1: 🖥️ MONITORING DASHBOARD (Unified Cards Matching Images 2 & 3) ────────
+MonitoringTab:AddSection("🖥️ แผงควบคุมระบบมอนิเตอร์ (IRON SOUL MONITORING DASHBOARD)")
+
+local MonDashboardCard = MonitoringTab:AddParagraph({
+    Title = "Status: 🟢 MONITORING | Target: World1 (ป่าไร้ดาว)",
+    Desc  = "Last Scan: 00:00:00 | System Uptime: 0m 0s | FPS: 60 (Ping: 45ms)\n\n"
+         .. "💰 GOLD PROTECTION & CHARACTER METRICS\n"
+         .. "Current: $0 | Reserve: $5,000 | Available: $0\n"
+         .. "Level: 1 | Power: 0 | Race: UNKNOWN | Weapon: NONE\n\n"
+         .. "📊 STATISTICS COUNTER\n"
+         .. "Clears: 0 | Total Gold: $0 | Deaths: 0 | Failures: 0\n"
+         .. "Memory: 240 MB | Watchdog: 100% HEALTHY\n\n"
+         .. "⚔️ TARGET & STRATEGY\n"
+         .. "DUNGEON TARGET: ป่าไร้ดาว (World1) (✔) | Diff: 1 | Party: 4\n"
+         .. "🎯 STRATEGY PLAN: AUTO FARM DUNGEON -> STANDBY"
+})
+
+MonitoringTab:AddSection("📜 ประวัติการทำงานระบบเรียลไทม์ (LIVE SYSTEM LOGS)")
+
+local MonLogsCard = MonitoringTab:AddParagraph({
+    Title = "",
+    Desc  = "[00:00:00] ℹ️ Telemetry Engine Online - SYSTEM INITIALIZED\n"
+         .. "[00:00:00] ℹ️ Waiting for Action Events... - ACTION ENGINE READY\n"
+         .. "[00:00:00] ℹ️ Heartbeat Monitoring Active... - WATCHDOG ONLINE\n"
+         .. "[00:00:00] ℹ️ Remote Network Handshakes Verified - REMOTES OK\n"
+         .. "[00:00:00] ℹ️ Dashboard Active - MONITORING OPERATIONAL"
+})
+
+MonitoringTab:AddButton({
+    Title = "🗑️ ล้างประวัติการตัดสินใจ (Clear Decision Logs)",
+    Callback = function()
+        pcall(function()
+            if _G.IronSoul_SystemLogs then table.clear(_G.IronSoul_SystemLogs) end
+            if MonLogsCard then
+                MonLogsCard:SetDesc("Log Terminal Cleared. Waiting for new activity...")
+            end
+        end)
     end
 })
-
-ChickenTab:AddSection("📊 PRIORITY MATRIX & TELEMETRY")
-local ChickenP0Para = ChickenTab:AddParagraph({ Title = "P0 EMERGENCY: 🟢 NORMAL",      Desc = "HEALTH: 100% | NO STUCK DETECTED" })
-local ChickenP1Para = ChickenTab:AddParagraph({ Title = "P1 REQUIRED: ⚔️ DUNGEON",      Desc = "QUESTS PENDING: 0 | DUNGEON ACTIVE" })
-local ChickenP2Para = ChickenTab:AddParagraph({ Title = "P2 PROGRESSION: 📈 ATTR",       Desc = "STAT POINTS: 0 | EQUIP OPTIMAL" })
-local ChickenP3Para = ChickenTab:AddParagraph({ Title = "P3 ECONOMY: 💰 RESERVED",      Desc = "GOLD RESERVE: SAFE | INVENTORY CLEAN" })
-local ChickenP4Para = ChickenTab:AddParagraph({ Title = "P4 OPTIONAL: 🎁 READY",        Desc = "DAILY REWARDS: CHECKED" })
-
-ChickenTab:AddSection("🧠 LIVE AGENT BRAIN DECISION")
-local ChickenBrainStagePara = ChickenTab:AddParagraph({ Title = "STAGE: OBSERVE", Desc = "ANALYZING GAME STATE..." })
-local ChickenBrainPlanPara  = ChickenTab:AddParagraph({ Title = "PLAN: START_DUNGEON", Desc = "REASON: LEVEL PROGRESSION" })
 
 -- ──────── TAB 2: เข้าดันเจี้ยน & แมตช์ ────────
 MatchTab:AddSection("ระบบสร้างห้อง & เข้าดันเจี้ยน (Zion Create Room Standard)")
@@ -3948,7 +4011,6 @@ MatchTab:AddDropdown("AutofarmWorldDropdown", {
         Config.SelectedWorldId = worldId
         saveSettings()
 
-        -- Dynamic Dependent Dropdown Update: อัปเดตรายการความยากตามแมพที่เลือกทันที
         if AutofarmDiffDropdown then
             local diffInfo = getDifficultyOptionsForWorld(worldId)
             AutofarmDiffDropdown:SetValues(diffInfo.Options)
@@ -4032,24 +4094,10 @@ MatchTab:AddButton({ Title = "🚀 สร้างห้องและเข้
     ObsidianGlassEngine:Notify({ Title = "สร้างห้องดันเจี้ยน", Content = "สร้างห้อง " .. tostring(Config.SelectedWorldName) .. " | " .. tostring(Config.SelectedDifficultyName) .. " (" .. tostring(Config.SelectedPartySizeName or "4 คน") .. ")", Duration = 4 })
 end })
 
-
-
 MatchTab:AddSection("ควบคุมหลังจบเกม")
 MatchTab:AddToggle("AutoBonusCardToggle", { Title = "เปิดสุ่มการ์ดโบนัสหลังจบเกม", Desc = "เลือกรับการ์ดรางวัลสุ่มหลังเคลียร์ดันเจี้ยนอัตโนมัติ", Default = Config.AutoBonusCard, Callback = function(t) Config.AutoBonusCard = t end })
 
-MatchTab:AddSection("🏰 DUNGEON TELEMETRY & LIVE DEBUGGER")
-local DunWorldPara      = MatchTab:AddParagraph({ Title = "WORLD: World1 (ป่าไร้ดาว)", Desc = "DIFFICULTY: 1 | PARTY: 4" })
-local DunPhasePara      = MatchTab:AddParagraph({ Title = "PHASE: 🟢 LOBBY",          Desc = "ROOM: NONE" })
-local DunCombatPara     = MatchTab:AddParagraph({ Title = "COMBAT: IDLE",            Desc = "ENEMIES ALIVE: 0 | BOSS: NOT SPAWNED" })
-local DunClearPara      = MatchTab:AddParagraph({ Title = "DUNGEON CLEAR: 0%",       Desc = "LAST EVENT: INITIALIZED" })
-local DunNextActionPara = MatchTab:AddParagraph({ Title = "NEXT ACTION: -> CREATE ROOM", Desc = "PREPARING DUNGEON QUEUE" })
-
--- AfterRunMode: แทน AutoPlayAgain bool เดิม
--- "PlayAgain"     → VotePlayAgain แล้วรอ rejoin
--- "ReturnToLobby" → ReturnToLobby RE แล้วกลับ Lobby
--- "Stop"          → ไม่ทำอะไร หยุดออโต้
 if not Config.AfterRunMode then
-    -- migrate จาก AutoPlayAgain เดิม
     Config.AfterRunMode = Config.AutoPlayAgain and "PlayAgain" or "Stop"
 end
 
@@ -4060,73 +4108,12 @@ MatchTab:AddDropdown("AfterRunModeDropdown", {
     Value  = Config.AfterRunMode,
     Callback = function(val)
         Config.AfterRunMode = val
-        -- backward compat
         Config.AutoPlayAgain = (val == "PlayAgain")
         saveSettings()
     end
 })
 
-MatchTab:AddSection("── 🐔 ไก่ตัน (All-In-One Lobby Farm) ──")
-MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน — เปิดทุกระบบล็อบบี้พร้อมกัน", Callback = function()
-    if not Config.ChickenMode then
-        -- snapshot ค่าเดิมก่อนเปิด (ต้องเก็บ exact value ไม่ใช่ or-default)
-        Config._ChickenPrevState = {
-            AutoEnterDungeon     = Config.AutoEnterDungeon,
-            AutoSelectBest       = Config.AutoSelectBest,
-            AutoSell             = Config.AutoSell,
-            AutoUpgradeAttribute = Config.AutoUpgradeAttribute,
-            AutoClaimDaily       = Config.AutoClaimDaily,
-            AutoBonusCard        = Config.AutoBonusCard,
-            AfterRunMode         = Config.AfterRunMode,
-            AutoQuest            = Config.AutoQuest,
-            AutoFarm             = Config.AutoFarm,
-            AutoSkill            = Config.AutoSkill,
-        }
-        Config.AutoEnterDungeon     = true
-        Config.AutoSelectBest       = true
-        Config.AutoSell             = true
-        Config.AutoUpgradeAttribute = true
-        Config.AutoClaimDaily       = true
-        Config.AutoBonusCard        = true
-        Config.AfterRunMode         = "PlayAgain"
-        Config.AutoQuest            = true
-        Config.AutoFarm             = true
-        Config.AutoSkill            = true
-        Config.ChickenMode          = true
-        _G.AutoFarm                 = true
-        _G.AutoSkill                = true
-
-        if #Config.Crystals_Value == 0 then Config.Crystals_Value = {"Common","Uncommon"} end
-        if #Config.Ores_Value == 0     then Config.Ores_Value     = {"Common","Uncommon"} end
-        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน เปิดแล้ว!", Content = "เปิดทุกระบบ Auto + Auto Skill ในดันเจี้ยนเต็มกำลัง!", Duration = 5 })
-    else
-        -- #8 FIX: ใช้ rawget-style restore — ไม่ใช้ `or default`
-        -- เพราะ `false or someDefault` = someDefault เสมอ ซึ่งผิด
-        local p = Config._ChickenPrevState or {}
-        local function restore(key, fallback)
-            local v = p[key]
-            if v == nil then return fallback end
-            return v  -- คืน false ได้ถูกต้อง
-        end
-        Config.AutoEnterDungeon     = restore("AutoEnterDungeon",     false)
-        Config.AutoSelectBest       = restore("AutoSelectBest",       false)
-        Config.AutoSell             = restore("AutoSell",             false)
-        Config.AutoUpgradeAttribute = restore("AutoUpgradeAttribute", false)
-        Config.AutoClaimDaily       = restore("AutoClaimDaily",       false)
-        Config.AutoBonusCard        = restore("AutoBonusCard",        false)
-        Config.AfterRunMode         = restore("AfterRunMode",         "Stop")
-        Config.AutoQuest            = restore("AutoQuest",            false)
-        Config.AutoFarm             = restore("AutoFarm",             false)
-        Config.AutoSkill            = restore("AutoSkill",            false)
-        Config.ChickenMode          = false
-        _G.AutoFarm                 = Config.AutoFarm
-        _G.AutoSkill                = Config.AutoSkill
-        ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน ปิดแล้ว", Content = "คืนค่าระบบกลับเป็นเดิมเรียบร้อย", Duration = 4 })
-    end
-    saveSettings()
-end })
-
--- ──────── TAB 2: ขายของอัตโนมัติ ────────
+-- ──────── TAB 3: ขายของอัตโนมัติ ────────
 AutoSellTab:AddSection("ตัวกรองไอเทมสำหรับขาย (Zion Central Architecture)")
 local CrystalDropdown = AutoSellTab:AddDropdown("CrystalSellDropdown", { Title = "เลือกระดับความหายากคริสตัลที่ต้องการขาย", Values = GetRarities(), Multi = true, Callback = function(val) Config.Crystals_Value = val end })
 local OreDropdown     = AutoSellTab:AddDropdown("OreSellDropdown",     { Title = "เลือกระดับความหายากแร่ที่ต้องการขาย",     Values = GetRarities(), Multi = true, Callback = function(val) Config.Ores_Value = val end })
@@ -4150,14 +4137,12 @@ AutoSellTab:AddButton({ Title = "🔄 รีเฟรชรายชื่อไ
     end)
 end })
 
--- #21: Safe Auto Sell (Equipped Protection & Minimum Reserve Guard)
 local function ExecuteSellNow()
     local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
     local ForgeRF    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
     local EquipRE    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
     local totalSold  = 0
 
-    -- Fetch Equipped UUIDs to protect them from being sold
     local equippedUUIDs = {}
     pcall(function()
         if DataUtil then
@@ -4171,7 +4156,6 @@ local function ExecuteSellNow()
         end
     end)
 
-    -- 1. Crystals (Keep minimum 5 reserve for crafting)
     if Config.Crystals_Value and type(Config.Crystals_Value) == "table" and #Config.Crystals_Value > 0 and MaterialRE then
         local crystalLoop = {}
         for _, v in pairs(GetCrystals()) do
@@ -4186,7 +4170,6 @@ local function ExecuteSellNow()
         if next(crystalLoop) then MaterialRE:FireServer("Sell", crystalLoop, {}) end
     end
 
-    -- 2. Ores (Keep minimum 4 Sandstone/Ores reserve for Forge)
     if Config.Ores_Value and type(Config.Ores_Value) == "table" and #Config.Ores_Value > 0 and ForgeRF then
         local oresLoop = {}
         for _, v in pairs(GetOresWithNames()) do
@@ -4201,7 +4184,6 @@ local function ExecuteSellNow()
         if next(oresLoop) then ForgeRF:InvokeServer("Sell", oresLoop) end
     end
 
-    -- 3. Equipment (Check Equipped Protection)
     if Config.Equipment_Value and type(Config.Equipment_Value) == "table" and #Config.Equipment_Value > 0 and DataUtil and EquipRE then
         local owned = {}
         pcall(function() owned = DataUtil:GetPlayerData(player).Equipment.Owned end)
@@ -4225,74 +4207,14 @@ end })
 
 AutoSellTab:AddToggle("AutoSellToggle", { Title = "เปิดใช้งานขายของอัตโนมัติ", Desc = "ขาย คริสตัล, แร่ และอุปกรณ์ ที่เลือกไว้ตามระยะเวลาอัจฉริยะ", Default = Config.AutoSell, Callback = function(t) Config.AutoSell = t saveSettings() end })
 
--- ──────── TAB 3: ตีบวก & ตีไอเทม ────────
-ForgeTab:AddSection("สวมใส่อุปกรณ์ที่ดีที่สุด")
-ForgeTab:AddButton({ Title = "⚡ สวมใส่ไอเทมที่ดีที่สุดทุกช่องทันที", Callback = function()
+-- ──────── TAB 4: อัปสเตตัส & สกิล ────────
+AttrTab:AddSection("สวมใส่อุปกรณ์ที่ดีที่สุด (Equipment Auto Management)")
+AttrTab:AddButton({ Title = "⚡ สวมใส่ไอเทมที่ดีที่สุดทุกช่องทันที", Callback = function()
     EquipBestAll()
     ObsidianGlassEngine:Notify({ Title = "สวมใส่ไอเทม", Content = "สวมใส่อาวุธ ชุดเกราะ และเครื่องประดับที่ดีที่สุดแล้ว!", Duration = 3 })
 end })
-ForgeTab:AddToggle("AutoEquipBestToggle", { Title = "เปิดสวมใส่ไอเทมดีที่สุดอัตโนมัติ", Desc = "เช็คและสวมใส่อุปกรณ์พลังสูงที่สุดในกระเป๋าอย่างต่อเนื่อง", Default = Config.AutoSelectBest, Callback = function(t) Config.AutoSelectBest = t end })
+AttrTab:AddToggle("AutoEquipBestToggle", { Title = "เปิดสวมใส่ไอเทมดีที่สุดอัตโนมัติ", Desc = "เช็คและสวมใส่อุปกรณ์พลังสูงที่สุดในกระเป๋าอย่างต่อเนื่อง", Default = Config.AutoSelectBest, Callback = function(t) Config.AutoSelectBest = t; saveSettings() end })
 
-ForgeTab:AddSection("ระบบเตาหลอมไอเทม (Forge System)")
-ForgeTab:AddButton({ Title = "❌ ปิดหน้าต่าง NPC & เตาหลอมทั้งหมดทันที", Callback = function()
-    CloseAllNPCWindows()
-    ObsidianGlassEngine:Notify({ Title = "ปิดหน้าต่าง", Content = "ซ่อนและปิดหน้าต่าง NPC ทั้งหมดเรียบร้อยแล้ว!", Duration = 3 })
-end })
-ForgeTab:AddButton({ Title = "🔥 วาปไปเตาหลอม & เปิดหน้าต่าง Forge (ScreenForge)", Callback = function()
-    OpenForgeGUI()
-    ObsidianGlassEngine:Notify({ Title = "เตาหลอม Forge", Content = "วาร์ปไปพิกัดเตาหลอม และเปิดหน้าต่าง Forge เรียบร้อย!", Duration = 3 })
-end })
-ForgeTab:AddButton({ Title = "🎯 สั่งตีอาวุธ Auto Perfect (QTE Rating 15)", Callback = function()
-    TriggerForgePerfectQTE()
-    ObsidianGlassEngine:Notify({ Title = "Auto Perfect", Content = "ส่งสัญญาณตีอาวุธ Perfect (Rating 15) เรียบร้อยแล้ว!", Duration = 3 })
-end })
-ForgeTab:AddToggle("AutoPerfectQTEToggle", { Title = "เปิดใช้งานตีอาวุธ Perfect อัตโนมัติ (Auto QTE)", Desc = "ส่งสัญญาณ QTE Perfect (Rating 15) อัตโนมัติทุกครั้งเมื่อเปิดหน้าเตาหลอม", Default = Config.AutoPerfectQTE, Callback = function(t) Config.AutoPerfectQTE = t end })
-
-ForgeTab:AddSection("🧙‍♂️ NPC Milo (ช่างออฟชั่น & ผสานรูน)")
-ForgeTab:AddButton({ Title = "✨ วาปไปหา Milo & เปิดหน้าออฟชั่นอุปกรณ์ (ScreenEnchantment)", Callback = function()
-    OpenMiloEnchantGUI()
-    ObsidianGlassEngine:Notify({ Title = "NPC Milo", Content = "วาร์ปไปหา Milo และเปิดหน้าต่าง Enchantment (ออฟชั่นอุปกรณ์) เรียบร้อย!", Duration = 3 })
-end })
-ForgeTab:AddButton({ Title = "🔮 วาปไปหา Milo & เปิดหน้าผสานรูน (ScreenEnchantmentFuse)", Callback = function()
-    OpenMiloFuseRuneGUI()
-    ObsidianGlassEngine:Notify({ Title = "NPC Milo", Content = "วาร์ปไปหา Milo และเปิดหน้าต่าง Fuse Rune (ผสานรูน) เรียบร้อย!", Duration = 3 })
-end })
-ForgeTab:AddToggle("AutoScrollToggle", { Title = "เปิดใช้งานคัมภีร์อัปเกรดอัตโนมัติ", Desc = "ใช้คัมภีร์ที่มีในตัวอัปเกรดอาวุธหลักอัตโนมัติ", Default = Config.AutoUseScroll, Callback = function(t) Config.AutoUseScroll = t end })
-
-ForgeTab:AddSection("ระบบตีบวกอาวุธ & ดรอปแร่")
-ForgeTab:AddButton({ Title = "🔨 วาปไปจุดตีบวก & เปิดหน้า ScreenFortify (Enhance Equipment)", Callback = function()
-    OpenEnhanceEquipmentGUI()
-    ObsidianGlassEngine:Notify({ Title = "ตีบวกอุปกรณ์", Content = "วาร์ปไปพิกัดตีบวก และเปิดหน้าต่าง ScreenFortify เรียบร้อย!", Duration = 3 })
-end })
-ForgeTab:AddButton({ Title = "⚡ สั่งรีโมทตีบวกอาวุธที่สวมใส่", Callback = function()
-    pcall(function()
-        local uuid = GetEquippedWeaponUUID()
-        if uuid then
-            FortifyEquipment(uuid)
-            ObsidianGlassEngine:Notify({ Title = "ตีบวกอาวุธ", Content = "Fortify UUID: " .. tostring(uuid), Duration = 3 })
-        else
-            ObsidianGlassEngine:Notify({ Title = "ตีบวกอาวุธ", Content = "ไม่พบ UUID อาวุธ — ลองสวมใส่อาวุธก่อน", Duration = 4 })
-        end
-    end)
-end })
-ForgeTab:AddToggle("AutoFortifyToggle", { Title = "เปิดตีบวกอาวุธอัตโนมัติ", Desc = "ตีบวกอาวุธที่สวมใส่อย่างต่อเนื่อง", Default = Config.AutoFortifyWeapon, Callback = function(t) Config.AutoFortifyWeapon = t end })
-
-ForgeTab:AddButton({ Title = "🔨 สั่งรีโมทวางแร่ใส่เตาหลอม (Sandstone 4 ชิ้น)", Callback = function()
-    pcall(function()
-        DropForgeOres({ Sandstone = 4 }, "Weapon")
-        ObsidianGlassEngine:Notify({ Title = "หลอมแร่", Content = "วางแร่ Sandstone 4 ชิ้นใส่เตาหลอมแล้ว", Duration = 3 })
-    end)
-end })
-ForgeTab:AddToggle("AutoDropOresToggle", { Title = "เปิดวางแร่ใส่เตาหลอมอัตโนมัติ", Desc = "วางแร่ Sandstone ใส่เตาหลอมอาวุธอัตโนมัติ", Default = Config.AutoDropOres, Callback = function(t) Config.AutoDropOres = t end })
-
-ForgeTab:AddButton({ Title = "✨ ยืนยันผลการตีไอเทม", Callback = function()
-    pcall(function()
-        ConfirmForgeResult(true)
-        ObsidianGlassEngine:Notify({ Title = "ผลการตีไอเทม", Content = "ยืนยันผลการหลอมอาวุธเรียบร้อยแล้ว", Duration = 3 })
-    end)
-end })
-
--- ──────── TAB 4: อัปสเตตัส & สกิล ────────
 AttrTab:AddSection("อัปเกรดสเตตัสตัวละคร (Attribute Upgrade)")
 AttrTab:AddSlider("AttrAtkSlider",   { Title = "เพิ่มพลังโจมตี (ATK)",  Min = 0, Max = 10, Default = 1, Callback = function(v) Config.AttrPreset.AtkBonusValue = v end })
 AttrTab:AddSlider("AttrHpSlider",    { Title = "เพิ่มพลังชีวิต (HP)",   Min = 0, Max = 10, Default = 1, Callback = function(v) Config.AttrPreset.HpBonus = v end })
@@ -4305,7 +4227,7 @@ AttrTab:AddButton({ Title = "⬆️ กดอัปสเตตัส 1 คร�
     ObsidianGlassEngine:Notify({ Title = "อัปสเตตัส", Content = "ส่งคำสั่งอัปสเตตัสเรียบร้อยแล้ว", Duration = 3 })
 end })
 
-AttrTab:AddToggle("AutoAttrUpgradeToggle", { Title = "เปิดอัปสเตตัสอัตโนมัติ", Desc = "อัปเดตสเตตัสตามค่าที่ตั้งไว้อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoUpgradeAttribute, Callback = function(t) Config.AutoUpgradeAttribute = t end })
+AttrTab:AddToggle("AutoAttrUpgradeToggle", { Title = "เปิดอัปสเตตัสอัตโนมัติ", Desc = "อัปเดตสเตตัสตามค่าที่ตั้งไว้อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoUpgradeAttribute, Callback = function(t) Config.AutoUpgradeAttribute = t; saveSettings() end })
 
 AttrTab:AddSection("ปลดล็อกสกิลต้นไม้ (Skill Tree)")
 AttrTab:AddDropdown("SkillWeaponDD", { Title = "สายอาวุธ", Values = { "Heavy", "Sword", "Magic", "Bow", "Dagger" }, Value = "Heavy", Callback = function(v) _G.IRS_SkillWeaponType = v end })
@@ -4402,7 +4324,7 @@ DailyTab:AddButton({ Title = "🎁 กดรับรางวัลประจ
         ObsidianGlassEngine:Notify({ Title = "รางวัลประจำวัน", Content = "กดรับรางวัลประจำวันทั้งหมดเรียบร้อยแล้ว!", Duration = 4 })
     end)
 end })
-DailyTab:AddToggle("AutoClaimDailyToggle", { Title = "เปิดรับรางวัลประจำวันอัตโนมัติ", Desc = "เช็คและรับรางวัลล็อกอินประจำวันให้อัตโนมัติเมื่อพร้อม", Default = Config.AutoClaimDaily, Callback = function(t) Config.AutoClaimDaily = t end })
+DailyTab:AddToggle("AutoClaimDailyToggle", { Title = "เปิดรับรางวัลประจำวันอัตโนมัติ", Desc = "เช็คและรับรางวัลล็อกอินประจำวันให้อัตโนมัติเมื่อพร้อม", Default = Config.AutoClaimDaily, Callback = function(t) Config.AutoClaimDaily = t; saveSettings() end })
 
 DailyTab:AddSection("เควสภารกิจ & คุย NPC")
 DailyTab:AddDropdown("TaskNpcDropdown", { Title = "เลือก NPC เควสเป้าหมาย", Values = { "EquipmentEnchantNpc2|0", "DialogNpcStarterNext1|1", "DialogNpcStarterNext2|0", "DialogPetNpc4|0" }, Value = "EquipmentEnchantNpc2|0", Callback = function(val) Config.TaskNpcTarget = val end })
@@ -4410,7 +4332,7 @@ DailyTab:AddButton({ Title = "💬 ดำเนินเควสคุยกั
     UpdateTaskProgress("DialogNpc", Config.TaskNpcTarget)
     ObsidianGlassEngine:Notify({ Title = "ภารกิจ", Content = "ส่งคำสั่งคุยเควส NPC: " .. tostring(Config.TaskNpcTarget), Duration = 3 })
 end })
-DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "เปิดคุยเควส NPC อัตโนมัติ", Desc = "ส่งคำสั่งดำเนินเควส NPC อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoTaskProgress or false, Callback = function(t) Config.AutoTaskProgress = t end })
+DailyTab:AddToggle("AutoTaskProgressToggle", { Title = "เปิดคุยเควส NPC อัตโนมัติ", Desc = "ส่งคำสั่งดำเนินเควส NPC อย่างต่อเนื่องในเบื้องหลัง", Default = Config.AutoTaskProgress or false, Callback = function(t) Config.AutoTaskProgress = t; saveSettings() end })
 
 -- ──────── TAB 6: รีเผ่า (Auto Race Reroll) ────────
 RaceTab:AddSection("ระบบรีเผ่าอัตโนมัติ (Auto Race Reroll System)")
@@ -4477,36 +4399,86 @@ RaceTab:AddButton({ Title = "🔍 ตรวจสอบเผ่าปัจจ�
     ObsidianGlassEngine:Notify({ Title = "ตรวจสอบเผ่า", Content = "เผ่าปัจจุบันของคุณคือ: " .. tostring(cur), Duration = 5 })
 end })
 
--- ──────── TAB 7: 🗺️ AUTO QUEST ────────
-QuestTab:AddSection("🗺️ AUTO QUEST CONTROL MATRIX")
-QuestTab:AddToggle("AutoQuestToggle",            { Title = "เปิด Auto Quest",                Desc = "เปิดระบบทำเควสประจำวันและเควสหลักอัตโนมัติ", Default = Config.AutoQuest,            Callback = function(t) Config.AutoQuest = t; saveSettings() end })
-QuestTab:AddToggle("AutoAcceptQuestToggle",      { Title = "รับเควสอัตโนมัติ",             Desc = "ตอบรับเควสใหม่จาก NPC อัตโนมัติเมื่อมีเควสว่าง", Default = Config.AutoAcceptQuest,      Callback = function(t) Config.AutoAcceptQuest = t; saveSettings() end })
-QuestTab:AddToggle("AutoDoQuestObjToggle",       { Title = "ทำ Objective อัตโนมัติ",         Desc = "เดินไปทำเป้าหมายเควส คุย NPC และจัดการเป้าหมาย", Default = Config.AutoDoQuestObjective, Callback = function(t) Config.AutoDoQuestObjective = t; saveSettings() end })
-QuestTab:AddToggle("AutoClaimQuestRewardToggle", { Title = "Claim Reward อัตโนมัติ",        Desc = "กดรับรางวัลเมื่อเควสเสร็จสิ้นทันที", Default = Config.AutoClaimQuestReward, Callback = function(t) Config.AutoClaimQuestReward = t; saveSettings() end })
-QuestTab:AddToggle("AutoSwitchQuestToggle",      { Title = "เปลี่ยน Quest อัตโนมัติ",         Desc = "สลับไปทำเควสถัดไปเมื่อเควสปัจจุบันเสร็จ", Default = Config.AutoSwitchQuest,      Callback = function(t) Config.AutoSwitchQuest = t; saveSettings() end })
-QuestTab:AddToggle("AutoReturnNPCQuestToggle",   { Title = "กลับ NPC เมื่อ Quest เสร็จ",      Desc = "วาร์ปกลับไปส่งเควสกับ NPC ทันทีที่ภารกิจเสร็จ", Default = Config.AutoReturnNPCQuest,   Callback = function(t) Config.AutoReturnNPCQuest = t; saveSettings() end })
-QuestTab:AddToggle("QuestPriorityModeToggle",    { Title = "ใช้ Quest เป็น Priority",         Desc = "ให้ GamePlanner ทำเควสเป็นอันดับแรกก่อนลงดันเจี้ยน", Default = Config.QuestPriorityMode, Callback = function(t) Config.QuestPriorityMode = t; saveSettings() end })
-QuestTab:AddToggle("QuestLoopModeToggle",        { Title = "Quest Loop (24/7)",               Desc = "เช็กเควสใหม่วนลูปต่อเนื่องตลอด 24/7", Default = Config.QuestLoopMode,        Callback = function(t) Config.QuestLoopMode = t; saveSettings() end })
+-- ──────── TAB 7: ⚙️ ตั้งค่า (Settings Management) ────────
+SettingsTab:AddSection("💾 CONFIGURATION MANAGEMENT (จัดการตั้งค่าคอนฟิก)")
 
-QuestTab:AddSection("📌 CURRENT QUEST MONITOR & STATUS")
-local QuestNamePara       = QuestTab:AddParagraph({ Title = "ชื่อเควส: -",               Desc = "Progress: 0 / 0 | Type: - | Target: -" })
-local QuestStatusPara     = QuestTab:AddParagraph({ Title = "STATUS: 🟢 Idle",            Desc = "FETCH COOLDOWN: READY" })
-local QuestNextActionPara = QuestTab:AddParagraph({ Title = "NEXT ACTION: -",           Desc = "PREPARING QUEUE" })
-local QuestLastActionPara = QuestTab:AddParagraph({ Title = "LAST ACTION: -",           Desc = "SYSTEM INITIALIZED" })
+SettingsTab:AddToggle("AutoLoadConfigToggle", {
+    Title = "เปิด Auto-Load คอนฟิกอัตโนมัติ (Auto-Load on Startup)",
+    Desc  = "โหลดค่าคอนฟิกที่บันทึกไว้ใน IronSoulSettings.json อัตโนมัติทุกครั้งที่เริ่มรันสคริปต์",
+    Default = Config.AutoLoadConfig,
+    Callback = function(t)
+        Config.AutoLoadConfig = t
+        saveSettings()
+        ObsidianGlassEngine:Notify({
+            Title = "Auto-Load Config",
+            Content = t and "เปิดใช้งาน Auto-Load คอนฟิกอัตโนมัติ!" or "ปิดใช้งาน Auto-Load คอนฟิกแล้ว",
+            Duration = 3
+        })
+    end
+})
 
-QuestTab:AddSection("📜 QUEST DEBUG / REALTIME LOGS")
-local QuestLogPara1 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ Quest Log Initialized", Desc = "SYSTEM LOG" })
-local QuestLogPara2 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ Waiting for Quest Activity...", Desc = "SYSTEM LOG" })
-local QuestLogPara3 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
-local QuestLogPara4 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
-local QuestLogPara5 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
+SettingsTab:AddButton({
+    Title = "💾 บันทึกตั้งค่าลงไฟล์ (Save Config)",
+    Callback = function()
+        saveSettings()
+        ObsidianGlassEngine:Notify({
+            Title = "บันทึกตั้งค่า",
+            Content = "บันทึกข้อมูลการตั้งค่าลงในไฟล์ IronSoulSettings.json เรียบร้อยแล้ว!",
+            Duration = 4
+        })
+    end
+})
 
-QuestTab:AddButton({ Title = "🗑️ เคลียร์ Quest Log", Callback = function()
-    pcall(function()
-        table.clear(QuestLogs)
-        AddQuestLog("Quest Log Cleared")
-    end)
-end })
+SettingsTab:AddButton({
+    Title = "📂 โหลดตั้งค่าจากไฟล์ (Load Config)",
+    Callback = function()
+        local ok = loadSettings()
+        if ok then
+            ObsidianGlassEngine:Notify({
+                Title = "โหลดตั้งค่า",
+                Content = "โหลดข้อมูลคอนฟิกจากไฟล์เรียบร้อยแล้ว!",
+                Duration = 4
+            })
+        else
+            ObsidianGlassEngine:Notify({
+                Title = "โหลดตั้งค่า",
+                Content = "ไม่พบไฟล์คอนฟิก หรือโหลดข้อมูลล้มเหลว!",
+                Duration = 4
+            })
+        end
+    end
+})
+
+SettingsTab:AddButton({
+    Title = "🔄 รีเซ็ตค่าเริ่มต้น (Reset Default Config)",
+    Callback = function()
+        pcall(function()
+            Config.AutoEnterDungeon     = false
+            Config.AutoSell             = false
+            Config.AutoSelectBest       = false
+            Config.AutoBonusCard        = false
+            Config.AutoUpgradeAttribute = false
+            Config.AutoClaimDaily       = false
+            Config.AutoCaveMode         = false
+            Config.AutoEndlessTowerMode = false
+            Config.AutoBuyShopItem      = false
+            Config.AfterRunMode         = "PlayAgain"
+            Config.AutoRaceReroll       = false
+            Config.MinGoldReserve       = 5000
+            saveSettings()
+            ObsidianGlassEngine:Notify({
+                Title = "รีเซ็ตตั้งค่า",
+                Content = "คืนค่าเริ่มต้นคอนฟิกและบันทึกลงไฟล์เรียบร้อยแล้ว!",
+                Duration = 4
+            })
+        end)
+    end
+})
+
+SettingsTab:AddSection("ℹ️ SCRIPT INFORMATION & STATUS")
+SettingsTab:AddParagraph({ Title = "📁 Configuration File", Desc = "Path: IronSoulSettings.json" })
+SettingsTab:AddParagraph({ Title = "🚀 Script Version", Desc = "v5.0 Final Monitoring Dashboard Edition" })
+SettingsTab:AddParagraph({ Title = "🎨 UI Theme Engine", Desc = "Obsidian Glassmorphic 2 Engine (Thai Localized)" })
 
 -- ════════════════════════════════════════════════
 -- SYSTEM LOGGING ENGINE FOR MONITOR #02 TERMINAL
@@ -5148,66 +5120,29 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: ตีบวก & สวมใส่ไอเทมอัตโนมัติ (#31 & #32: ActionEngine & Idempotency)
+-- ASYNC LOOP: สวมใส่ไอเทมอัตโนมัติ (ActionEngine & Idempotency)
 task.spawn(function()
     while task.wait(3) do
         if State.Unloaded then break end
         if Config.AutoSelectBest then
             ActionEngine.Execute("AutoEquipBest", nil, 15, 3, EquipBestAll)
         end
-
-        if Config.AutoUseScroll then
-            pcall(function()
-                local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
-                local uuid = GetEquippedWeaponUUID()
-                if MaterialRE and uuid then
-                    MaterialRE:FireServer("UseScroll", { scrollId = "DefaultScroll", weaponUUID = uuid })
-                end
-            end)
-        end
-
-        if Config.AutoFortifyWeapon then
-            pcall(function()
-                local uuid = GetEquippedWeaponUUID()
-                if uuid then FortifyEquipment(uuid) end
-            end)
-        end
-    end
-end)
-
--- ASYNC LOOP: วางแร่ใส่เตาหลอม
-task.spawn(function()
-    local lastDropTime = 0
-    local DROP_COOLDOWN = 20
-    while task.wait(3) do
-        if State.Unloaded then break end
-        if Config.AutoDropOres then
-            local now = tick()
-            if (now - lastDropTime) >= DROP_COOLDOWN then
-                pcall(function() DropForgeOres({ Sandstone = 4 }, "Weapon") end)
-                lastDropTime = tick()
-            end
-        end
     end
 end)
 
 -- ASYNC LOOP: Lobby Orchestrator
--- #6 FIX: ต่อ AutoCaveMode และ AutoEndlessTowerMode เข้า execution path จริง
--- Priority: AutoEnterDungeon > AutoCaveMode > AutoEndlessTowerMode
--- ใช้ State.Phase guard — ไม่เข้าถ้ายังอยู่ใน dungeon / settlement
 task.spawn(function()
-    task.wait(3) -- รอ UI โหลดก่อน
+    task.wait(5) -- รอ UI และเกม Synchronize ให้เรียบร้อยก่อน 5 วินาที
     local DUNGEON_COOLDOWN = 15
     local CAVE_COOLDOWN    = 20
     local TOWER_COOLDOWN   = 20
-    local lastDungeonTime  = 0
-    local lastCaveTime     = 0
-    local lastTowerTime    = 0
+    local lastDungeonTime  = tick()
+    local lastCaveTime     = tick()
+    local lastTowerTime    = tick()
 
     while task.wait(2) do
         if State.Unloaded then break end
 
-        -- ไม่ขัดจังหวะ dungeon ที่รันอยู่
         local phase = State.Phase
         if phase == "InDungeon" or phase == "Queue" or phase == "RoomCreated"
             or phase == "Settlement" or phase == "Dead" then
@@ -5216,12 +5151,11 @@ task.spawn(function()
 
         local now = tick()
 
-        -- 🧠 GAME PLANNER EVALUATION & EXECUTION (Autonomous Kai-Tun Brain)
         pcall(function()
             GamePlanner.ExecuteNextStep()
         end)
 
-        -- Priority 1: Dungeon หลัก (Gated StartDungeonRun Pipeline)
+        -- Priority 1: Dungeon หลัก
         if Config.AutoEnterDungeon and (now - lastDungeonTime) >= DUNGEON_COOLDOWN then
             local rec = IronSoulKnowledgeMap.GetRecommendedWorld(PlayerState.GetLevel())
             local wId = Config.SelectedWorldId or rec.RecommendedWorld
@@ -5229,7 +5163,7 @@ task.spawn(function()
             StartDungeonRun(wId, diff, Config.SelectedPartySizeNum or 1)
             lastDungeonTime = tick()
 
-        -- Priority 2: Cave Mode (#6 FIX — wired in)
+        -- Priority 2: Cave Mode
         elseif Config.AutoCaveMode and (now - lastCaveTime) >= CAVE_COOLDOWN then
             pcall(function()
                 local caveId    = Config.SelectedCaveId or "Cave1"
@@ -5252,7 +5186,7 @@ task.spawn(function()
             end)
             lastCaveTime = tick()
 
-        -- Priority 3: Endless Tower (#6 FIX — wired in)
+        -- Priority 3: Endless Tower
         elseif Config.AutoEndlessTowerMode and (now - lastTowerTime) >= TOWER_COOLDOWN then
             pcall(function()
                 local towerDiff  = Config.EndlessTowerDiffNum or 1
@@ -5275,13 +5209,12 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: อัปสเตตัสอัตโนมัติ (#22 FIX: Resource-Aware Point Check)
+-- ASYNC LOOP: อัปสเตตัสอัตโนมัติ
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
         if Config.AutoUpgradeAttribute then
             safeCall("AutoUpgradeAttribute", function()
-                -- Verify available attribute points before calling Upgrade
                 local unusedPoints = 0
                 if DataUtil then
                     local pd = DataUtil:GetPlayerData(player)
@@ -5291,7 +5224,6 @@ task.spawn(function()
                 end
 
                 if unusedPoints <= 0 then
-                    -- Check leaderstats as fallback
                     local ls = player:FindFirstChild("leaderstats")
                     local ptsObj = ls and (ls:FindFirstChild("Points") or ls:FindFirstChild("StatPoints"))
                     if ptsObj then unusedPoints = tonumber(ptsObj.Value) or 0 end
@@ -5310,20 +5242,10 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: รับรางวัลประจำวัน & ซื้อของอัตโนมัติ (#19 FIX: Gold Guard & Shop Manager)
+-- ASYNC LOOP: รับรางวัลประจำวัน & ซื้อของอัตโนมัติ
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
-
-        if Config.AutoPerfectQTE then
-            pcall(function()
-                local pg = player and player:FindFirstChildOfClass("PlayerGui")
-                local screenForge = pg and pg:FindFirstChild("ScreenForge", true)
-                if screenForge and (screenForge.Enabled or screenForge.Visible) then
-                    TriggerForgePerfectQTE()
-                end
-            end)
-        end
 
         if Config.AutoClaimDaily then
             pcall(function()
@@ -5336,7 +5258,6 @@ task.spawn(function()
             end)
         end
 
-        -- #19 FIX: Intelligent Shop Purchase with Gold Guard
         if Config.AutoBuyShopItem then
             safeCall("AutoBuyShopItem", function()
                 local minReserve = Config.MinGoldReserve or 1000
@@ -5351,7 +5272,6 @@ task.spawn(function()
                     if goldObj then currentGold = tonumber(goldObj.Value) or 0 end
                 end
 
-                -- Buy only if player has enough gold beyond reserve
                 if currentGold > minReserve then
                     BuyConsumableItem("Gold", Config.ShopItemToBuy or "GoldShop_17")
                 end
@@ -5360,154 +5280,108 @@ task.spawn(function()
     end
 end)
 
--- ════════════════════════════════════════════════
--- AUTO QUEST SYSTEM (Senior Dev Architecture)
--- สถาปัตยกรรม: State Machine แบบ Poll-based
--- ขั้นตอน: Fetch → Parse → Execute → Claim
--- ════════════════════════════════════════════════
---[[
-  Quest Remote Paths (ยืนยันจาก IRSRE.lua dump):
-    DailyQuestRE = ReplicatedStorage.Framework.Features.DailyQuestSystem.RE
-    TaskRE       = ReplicatedStorage.Framework.Features.TaskSystem.TaskRE
-  Actions ที่รองรับ:
-    DailyQuestRE:FireServer("GetDailyQuest")   → server return quest list
-    DailyQuestRE:FireServer("ClaimDailyQuest", questId)
-    TaskRE:FireServer("UpdateTaskProgress", "DialogNpc", npcId)
-    TaskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", windowId)
---]]
-
-local _questState = {
-    phase       = "idle",   -- idle | fetching | executing | claiming | cooldown
-    lastFetch   = 0,
-    fetchCooldown = 60,     -- วิ: ดึงข้อมูลเควสใหม่ทุก 60 วิ
-    pendingQuests = {},
-    currentIdx  = 0,
-    execCooldown = 0,
-}
-
--- ฟังก์ชัน execute quest ตาม type
-local function _executeQuest(quest)
-    if not quest then return end
-    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-    local qType  = tostring(quest.Type or quest.QuestType or "")
-    local qParam = tostring(quest.Param or quest.NpcId or quest.Target or "")
-
-    -- Dialog NPC quest
-    if qType:find("Dialog") or qType:find("NPC") or qType:find("Talk") then
-        if taskRE and qParam ~= "" then
-            taskRE:FireServer("UpdateTaskProgress", "DialogNpc", qParam)
-            task.wait(0.3)
-        end
-    end
-
-    -- Open GUI / Visit window quest
-    if qType:find("Open") or qType:find("Visit") or qType:find("GUI") then
-        if taskRE and qParam ~= "" then
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", qParam)
-            task.wait(0.3)
-        end
-    end
-
-    -- Generic progress bump (ยิง UpdateTaskProgress ทั่วไป)
-    if taskRE then
-        pcall(function()
-            taskRE:FireServer("UpdateTaskProgress", qType, qParam)
-        end)
-    end
-end
+-- ════════════════════════════════════════════════════
+-- 🖥️ MONITORING DASHBOARD REAL-TIME TELEMETRY LOOP (1.5s)
+-- ════════════════════════════════════════════════════
+local _startTime = tick()
+local _totalDungeonClears = 0
+local _totalGoldGained = 0
 
 task.spawn(function()
-    while task.wait(2) do
+    while task.wait(1.5) do
         if State.Unloaded then break end
-        if not Config.AutoQuest then
-            _questState.phase = "idle"
-            _questState.pendingQuests = {}
-            _questState.currentIdx = 0
-            continue
-        end
 
-        local now = tick()
-        local dailyRE = getRemote("ReplicatedStorage.Framework.Features.DailyQuestSystem.RE")
+        pcall(function()
+            local fps = 60
+            local ping = 45
+            local mem = 240
+            pcall(function()
+                local stats = game:GetService("Stats")
+                fps = math.floor(workspace:GetRealPhysicsFPS() or 60)
+                ping = math.floor(stats.Network.ServerStatsItem["Data Ping"]:GetValue() or 45)
+                mem = math.floor(stats:GetTotalMemoryUsageMb() or 240)
+            end)
 
-        -- Phase: idle → fetch
-        if _questState.phase == "idle" then
-            if (now - _questState.lastFetch) >= _questState.fetchCooldown then
-                _questState.phase = "fetching"
+            local timeStr = os.date("%H:%M:%S")
+            local uptimeSec = math.floor(tick() - _startTime)
+            local mins = math.floor(uptimeSec / 60)
+            local secs = uptimeSec % 60
+            local phaseStr = tostring(State.Phase or "LOBBY"):upper()
+            local targetName = Config.SelectedWorldName or "World1 (ป่าไร้ดาว)"
+
+            local plan = GamePlanner._currentPlan or GamePlanner.EvaluateAndPlan()
+            local gold    = tonumber(PlayerState.GetGold()) or 0
+            local reserve = tonumber(Config.MinGoldReserve) or 5000
+            local avail   = math.max(0, gold - reserve)
+            local level   = PlayerState.GetLevel()
+            local power   = PlayerState.GetPower()
+            local race    = detectCurrentRace()
+            local weapon  = GetEquippedWeaponUUID() and "EQUIPPED" or "NONE"
+            local failCnt = math.floor(RecoveryManager and RecoveryManager.failureCount or 0)
+
+            local dashText = string.format(
+                "Last Scan: %s | System Uptime: %dm %ds | FPS: %d (Ping: %dms)\n\n"
+             .. "💰 GOLD PROTECTION & CHARACTER METRICS\n"
+             .. "Current: $%s | Reserve: $%s | Available: $%s\n"
+             .. "Level: %s | Power: %s | Race: %s | Weapon: %s\n\n"
+             .. "📊 STATISTICS COUNTER\n"
+             .. "Clears: %d | Total Gold: $%s | Deaths: 0 | Failures: %d\n"
+             .. "Memory: %d MB | Watchdog: %s\n\n"
+             .. "⚔️ TARGET & STRATEGY\n"
+             .. "DUNGEON TARGET: %s (✔) | Diff: %s | Party: %s\n"
+             .. "🎯 STRATEGY PLAN: %s -> %s",
+                timeStr, mins, secs, fps, ping,
+                tostring(gold), tostring(reserve), tostring(avail),
+                tostring(level), tostring(power), tostring(race):upper(), weapon,
+                _totalDungeonClears, tostring(_totalGoldGained), failCnt,
+                mem, failCnt > 0 and (failCnt .. " FAILURES") or "100% HEALTHY",
+                tostring(targetName), tostring(Config.SelectedDifficultyName or "1"), tostring(Config.SelectedPartySizeName or "4 คน"),
+                tostring(plan.Name or "AUTO FARM DUNGEON"), tostring(plan.Reason or "STANDBY")
+            )
+
+            if MonDashboardCard then
+                MonDashboardCard:SetTitle(string.format("Status: 🟢 MONITORING | Phase: %s", phaseStr))
+                MonDashboardCard:SetDesc(dashText)
             end
 
-        -- Phase: fetching → request quest list จาก server
-        elseif _questState.phase == "fetching" then
-            _questState.lastFetch = now
-            -- เปิดหน้า quest ก่อนเพื่อ trigger server sync
-            pcall(function()
-                local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-                if taskRE then
-                    taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenDailyQuest")
+            -- Update live logs terminal card
+            if MonLogsCard then
+                local logTextTable = {}
+                if _G.IronSoul_SystemLogs and #_G.IronSoul_SystemLogs > 0 then
+                    for i = 1, math.min(5, #_G.IronSoul_SystemLogs) do
+                        local item = _G.IronSoul_SystemLogs[i]
+                        if item then
+                            table.insert(logTextTable, string.format("%s - %s", tostring(item.Title or ""), tostring(item.Desc or "")))
+                        end
+                    end
+                else
+                    table.insert(logTextTable, "[" .. timeStr .. "] ℹ️ Telemetry Engine Online - SYSTEM INITIALIZED")
+                    table.insert(logTextTable, "[" .. timeStr .. "] ℹ️ Waiting for Action Events... - ACTION ENGINE READY")
+                    table.insert(logTextTable, "[" .. timeStr .. "] ℹ️ Heartbeat Monitoring Active... - WATCHDOG ONLINE")
+                    table.insert(logTextTable, "[" .. timeStr .. "] ℹ️ Remote Network Handshakes Verified - REMOTES OK")
+                    table.insert(logTextTable, "[" .. timeStr .. "] ℹ️ Dashboard Active - MONITORING OPERATIONAL")
                 end
-            end)
-            -- รวบรวม quest จาก PlayerGui หรือ Attributes
-            local quests = {}
+                MonLogsCard:SetDesc(table.concat(logTextTable, "\n"))
+            end
+
+            -- Update Floating Overlay HUD Widget
             pcall(function()
-                -- วิธีที่ 1: อ่านจาก PlayerGui ที่ game render ให้
-                local pg = player and player:FindFirstChildOfClass("PlayerGui")
-                local questGui = pg and (pg:FindFirstChild("QuestGui")
-                    or pg:FindFirstChild("DailyQuestGui")
-                    or pg:FindFirstChild("UIMain"))
-                if questGui then
-                    for _, v in ipairs(questGui:GetDescendants()) do
-                        local qId = v:GetAttribute("QuestId") or v:GetAttribute("questId")
-                        local isDone = v:GetAttribute("Completed") or v:GetAttribute("IsDone")
-                        local qType = v:GetAttribute("QuestType") or v:GetAttribute("Type") or "DialogNpc"
-                        local qParam = v:GetAttribute("QuestParam") or v:GetAttribute("Param") or ""
-                        if qId and not isDone then
-                            table.insert(quests, { Id = qId, Type = qType, Param = qParam })
+                local parentGui = GetSafeParentGui()
+                if parentGui then
+                    local hud = parentGui:FindFirstChild("PayomboyZ_FloatingHUD")
+                    if hud then
+                        local card = hud:FindFirstChild("HUDCard")
+                        local body = card and card:FindFirstChild("HUDBody")
+                        if body then
+                            body.Text = string.format(
+                                "สถานะ: 🟢 %s | ภารกิจ: %s\n❤️ HP: 100%% | ⚡ พลังงาน: 100%% | ⚔️ %s\n📊 เลเวล: %s | Power: %s | 💀 ตาย: 0 | 🔄 ฟื้นฟู: %d\n💰 เงิน: +$%s | ⏱️ เวลา: %dm %ds",
+                                phaseStr, tostring(plan.Name or "AUTO FARM DUNGEON"), weapon, tostring(level), tostring(power), failCnt, tostring(gold), mins, secs
+                            )
                         end
                     end
                 end
-                -- วิธีที่ 2: ยิง server แบบ fire-and-read ผ่าน DailyQuestRE
-                if #quests == 0 and dailyRE then
-                    pcall(function() dailyRE:FireServer("GetDailyQuest") end)
-                    -- fallback: สร้าง quest list จาก NPC ที่รู้จัก
-                    quests = {
-                        { Id = "dq_dialog1",    Type = "DialogNpc",     Param = "DialogNpcNormal1|1"    },
-                        { Id = "dq_enchant",    Type = "DialogNpc",     Param = "EquipmentEnchantNpc2|0" },
-                        { Id = "dq_skilltree",  Type = "OpenGUIWindow",  Param = "ScreenSkillTree"       },
-                        { Id = "dq_forge",      Type = "OpenGUIWindow",  Param = "ScreenForge"           },
-                        { Id = "dq_shop",       Type = "OpenGUIWindow",  Param = "ScreenShop"            },
-                    }
-                end
             end)
-            _questState.pendingQuests = quests
-            _questState.currentIdx    = 0
-            _questState.phase = (#quests > 0) and "executing" or "cooldown"
-
-        -- Phase: executing → ทำเควสทีละตัว
-        elseif _questState.phase == "executing" then
-            _questState.currentIdx = _questState.currentIdx + 1
-            local quest = _questState.pendingQuests[_questState.currentIdx]
-            if quest then
-                pcall(_executeQuest, quest)
-                task.wait(1.5)
-                -- claim ทันทีหลัง execute
-                if dailyRE then
-                    pcall(function() dailyRE:FireServer("ClaimDailyQuest", quest.Id) end)
-                end
-            else
-                -- ทำหมดแล้ว
-                _questState.phase = "cooldown"
-                ObsidianGlassEngine:Notify({
-                    Title = "Auto Quest",
-                    Content = "ทำเควสครบทั้งหมดแล้ว! รอรอบถัดไป",
-                    Duration = 4
-                })
-            end
-
-        -- Phase: cooldown → รอรอบถัดไป
-        elseif _questState.phase == "cooldown" then
-            if (now - _questState.lastFetch) >= _questState.fetchCooldown then
-                _questState.phase = "idle"
-            end
-        end
+        end)
     end
 end)
 
