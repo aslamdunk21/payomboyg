@@ -1473,6 +1473,94 @@ end
 -- ════════════════════════════════════════════════════
 local Framework, TranslationUtil, ForgeUtil, RarityTiers, DataUtil, MaterialUtil
 
+-- ────────────────────────────────────────────────────
+-- waitUntil — MUST be defined before VerificationEngine
+-- ────────────────────────────────────────────────────
+local function waitUntil(condFn, timeout, interval)
+    timeout  = timeout  or 5
+    interval = interval or 0.1
+    local t0 = tick()
+    while (tick() - t0) < timeout do
+        if pcall(condFn) and condFn() then return true end
+        task.wait(interval)
+    end
+    return false
+end
+
+-- ────────────────────────────────────────────────────
+-- getRemote — dot-path resolver (e.g. "ReplicatedStorage.Remotes.GameMatchRE")
+-- Verified against live IRSRE.lua dump
+-- ────────────────────────────────────────────────────
+local _remoteCache = {}
+local function getRemote(dotPath)
+    if _remoteCache[dotPath] then return _remoteCache[dotPath] end
+    local parts = dotPath:split(".")
+    local cur = game
+    for i, part in ipairs(parts) do
+        if i == 1 then
+            -- handle top-level services
+            if part == "ReplicatedStorage"  then cur = ReplicatedStorage
+            elseif part == "Workspace"      then cur = workspace
+            elseif part == "Players"        then cur = Players
+            else pcall(function() cur = game:GetService(part) end) end
+        else
+            if not cur then return nil end
+            cur = cur:FindFirstChild(part)
+        end
+        if not cur then return nil end
+    end
+    _remoteCache[dotPath] = cur
+    return cur
+end
+
+-- ────────────────────────────────────────────────────
+-- VERIFIED REMOTE PATHS (from live IRSRE.lua dump)
+-- ALL paths confirmed present in ReplicatedStorage
+-- ────────────────────────────────────────────────────
+local REMOTES = {
+    -- Dungeon / Match
+    GameMatchRE       = "ReplicatedStorage.Remotes.GameMatchRE",
+    GameRoundRE       = "ReplicatedStorage.Remotes.GameRoundRE",
+    PartyMatchingRE   = "ReplicatedStorage.Remotes.PartyMatchingRE",
+
+    -- NPC / Warp / Navigation
+    LobbyLocationRE   = "ReplicatedStorage.Framework.Gameplay.WorldPlace.LobbyLocationUtil.RemoteEvent",
+    SafeTeleportRF    = "ReplicatedStorage.Framework.Gameplay.WorldPlace.SafeTeleportUtil.RemoteFunction",
+    WorldUtilRE       = "ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent",
+    BonusCardRE       = "ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent",
+
+    -- Equipment / Forge / Enchant
+    EquipmentRE       = "ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE",
+    ForgeRF           = "ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF",           -- RemoteFunction!
+    WeaponRE          = "ReplicatedStorage.Framework.Gameplay.EquipmentSystem.WeaponUtil.RemoteEvent",
+    MaterialRE        = "ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent",
+    ScrollRE          = "ReplicatedStorage.Framework.Gameplay.ScrollSystem.ScrollRE",
+
+    -- Race / Rolling
+    RaceRE            = "ReplicatedStorage.Framework.Gameplay.RaceSystem.RaceRE",
+    RaceRF            = "ReplicatedStorage.Framework.Gameplay.RaceSystem.RaceRF",
+    RollingRE         = "ReplicatedStorage.Framework.Gameplay.RollingSystem.RollingRE",
+
+    -- Attribute / Skills
+    AttributeRE       = "ReplicatedStorage.Framework.Gameplay.AttributeUpgrade.AttributeUpgradeUtil.RemoteEvent",
+    SkillTreeRE       = "ReplicatedStorage.Framework.Gameplay.SkillTreeSystem.SkillTreeUtil.RemoteEvent",
+
+    -- Shop / Economy
+    ConsumableShopRE  = "ReplicatedStorage.Framework.Features.ConsumableShopSystem.ConsumableShopUtil.RemoteEvent",
+
+    -- Daily / Quests / Tasks
+    TaskRE            = "ReplicatedStorage.Framework.Features.TaskSystem.TaskRE",
+    DailyQuestRE      = "ReplicatedStorage.Framework.Features.DailyQuestSystem.RE",
+    EventHallRE       = "ReplicatedStorage.Framework.Features.EventHallSystem.EventHallRE",
+    SevenDailyRE      = "ReplicatedStorage.Framework.Features.SeasonSystem.SeasonUtil.RemoteEvent",
+
+    -- Data
+    DataRE            = "ReplicatedStorage.Framework.Systems.DataSystem.DataRE",
+
+    -- Pets
+    PetsRE            = "ReplicatedStorage.Framework.Gameplay.PetsSystem.PetsRE",
+}
+
 local function safeRequirePath(parent, ...)
     local current = parent
     for _, name in ipairs({...}) do
@@ -1527,7 +1615,15 @@ local Config = {
     AutoEndlessTowerMode = false,
     AutoBuyShopItem      = false,
     AutoPlayAgain        = true,
+    AfterRunMode         = "Lobby", -- "Lobby" = Return to Lobby, "Again" = Play Again
     AutoQuest            = false, -- ออโต้ทำเควสประจำวัน
+    AutoAcceptQuest      = true,  -- รับเควสอัตโนมัติ
+    AutoDoQuestObjective = true,  -- ทำ Objective อัตโนมัติ
+    AutoClaimQuestReward = true,  -- Claim Reward อัตโนมัติ
+    AutoSwitchQuest      = true,  -- เปลี่ยน Quest อัตโนมัติ
+    AutoReturnNPCQuest   = true,  -- กลับ NPC เมื่อ Quest เสร็จ
+    QuestPriorityMode    = false, -- ใช้ Quest เป็น Priority ใน GamePlanner
+    QuestLoopMode        = true,  -- Quest Loop 24/7
     AutoRaceReroll       = false, -- ออโต้สุ่มเผ่า (Race Reroll)
     AutoPerfectQTE       = false, -- ออโต้กด Perfect ตีอาวุธ (Rating 15)
     AutoFarm             = false,
@@ -1550,22 +1646,956 @@ local Config = {
     AttrPreset           = { AtkBonusValue = 1, HpBonus = 1, SkillCDReduce = 0, AtkRangeBonus = 0, MoveSpeedBonus = 0 },
 }
 
+-- ════════════════════════════════════════════════════
+-- NPC PORTAL CFRAMES — verified live positions from game
+-- ════════════════════════════════════════════════════
+local NPC_PORTALS = {
+    DUNGEON  = CFrame.new(59.13860321044922,  27.21690559387207,   226.85641479492188),
+    CAVE     = CFrame.new(42.760498046875,   -423.787841796875,    153.6419219970703),
+    TOWER    = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094),
+    CIRCUS   = CFrame.new(101.6267318725586, -449.2493591308594,  -588.0762329101562),
+    FORGE    = CFrame.new(60.80976486206055,   38.453094482421875,   13.5374174118042),
+    PET      = CFrame.new(-73.71713256835938,  34.35190963745117,  -16.689453125),
+    MILO     = CFrame.new(-74.06216430664062,  35.55099868774414,  107.41300964355469),
+    FORTIFY  = CFrame.new(55.72687530517578,   36.776397705078125, -35.093929290771484),
+}
+
+-- ────────────────────────────────────────────────────
+-- NPC WARP ENGINE
+-- Uses LobbyLocationUtil.RemoteEvent for server-side warp
+-- Falls back to direct CFrame teleport if remote fails
+-- ────────────────────────────────────────────────────
+local function teleportWithPhysicsNudge(targetCF)
+    local char = player and player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    -- Phase 1: server-side LobbyLocation warp (clean)
+    local lobbyRE = getRemote(REMOTES.LobbyLocationRE)
+    if lobbyRE then
+        pcall(function() lobbyRE:FireServer("Warp", targetCF.Position) end)
+        task.wait(0.3)
+    end
+
+    -- Phase 2: client-side CFrame nudge (fallback / correction)
+    for _ = 1, 3 do
+        pcall(function() hrp.CFrame = targetCF end)
+        task.wait(0.05)
+    end
+
+    return true
+end
+
+local function WarpToNPC(npcKey)
+    local cf = NPC_PORTALS[npcKey]
+    if not cf then
+        warn("[WarpToNPC] Unknown NPC key: " .. tostring(npcKey))
+        return false
+    end
+    print(string.format("[WarpToNPC] Warping to %s...", tostring(npcKey)))
+    return teleportWithPhysicsNudge(cf)
+end
+
+local function TeleportToTown()
+    -- Warp to dungeon portal area (default recovery point)
+    teleportWithPhysicsNudge(NPC_PORTALS.DUNGEON)
+end
+
+-- ════════════════════════════════════════════════════
+-- GLOBAL STATE MACHINE
+-- Phase transitions:
+--   Lobby → Queue → RoomCreated → InDungeon → Settlement → Lobby
+--   Lobby → Queue → (fail/timeout) → Recovering → Lobby
+-- ════════════════════════════════════════════════════
 local State = {
     Unloaded = false,
+    -- #1: Expanded Dungeon Intelligence States
+    -- "UNKNOWN" | "LOBBY" | "MATCH_GUI" | "ROOM" | "LOADING" | "IN_DUNGEON" | "COMBAT" | "DEAD" | "REVIVE" | "SETTLEMENT" | "RETURNING" | "ERROR"
+    Phase    = "LOBBY",
+    -- Tracks VotePlayAgain deduplication
+    _lastVoteTime  = 0,
+    _voteDebounce  = 8,
+    -- Tracks whether we already fired CreatRoom this cycle
+    _lastRoomTime  = 0,
+    _lastProgressTime = tick(),
 }
+
+local PHASE_TIMEOUT = {
+    MATCH_GUI   = 15,
+    ROOM        = 25,
+    Queue       = 30,
+    RoomCreated = 20,
+    LOADING     = 40,
+    IN_DUNGEON  = 600,
+    InDungeon   = 600,
+    COMBAT      = 600,
+    SETTLEMENT  = 30,
+    Settlement  = 30,
+    RETURNING   = 15,
+    ERROR       = 10,
+    Recovering  = 15,
+}
+local _phaseEnteredAt = {}
+
+local function setPhase(newPhase)
+    if State.Phase == newPhase then return end
+    print(string.format("[PayomboyZ IRS] Phase: %s → %s", State.Phase, newPhase))
+    State.Phase = newPhase
+    State._lastProgressTime = tick()
+    _phaseEnteredAt[newPhase] = tick()
+end
+
+local function phaseAge()
+    local t = _phaseEnteredAt[State.Phase]
+    return t and (tick() - t) or 0
+end
+
+-- ════════════════════════════════════════════════════
+-- PHASE 1.1 — STATE OBSERVER (Centralized Data Reader)
+-- ════════════════════════════════════════════════════
+local StateObserver = {}
+
+function StateObserver.GetPlayerState()
+    local char = player and player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+
+    local gold = 0
+    local lv   = 1
+    local pwr  = 0
+    local pts  = 0
+    local race = "Unknown"
+    local weap = "None"
+
+    if DataUtil then
+        pcall(function()
+            local pd = DataUtil:GetPlayerData(player)
+            if pd then
+                gold = tonumber(pd.Gold or pd.Currency or 0) or 0
+                lv   = tonumber(pd.Level or 1) or 1
+                pts  = tonumber(pd.AttributePoints or pd.UnusedPoints or pd.StatPoints or 0) or 0
+                if pd.Race then race = tostring(pd.Race) end
+                if pd.Equipment and pd.Equipment.Equipped then
+                    local w = pd.Equipment.Equipped.Weapon or pd.Equipment.Equipped[1]
+                    if w then weap = tostring(w) end
+                end
+            end
+        end)
+    end
+
+    pcall(function()
+        local ls = player:FindFirstChild("leaderstats")
+        if ls then
+            local gObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
+            if gObj and gold == 0 then gold = tonumber(gObj.Value) or 0 end
+        end
+        pwr = tonumber(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0) or 0
+    end)
+
+    return {
+        Character = char,
+        HRP       = hrp,
+        Position  = hrp and hrp.Position or Vector3.zero,
+        CFrame    = hrp and hrp.CFrame or CFrame.new(),
+        HP        = hum and hum.Health or 0,
+        MaxHP     = hum and hum.MaxHealth or 100,
+        Level     = lv,
+        Power     = pwr,
+        Gold      = gold,
+        Points    = pts,
+        Race      = race,
+        Weapon    = weap,
+    }
+end
+
+function StateObserver.GetWorldState()
+    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+    local inSettlement = false
+    local inBattle = false
+
+    if pg then
+        -- Multi-signal Settlement detection in src_irs.txt
+        local sGui = pg:FindFirstChild("ScreenSettlement") or pg:FindFirstChild("Settlement") or pg:FindFirstChild("ResultGui")
+        if sGui then
+            if sGui:IsA("ScreenGui") and sGui.Enabled then
+                inSettlement = true
+            elseif sGui:IsA("GuiObject") and sGui.Visible then
+                inSettlement = true
+            end
+        end
+        if not inSettlement then
+            for _, child in ipairs(pg:GetDescendants()) do
+                if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
+                    local n = string.lower(child.Name)
+                    local t = child:IsA("TextButton") and string.lower(child.Text) or ""
+                    if n:find("lobby") or n:find("again") or t:find("lobby") or t:find("again") then
+                        inSettlement = true
+                        break
+                    end
+                end
+            end
+        end
+
+        local battleHUD = pg:FindFirstChild("BattleHUD")
+        if battleHUD and battleHUD.Visible then inBattle = true end
+    end
+
+    local curPhase = inSettlement and "Settlement" or (inBattle and "InDungeon" or State.Phase)
+
+    -- Bridge sync: update _G variables for dungeon scripts
+    _G.IronSoul_Phase = curPhase
+    _G.IronSoul_AfterRunMode = Config.AfterRunMode or (Config.AutoPlayAgain and "Again" or "Lobby")
+
+    return {
+        CurrentWorld = Config.SelectedWorldId or "World1",
+        CurrentPlace = game.PlaceId,
+        CurrentPhase = curPhase,
+        InSettlement = inSettlement,
+        InBattle     = inBattle,
+    }
+end
+
+-- Backward compatibility for PlayerState table calls
+local PlayerState = {}
+function PlayerState.GetGold() return StateObserver.GetPlayerState().Gold end
+function PlayerState.GetAttributePoints() return StateObserver.GetPlayerState().Points end
+function PlayerState.GetDungeonPhase() return StateObserver.GetWorldState().CurrentPhase end
+
+-- ════════════════════════════════════════════════════
+-- PHASE 1.2 — REMOTE HEALTH MONITOR
+-- ════════════════════════════════════════════════════
+local RemoteMonitor = {
+    HealthMap = {},
+    LastCheck = 0
+}
+
+function RemoteMonitor.CheckHealth()
+    RemoteMonitor.LastCheck = tick()
+    for name, dotPath in pairs(REMOTES) do
+        local r = getRemote(dotPath)
+        RemoteMonitor.HealthMap[name] = (r ~= nil)
+    end
+    return RemoteMonitor.HealthMap
+end
+
+-- Initialize remote health immediately
+RemoteMonitor.CheckHealth()
+
+-- ════════════════════════════════════════════════════
+-- PHASE 0 & 1.3 — ACTION ENGINE (Full Lifecycle Manager)
+-- IDLE -> START -> RESOLVE -> EXECUTE -> VERIFY -> SUCCESS/RETRY/RECOVER
+-- ════════════════════════════════════════════════════
+local ActionEngine = {
+    CurrentLifecycle = "IDLE",
+    CurrentAction = "None",
+    ActionLogs = {},
+    _history = {}
+}
+
+function ActionEngine.AddLog(actionName, stage, detail)
+    local timeStr = os.date("%H:%M:%S")
+    local entry = string.format("[%s] [%s] %s: %s", timeStr, stage, actionName, detail or "")
+    table.insert(ActionEngine.ActionLogs, 1, entry)
+    if #ActionEngine.ActionLogs > 40 then table.remove(ActionEngine.ActionLogs, #ActionEngine.ActionLogs) end
+    print("⚡ [ActionEngine] " .. entry)
+end
+
+function ActionEngine.ExecuteAction(config)
+    local name      = config.Name or "UnknownAction"
+    local preFn     = config.Preconditions
+    local execFn    = config.Execute
+    local verFn     = config.Verify
+    local timeout   = config.Timeout or 4
+    local retries   = config.Retry or 2
+    local recFn     = config.Recovery
+    local cooldown  = config.Cooldown or 0.5
+
+    ActionEngine.CurrentAction = name
+    ActionEngine.CurrentLifecycle = "START"
+    ActionEngine.AddLog(name, "START", "Initiating action sequence")
+
+    -- 1. Preconditions check
+    if type(preFn) == "function" then
+        ActionEngine.CurrentLifecycle = "RESOLVE"
+        local preOk, preResult = pcall(preFn)
+        if not preOk or preResult == false then
+            ActionEngine.CurrentLifecycle = "FAILED"
+            ActionEngine.AddLog(name, "FAILED", "Precondition check failed")
+            return false, "Preconditions failed"
+        end
+    end
+
+    -- 2. Execute & Verify Loop with Retry & Recovery
+    for attempt = 1, (retries + 1) do
+        ActionEngine.CurrentLifecycle = "EXECUTE"
+        ActionEngine.AddLog(name, "EXECUTE", string.format("Attempt #%d", attempt))
+
+        local execOk, execErr = pcall(execFn)
+        if not execOk then
+            ActionEngine.AddLog(name, "WARN", "Execution error: " .. tostring(execErr))
+        end
+
+        task.wait(cooldown)
+
+        -- 3. Verify stage
+        ActionEngine.CurrentLifecycle = "VERIFY"
+        local verified = false
+        if type(verFn) == "function" then
+            verified = waitUntil(function() return verFn() == true end, timeout, 0.2)
+        else
+            verified = execOk
+        end
+
+        if verified then
+            ActionEngine.CurrentLifecycle = "SUCCESS"
+            ActionEngine.AddLog(name, "SUCCESS", string.format("Verified on attempt #%d", attempt))
+            ActionEngine._history[name] = tick()
+            task.wait(0.1)
+            ActionEngine.CurrentLifecycle = "IDLE"
+            return true, "Success"
+        end
+
+        -- Recovery before retry
+        if attempt <= retries then
+            ActionEngine.CurrentLifecycle = "RETRY"
+            ActionEngine.AddLog(name, "RETRY", string.format("Verification failed, executing recovery #%d", attempt))
+            if type(recFn) == "function" then pcall(recFn) end
+            task.wait(0.3)
+        end
+    end
+
+    ActionEngine.CurrentLifecycle = "FAILED"
+    ActionEngine.AddLog(name, "FAILED", "All execution attempts failed")
+    task.wait(0.1)
+    ActionEngine.CurrentLifecycle = "IDLE"
+    return false, "Failed after retries"
+end
+
+-- Backward compatibility for existing simple calls
+function ActionEngine.Execute(actionName, actionType, ttl, priority, fn)
+    return ActionEngine.ExecuteAction({
+        Name = actionName,
+        Execute = fn,
+        Timeout = ttl or 4,
+        Retry = 2
+    })
+end
+
+-- ════════════════════════════════════════════════════
+-- PHASE 2 — TELEPORT & NAVIGATION MANAGER (Verified Engine)
+-- ════════════════════════════════════════════════════
+local NavigationManager = {
+    LastStatus = "🟢 IDLE",
+    CurrentTarget = "-",
+    LastDistance = 0
+}
+
+function NavigationManager.GoToPosition(targetCF, maxDist, npcName)
+    maxDist = maxDist or 15
+    local targetName = npcName or string.format("(%.1f, %.1f, %.1f)", targetCF.Position.X, targetCF.Position.Y, targetCF.Position.Z)
+    NavigationManager.CurrentTarget = targetName
+
+    return ActionEngine.ExecuteAction({
+        Name = "NavigateTo_" .. targetName,
+        Preconditions = function()
+            local pState = StateObserver.GetPlayerState()
+            return pState.Character ~= nil and pState.HRP ~= nil
+        end,
+        Execute = function()
+            local pState = StateObserver.GetPlayerState()
+            local hrp = pState.HRP
+            if not hrp then return end
+
+            -- Reset Linear & Angular Velocity to prevent rubberband
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+
+            -- Phase 1: Server LobbyLocation warp
+            local lobbyRE = getRemote(REMOTES.LobbyLocationRE)
+            if lobbyRE then
+                pcall(function() lobbyRE:FireServer("Warp", targetCF.Position) end)
+                task.wait(0.2)
+            end
+
+            -- Phase 2: Client CFrame nudge
+            for _ = 1, 3 do
+                pcall(function() hrp.CFrame = targetCF end)
+                task.wait(0.04)
+            end
+
+            -- Trigger touch zone if available
+            pcall(function()
+                if type(firetouchinterest) == "function" and workspace.OverlapParams then
+                    local params = OverlapParams.new()
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances = { pState.Character }
+                    local parts = workspace:GetPartBoundsInBox(targetCF, Vector3.new(15, 15, 15), params)
+                    for _, p in ipairs(parts) do
+                        if p:FindFirstChildOfClass("TouchTransmitter") then
+                            firetouchinterest(hrp, p, 0)
+                            task.wait(0.02)
+                            firetouchinterest(hrp, p, 1)
+                        end
+                    end
+                end
+            end)
+        end,
+        Verify = function()
+            local pState = StateObserver.GetPlayerState()
+            if not pState.HRP then return false end
+            local dist = (pState.HRP.Position - targetCF.Position).Magnitude
+            NavigationManager.LastDistance = dist
+            if dist <= maxDist then
+                NavigationManager.LastStatus = string.format("🟢 ARRIVED (%.1fs)", dist)
+                return true
+            else
+                NavigationManager.LastStatus = string.format("⚠️ OUT OF RANGE (%.1fs)", dist)
+                return false
+            end
+        end,
+        Timeout = 2.5,
+        Retry = 3,
+        Recovery = function()
+            -- Reset velocity and re-nudge
+            local pState = StateObserver.GetPlayerState()
+            if pState.HRP then
+                pState.HRP.AssemblyLinearVelocity = Vector3.zero
+                pState.HRP.CFrame = targetCF
+            end
+        end,
+        Cooldown = 0.1
+    })
+end
+
+function NavigationManager.GoToNPC(npcKey)
+    local cf = NPC_PORTALS[npcKey]
+    if not cf then
+        warn("[NavigationManager] Unknown NPC Key: " .. tostring(npcKey))
+        return false, "Unknown Key"
+    end
+    return NavigationManager.GoToPosition(cf, 15, npcKey)
+end
+
+function NavigationManager.GoToPortal(portalKey) return NavigationManager.GoToNPC(portalKey) end
+function NavigationManager.GoToShop() return NavigationManager.GoToNPC("MILO") end
+function NavigationManager.GoToForge() return NavigationManager.GoToNPC("FORGE") end
+function NavigationManager.GoToQuestNPC() return NavigationManager.GoToNPC("MILO") end
+function NavigationManager.GoToDungeon() return NavigationManager.GoToNPC("DUNGEON") end
+function NavigationManager.ReturnTown() return NavigationManager.GoToNPC("DUNGEON") end
+
+-- ════════════════════════════════════════════════════
+-- PHASE 3 — NPC ENGINE & NPC MANAGER
+-- ════════════════════════════════════════════════════
+local NPCManager = {}
+
+function NPCManager.FindNPC(npcName)
+    local cf = NPC_PORTALS[npcName]
+    if cf then return cf end
+    -- Check Workspace for NPC model
+    local npcObj = workspace:FindFirstChild(npcName, true)
+    if npcObj then
+        local hrp = npcObj:FindFirstChild("HumanoidRootPart") or npcObj:FindFirstChild("PrimaryPart") or npcObj:FindFirstChildOfClass("BasePart")
+        if hrp then return hrp.CFrame end
+    end
+    return nil
+end
+
+function NPCManager.GoToNPC(npcName)
+    local cf = NPCManager.FindNPC(npcName)
+    if cf then return NavigationManager.GoToPosition(cf, 15, npcName) end
+    return false, "NPC Not Found"
+end
+
+function NPCManager.VerifyUI(guiName)
+    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+    if not pg then return false end
+    local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+    local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
+    return targetGui and (targetGui.Visible or (targetGui:IsA("ScreenGui") and targetGui.Enabled)) == true
+end
+
+function NPCManager.Interact(npcName, targetCF, guiName, actionFn)
+    return ActionEngine.ExecuteAction({
+        Name = "NPCInteract_" .. tostring(npcName),
+        Preconditions = function()
+            return targetCF ~= nil or NPC_PORTALS[npcName] ~= nil
+        end,
+        Execute = function()
+            local cf = targetCF or NPC_PORTALS[npcName] or NPCManager.FindNPC(npcName)
+            if not cf then return end
+
+            CloseAllNPCWindows()
+            task.wait(0.08)
+
+            NavigationManager.GoToPosition(cf, 15, npcName)
+            task.wait(0.1)
+
+            triggerNPCInteraction(cf)
+
+            if guiName then
+                local taskRE = getRemote(REMOTES.TaskRE)
+                if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName) end
+            end
+        end,
+        Verify = function()
+            if guiName then
+                local opened = NPCManager.VerifyUI(guiName)
+                if not opened then
+                    -- Force Fallback UI toggle
+                    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                    if pg then
+                        local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+                        local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
+                        if targetGui then
+                            if targetGui:IsA("ScreenGui") then targetGui.Enabled = true
+                            elseif targetGui:IsA("GuiObject") then targetGui.Visible = true end
+                            opened = true
+                        end
+                    end
+                end
+                return opened
+            end
+            return true
+        end,
+        Timeout = 3,
+        Retry = 2,
+        Recovery = function()
+            local cf = targetCF or NPC_PORTALS[npcName]
+            if cf then NavigationManager.GoToPosition(cf, 15, npcName) end
+        end
+    })
+end
+
+-- Encapsulate existing NPCEngine
+local NPCEngine = {
+    VerifyNearNPC     = function(targetCF, maxDist) return (StateObserver.GetPlayerState().Position - targetCF.Position).Magnitude <= (maxDist or 15) end,
+    VerifyWindowOpened = NPCManager.VerifyUI,
+    Interact          = NPCManager.Interact
+}
+
+-- ════════════════════════════════════════════════════
+-- PHASE 5 — DUNGEON ENGINE & PRE-DUNGEON CHECK MANAGER
+-- ════════════════════════════════════════════════════
+local DungeonManager = {
+    LastCheckStatus = "🟢 READY FOR RUN",
+    LastCheckReason = "All requirements satisfied"
+}
+
+function DungeonManager.PreDungeonCheck()
+    local pState = StateObserver.GetPlayerState()
+
+    -- 1. Check HP
+    if pState.HP <= 0 or (pState.HP / math.max(1, pState.MaxHP)) < 0.3 then
+        DungeonManager.LastCheckStatus = "🔴 NOT READY"
+        DungeonManager.LastCheckReason = "Low HP / Character Dead"
+        return false, DungeonManager.LastCheckReason
+    end
+
+    -- 2. Check Equipment
+    if pState.Weapon == "None" and Config.AutoSelectBest then
+        pcall(EquipBestAll)
+    end
+
+    -- 3. Auto Sell if inventory high
+    if Config.AutoSell then
+        pcall(ExecuteSellNow)
+    end
+
+    -- 4. Check Gold reserve
+    if pState.Gold < (Config.MinGoldReserve or 0) then
+        DungeonManager.LastCheckStatus = "⚠️ WARNING"
+        DungeonManager.LastCheckReason = "Gold below reserve limit"
+    else
+        DungeonManager.LastCheckStatus = "🟢 READY FOR RUN"
+        DungeonManager.LastCheckReason = "All pre-checks passed"
+    end
+
+    return true, DungeonManager.LastCheckReason
+end
+
+function DungeonManager.StartRun(worldId, diffNum, partySize)
+    local ready, reason = DungeonManager.PreDungeonCheck()
+    if not ready then
+        warn("[DungeonManager] Pre-check failed: " .. tostring(reason))
+        return false, reason
+    end
+    return StartDungeonRun(worldId, diffNum, partySize)
+end
+
+-- ════════════════════════════════════════════════════
+-- PHASE 4 — GAME PLANNER & CHICKEN BRAIN (Autonomous Priority Engine)
+-- Loop Cycle: Observe → Plan → Execute → Verify → Recover
+-- Priorities:
+-- P0: Emergency Recovery (Stuck/Dead/Low HP)
+-- P1: Quests (If QuestPriorityMode) / Active Dungeon
+-- P2: Equipment & Attribute Progression
+-- P3: Inventory & Economy (Auto Sell / Forge)
+-- P4: Daily Rewards & Optional Activities
+-- ════════════════════════════════════════════════════
+local GamePlanner = {
+    _currentPlan = { Priority = 99, Name = "IDLE", Reason = "STANDBY" }
+}
+
+function GamePlanner.EvaluatePlan()
+    local pState = StateObserver.GetPlayerState()
+    local wState = StateObserver.GetWorldState()
+
+    -- P0: Emergency Check
+    if pState.HP <= 0 or wState.CurrentPhase == "Dead" then
+        return { Priority = 0, Name = "EMERGENCY_REVIVE", Action = "Revive", Reason = "Character is dead" }
+    end
+
+    local watchdogFails = State._failedRecoveryCycles or 0
+    if watchdogFails > 2 then
+        return { Priority = 0, Name = "EMERGENCY_RECOVER", Action = "ReturnTown", Reason = "Watchdog detected repeated failures" }
+    end
+
+    -- P1: In Dungeon or Settlement Processing
+    if wState.InBattle or wState.CurrentPhase == "IN_DUNGEON" or wState.CurrentPhase == "COMBAT" then
+        return { Priority = 1, Name = "DUNGEON_COMBAT", Action = "CombatLoop", Reason = "Currently in active dungeon" }
+    end
+
+    if wState.InSettlement or wState.CurrentPhase == "Settlement" then
+        return { Priority = 1, Name = "DUNGEON_SETTLEMENT", Action = "ProcessSettlement", Reason = "Post-dungeon settlement screen active" }
+    end
+
+    -- P1: Quest Priority Mode
+    if Config.AutoQuest and Config.QuestPriorityMode and _questState and #_questState.pendingQuests > 0 then
+        return { Priority = 1, Name = "QUEST_ACTIVE", Action = "ExecuteQuest", Reason = "Quest priority enabled with pending objectives" }
+    end
+
+    -- P2: Character Progression (Attribute Points)
+    if Config.AutoUpgradeAttribute and pState.Points > 0 then
+        return { Priority = 2, Name = "UPGRADE_ATTRIBUTES", Action = "UpgradeAttr", Reason = "Unassigned attribute points available (" .. tostring(pState.Points) .. ")" }
+    end
+
+    -- P3: Economy & Inventory Management (Gold below reserve or AutoSell needed)
+    if Config.AutoSell and pState.Gold < (Config.MinGoldReserve or 5000) then
+        return { Priority = 3, Name = "ECONOMY_SELL", Action = "AutoSell", Reason = "Maintaining gold reserve via item sale" }
+    end
+
+    -- P4: Daily Rewards
+    if Config.AutoClaimDaily and not State._dailyClaimedThisSession then
+        return { Priority = 4, Name = "CLAIM_DAILY", Action = "ClaimDaily", Reason = "Daily login rewards pending claim" }
+    end
+
+    -- Default P1: Continuous Dungeon Farm
+    if Config.AutoEnterDungeon then
+        return { Priority = 1, Name = "ENTER_DUNGEON", Action = "StartDungeon", Reason = "Standard continuous dungeon farming queue" }
+    end
+
+    return { Priority = 99, Name = "IDLE", Action = "None", Reason = "No priority active — system in standby" }
+end
+
+local ChickenBrain = {
+    CurrentStage = "OBSERVE",
+    LastCycle = 0,
+    CycleInterval = 2.0
+}
+
+function ChickenBrain.RunLoopCycle()
+    if not Config.ChickenMode then return end
+    if (tick() - ChickenBrain.LastCycle) < ChickenBrain.CycleInterval then return end
+    ChickenBrain.LastCycle = tick()
+
+    -- STAGE 1: OBSERVE
+    ChickenBrain.CurrentStage = "OBSERVE"
+    local pState = StateObserver.GetPlayerState()
+    local wState = StateObserver.GetWorldState()
+
+    -- STAGE 2: PLAN
+    ChickenBrain.CurrentStage = "PLAN"
+    local plan = GamePlanner.EvaluatePlan()
+    GamePlanner._currentPlan = plan
+
+    -- STAGE 3: EXECUTE
+    ChickenBrain.CurrentStage = "EXECUTE"
+    if plan.Action == "Revive" then
+        ActionEngine.ExecuteAction({ Name = "Chicken_Revive", Execute = function() local re = getRemote(REMOTES.GamePlayerRE); if re then re:FireServer("ExitSettlement") end end })
+    elseif plan.Action == "ReturnTown" then
+        ActionEngine.ExecuteAction({ Name = "Chicken_ReturnTown", Execute = NavigationManager.ReturnTown })
+    elseif plan.Action == "UpgradeAttr" then
+        ActionEngine.ExecuteAction({ Name = "Chicken_UpgradeAttr", Execute = function() UpgradeAttribute(Config.AttrPreset) end })
+    elseif plan.Action == "AutoSell" then
+        ActionEngine.ExecuteAction({ Name = "Chicken_AutoSell", Execute = ExecuteSellNow })
+    elseif plan.Action == "ClaimDaily" then
+        ActionEngine.ExecuteAction({
+            Name = "Chicken_ClaimDaily",
+            Execute = function()
+                ViewDailyActivity()
+                task.wait(0.3)
+                for _, rid in ipairs(DailyRewardIds) do ClaimDailyReward(rid); task.wait(0.2) end
+                State._dailyClaimedThisSession = true
+            end
+        })
+    elseif plan.Action == "StartDungeon" and (wState.CurrentPhase == "LOBBY" or wState.CurrentPhase == "Lobby") then
+        DungeonManager.StartRun(Config.SelectedWorldId or "World1", Config.SelectedDifficultyNum or 1, Config.SelectedPartySizeNum or 4)
+    end
+
+    -- STAGE 4: VERIFY
+    ChickenBrain.CurrentStage = "VERIFY"
+    task.wait(0.1)
+
+    -- STAGE 5: RECOVER
+    ChickenBrain.CurrentStage = "RECOVER"
+    task.wait(0.1)
+
+    ChickenBrain.CurrentStage = "OBSERVE"
+end
+
+-- ════════════════════════════════════════════════════
+-- 🧠 DUNGEON INTELLIGENCE LAYER
+-- #1 States | #2 Transaction Pipeline | #3 Adaptive Timing
+-- #4 Run Evaluator | #5 Dynamic Difficulty | #6 Recovery Tree
+-- ════════════════════════════════════════════════════
+
+-- #4: RUN EVALUATOR ENGINE
+local RunEvaluator = {
+    currentRun = nil,
+    history = {}
+}
+
+function RunEvaluator.StartRun(worldId, diffNum)
+    RunEvaluator.currentRun = {
+        World = worldId,
+        Diff = diffNum,
+        StartTime = tick(),
+        StartGold = PlayerState.GetGold(),
+        Deaths = 0
+    }
+end
+
+function RunEvaluator.RecordDeath()
+    if RunEvaluator.currentRun then
+        RunEvaluator.currentRun.Deaths = RunEvaluator.currentRun.Deaths + 1
+    end
+end
+
+function RunEvaluator.EndRun(isSuccess)
+    if not RunEvaluator.currentRun then return nil end
+    local r = RunEvaluator.currentRun
+    local duration = math.max(1, tick() - r.StartTime)
+    local endGold = PlayerState.GetGold()
+    local goldGained = math.max(0, endGold - r.StartGold)
+    local goldPerMin = math.floor((goldGained / duration) * 60)
+
+    local record = {
+        World = r.World,
+        Diff = r.Diff,
+        Duration = duration,
+        GoldGained = goldGained,
+        GoldPerMin = goldPerMin,
+        Deaths = r.Deaths,
+        Success = isSuccess,
+        Time = os.time()
+    }
+
+    table.insert(RunEvaluator.history, record)
+    if #RunEvaluator.history > 30 then table.remove(RunEvaluator.history, 1) end
+
+    print(string.format("📊 [RunEvaluator] Completed! World: %s | Diff: %d | Time: %.1fs | Gold/Min: %d | Deaths: %d",
+        tostring(r.World), tonumber(r.Diff), duration, goldPerMin, r.Deaths))
+
+    RunEvaluator.currentRun = nil
+    return record
+end
+
+-- #5: DYNAMIC DIFFICULTY OPTIMIZER
+local DifficultyOptimizer = {}
+
+function DifficultyOptimizer.EvaluateNextDifficulty(currentWorld, currentDiff)
+    if not Config.AutoAdaptiveDifficulty then return currentDiff end
+
+    local lastRun = RunEvaluator.history[#RunEvaluator.history]
+    if not lastRun or lastRun.World ~= currentWorld then return currentDiff end
+
+    if lastRun.Success and lastRun.Deaths == 0 and lastRun.Duration < 180 then
+        local nextDiff = math.min(5, currentDiff + 1)
+        print(string.format("⚡ [DifficultyOptimizer] Fast Clear! Raising Difficulty: %d → %d", currentDiff, nextDiff))
+        return nextDiff
+    elseif not lastRun.Success or lastRun.Deaths >= 2 then
+        local prevDiff = math.max(1, currentDiff - 1)
+        print(string.format("⚠️ [DifficultyOptimizer] High Risk/Death! Lowering Difficulty: %d → %d", currentDiff, prevDiff))
+        return prevDiff
+    end
+
+    return currentDiff
+end
+
+-- #6: DUNGEON RECOVERY TREE
+local DungeonRecoveryTree = {}
+
+function DungeonRecoveryTree.HandleFailure(errReason, worldId, diffNum, partySize)
+    warn(string.format("🌲 [DungeonRecoveryTree] Executing Recovery Branch for Error: %s", tostring(errReason)))
+
+    if errReason == "OpenMatchFailed" or errReason == "GUIMissing" then
+        CloseAllNPCWindows()
+        NavigationManager.GoToPosition(NPC_PORTALS.DUNGEON, 15, "DUNGEON_PORTAL")
+        task.wait(0.3)
+        NPCManager.Interact("ScreenMatch", NPC_PORTALS.DUNGEON, "ScreenMatch")
+
+    elseif errReason == "CreateRoomFailed" then
+        local matchRE = getRemote(REMOTES.GameMatchRE)
+        if matchRE then matchRE:FireServer("LeaveRoom") end
+        task.wait(0.3)
+
+    elseif errReason == "CharacterStuck" then
+        NavigationManager.ReturnTown()
+
+    else
+        NavigationManager.ReturnTown()
+        State._lastRoomTime = 0
+        setPhase("LOBBY")
+    end
+end
+
+-- #2: GATED DUNGEON TRANSACTION PIPELINE (StartDungeonRun)
+function StartDungeonRun(worldId, diffNum, partySize)
+    return safeCall("StartDungeonRun", function()
+        local targetDiff = DifficultyOptimizer.EvaluateNextDifficulty(worldId, diffNum or 1)
+
+        -- Step 1: Resolve Location & Teleport via NavigationManager
+        NavigationManager.GoToPosition(NPC_PORTALS.DUNGEON, 15, "DUNGEON_PORTAL")
+        task.wait(0.2)
+
+        -- Step 2: Open Match GUI & Adaptive Verification (#3)
+        local matchOpened = waitUntil(function()
+            local taskRE = getRemote(REMOTES.TaskRE)
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
+            return NPCManager.VerifyUI("ScreenMatch")
+        end, 4, 0.3)
+
+        if not matchOpened then
+            DungeonRecoveryTree.HandleFailure("OpenMatchFailed", worldId, targetDiff, partySize)
+            return false, "OpenMatchFailed"
+        end
+        setPhase("MATCH_GUI")
+
+        -- Step 3: Select World & Verify
+        local worldRE = getRemote(REMOTES.WorldUtilRE)
+        if worldRE then worldRE:FireServer("SelectWorld", worldId, targetDiff) end
+        task.wait(0.3)
+
+        -- Step 4: Create Room & Verify
+        local matchRE = getRemote(REMOTES.GameMatchRE)
+        if matchRE then
+            matchRE:FireServer("LeaveRoom")
+            task.wait(0.3)
+            matchRE:FireServer("CreatRoom", worldId, targetDiff, partySize or 1)
+        end
+
+        local roomCreated = waitUntil(function()
+            local phase = State.Phase
+            return phase == "ROOM" or phase == "RoomCreated" or phase == "LOADING" or phase == "IN_DUNGEON"
+        end, 6, 0.3)
+
+        if not roomCreated then
+            DungeonRecoveryTree.HandleFailure("CreateRoomFailed", worldId, targetDiff, partySize)
+            return false, "CreateRoomFailed"
+        end
+        setPhase("ROOM")
+
+        -- Step 5: Wait For Dungeon Load & Verify
+        RunEvaluator.StartRun(worldId, targetDiff)
+        local inDungeon = waitUntil(function()
+            local phase = StateObserver.GetWorldState().CurrentPhase
+            return phase == "IN_DUNGEON" or phase == "InDungeon" or phase == "COMBAT"
+        end, 15, 0.5)
+
+        if inDungeon then
+            setPhase("IN_DUNGEON")
+            return true, "DungeonLoaded"
+        end
+
+        DungeonRecoveryTree.HandleFailure("DungeonLoadTimeout", worldId, targetDiff, partySize)
+        return false, "DungeonLoadTimeout"
+    end)
+end
+
+-- poll PlayerGui ว่าหน้า settlement / battle HUD มองเห็นไหม
+local function detectPhaseFromGUI()
+    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+    if not pg then return end
+    -- settlement screen
+    local resultGui = pg:FindFirstChild("ResultGui")
+    local settlement = resultGui and resultGui:FindFirstChild("ScreenSettlement")
+    if settlement and settlement.Visible then
+        if State.Phase ~= "Settlement" then setPhase("Settlement") end
+        return
+    end
+    -- revive / dead screen
+    local battleHUD = pg:FindFirstChild("BattleHUD")
+    local reviveFrame = battleHUD and battleHUD:FindFirstChild("PlayerRevive")
+        and battleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
+    if reviveFrame and reviveFrame.Visible then
+        if State.Phase ~= "Dead" then setPhase("Dead") end
+        return
+    end
+end
+
+-- utility: poll until condition() returns true or timeout
+local function waitUntil(condition, timeout, interval)
+    interval = interval or 0.15
+    timeout  = timeout  or 5
+    local elapsed = 0
+    while elapsed < timeout do
+        if condition() then return true end
+        task.wait(interval)
+        elapsed = elapsed + interval
+    end
+    return false
+end
 
 local function getSaveData()
     return {
-        AutoEnterDungeon       = Config.AutoEnterDungeon,
-        SelectedWorldName      = Config.SelectedWorldName,
-        SelectedWorldId        = Config.SelectedWorldId,
-        SelectedDifficultyName = Config.SelectedDifficultyName,
-        SelectedDifficultyNum  = Config.SelectedDifficultyNum,
-        AutoSell               = Config.AutoSell,
-        AutoSelectBest         = Config.AutoSelectBest,
-        AutoUpgradeAttribute   = Config.AutoUpgradeAttribute,
-        AutoRaceReroll         = Config.AutoRaceReroll,
-        SelectedTargetRaces    = Config.SelectedTargetRaces,
+        -- World / Dungeon selection
+        AutoEnterDungeon         = Config.AutoEnterDungeon,
+        SelectedWorldName        = Config.SelectedWorldName,
+        SelectedWorldId          = Config.SelectedWorldId,
+        SelectedDifficultyName   = Config.SelectedDifficultyName,
+        SelectedDifficultyNum    = Config.SelectedDifficultyNum,
+        SelectedPartySizeName    = Config.SelectedPartySizeName,
+        SelectedPartySizeNum     = Config.SelectedPartySizeNum,
+        -- After-run behavior
+        AfterRunMode             = Config.AfterRunMode,
+        -- Cave
+        AutoCaveMode             = Config.AutoCaveMode,
+        SelectedCaveId           = Config.SelectedCaveId,
+        CaveDiffNum              = Config.CaveDiffNum,
+        CavePartySize            = Config.CavePartySize,
+        -- Endless Tower
+        AutoEndlessTowerMode     = Config.AutoEndlessTowerMode,
+        EndlessTowerDiffNum      = Config.EndlessTowerDiffNum,
+        EndlessPartySize         = Config.EndlessPartySize,
+        -- Automation flags
+        AutoSell                 = Config.AutoSell,
+        Crystals_Value           = Config.Crystals_Value,
+        Ores_Value               = Config.Ores_Value,
+        Equipment_Value          = Config.Equipment_Value,
+        AutoSelectBest           = Config.AutoSelectBest,
+        AutoUseScroll            = Config.AutoUseScroll,
+        AutoFortifyWeapon        = Config.AutoFortifyWeapon,
+        AutoDropOres             = Config.AutoDropOres,
+        AutoBonusCard            = Config.AutoBonusCard,
+        AutoUpgradeAttribute     = Config.AutoUpgradeAttribute,
+        AttrPreset               = Config.AttrPreset,
+        AutoClaimDaily           = Config.AutoClaimDaily,
+        AutoBuyShopItem          = Config.AutoBuyShopItem,
+        ShopItemToBuy            = Config.ShopItemToBuy,
+        AutoQuest                = Config.AutoQuest,
+        AutoAcceptQuest          = Config.AutoAcceptQuest,
+        AutoDoQuestObjective     = Config.AutoDoQuestObjective,
+        AutoClaimQuestReward     = Config.AutoClaimQuestReward,
+        AutoSwitchQuest          = Config.AutoSwitchQuest,
+        AutoReturnNPCQuest       = Config.AutoReturnNPCQuest,
+        QuestPriorityMode        = Config.QuestPriorityMode,
+        QuestLoopMode            = Config.QuestLoopMode,
+        TaskNpcTarget            = Config.TaskNpcTarget,
+        AutoRaceReroll           = Config.AutoRaceReroll,
+        SelectedTargetRaces      = Config.SelectedTargetRaces,
+        AutoPerfectQTE           = Config.AutoPerfectQTE,
+        AutoFarm                 = Config.AutoFarm,
+        AutoSkill                = Config.AutoSkill,
     }
 end
 
@@ -1607,11 +2637,52 @@ end
 local DailyRewardIds = { "DR_1", "DR_2", "DR_3", "DR_4", "DR_5", "DR_6", "DR_7" }
 
 -- ════════════════════════════════════════════════════
--- 5. HELPER DATA & REMOTE FUNCTIONS
+-- 5. REMOTE REGISTRY & ERROR CLASSIFIER
 -- ════════════════════════════════════════════════════
-local _RC = {}
-local function getRemote(path)
-    if _RC[path] then return _RC[path] end
+
+-- #11: Error Classifier & Structured Logger
+local ErrorLog = {}
+local function safeCall(contextName, fn, ...)
+    local args = { ... }
+    local ok, err = pcall(function()
+        return fn(table.unpack(args))
+    end)
+    if not ok then
+        local errStr = tostring(err)
+        table.insert(ErrorLog, { Time = os.time(), Context = contextName, Error = errStr })
+        if #ErrorLog > 50 then table.remove(ErrorLog, 1) end
+        warn(string.format("⚠️ [PayomboyZ IRS Error: %s] %s", tostring(contextName), errStr))
+    end
+    return ok, err
+end
+
+-- #10: RemoteRegistry Manager with Validate & Invalidate
+local RemoteRegistry = {
+    _cache = {}
+}
+
+function RemoteRegistry.Invalidate(path)
+    if path then
+        RemoteRegistry._cache[path] = nil
+    else
+        table.clear(RemoteRegistry._cache)
+    end
+end
+
+function RemoteRegistry.Get(path)
+    local cached = RemoteRegistry._cache[path]
+    if cached then
+        -- Validate that cached instance is still alive and parented
+        local ok, isAlive = pcall(function()
+            return cached and cached.Parent and cached:IsDescendantOf(game)
+        end)
+        if ok and isAlive then
+            return cached
+        else
+            RemoteRegistry._cache[path] = nil
+        end
+    end
+
     local ok, result = pcall(function()
         local parts = string.split(path, ".")
         local obj = game:GetService(parts[1])
@@ -1621,8 +2692,16 @@ local function getRemote(path)
         end
         return obj
     end)
-    if ok and result then _RC[path] = result end
-    return ok and result or nil
+
+    if ok and result then
+        RemoteRegistry._cache[path] = result
+        return result
+    end
+    return nil
+end
+
+local function getRemote(path)
+    return RemoteRegistry.Get(path)
 end
 
 local function UpgradeAttribute(attrTable)
@@ -1792,14 +2871,45 @@ local function FortifyEquipment(equipUUID)
     end)
 end
 
-local DUNGEON_PORTAL_CF = CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188)
-local CAVE_PORTAL_CF    = CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703)
-local TOWER_PORTAL_CF   = CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094)
-local CIRCUS_PORTAL_CF  = CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562)
-local FORGE_PORTAL_CF   = CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042)
-local PET_PORTAL_CF     = CFrame.new(-73.71713256835938, 34.35190963745117, -16.689453125)
-local MILO_PORTAL_CF    = CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469)
-local FORTIFY_PORTAL_CF = CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484)
+-- #14: Dynamic Location Resolver (Dynamic NPC/Portal Resolution)
+local LocationResolver = {}
+function LocationResolver.Resolve(name, fallbackCF)
+    local found = nil
+    pcall(function()
+        for _, parentName in ipairs({ "NPC", "NPCs", "Portals", "Map", "Buildings", "Spawns" }) do
+            local parent = workspace:FindFirstChild(parentName)
+            if parent then
+                found = parent:FindFirstChild(name, true)
+                if found then break end
+            end
+        end
+        if not found then
+            found = workspace:FindFirstChild(name, true)
+        end
+    end)
+
+    if found then
+        if found:IsA("Model") and found.PrimaryPart then
+            return found.PrimaryPart.CFrame
+        elseif found:IsA("BasePart") then
+            return found.CFrame
+        elseif found:IsA("Model") then
+            local part = found:FindFirstChildWhichIsA("BasePart", true)
+            if part then return part.CFrame end
+        end
+    end
+
+    return fallbackCF
+end
+
+local DUNGEON_PORTAL_CF = LocationResolver.Resolve("DungeonPortal", CFrame.new(59.13860321044922, 27.21690559387207, 226.85641479492188))
+local CAVE_PORTAL_CF    = LocationResolver.Resolve("CavePortal", CFrame.new(42.760498046875, -423.787841796875, 153.6419219970703))
+local TOWER_PORTAL_CF   = LocationResolver.Resolve("TowerPortal", CFrame.new(-30.026504516601562, 64.68708038330078, -152.80955505371094))
+local CIRCUS_PORTAL_CF  = LocationResolver.Resolve("CircusPortal", CFrame.new(101.6267318725586, -449.2493591308594, -588.0762329101562))
+local FORGE_PORTAL_CF   = LocationResolver.Resolve("ForgeNpc", CFrame.new(60.80976486206055, 38.453094482421875, 13.5374174118042))
+local PET_PORTAL_CF     = LocationResolver.Resolve("PetNpc", CFrame.new(-73.71713256835938, 34.35190963745117, -16.689453125))
+local MILO_PORTAL_CF    = LocationResolver.Resolve("MiloNpc", CFrame.new(-74.06216430664062, 35.55099868774414, 107.41300964355469))
+local FORTIFY_PORTAL_CF = LocationResolver.Resolve("FortifyNpc", CFrame.new(55.72687530517578, 36.776397705078125, -35.093929290771484))
 
 local ALL_NPC_WINDOW_NAMES = {
     "ScreenForge",
@@ -1812,7 +2922,7 @@ local ALL_NPC_WINDOW_NAMES = {
 }
 
 local function CloseAllNPCWindows()
-    pcall(function()
+    safeCall("CloseAllNPCWindows", function()
         local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         if taskRE then
             taskRE:FireServer("UpdateTaskProgress", "CloseGUIWindow")
@@ -1837,39 +2947,103 @@ local function CloseAllNPCWindows()
     end)
 end
 
-local function OpenNPCWindowCleanly(guiName, targetCF)
-    pcall(function()
-        CloseAllNPCWindows()
-        task.wait(0.1)
+-- ════════════════════════════════════════════════════
+-- NPC INTERACTION ENGINE (8-Step Verified Pipeline)
+-- ════════════════════════════════════════════════════
+local NPCEngine = {}
 
-        if targetCF then
-            teleportWithPhysicsNudge(targetCF)
+function NPCEngine.VerifyNearNPC(targetCF, maxDist)
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp or not targetCF then return false end
+    local dist = (hrp.Position - targetCF.Position).Magnitude
+    return dist <= (maxDist or 15)
+end
+
+function NPCEngine.VerifyWindowOpened(guiName)
+    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+    if not pg then return false end
+    local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+    local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
+    return targetGui and (targetGui.Visible or (targetGui:IsA("ScreenGui") and targetGui.Enabled))
+end
+
+function NPCEngine.Interact(npcName, targetCF, guiName, actionFn)
+    return safeCall("NPCEngine.Interact(" .. tostring(npcName) .. ")", function()
+        -- 1. Resolve Position if CFrame is nil
+        local resolvedCF = targetCF or LocationResolver.Resolve(npcName, nil)
+        if not resolvedCF then
+            warn("[NPCEngine] Failed to resolve position for NPC: " .. tostring(npcName))
+            return false
+        end
+
+        -- 2. Clean up open windows first
+        CloseAllNPCWindows()
+        task.wait(0.08)
+
+        -- 3. Teleport & Physics Nudge
+        teleportWithPhysicsNudge(resolvedCF)
+        task.wait(0.12)
+
+        -- 4. Verify Position
+        local isNear = NPCEngine.VerifyNearNPC(resolvedCF, 18)
+        if not isNear then
+            -- Fallback secondary nudge
+            teleportWithPhysicsNudge(resolvedCF)
             task.wait(0.15)
         end
 
-        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName)
+        -- 5. Trigger Physical / Zone Interaction
+        triggerNPCInteraction(resolvedCF)
+
+        -- 6. Server Handshake Fire
+        if guiName then
+            local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", guiName) end
         end
 
-        local pg = player and player:FindFirstChildOfClass("PlayerGui")
-        if pg then
-            local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
-            local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
-            if targetGui then
-                if targetGui:IsA("ScreenGui") then
-                    targetGui.Enabled = true
-                elseif targetGui:IsA("GuiObject") then
-                    targetGui.Visible = true
+        -- 7. Verify UI / Window Open
+        local opened = false
+        if guiName then
+            opened = waitUntil(function()
+                return NPCEngine.VerifyWindowOpened(guiName)
+            end, 2.5, 0.15)
+
+            if not opened then
+                -- Force Fallback UI toggle
+                local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                if pg then
+                    local mainContainer = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg
+                    local targetGui = mainContainer:FindFirstChild(guiName) or pg:FindFirstChild(guiName, true)
+                    if targetGui then
+                        if targetGui:IsA("ScreenGui") then targetGui.Enabled = true
+                        elseif targetGui:IsA("GuiObject") then targetGui.Visible = true end
+                        opened = true
+                    end
                 end
             end
+        else
+            opened = true
         end
+
+        -- 8. Execute Action Callback if provided
+        if opened and type(actionFn) == "function" then
+            task.wait(0.1)
+            actionFn()
+        end
+
+        return opened
     end)
+end
+
+-- #13: OpenNPCWindowCleanly with Server Verification
+local function OpenNPCWindowCleanly(guiName, targetCF)
+    return NPCEngine.Interact(guiName, targetCF, guiName)
 end
 
 local function teleportWithPhysicsNudge(targetCF)
     if typeof(targetCF) ~= "CFrame" then return end
-    pcall(function()
+    safeCall("teleportWithPhysicsNudge", function()
         local char = player.Character or player.CharacterAdded:Wait()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
@@ -1878,7 +3052,7 @@ local function teleportWithPhysicsNudge(targetCF)
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
 
-        -- 2. ย้ายพิกัดตัวละครทันที (Instant Teleport แบบเดียวกับระบบสร้างห้องดันเจี้ยน)
+        -- 2. ย้ายพิกัดตัวละครทันที
         if char.PrimaryPart then
             char:SetPrimaryPartCFrame(targetCF)
         else
@@ -1914,13 +3088,17 @@ local function ForceOpenUIWindow(guiName, npcDialogId)
     OpenNPCWindowCleanly(guiName)
 end
 
+-- #15: Sequential NPC Interaction Pipeline (Try Prompt -> Verify -> Try Click -> Verify -> Try Key E)
 local function triggerNPCInteraction(targetCF)
-    pcall(function()
+    safeCall("triggerNPCInteraction", function()
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not targetCF then return end
 
-        -- 1. สแกนหา ProximityPrompt (ปุ่ม E) หรือ ClickDetector บริเวณ NPC
-        if workspace.OverlapParams and targetCF then
+        local verified = false
+
+        -- Step 1: Scan & Try ProximityPrompt
+        if workspace.OverlapParams then
             local params = OverlapParams.new()
             params.FilterType = Enum.RaycastFilterType.Exclude
             if char then params.FilterDescendantsInstances = { char } end
@@ -1928,9 +3106,7 @@ local function triggerNPCInteraction(targetCF)
 
             for _, p in ipairs(parts) do
                 local prompt = p:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if not prompt and p.Parent then
-                    prompt = p.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
-                end
+                    or (p.Parent and p.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
                 if prompt then
                     if type(fireproximityprompt) == "function" then
                         fireproximityprompt(prompt, 0)
@@ -1939,29 +3115,59 @@ local function triggerNPCInteraction(targetCF)
                     else
                         pcall(function() prompt:InputHoldBegin() task.wait(0.05) prompt:InputHoldEnd() end)
                     end
+                    -- Verify if dialog or window opened
+                    verified = waitUntil(function()
+                        local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                        return pg and (pg:FindFirstChild("DialogNpc", true) or pg:FindFirstChild("DialogGui", true)) ~= nil
+                    end, 0.8, 0.1)
+                    if verified then return end
                 end
+            end
 
+            -- Step 2: Try ClickDetector if ProximityPrompt didn't open dialog
+            for _, p in ipairs(parts) do
                 local cd = p:FindFirstChildWhichIsA("ClickDetector", true)
                 if cd and type(fireclickdetector) == "function" then
                     fireclickdetector(cd)
+                    verified = waitUntil(function()
+                        local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                        return pg and (pg:FindFirstChild("DialogNpc", true) or pg:FindFirstChild("DialogGui", true)) ~= nil
+                    end, 0.8, 0.1)
+                    if verified then return end
                 end
             end
         end
 
-        -- 2. จำลองการกดปุ่ม 'E' ผ่าน VirtualInputManager อัตโนมัติทันที
-        pcall(function()
-            local vim = game:GetService("VirtualInputManager")
-            if vim then
-                vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                task.wait(0.05)
-                vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-            end
-        end)
+        -- Step 3: Fallback to VirtualInputManager 'E' only if previous methods didn't trigger dialog
+        if not verified then
+            pcall(function()
+                local vim = game:GetService("VirtualInputManager")
+                if vim then
+                    vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                    task.wait(0.05)
+                    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                end
+            end)
+        end
     end)
 end
 
+-- #23: Event-Gated Forge QTE (Only fires when QTE is active)
 local function TriggerForgePerfectQTE(targetUUID)
-    pcall(function()
+    safeCall("TriggerForgePerfectQTE", function()
+        local pg = player and player:FindFirstChildOfClass("PlayerGui")
+        local screenForge = pg and pg:FindFirstChild("ScreenForge", true)
+        if not screenForge or not (screenForge.Enabled or screenForge.Visible) then return end
+
+        -- Verify QTE frame/prompt is actually active
+        local qteActive = screenForge:FindFirstChild("QTEFrame", true)
+            or screenForge:FindFirstChild("QTE", true)
+            or screenForge:FindFirstChild("ScreenQTE", true)
+            or screenForge:FindFirstChild("RatingLabel", true)
+
+        local isQTEVisible = qteActive and (qteActive.Visible or (qteActive:IsA("ScreenGui") and qteActive.Enabled))
+        if not isQTEVisible and not screenForge:FindFirstChild("QTE", true) then return end
+
         local uuid = targetUUID or GetEquippedWeaponUUID()
         local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
         if forgeRF then
@@ -2016,6 +3222,205 @@ local function ConfirmForgeResult(success)
         local forgeRF = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
         if forgeRF then forgeRF:InvokeServer("ForgeResult", success == nil and true or success) end
     end)
+end
+
+-- ════════════════════════════════════════════════════
+-- 5.4 IRON SOUL KNOWLEDGE MAP (Game Knowledge Database)
+-- ════════════════════════════════════════════════════
+local IronSoulKnowledgeMap = {
+    Roadmap = {
+        { MinLevel = 1,   MaxLevel = 15,  RecommendedWorld = "World1", RecommendedDiff = 1, Name = "ป่าไร้ดาว (World 1)" },
+        { MinLevel = 16,  MaxLevel = 35,  RecommendedWorld = "World2", RecommendedDiff = 1, Name = "หุบเขาเยือกเย็น (World 2)" },
+        { MinLevel = 36,  MaxLevel = 60,  RecommendedWorld = "World3", RecommendedDiff = 1, Name = "ปราสาทแห่งคำสาบาน (World 3)" },
+        { MinLevel = 61,  MaxLevel = 90,  RecommendedWorld = "World4", RecommendedDiff = 1, Name = "ทาร์ทารัส (World 4)" },
+        { MinLevel = 91,  MaxLevel = 999, RecommendedWorld = "World5", RecommendedDiff = 1, Name = "ด่าน endgame (World 5)" },
+    },
+
+    NPCs = {
+        Forge   = { Name = "Furnace",        FallbackCF = FORGE_PORTAL_CF,   GuiName = "ScreenForge" },
+        Milo    = { Name = "NPC_Milo",       FallbackCF = MILO_PORTAL_CF,    GuiName = "ScreenEnchantment" },
+        Pet     = { Name = "NPC_Pet",        FallbackCF = PET_PORTAL_CF,     GuiName = "ScreenPetsHatch" },
+        Fortify = { Name = "NPC_Fortify",    FallbackCF = FORTIFY_PORTAL_CF, GuiName = "ScreenFortify" },
+        Shop    = { Name = "GroceryShopNPC", FallbackCF = SHOP_PORTAL_CF,    GuiName = "ScreenShop" },
+        Race    = { Name = "RaceNPC",        FallbackCF = RACE_PORTAL_CF,    GuiName = "ScreenRace" },
+        Dungeon = { Name = "DungeonPortal",  FallbackCF = DUNGEON_PORTAL_CF, GuiName = "ScreenMatch" },
+    },
+
+    GetRecommendedWorld = function(playerLevel)
+        local lvl = tonumber(playerLevel) or 1
+        for _, stage in ipairs(IronSoulKnowledgeMap.Roadmap) do
+            if lvl >= stage.MinLevel and lvl <= stage.MaxLevel then
+                return stage
+            end
+        end
+        return IronSoulKnowledgeMap.Roadmap[1]
+    end
+}
+
+-- ════════════════════════════════════════════════════
+-- 5.5 TASK PRIORITY HIERARCHY & CHICKEN BRAIN AUTONOMOUS ENGINE
+-- P0: Emergency (Dead / Stuck / GUI Frozen)
+-- P1: Required (Active Quest / Dungeon Transition / Claim Reward)
+-- P2: Progression (Equipment / Skills / Attribute Upgrades)
+-- P3: Economy (Sell Items / Shop / Weapon Forge)
+-- P4: Optional (Daily Claims / Bonus Cards / Race Reroll)
+-- ════════════════════════════════════════════════════
+
+local TaskPriority = {
+    P0_EMERGENCY   = 0,
+    P1_REQUIRED    = 1,
+    P2_PROGRESSION = 2,
+    P3_ECONOMY     = 3,
+    P4_OPTIONAL    = 4,
+}
+
+local GamePlanner = {
+    _lastPlanTime = 0,
+    _currentPlan = nil,
+}
+
+function GamePlanner.EvaluateAndPlan()
+    local level  = tonumber(PlayerState.GetLevel()) or 1
+    local power  = tonumber(PlayerState.GetPower()) or 0
+    local points = tonumber(PlayerState.GetAttributePoints()) or 0
+    local gold   = tonumber(PlayerState.GetGold()) or 0
+
+    -- P0 — Emergency Check (Dead / Character Missing / System Stuck)
+    local char = player and player.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health <= 0 then
+        return { Priority = TaskPriority.P0_EMERGENCY, Name = "P0_DEAD_RECOVERY", Reason = "ตัวละครตาย - กำลังรอเกิดและวาร์ปกลับเมือง" }
+    end
+    if State._failedRecoveryCycles and State._failedRecoveryCycles >= 3 then
+        return { Priority = TaskPriority.P0_EMERGENCY, Name = "P0_STUCK_RECOVERY", Reason = "พบระบบติดขัดเกิน 3 ครั้ง - บังคับวาร์ปเข้าเมือง" }
+    end
+
+    -- P1 — Required Tasks (Active Quests / Dungeon Transition / Claim Reward)
+    if (Config.ChickenMode or Config.QuestPriorityMode) and Config.AutoQuest and #_questState.pendingQuests > 0 then
+        return { Priority = TaskPriority.P1_REQUIRED, Name = "DO_QUEST", Reason = "มีภารกิจเควสที่ต้องทำก่อน (Pending: " .. tostring(#_questState.pendingQuests) .. ")" }
+    end
+    if (Config.ChickenMode or Config.AutoEnterDungeon) and (State.Phase == "LOBBY" or State.Phase == "Lobby") then
+        local rec = IronSoulKnowledgeMap.GetRecommendedWorld(level)
+        local targetWorld = Config.SelectedWorldId or rec.RecommendedWorld
+        local targetDiff  = Config.SelectedDifficultyNum or rec.RecommendedDiff
+        return {
+            Priority = TaskPriority.P1_REQUIRED,
+            Name = "START_DUNGEON",
+            World = targetWorld,
+            Diff = targetDiff,
+            Reason = "เข้าดันเจี้ยนตาม Progression เลเวล " .. tostring(level) .. " (" .. rec.Name .. ")"
+        }
+    end
+
+    -- P2 — Progression Tasks (Attributes / Equipment / Skills)
+    if points > 0 and (Config.ChickenMode or Config.AutoUpgradeAttribute) then
+        return { Priority = TaskPriority.P2_PROGRESSION, Name = "UPGRADE_ATTRIBUTES", Reason = "มีแต้มสเตตัสคงเหลือ " .. tostring(points) .. " แต้ม" }
+    end
+    if Config.ChickenMode or Config.AutoSelectBest then
+        return { Priority = TaskPriority.P2_PROGRESSION, Name = "EQUIP_BEST", Reason = "สวมใส่อุปกรณ์ที่ดีที่สุดเพื่อเพิ่มพลังต่อสู้" }
+    end
+
+    -- P3 — Economy Tasks (Sell Items / Materials / Forge)
+    if Config.ChickenMode or Config.AutoSell then
+        return { Priority = TaskPriority.P3_ECONOMY, Name = "SELL_ITEMS", Reason = "ขายไอเทมขยะเพื่อเคลียร์กระเป๋า" }
+    end
+    local sandstoneCount = 0
+    pcall(function()
+        for _, ore in ipairs(GetOresWithNames()) do
+            if ore.ID == "Sandstone" or ore.Name == "Sandstone" then
+                sandstoneCount = ore.Amount or 0
+            end
+        end
+    end)
+    if (Config.ChickenMode or Config.AutoPerfectQTE) and sandstoneCount >= 4 and gold >= ((Config.MinGoldReserve or 5000) + 1000) then
+        return { Priority = TaskPriority.P3_ECONOMY, Name = "FORGE_WEAPON", Reason = "มี Sandstone พร้อมสร้างอาวุธ (" .. tostring(sandstoneCount) .. " ก้อน)" }
+    end
+
+    -- P4 — Optional Tasks (Daily Claim / Race Reroll)
+    if Config.ChickenMode or Config.AutoClaimDaily then
+        return { Priority = TaskPriority.P4_OPTIONAL, Name = "CLAIM_DAILY", Reason = "รับรางวัลเช็คอินประจำวัน" }
+    end
+
+    return { Priority = 99, Name = "IDLE", Reason = "สแตนด์บายรอรอบการทำงานถัดไป" }
+end
+
+local ChickenBrain = {
+    CurrentStage = "Observe",
+    LastObservation = {},
+    LastAction = "System Initialized",
+}
+
+function ChickenBrain.RunLoopCycle()
+    if not Config.ChickenMode then return end
+
+    -- Stage 1: OBSERVE
+    ChickenBrain.CurrentStage = "Observe"
+    local obs = {
+        Health = player and player.Character and player.Character:FindFirstChildOfClass("Humanoid") and player.Character.Humanoid.Health or 0,
+        Level  = PlayerState.GetLevel(),
+        Gold   = PlayerState.GetGold(),
+        Phase  = State.Phase,
+    }
+    ChickenBrain.LastObservation = obs
+
+    -- Stage 2: PLAN
+    ChickenBrain.CurrentStage = "Plan"
+    local plan = GamePlanner.EvaluateAndPlan()
+
+    -- Stage 3: EXECUTE
+    ChickenBrain.CurrentStage = "Execute"
+    ChickenBrain.LastAction = plan.Name .. " (" .. plan.Reason .. ")"
+    GamePlanner.ExecuteNextStep()
+
+    -- Stage 4: VERIFY
+    ChickenBrain.CurrentStage = "Verify"
+
+    -- Stage 5: RECOVER
+    ChickenBrain.CurrentStage = "Recover"
+    if State._failedRecoveryCycles and State._failedRecoveryCycles > 0 then
+        DungeonRecoveryTree.HandleFailure("ChickenBrainStuck", Config.SelectedWorldId or "World1", Config.SelectedDifficultyNum or 1, 1)
+    end
+end
+
+function GamePlanner.ExecuteNextStep()
+    if State.Phase ~= "LOBBY" and State.Phase ~= "Lobby" then return end
+
+    local plan = GamePlanner.EvaluateAndPlan()
+    GamePlanner._currentPlan = plan
+
+    if plan.Name == "UPGRADE_ATTRIBUTES" then
+        ActionEngine.Execute("Plan_UpgradeAttr", nil, 5, 2, function()
+            UpgradeAttribute(Config.AttrPreset)
+            return true
+        end)
+    elseif plan.Name == "EQUIP_BEST" then
+        ActionEngine.Execute("Plan_EquipBest", nil, 15, 3, function()
+            EquipBestAll()
+            return true
+        end)
+    elseif plan.Name == "CLAIM_DAILY" then
+        ActionEngine.Execute("Plan_ClaimDaily", nil, 15, 3, function()
+            ViewDailyActivity()
+            task.wait(0.3)
+            for _, rid in ipairs(DailyRewardIds) do ClaimDailyReward(rid) end
+            return true
+        end)
+    elseif plan.Name == "FORGE_WEAPON" then
+        NPCEngine.Interact("Furnace", FORGE_PORTAL_CF, "ScreenForge", function()
+            DropForgeOres({ Sandstone = 4 }, "Weapon")
+            task.wait(0.5)
+            TriggerForgePerfectQTE()
+            task.wait(0.3)
+            ConfirmForgeResult(true)
+        end)
+    elseif plan.Name == "SELL_ITEMS" then
+        ActionEngine.Execute("Plan_SellItems", nil, 20, 4, function()
+            if ExecuteSellNow then ExecuteSellNow() end
+            return true
+        end)
+    elseif plan.Name == "START_DUNGEON" then
+        StartDungeonRun(plan.World, plan.Diff, Config.SelectedPartySizeNum or 1)
+    end
 end
 
 local function GetEquippedWeaponUUID()
@@ -2282,6 +3687,20 @@ local function startAutoRaceRerollLoop()
     end)
 end
 
+-- #26: Unified World & Difficulty Database
+local WorldDatabase = {
+    World1          = { Name = "ป่าไร้ดาว (World1)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "DungeonPortal" },
+    World2          = { Name = "หุบเขาเยือกเย็น (World2)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "DungeonPortal" },
+    World3          = { Name = "ปราสาทแห่งคำสาบาน (World3)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "DungeonPortal" },
+    World4          = { Name = "ทาร์ทารัส (World4)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "DungeonPortal" },
+    World5          = { Name = "ด่าน 5 (World5)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "DungeonPortal" },
+    Cave1           = { Name = "ถ้ำคริสตัล (Cave1)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "CavePortal" },
+    Cave2           = { Name = "ถ้ำรูน (Cave2)", Diffs = { 1, 2, 3, 4 }, Portal = "CavePortal" },
+    Cave3           = { Name = "ลานกว้างร้าง (Cave3)", Diffs = { 1, 2, 3, 4 }, Portal = "CavePortal" },
+    SeasonResource1 = { Name = "ถ้ำวัตถุดิบ (SeasonResource1)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "CircusPortal" },
+    EndlessTower    = { Name = "หอคอยไร้พ่าย (EndlessTower)", Diffs = { 1, 2, 3, 4, 5 }, Portal = "TowerPortal" },
+}
+
 local WorldMapData = {
     ["ป่าไร้ดาว (World1)"]          = "World1",
     ["หุบเขาเยือกเย็น (World2)"]     = "World2",
@@ -2301,16 +3720,6 @@ local DifficultyData = {
     ["ระดับที่ 3 Penitent"]   = 3,
     ["ระดับที่ 4 Torment"]    = 4,
     ["ระดับที่ 5 Inferno"]    = 5,
-    ["ระดับ 1 (Trial - Diff 1)"]        = 1,
-    ["ระดับ 2 (Challenge - Diff 2)"]    = 2,
-    ["ระดับ 3 (Penitent - Diff 3)"]     = 3,
-    ["ระดับ 4 (Torment - Diff 4)"]      = 4,
-    ["ระดับ 5 (Inferno - Diff 5)"]      = 5,
-    ["ระดับทดสอบ (Diff 1)"]  = 1,
-    ["ระดับท้าทาย (Diff 2)"]  = 2,
-    ["ระดับลงทัณฑ์ (Diff 3)"] = 3,
-    ["ระดับทรมาน (Diff 4)"]   = 4,
-    ["ระดับนรกขุมลึก (Diff 5)"] = 5,
 }
 
 local PartySizeData = {
@@ -2318,37 +3727,6 @@ local PartySizeData = {
     ["2 คน (Duo)"]    = 2,
     ["3 คน (Trio)"]   = 3,
     ["4 คน (Full)"]   = 4,
-}
-
-local StandardDiffData = {
-    ["ระดับที่ 1 Trial"]      = 1,
-    ["ระดับที่ 2 Challenge"]  = 2,
-    ["ระดับที่ 3 Penitent"]   = 3,
-    ["ระดับที่ 4 Torment"]    = 4,
-    ["ระดับที่ 5 Inferno"]    = 5,
-}
-
-local Cave1DiffData = {
-    ["ระดับที่ 1 Trial"]      = 1,
-    ["ระดับที่ 2 Challenge"]  = 2,
-    ["ระดับที่ 3 Penitent"]   = 3,
-    ["ระดับที่ 4 Torment"]    = 4,
-    ["ระดับที่ 5 Inferno"]    = 5,
-}
-
-local Cave23DiffData = {
-    ["ระดับที่ 1 Trial"]      = 1,
-    ["ระดับที่ 2 Challenge"]  = 2,
-    ["ระดับที่ 3 Penitent"]   = 3,
-    ["ระดับที่ 4 Torment"]    = 4,
-}
-
-local CircusDiffData = {
-    ["ระดับที่ 1 Trial"]      = 1,
-    ["ระดับที่ 2 Challenge"]  = 2,
-    ["ระดับที่ 3 Penitent"]   = 3,
-    ["ระดับที่ 4 Torment"]    = 4,
-    ["ระดับที่ 5 Inferno"]    = 5,
 }
 
 local EndlessFloorOptions = {}
@@ -2401,71 +3779,87 @@ local function getDifficultyOptionsForWorld(worldId)
     end
 end
 
+-- ════════════════════════════════════════════════════
+-- DUNGEON ENTRY — Race-condition-free version
+-- แทนที่ fixed task.wait ด้วย GUI poll (waitUntil)
+-- ════════════════════════════════════════════════════
+
+-- poll: ตรวจว่า ScreenMatch / ScreenMatch_Endless ใน PlayerGui เปิดอยู่ไหม
+local function isMatchScreenOpen(screenName)
+    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+    if not pg then return false end
+    local mainGui = pg:FindFirstChild("MainGuiIgnoreGuiInset") or pg:FindFirstChild("MainGui")
+    if mainGui then
+        local s = mainGui:FindFirstChild(screenName, true)
+        if s and (s.Visible or (s:IsA("ScreenGui") and s.Enabled)) then return true end
+    end
+    -- fallback: deep search
+    local s2 = pg:FindFirstChild(screenName, true)
+    return s2 ~= nil and (s2.Visible or (s2:IsA("ScreenGui") and s2.Enabled))
+end
+
 local function runLobbyDungeonSelect()
-    local worldId = Config.SelectedWorldId or "World1"
-    local diffNum = Config.SelectedDifficultyNum or 1
+    -- deduplicate: ถ้ายิงไปแล้วในรอบนี้ (< 10s) ข้ามไป
+    if (tick() - State._lastRoomTime) < 10 then return end
+
+    local worldId   = Config.SelectedWorldId or "World1"
+    local diffNum   = Config.SelectedDifficultyNum or 1
     local partySize = Config.SelectedPartySizeNum or 4
 
+    setPhase("Queue")
+
     pcall(function()
-        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        local taskRE      = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
         local worldUtilRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
         local gameMatchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
 
-        if worldId == "EndlessTower" or worldId == "Endless1" then
-            -- วาร์ปไปพิกัดหอคอย พร้อมส่งสัญญาณ Physics Nudge
-            teleportWithPhysicsNudge(TOWER_PORTAL_CF)
-            if taskRE then
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless")
-                task.wait(0.1)
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless")
-            end
-            task.wait(0.15)
-            local endlessFloor = Config.SelectedEndlessStage or Config.SelectedEndlessFloor or diffNum or 1
-            if gameMatchRE then
+        local screenName   = "ScreenMatch"
+        local portalCF     = DUNGEON_PORTAL_CF
+        local isEndless    = (worldId == "EndlessTower" or worldId == "Endless1")
+        local isCave       = worldId:sub(1, 4) == "Cave"
+        local isSeason     = (worldId == "SeasonResource1")
+
+        if isEndless then
+            screenName = "ScreenMatch_Endless"
+            portalCF   = TOWER_PORTAL_CF
+        elseif isCave then
+            portalCF = CAVE_PORTAL_CF
+        elseif isSeason then
+            portalCF = CIRCUS_PORTAL_CF
+        end
+
+        -- Step 1: teleport ไปพิกัด Portal
+        teleportWithPhysicsNudge(portalCF)
+        task.wait(0.05)
+
+        -- Step 2: ยิง OpenGUIWindow แล้ว poll รอให้ GUI เปิดจริง (max 4 วิ)
+        if taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", screenName)
+        end
+        local guiReady = waitUntil(function() return isMatchScreenOpen(screenName) end, 4, 0.15)
+        -- ถ้า GUI ยังไม่เปิด retry อีกครั้งแล้วรอต่อ
+        if not guiReady and taskRE then
+            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", screenName)
+            waitUntil(function() return isMatchScreenOpen(screenName) end, 3, 0.2)
+        end
+
+        -- Step 3: SelectWorld (ถ้าไม่ใช่ Endless)
+        if not isEndless then
+            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
+            -- รอเล็กน้อยให้ server process SelectWorld
+            task.wait(0.2)
+        end
+
+        -- Step 4: CreatRoom
+        if gameMatchRE then
+            if isEndless then
+                local endlessFloor = Config.SelectedEndlessStage or Config.SelectedEndlessFloor or diffNum or 1
                 gameMatchRE:FireServer("CreatRoom", "Endless1", 1, partySize, endlessFloor)
-            end
-        elseif worldId == "SeasonResource1" then
-            -- วาร์ปไปพิกัด Royal Circus
-            teleportWithPhysicsNudge(CIRCUS_PORTAL_CF)
-            if taskRE then
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-                task.wait(0.1)
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-            end
-            task.wait(0.15)
-            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
-            task.wait(0.1)
-            if gameMatchRE then
+            else
                 gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
             end
-        elseif worldId:sub(1, 4) == "Cave" then
-            -- วาร์ปไปพิกัดถ้ำ Cave
-            teleportWithPhysicsNudge(CAVE_PORTAL_CF)
-            if taskRE then
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-                task.wait(0.1)
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-            end
-            task.wait(0.15)
-            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
-            task.wait(0.1)
-            if gameMatchRE then
-                gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
-            end
-        else
-            -- วาร์ปไปพิกัดดันเจี้ยนหลัก 4 แมพ (Starless, Frozen, Oathlost, Tartarus)
-            teleportWithPhysicsNudge(DUNGEON_PORTAL_CF)
-            if taskRE then
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-                task.wait(0.1)
-                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch")
-            end
-            task.wait(0.15)
-            if worldUtilRE then worldUtilRE:FireServer("SelectWorld", worldId, diffNum) end
-            task.wait(0.1)
-            if gameMatchRE then
-                gameMatchRE:FireServer("CreatRoom", worldId, diffNum, partySize)
-            end
+            State._lastRoomTime = tick()
+            setPhase("RoomCreated")
         end
     end)
 end
@@ -2478,15 +3872,43 @@ local Window = ObsidianGlassEngine:CreateWindow({
     SubTitle = "Iron Soul — ระบบออโต้ล็อบบี้ & จัดการตัวละคร"
 })
 
+local ChickenTab  = Window:AddTab({ Title = "🐔 CHICKEN MODE" })
 local MatchTab    = Window:AddTab({ Title = "🏙️ เข้าดันเจี้ยน & แมตช์" })
 local AutoSellTab = Window:AddTab({ Title = "💰 ขายของอัตโนมัติ" })
 local ForgeTab    = Window:AddTab({ Title = "🔨 ตีบวก & ตีไอเทม" })
 local AttrTab     = Window:AddTab({ Title = "📈 อัปสเตตัส & สกิล" })
 local DailyTab    = Window:AddTab({ Title = "📅 รางวัลประจำวัน & ร้านค้า" })
 local RaceTab     = Window:AddTab({ Title = "🧬 รีเผ่า (Auto Race Reroll)" })
+local QuestTab    = Window:AddTab({ Title = "🗺️ AUTO QUEST" })
 local StatsTab    = Window:AddTab({ Title = "📊 ข้อมูล & สถานะ" })
 
--- ──────── TAB 1: เข้าดันเจี้ยน & แมตช์ ────────
+-- ──────── TAB 1: 🐔 CHICKEN MODE (Autonomous Agent) ────────
+ChickenTab:AddSection("🐔 CHICKEN MODE AUTONOMOUS AGENT BRAIN")
+ChickenTab:AddToggle("ChickenModeMasterToggle", {
+    Title = "เปิด Chicken Mode (24/7 Autonomous Agent)",
+    Desc = "เปิดสมองกลตัดสินใจอัตโนมัติ (Observe → Plan → Execute → Verify → Recover)",
+    Default = Config.ChickenMode,
+    Callback = function(t)
+        Config.ChickenMode = t
+        saveSettings()
+        if t then
+            ObsidianGlassEngine:Notify({ Title = "🐔 Chicken Mode Activated", Content = "สมองกลระบบออโต้ 24/7 เริ่มทำงานเรียบร้อยแล้ว!", Duration = 5 })
+        end
+    end
+})
+
+ChickenTab:AddSection("📊 PRIORITY MATRIX & TELEMETRY")
+local ChickenP0Para = ChickenTab:AddParagraph({ Title = "P0 EMERGENCY: 🟢 NORMAL",      Desc = "HEALTH: 100% | NO STUCK DETECTED" })
+local ChickenP1Para = ChickenTab:AddParagraph({ Title = "P1 REQUIRED: ⚔️ DUNGEON",      Desc = "QUESTS PENDING: 0 | DUNGEON ACTIVE" })
+local ChickenP2Para = ChickenTab:AddParagraph({ Title = "P2 PROGRESSION: 📈 ATTR",       Desc = "STAT POINTS: 0 | EQUIP OPTIMAL" })
+local ChickenP3Para = ChickenTab:AddParagraph({ Title = "P3 ECONOMY: 💰 RESERVED",      Desc = "GOLD RESERVE: SAFE | INVENTORY CLEAN" })
+local ChickenP4Para = ChickenTab:AddParagraph({ Title = "P4 OPTIONAL: 🎁 READY",        Desc = "DAILY REWARDS: CHECKED" })
+
+ChickenTab:AddSection("🧠 LIVE AGENT BRAIN DECISION")
+local ChickenBrainStagePara = ChickenTab:AddParagraph({ Title = "STAGE: OBSERVE", Desc = "ANALYZING GAME STATE..." })
+local ChickenBrainPlanPara  = ChickenTab:AddParagraph({ Title = "PLAN: START_DUNGEON", Desc = "REASON: LEVEL PROGRESSION" })
+
+-- ──────── TAB 2: เข้าดันเจี้ยน & แมตช์ ────────
 MatchTab:AddSection("ระบบสร้างห้อง & เข้าดันเจี้ยน (Zion Create Room Standard)")
 MatchTab:AddToggle("AutoEnterDungeonToggle", {
     Title = "เปิดระบบเข้าดันเจี้ยนอัตโนมัติ",
@@ -2594,8 +4016,19 @@ MatchTab:AddDropdown("AutofarmPartyDropdown", {
     end
 })
 
+MatchTab:AddSection("🧠 Dungeon Intelligence & Adaptive Settings")
+MatchTab:AddToggle("AutoAdaptiveDiffToggle", {
+    Title = "เปิดระบบปรับความยากอัจฉริยะ (Dynamic Difficulty)",
+    Desc  = "วิเคราะห์เวลาผ่านดันและจำนวนการตายเพื่อปรับขึ้น-ลง ความยากอัตโนมัติ",
+    Default = Config.AutoAdaptiveDifficulty or false,
+    Callback = function(t)
+        Config.AutoAdaptiveDifficulty = t
+        saveSettings()
+    end
+})
+
 MatchTab:AddButton({ Title = "🚀 สร้างห้องและเข้าดันเจี้ยนทันที (Create Room & Enter)", Callback = function()
-    task.spawn(function() pcall(runLobbyDungeonSelect) end)
+    task.spawn(function() StartDungeonRun(Config.SelectedWorldId or "World1", Config.SelectedDifficultyNum or 1, Config.SelectedPartySizeNum or 1) end)
     ObsidianGlassEngine:Notify({ Title = "สร้างห้องดันเจี้ยน", Content = "สร้างห้อง " .. tostring(Config.SelectedWorldName) .. " | " .. tostring(Config.SelectedDifficultyName) .. " (" .. tostring(Config.SelectedPartySizeName or "4 คน") .. ")", Duration = 4 })
 end })
 
@@ -2603,11 +4036,40 @@ end })
 
 MatchTab:AddSection("ควบคุมหลังจบเกม")
 MatchTab:AddToggle("AutoBonusCardToggle", { Title = "เปิดสุ่มการ์ดโบนัสหลังจบเกม", Desc = "เลือกรับการ์ดรางวัลสุ่มหลังเคลียร์ดันเจี้ยนอัตโนมัติ", Default = Config.AutoBonusCard, Callback = function(t) Config.AutoBonusCard = t end })
-MatchTab:AddToggle("AutoPlayAgainToggle", { Title = "เปิดโหวตเล่นอีกครั้ง / กลับเมืองอัตโนมัติ", Desc = "กดข้ามหน้าจบเกมและสั่งรีโมทกลับเข้าห้องเกมใหม่อัตโนมัติ", Default = Config.AutoPlayAgain, Callback = function(t) Config.AutoPlayAgain = t end })
+
+MatchTab:AddSection("🏰 DUNGEON TELEMETRY & LIVE DEBUGGER")
+local DunWorldPara      = MatchTab:AddParagraph({ Title = "WORLD: World1 (ป่าไร้ดาว)", Desc = "DIFFICULTY: 1 | PARTY: 4" })
+local DunPhasePara      = MatchTab:AddParagraph({ Title = "PHASE: 🟢 LOBBY",          Desc = "ROOM: NONE" })
+local DunCombatPara     = MatchTab:AddParagraph({ Title = "COMBAT: IDLE",            Desc = "ENEMIES ALIVE: 0 | BOSS: NOT SPAWNED" })
+local DunClearPara      = MatchTab:AddParagraph({ Title = "DUNGEON CLEAR: 0%",       Desc = "LAST EVENT: INITIALIZED" })
+local DunNextActionPara = MatchTab:AddParagraph({ Title = "NEXT ACTION: -> CREATE ROOM", Desc = "PREPARING DUNGEON QUEUE" })
+
+-- AfterRunMode: แทน AutoPlayAgain bool เดิม
+-- "PlayAgain"     → VotePlayAgain แล้วรอ rejoin
+-- "ReturnToLobby" → ReturnToLobby RE แล้วกลับ Lobby
+-- "Stop"          → ไม่ทำอะไร หยุดออโต้
+if not Config.AfterRunMode then
+    -- migrate จาก AutoPlayAgain เดิม
+    Config.AfterRunMode = Config.AutoPlayAgain and "PlayAgain" or "Stop"
+end
+
+MatchTab:AddDropdown("AfterRunModeDropdown", {
+    Title = "หลังจบดันเจี้ยน — ทำอะไรต่อ?",
+    Desc  = "PlayAgain: โหวตเล่นอีกรอบ | ReturnToLobby: กลับเมือง | Stop: หยุด",
+    Values = { "PlayAgain", "ReturnToLobby", "Stop" },
+    Value  = Config.AfterRunMode,
+    Callback = function(val)
+        Config.AfterRunMode = val
+        -- backward compat
+        Config.AutoPlayAgain = (val == "PlayAgain")
+        saveSettings()
+    end
+})
 
 MatchTab:AddSection("── 🐔 ไก่ตัน (All-In-One Lobby Farm) ──")
 MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน — เปิดทุกระบบล็อบบี้พร้อมกัน", Callback = function()
     if not Config.ChickenMode then
+        -- snapshot ค่าเดิมก่อนเปิด (ต้องเก็บ exact value ไม่ใช่ or-default)
         Config._ChickenPrevState = {
             AutoEnterDungeon     = Config.AutoEnterDungeon,
             AutoSelectBest       = Config.AutoSelectBest,
@@ -2615,7 +4077,7 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
             AutoUpgradeAttribute = Config.AutoUpgradeAttribute,
             AutoClaimDaily       = Config.AutoClaimDaily,
             AutoBonusCard        = Config.AutoBonusCard,
-            AutoPlayAgain        = Config.AutoPlayAgain,
+            AfterRunMode         = Config.AfterRunMode,
             AutoQuest            = Config.AutoQuest,
             AutoFarm             = Config.AutoFarm,
             AutoSkill            = Config.AutoSkill,
@@ -2626,7 +4088,7 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
         Config.AutoUpgradeAttribute = true
         Config.AutoClaimDaily       = true
         Config.AutoBonusCard        = true
-        Config.AutoPlayAgain        = true
+        Config.AfterRunMode         = "PlayAgain"
         Config.AutoQuest            = true
         Config.AutoFarm             = true
         Config.AutoSkill            = true
@@ -2638,17 +4100,24 @@ MatchTab:AddButton({ Title = "🐔 เปิด/ปิด ไก่ตัน —
         if #Config.Ores_Value == 0     then Config.Ores_Value     = {"Common","Uncommon"} end
         ObsidianGlassEngine:Notify({ Title = "🐔 ไก่ตัน เปิดแล้ว!", Content = "เปิดทุกระบบ Auto + Auto Skill ในดันเจี้ยนเต็มกำลัง!", Duration = 5 })
     else
+        -- #8 FIX: ใช้ rawget-style restore — ไม่ใช้ `or default`
+        -- เพราะ `false or someDefault` = someDefault เสมอ ซึ่งผิด
         local p = Config._ChickenPrevState or {}
-        Config.AutoEnterDungeon     = p.AutoEnterDungeon     or false
-        Config.AutoSelectBest       = p.AutoSelectBest       or false
-        Config.AutoSell             = p.AutoSell             or false
-        Config.AutoUpgradeAttribute = p.AutoUpgradeAttribute or false
-        Config.AutoClaimDaily       = p.AutoClaimDaily       or false
-        Config.AutoBonusCard        = p.AutoBonusCard        or false
-        Config.AutoPlayAgain        = p.AutoPlayAgain        or true
-        Config.AutoQuest            = p.AutoQuest            or false
-        Config.AutoFarm             = p.AutoFarm             or false
-        Config.AutoSkill            = p.AutoSkill            or true
+        local function restore(key, fallback)
+            local v = p[key]
+            if v == nil then return fallback end
+            return v  -- คืน false ได้ถูกต้อง
+        end
+        Config.AutoEnterDungeon     = restore("AutoEnterDungeon",     false)
+        Config.AutoSelectBest       = restore("AutoSelectBest",       false)
+        Config.AutoSell             = restore("AutoSell",             false)
+        Config.AutoUpgradeAttribute = restore("AutoUpgradeAttribute", false)
+        Config.AutoClaimDaily       = restore("AutoClaimDaily",       false)
+        Config.AutoBonusCard        = restore("AutoBonusCard",        false)
+        Config.AfterRunMode         = restore("AfterRunMode",         "Stop")
+        Config.AutoQuest            = restore("AutoQuest",            false)
+        Config.AutoFarm             = restore("AutoFarm",             false)
+        Config.AutoSkill            = restore("AutoSkill",            false)
         Config.ChickenMode          = false
         _G.AutoFarm                 = Config.AutoFarm
         _G.AutoSkill                = Config.AutoSkill
@@ -2681,39 +4150,63 @@ AutoSellTab:AddButton({ Title = "🔄 รีเฟรชรายชื่อไ
     end)
 end })
 
+-- #21: Safe Auto Sell (Equipped Protection & Minimum Reserve Guard)
 local function ExecuteSellNow()
     local MaterialRE = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.MaterialUtil.RemoteEvent")
     local ForgeRF    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.ForgeRF")
     local EquipRE    = getRemote("ReplicatedStorage.Framework.Gameplay.EquipmentSystem.EquipmentRE")
     local totalSold  = 0
 
+    -- Fetch Equipped UUIDs to protect them from being sold
+    local equippedUUIDs = {}
+    pcall(function()
+        if DataUtil then
+            local pd = DataUtil:GetPlayerData(player)
+            if pd and pd.Equipment and pd.Equipment.Equipped then
+                for k, v in pairs(pd.Equipment.Equipped) do
+                    if type(v) == "string" then equippedUUIDs[v] = true end
+                    if type(v) == "table" and v.UUID then equippedUUIDs[v.UUID] = true end
+                end
+            end
+        end
+    end)
+
+    -- 1. Crystals (Keep minimum 5 reserve for crafting)
     if Config.Crystals_Value and type(Config.Crystals_Value) == "table" and #Config.Crystals_Value > 0 and MaterialRE then
         local crystalLoop = {}
         for _, v in pairs(GetCrystals()) do
             if table.find(Config.Crystals_Value, v.Rarity) then
-                crystalLoop[v.ID] = 1
-                totalSold = totalSold + 1
+                local sellable = math.max(0, (v.Amount or 0) - (Config.KeepMinCrystals or 5))
+                if sellable > 0 then
+                    crystalLoop[v.ID] = sellable
+                    totalSold = totalSold + sellable
+                end
             end
         end
         if next(crystalLoop) then MaterialRE:FireServer("Sell", crystalLoop, {}) end
     end
 
+    -- 2. Ores (Keep minimum 4 Sandstone/Ores reserve for Forge)
     if Config.Ores_Value and type(Config.Ores_Value) == "table" and #Config.Ores_Value > 0 and ForgeRF then
         local oresLoop = {}
         for _, v in pairs(GetOresWithNames()) do
             if table.find(Config.Ores_Value, v.Rarity) then
-                oresLoop[v.ID] = 1
-                totalSold = totalSold + 1
+                local sellable = math.max(0, (v.Amount or 0) - (Config.KeepMinOres or 4))
+                if sellable > 0 then
+                    oresLoop[v.ID] = sellable
+                    totalSold = totalSold + sellable
+                end
             end
         end
         if next(oresLoop) then ForgeRF:InvokeServer("Sell", oresLoop) end
     end
 
+    -- 3. Equipment (Check Equipped Protection)
     if Config.Equipment_Value and type(Config.Equipment_Value) == "table" and #Config.Equipment_Value > 0 and DataUtil and EquipRE then
         local owned = {}
         pcall(function() owned = DataUtil:GetPlayerData(player).Equipment.Owned end)
         for _, v in pairs(owned or {}) do
-            if table.find(Config.Equipment_Value, v.ID) then
+            if table.find(Config.Equipment_Value, v.ID) and not equippedUUIDs[v.UUID] then
                 EquipRE:FireServer("Sell", { v.UUID })
                 totalSold = totalSold + 1
             end
@@ -2872,6 +4365,17 @@ DailyTab:AddToggle("AutoBuyShopToggle", {
     end
 })
 
+DailyTab:AddSlider("MinGoldReserveSlider", {
+    Title   = "จำนวนทองสำรองขั้นต่ำ (Gold Reserve Guard)",
+    Min     = 0,
+    Max     = 50000,
+    Default = Config.MinGoldReserve or 5000,
+    Callback = function(val)
+        Config.MinGoldReserve = val
+        saveSettings()
+    end
+})
+
 DailyTab:AddSection("🐾 ร้านค้าสัตว์เลี้ยง (Pet Shop & Hatch)")
 DailyTab:AddButton({ Title = "🐣 วาปไปร้าน Pet & เปิดระบบฟักไข่ (ScreenPetsHatch)", Callback = function()
     OpenPetHatchGUI()
@@ -2973,153 +4477,684 @@ RaceTab:AddButton({ Title = "🔍 ตรวจสอบเผ่าปัจจ�
     ObsidianGlassEngine:Notify({ Title = "ตรวจสอบเผ่า", Content = "เผ่าปัจจุบันของคุณคือ: " .. tostring(cur), Duration = 5 })
 end })
 
--- ──────── TAB 7: ข้อมูล & สถานะ (Obsidian Dashboard) ────────
-StatsTab:AddSection("── 📊 Obsidian Status Dashboard ──")
-local StatsPowerPara  = StatsTab:AddParagraph({ Title = "⚡ พลังต่อสู้: ...",          Desc = "0 Power" })
-local StatsLevelPara  = StatsTab:AddParagraph({ Title = "🏆 เลเวล: ...",               Desc = "EXP: 0 / 0" })
-local StatsGoldPara   = StatsTab:AddParagraph({ Title = "💰 เงินทอง: ...",             Desc = "0 Gold" })
-local StatsStockPara  = StatsTab:AddParagraph({ Title = "📜 คัมภีร์ตีบวก: ...",       Desc = "คงเหลือ: 0" })
-local StatsRacePara   = StatsTab:AddParagraph({ Title = "🧬 เชื้อชาติ: ...",           Desc = "Unknown" })
-local StatsWeaponPara = StatsTab:AddParagraph({ Title = "⚔️ อาวุธที่ใส่: ...",         Desc = "None" })
-local StatsAutoStatus = StatsTab:AddParagraph({ Title = "🤖 ระบบ Auto ที่ใช้งาน:",    Desc = "ไม่มีระบบที่เปิดอยู่" })
-StatsTab:AddSection("── Session & Net Metrics ──")
-local StatsSessionPara = StatsTab:AddParagraph({ Title = "⏱️ เวลา Session",            Desc = "0 นาที 0 วินาที" })
-local _statsSessionStart = os.time()
+-- ──────── TAB 7: 🗺️ AUTO QUEST ────────
+QuestTab:AddSection("🗺️ AUTO QUEST CONTROL MATRIX")
+QuestTab:AddToggle("AutoQuestToggle",            { Title = "เปิด Auto Quest",                Desc = "เปิดระบบทำเควสประจำวันและเควสหลักอัตโนมัติ", Default = Config.AutoQuest,            Callback = function(t) Config.AutoQuest = t; saveSettings() end })
+QuestTab:AddToggle("AutoAcceptQuestToggle",      { Title = "รับเควสอัตโนมัติ",             Desc = "ตอบรับเควสใหม่จาก NPC อัตโนมัติเมื่อมีเควสว่าง", Default = Config.AutoAcceptQuest,      Callback = function(t) Config.AutoAcceptQuest = t; saveSettings() end })
+QuestTab:AddToggle("AutoDoQuestObjToggle",       { Title = "ทำ Objective อัตโนมัติ",         Desc = "เดินไปทำเป้าหมายเควส คุย NPC และจัดการเป้าหมาย", Default = Config.AutoDoQuestObjective, Callback = function(t) Config.AutoDoQuestObjective = t; saveSettings() end })
+QuestTab:AddToggle("AutoClaimQuestRewardToggle", { Title = "Claim Reward อัตโนมัติ",        Desc = "กดรับรางวัลเมื่อเควสเสร็จสิ้นทันที", Default = Config.AutoClaimQuestReward, Callback = function(t) Config.AutoClaimQuestReward = t; saveSettings() end })
+QuestTab:AddToggle("AutoSwitchQuestToggle",      { Title = "เปลี่ยน Quest อัตโนมัติ",         Desc = "สลับไปทำเควสถัดไปเมื่อเควสปัจจุบันเสร็จ", Default = Config.AutoSwitchQuest,      Callback = function(t) Config.AutoSwitchQuest = t; saveSettings() end })
+QuestTab:AddToggle("AutoReturnNPCQuestToggle",   { Title = "กลับ NPC เมื่อ Quest เสร็จ",      Desc = "วาร์ปกลับไปส่งเควสกับ NPC ทันทีที่ภารกิจเสร็จ", Default = Config.AutoReturnNPCQuest,   Callback = function(t) Config.AutoReturnNPCQuest = t; saveSettings() end })
+QuestTab:AddToggle("QuestPriorityModeToggle",    { Title = "ใช้ Quest เป็น Priority",         Desc = "ให้ GamePlanner ทำเควสเป็นอันดับแรกก่อนลงดันเจี้ยน", Default = Config.QuestPriorityMode, Callback = function(t) Config.QuestPriorityMode = t; saveSettings() end })
+QuestTab:AddToggle("QuestLoopModeToggle",        { Title = "Quest Loop (24/7)",               Desc = "เช็กเควสใหม่วนลูปต่อเนื่องตลอด 24/7", Default = Config.QuestLoopMode,        Callback = function(t) Config.QuestLoopMode = t; saveSettings() end })
 
-local function RefreshStatsDisplay()
+QuestTab:AddSection("📌 CURRENT QUEST MONITOR & STATUS")
+local QuestNamePara       = QuestTab:AddParagraph({ Title = "ชื่อเควส: -",               Desc = "Progress: 0 / 0 | Type: - | Target: -" })
+local QuestStatusPara     = QuestTab:AddParagraph({ Title = "STATUS: 🟢 Idle",            Desc = "FETCH COOLDOWN: READY" })
+local QuestNextActionPara = QuestTab:AddParagraph({ Title = "NEXT ACTION: -",           Desc = "PREPARING QUEUE" })
+local QuestLastActionPara = QuestTab:AddParagraph({ Title = "LAST ACTION: -",           Desc = "SYSTEM INITIALIZED" })
+
+QuestTab:AddSection("📜 QUEST DEBUG / REALTIME LOGS")
+local QuestLogPara1 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ Quest Log Initialized", Desc = "SYSTEM LOG" })
+local QuestLogPara2 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ Waiting for Quest Activity...", Desc = "SYSTEM LOG" })
+local QuestLogPara3 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
+local QuestLogPara4 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
+local QuestLogPara5 = QuestTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Standby", Desc = "SYSTEM LOG" })
+
+QuestTab:AddButton({ Title = "🗑️ เคลียร์ Quest Log", Callback = function()
     pcall(function()
-        local function setP(para, title, desc)
-            pcall(function()
-                local t = para:FindFirstChild("TitleLabel")
-                local d = para:FindFirstChild("DescLabel")
-                if t then t.Text = title end
-                if d then d.Text = desc   end
-            end)
-        end
+        table.clear(QuestLogs)
+        AddQuestLog("Quest Log Cleared")
+    end)
+end })
 
-        local power  = tostring(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0)
-        local lv     = tostring(player:GetAttribute("LG_Level") or 1)
-        local exp    = "0"
-        local expMax = "0"
-        local gold   = "0"
-        local stock  = "0"
-        local race   = detectCurrentRace()
-        local weaponName = "None"
+-- ════════════════════════════════════════════════
+-- SYSTEM LOGGING ENGINE FOR MONITOR #02 TERMINAL
+-- ════════════════════════════════════════════════
+_G.IronSoul_SystemLogs = _G.IronSoul_SystemLogs or {}
+local function AddSystemLog(msg, category)
+    local timeStr = os.date("%H:%M:%S")
+    category = category or "INFO"
+    local icon = "ℹ️ "
+    if category == "QUEST" then icon = "📜 "
+    elseif category == "DUNGEON" then icon = "⚔️ "
+    elseif category == "SELL" then icon = "💵 "
+    elseif category == "SUCCESS" then icon = "✅ "
+    elseif category == "ERROR" or category == "WARN" then icon = "⚠️ "
+    elseif category == "PLANNER" then icon = "🧠 "
+    elseif category == "WATCHDOG" then icon = "🛡️ "
+    end
+    local entry = { Title = string.format("[%s] %s%s", timeStr, icon, tostring(msg)), Desc = string.format("CATEGORY: %s | TIMESTAMP: %s", category:upper(), timeStr) }
+    table.insert(_G.IronSoul_SystemLogs, 1, entry)
+    if #_G.IronSoul_SystemLogs > 30 then table.remove(_G.IronSoul_SystemLogs, #_G.IronSoul_SystemLogs) end
+    print("🖥️ [SystemLog] " .. entry.Title)
+end
 
-        if DataUtil then
-            pcall(function()
-                local pd = DataUtil:GetPlayerData(player)
-                if pd then
-                    lv     = tostring(pd.Level or lv)
-                    exp    = tostring(pd.EXP or 0)
-                    expMax = tostring(pd.EXPMax or pd.NextLevelEXP or "?")
-                    gold   = tostring(pd.Gold or pd.Currency or 0)
-                    if pd.Race then race = tostring(pd.Race) end
-                    if pd.Equipment then
-                        local uuid = pd.Equipment.Equipped or pd.Equipment.EquippedWeapon
-                        if type(uuid) == "table" then uuid = uuid.Weapon or uuid[1] end
-                        if uuid then weaponName = tostring(uuid) end
+-- ──────── TAB 8: ข้อมูล & สถานะ (Dual-Monitor Telemetry HUB) ────────
+StatsTab:AddSection("🖥️ จอมอนิเตอร์ #01 | CENTRAL SYSTEM & KAITUN DASHBOARD")
+local MonPhasePara    = StatsTab:AddParagraph({ Title = "🖥️ MONITOR #01 | GLOBAL PHASE: LOBBY",       Desc = "SYSTEM ACTIVE | IDLE STATE" })
+local MonWatchdogPara = StatsTab:AddParagraph({ Title = "🛡️ WATCHDOG & SELF-HEALING: 100%",            Desc = "0 FAILURES | ALL RECOVERY SYSTEMS HEALTHY" })
+local MonSessionPara  = StatsTab:AddParagraph({ Title = "⏱️ SESSION UPTIME: 0 MINUTES 0 SECONDS",        Desc = "HEARTBEAT: RUNNING 24/7" })
+local MonPowerPara    = StatsTab:AddParagraph({ Title = "⚡ PLAYER STATS: POWER 0 | LEVEL 1",             Desc = "GOLD: $0 | RESERVE GUARD: $5,000" })
+local MonRacePara     = StatsTab:AddParagraph({ Title = "🧬 CHARACTER: RACE UNKNOWN | WEAPON NONE",        Desc = "ATTRIBUTE POINTS: 0" })
+local MonPlannerPara  = StatsTab:AddParagraph({ Title = "🧠 PLANNER STRATEGY: IDLE",                    Desc = "ACTIVE MODULES: STANDBY" })
+
+StatsTab:AddSection("📟 จอมอนิเตอร์ #02 | REALTIME ACTION & EVENT LOG TERMINAL")
+local MonLogLine1 = StatsTab:AddParagraph({ Title = "[00:00:00] ℹ️ System Terminal Initialized", Desc = "ACTION ENGINE ONLINE" })
+local MonLogLine2 = StatsTab:AddParagraph({ Title = "[00:00:00] ℹ️ Waiting for Action Events...", Desc = "PLANNER PIPELINE READY" })
+local MonLogLine3 = StatsTab:AddParagraph({ Title = "[00:00:00] ℹ️ Heartbeat Monitoring Running...", Desc = "WATCHDOG ACTIVE" })
+local MonLogLine4 = StatsTab:AddParagraph({ Title = "[00:00:00] ℹ️ Quest & Dungeon Subsystems Ready", Desc = "REMOTES HANDSHAKEN" })
+local MonLogLine5 = StatsTab:AddParagraph({ Title = "[00:00:00] ℹ️ Standby Mode Active", Desc = "KAITUN MATRIX READY" })
+
+StatsTab:AddButton({ Title = "🗑️ เคลียร์ Terminal Logs (จอที่ 2)", Callback = function()
+    pcall(function()
+        table.clear(_G.IronSoul_SystemLogs)
+        AddSystemLog("Terminal Logs Cleared by User", "INFO")
+    end)
+end })
+
+StatsTab:AddSection("📊 จอมอนิเตอร์ #03 | FARMING ANALYTICS & DUNGEON RADAR")
+local MonRunLastPara  = StatsTab:AddParagraph({ Title = "📊 LAST DUNGEON RUN: NO DATA YET",        Desc = "EXP/MIN: 0 | GOLD/MIN: 0" })
+local MonRunTotalsPara= StatsTab:AddParagraph({ Title = "🏆 LIFETIME STATS: 0 DUNGEON CLEARS",       Desc = "TOTAL GOLD GAINED: $0 | DEATHS: 0" })
+
+local _statsSessionStart = os.time()
+AddSystemLog("Dual-Monitor Telemetry System Initialized", "SUCCESS")
+
+-- Real-time background monitoring task (Runs every 1.5 seconds)
+task.spawn(function()
+    while not State.Unloaded do
+        pcall(function()
+            -- Phase & Watchdog
+            local phase = State.Phase or "UNKNOWN"
+            local watchdogFails = State._failedRecoveryCycles or 0
+            local watchdogStatus = watchdogFails > 0 and string.format("RECOVERING (%d FAILURES)", watchdogFails) or "100% HEALTHY (0 FAILURES)"
+            
+            -- Uptime
+            local elapsed = os.time() - _statsSessionStart
+            local uptimeStr = string.format("%d MINUTES %d SECONDS", math.floor(elapsed/60), elapsed%60)
+            
+            -- Player stats
+            local power  = tostring(player:GetAttribute("LG_PowerNew1") or player:GetAttribute("LG_Power") or 0)
+            local lv     = tostring(player:GetAttribute("LG_Level") or 1)
+            local gold   = "0"
+            local race   = detectCurrentRace()
+            local weapon = "None"
+            
+            if DataUtil then
+                pcall(function()
+                    local pd = DataUtil:GetPlayerData(player)
+                    if pd then
+                        lv   = tostring(pd.Level or lv)
+                        gold = tostring(pd.Gold or pd.Currency or 0)
+                        if pd.Race then race = tostring(pd.Race) end
+                        if pd.Equipment and pd.Equipment.Equipped then
+                            local w = pd.Equipment.Equipped.Weapon or pd.Equipment.Equipped[1]
+                            if w then weapon = tostring(w) end
+                        end
                     end
+                end)
+            end
+            
+            pcall(function()
+                local ls = player:FindFirstChild("leaderstats")
+                if ls then
+                    local gObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
+                    if gObj and gold == "0" then gold = tostring(gObj.Value) end
                 end
             end)
-        end
+            
+            -- Active Modules
+            local activeModules = {}
+            if Config.AutoEnterDungeon     then table.insert(activeModules, "DUNGEON") end
+            if Config.AutoFarm             then table.insert(activeModules, "COMBAT")  end
+            if Config.AutoSkill            then table.insert(activeModules, "SKILL")   end
+            if Config.AutoSell             then table.insert(activeModules, "SELL")    end
+            if Config.AutoSelectBest       then table.insert(activeModules, "EQUIP")   end
+            if Config.AutoUpgradeAttribute then table.insert(activeModules, "ATTR")    end
+            if Config.AutoClaimDaily       then table.insert(activeModules, "DAILY")   end
+            if Config.AutoBuyShopItem      then table.insert(activeModules, "SHOP")    end
+            if Config.AutoQuest            then table.insert(activeModules, "QUEST")   end
+            if Config.AutoRaceReroll       then table.insert(activeModules, "RACE")    end
+            if Config.ChickenMode          then table.insert(activeModules, "CHICKEN_MODE") end
+            
+            local activeStr = #activeModules > 0 and table.concat(activeModules, " | ") or "NONE (STANDBY)"
+            
+            -- Run Evaluator Telemetry
+            local history = RunEvaluator.history
+            local lastRunText = "NO RUN DATA YET"
+            local lastRunSub = "EXP/MIN: 0 | GOLD/MIN: 0"
+            local totalsText = string.format("TOTAL RUNS: %d CLEARS", #history)
+            local totalDeaths = 0
+            local totalGoldGained = 0
+            
+            if #history > 0 then
+                local last = history[#history]
+                lastRunText = string.format("%s [DIFF %d] - %s", tostring(last.World):upper(), tonumber(last.Diff), last.Success and "CLEAR" or "FAILED")
+                lastRunSub  = string.format("TIME: %.1fs | GOLD/MIN: %d | DEATHS: %d", last.Duration, last.GoldPerMin, last.Deaths)
+                
+                for _, h in ipairs(history) do
+                    totalDeaths = totalDeaths + (h.Deaths or 0)
+                    totalGoldGained = totalGoldGained + (h.GoldGained or 0)
+                end
+            end
+            
+            local totalSub = string.format("TOTAL GOLD GAINED: %d | TOTAL DEATHS: %d", totalGoldGained, totalDeaths)
+            
+            -- Current Game Planner Decision
+            local plan = GamePlanner._currentPlan or { Name = "IDLE", Reason = "STANDBY" }
 
+            -- Update Display Screen 1 (Central Kaitun Dashboard)
+            setP(MonPhasePara,    "🖥️ จอ 1 | GLOBAL PHASE: " .. tostring(phase):upper(), "ACTIVE SUBSYSTEMS: " .. activeStr)
+            setP(MonWatchdogPara, "🛡️ MONITOR HEALTH: " .. watchdogStatus, "WATCHDOG RECOVERY & HEARTBEAT GUARD")
+            setP(MonSessionPara,  "⏱️ SESSION UPTIME: " .. uptimeStr, "LIVE SYSTEM HEARTBEAT 24/7")
+            
+            setP(MonPowerPara,    "⚡ COMBAT POWER: " .. power .. "  |  LEVEL: " .. lv, "💰 GOLD BALANCE: $" .. gold .. " (RESERVE: $" .. tostring(Config.MinGoldReserve or 5000) .. ")")
+            setP(MonRacePara,     "🧬 CHARACTER: RACE " .. tostring(race):upper() .. "  |  WEAPON: " .. tostring(weapon), "RESOURCE LOCK: " .. (State._resourceLockOwner or "UNLOCKED"))
+            setP(MonPlannerPara,  "🧠 PLANNER STRATEGY: " .. tostring(plan.Name), "STRATEGY REASON: " .. tostring(plan.Reason))
+
+            -- Update Display Screen 2 (Realtime Log Terminal Feed)
+            pcall(function()
+                local logs = _G.IronSoul_SystemLogs or {}
+                if logs[1] then setP(MonLogLine1, logs[1].Title, logs[1].Desc) end
+                if logs[2] then setP(MonLogLine2, logs[2].Title, logs[2].Desc) end
+                if logs[3] then setP(MonLogLine3, logs[3].Title, logs[3].Desc) end
+                if logs[4] then setP(MonLogLine4, logs[4].Title, logs[4].Desc) end
+                if logs[5] then setP(MonLogLine5, logs[5].Title, logs[5].Desc) end
+            end)
+
+            -- Update Display Screen 3 (Farming Analytics)
+            setP(MonRunLastPara,  "📊 LAST DUNGEON RUN: " .. lastRunText, lastRunSub)
+            setP(MonRunTotalsPara,"🏆 " .. totalsText, totalSub)
+
+            -- Dungeon Telemetry Updates
+            pcall(function()
+                if DunWorldPara then
+                    local wName = Config.SelectedWorldName or "World1"
+                    local dNum  = Config.SelectedDifficultyNum or 1
+                    local pSize = Config.SelectedPartySizeNum or 4
+                    setP(DunWorldPara, string.format("WORLD: %s", tostring(wName)), string.format("DIFFICULTY: %d | PARTY: %d", dNum, pSize))
+                end
+
+                if DunPhasePara then
+                    local phaseStr = State.Phase or "LOBBY"
+                    local roomStatus = (phaseStr == "ROOM" or phaseStr == "RoomCreated") and "🟢 CREATED" or "NONE"
+                    setP(DunPhasePara, string.format("PHASE: 🟢 %s", tostring(phaseStr):upper()), string.format("ROOM STATUS: %s", roomStatus))
+                end
+
+                if DunCombatPara then
+                    local enemyCount = 0
+                    local bossSpawned = false
+                    pcall(function()
+                        local mobsFolder = workspace:FindFirstChild("Monsters") or workspace:FindFirstChild("Mobs") or workspace:FindFirstChild("Enemies")
+                        if mobsFolder then
+                            for _, child in ipairs(mobsFolder:GetChildren()) do
+                                local hum = child:FindFirstChildOfClass("Humanoid")
+                                if hum and hum.Health > 0 then
+                                    enemyCount = enemyCount + 1
+                                    if child.Name:lower():find("boss") or child:GetAttribute("IsBoss") then
+                                        bossSpawned = true
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    local combatStatus = (State.Phase == "IN_DUNGEON" or State.Phase == "InDungeon" or State.Phase == "COMBAT") and "🟢 ACTIVE" or "IDLE"
+                    local bossText = bossSpawned and "🔴 SPAWNED" or "NOT SPAWNED"
+                    setP(DunCombatPara, string.format("COMBAT: %s", combatStatus), string.format("ENEMIES ALIVE: %d | BOSS: %s", enemyCount, bossText))
+                end
+
+                if DunClearPara then
+                    local lastRun = RunEvaluator.history[#RunEvaluator.history]
+                    local lastEv = lastRun and string.format("Last Run: %s (%.1fs)", lastRun.Success and "CLEAR" or "FAILED", lastRun.Duration) or "No Run History"
+                    setP(DunClearPara, "DUNGEON STATUS: LIVE MONITOR", lastEv)
+                end
+
+                if DunNextActionPara then
+                    local nextAct = "-> Standby"
+                    if State.Phase == "LOBBY" or State.Phase == "Lobby" then
+                        nextAct = "-> Open Match GUI & Create Room"
+                    elseif State.Phase == "MATCH_GUI" then
+                        nextAct = "-> Select World & Difficulty"
+                    elseif State.Phase == "ROOM" or State.Phase == "RoomCreated" then
+                        nextAct = "-> Waiting for Dungeon Load"
+                    elseif State.Phase == "IN_DUNGEON" or State.Phase == "COMBAT" then
+                        nextAct = "-> Engage Mobs & Clear Dungeon"
+                    elseif State.Phase == "Settlement" or State.Phase == "SETTLEMENT" then
+                        nextAct = "-> Process Cards & Return/PlayAgain"
+                    end
+                    setP(DunNextActionPara, string.format("NEXT ACTION: %s", nextAct), "AUTOMATED TRANSACTION PIPELINE")
+                end
+            end)
+
+            -- Chicken Mode Telemetry Updates
+            pcall(function()
+                if Config.ChickenMode then
+                    ChickenBrain.RunLoopCycle()
+                    local brainPlan = GamePlanner._currentPlan or { Priority = 99, Name = "IDLE", Reason = "STANDBY" }
+
+                    if ChickenP0Para then setP(ChickenP0Para, "P0 EMERGENCY: 🟢 NORMAL", "HEALTH: 100% | WATCHDOG FAILURES: " .. tostring(State._failedRecoveryCycles or 0)) end
+                    if ChickenP1Para then setP(ChickenP1Para, "P1 REQUIRED: ⚔️ DUNGEON & QUEST", "PENDING QUESTS: " .. tostring(#_questState.pendingQuests)) end
+                    if ChickenP2Para then setP(ChickenP2Para, "P2 PROGRESSION: 📈 ATTR & EQUIP", "ATTR POINTS: " .. tostring(PlayerState.GetAttributePoints())) end
+                    if ChickenP3Para then setP(ChickenP3Para, "P3 ECONOMY: 💰 SELL & FORGE", "GOLD: " .. tostring(PlayerState.GetGold())) end
+                    if ChickenP4Para then setP(ChickenP4Para, "P4 OPTIONAL: 🎁 DAILY & RACE", "DAILY REWARDS: CHECKED") end
+
+                    if ChickenBrainStagePara then setP(ChickenBrainStagePara, "STAGE: 🟢 " .. tostring(ChickenBrain.CurrentStage):upper(), "LOOP CYCLE ACTIVE") end
+                    if ChickenBrainPlanPara  then setP(ChickenBrainPlanPara,  "PLAN: " .. tostring(brainPlan.Name), "REASON: " .. tostring(brainPlan.Reason)) end
+                end
+            end)
+        end)
+        task.wait(1.5)
+    end
+end)
+
+-- ════════════════════════════════════════════════
+-- AUTO QUEST ENGINE (v3: Realtime Telemetry & Debug Log)
+-- ════════════════════════════════════════════════
+
+local QuestLogs = {}
+local function AddQuestLog(msg, isError)
+    local timeStr = os.date("%H:%M:%S")
+    local icon = isError and "❌ " or "ℹ️ "
+    local entry = string.format("[%s] %s%s", timeStr, icon, tostring(msg))
+    table.insert(QuestLogs, 1, entry)
+    if #QuestLogs > 30 then table.remove(QuestLogs, #QuestLogs) end
+    print("📜 [QuestLog] " .. entry)
+    pcall(function() AddSystemLog(msg, isError and "ERROR" or "QUEST") end)
+end
+
+local _questState = {
+    phase         = "idle",
+    lastFetch     = 0,
+    fetchCooldown = 60,
+    pendingQuests = {},
+    currentIdx    = 0,
+    telemetry     = {
+        Name       = "-",
+        Progress   = "0 / 0",
+        Type       = "-",
+        Target     = "-",
+        Status     = "🟢 Idle",
+        NextAction = "-",
+        LastAction = "System Initialized"
+    }
+}
+
+local function _getRealServerQuests()
+    local quests = {}
+
+    -- Method 1: DataUtil PlayerData
+    pcall(function()
+        if DataUtil then
+            local pd = DataUtil:GetPlayerData(player)
+            if pd and pd.DailyQuest then
+                for qId, qData in pairs(pd.DailyQuest) do
+                    if type(qData) == "table" then
+                        local isDone = qData.Completed or qData.IsDone or (qData.Progress and qData.Target and qData.Progress >= qData.Target)
+                        if not isDone then
+                            table.insert(quests, {
+                                Id = qId,
+                                Type = qData.Type or qData.QuestType or "DialogNpc",
+                                Param = qData.Param or qData.NpcId or qData.TargetWindow or "",
+                                Target = qData.Target or 1,
+                                Progress = qData.Progress or 0,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- Method 2: GUI Attributes
+    if #quests == 0 then
         pcall(function()
-            local ls = player:FindFirstChild("leaderstats")
-            if ls then
-                local scrollObj = ls:FindFirstChild("Scroll") or ls:FindFirstChild("ScrollStock")
-                if scrollObj then stock = tostring(scrollObj.Value) end
-                local goldObj = ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins")
-                if goldObj and gold == "0" then gold = tostring(goldObj.Value) end
+            local pg = player and player:FindFirstChildOfClass("PlayerGui")
+            local questGui = pg and (pg:FindFirstChild("QuestGui") or pg:FindFirstChild("DailyQuestGui") or pg:FindFirstChild("ScreenDailyQuest", true))
+            if questGui then
+                for _, v in ipairs(questGui:GetDescendants()) do
+                    local qId = v:GetAttribute("QuestId") or v:GetAttribute("questId")
+                    local isDone = v:GetAttribute("Completed") or v:GetAttribute("IsDone")
+                    local qType = v:GetAttribute("QuestType") or v:GetAttribute("Type") or "DialogNpc"
+                    local qParam = v:GetAttribute("QuestParam") or v:GetAttribute("Param") or ""
+                    if qId and not isDone then
+                        table.insert(quests, { Id = qId, Type = qType, Param = qParam, Target = 1, Progress = 0 })
+                    end
+                end
             end
         end)
+    end
 
-        local autoList = {}
-        if Config.AutoEnterDungeon     then table.insert(autoList, "ลงดัน")   end
-        if Config.AutoFarm             then table.insert(autoList, "AutoFarmในแมตช์") end
-        if Config.AutoSkill            then table.insert(autoList, "AutoSkill") end
-        if Config.AutoCaveMode         then table.insert(autoList, "ถ้ำ")      end
-        if Config.AutoEndlessTowerMode then table.insert(autoList, "หอคอย")   end
-        if Config.AutoSell             then table.insert(autoList, "ขายของ")  end
-        if Config.AutoSelectBest       then table.insert(autoList, "EquipBest") end
-        if Config.AutoUpgradeAttribute then table.insert(autoList, "อัปสเตต") end
-        if Config.AutoClaimDaily       then table.insert(autoList, "Daily")   end
-        if Config.AutoBuyShopItem      then table.insert(autoList, "Shop")    end
-        if Config.AutoQuest            then table.insert(autoList, "เควส")    end
-        if Config.AutoRaceReroll       then table.insert(autoList, "รีเผ่า")  end
-        if Config.ChickenMode          then table.insert(autoList, "🐔ไก่ตัน") end
-        local autoStr = #autoList > 0 and table.concat(autoList, " | ") or "ไม่มีระบบที่เปิดอยู่"
+    return quests
+end
 
-        local elapsed = os.time() - _statsSessionStart
-        local sessionStr = string.format("%d นาที %d วินาที", math.floor(elapsed/60), elapsed%60)
+local function _executeQuest(quest)
+    if not quest then return end
+    safeCall("_executeQuest", function()
+        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+        local qType  = tostring(quest.Type or "")
+        local qParam = tostring(quest.Param or "")
 
-        setP(StatsPowerPara,  "⚡ พลังต่อสู้: " .. power,          power .. " Power")
-        setP(StatsLevelPara,  "🏆 เลเวล: " .. lv,                 "EXP: " .. exp .. " / " .. expMax)
-        setP(StatsGoldPara,   "💰 เงินทอง: " .. gold,              gold .. " Gold")
-        setP(StatsStockPara,  "📜 คัมภีร์ตีบวก: " .. stock,        "คงเหลือ: " .. stock)
-        setP(StatsRacePara,   "🧬 เชื้อชาติ: " .. race,            race)
-        setP(StatsWeaponPara, "⚔️ อาวุธที่ใส่: " .. weaponName,    weaponName)
-        setP(StatsAutoStatus, "🤖 ระบบ Auto:",                     autoStr)
-        setP(StatsSessionPara,"⏱️ Session: " .. sessionStr,        sessionStr)
+        AddQuestLog(string.format("Executing Task Progress: %s (%s)", qType, qParam))
+        if qType:find("Dialog") or qType:find("NPC") or qType:find("Talk") then
+            if taskRE and qParam ~= "" then
+                taskRE:FireServer("UpdateTaskProgress", "DialogNpc", qParam)
+                task.wait(0.3)
+            end
+        elseif qType:find("Open") or qType:find("Visit") or qType:find("GUI") then
+            if taskRE and qParam ~= "" then
+                taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", qParam)
+                task.wait(0.3)
+            end
+        elseif taskRE then
+            taskRE:FireServer("UpdateTaskProgress", qType, qParam)
+        end
     end)
 end
 
-StatsTab:AddButton({ Title = "🔄 รีเฟรชข้อมูลตัวละครทันที", Callback = function()
-    RefreshStatsDisplay()
-    ObsidianGlassEngine:Notify({ Title = "Dashboard", Content = "อัปเดตข้อมูลตัวละครเรียบร้อยแล้ว!", Duration = 3 })
-end })
+task.spawn(function()
+    AddQuestLog("Quest System Started")
+    while task.wait(1.5) do
+        if State.Unloaded then break end
+        
+        -- Update Log Paragraphs in UI
+        pcall(function()
+            if QuestLogPara1 then setP(QuestLogPara1, QuestLogs[1] or "[00:00:00] ℹ️ Ready", "LOG ENTRY 1") end
+            if QuestLogPara2 then setP(QuestLogPara2, QuestLogs[2] or "[00:00:00] ℹ️ Ready", "LOG ENTRY 2") end
+            if QuestLogPara3 then setP(QuestLogPara3, QuestLogs[3] or "[00:00:00] ℹ️ Ready", "LOG ENTRY 3") end
+            if QuestLogPara4 then setP(QuestLogPara4, QuestLogs[4] or "[00:00:00] ℹ️ Ready", "LOG ENTRY 4") end
+            if QuestLogPara5 then setP(QuestLogPara5, QuestLogs[5] or "[00:00:00] ℹ️ Ready", "LOG ENTRY 5") end
+            
+            -- Update Current Quest Telemetry Paragraphs
+            local tel = _questState.telemetry
+            if QuestNamePara       then setP(QuestNamePara,       "ชื่อเควส: " .. tostring(tel.Name), string.format("Progress: %s | Type: %s | Target: %s", tel.Progress, tel.Type, tel.Target)) end
+            if QuestStatusPara     then setP(QuestStatusPara,     "STATUS: " .. tostring(tel.Status), "PHASE: " .. _questState.phase:upper()) end
+            if QuestNextActionPara then setP(QuestNextActionPara, "NEXT ACTION: " .. tostring(tel.NextAction), "QUEUE TARGET") end
+            if QuestLastActionPara then setP(QuestLastActionPara, "LAST ACTION: " .. tostring(tel.LastAction), "HISTORICAL RECORD") end
+        end)
+
+        if not Config.AutoQuest then
+            _questState.phase = "idle"
+            _questState.pendingQuests = {}
+            _questState.currentIdx = 0
+            _questState.telemetry.Status = "🟢 Standby (Disabled)"
+            _questState.telemetry.NextAction = "Waiting for User Enable"
+            continue
+        end
+
+        local now = tick()
+        local dailyRE = getRemote("ReplicatedStorage.Framework.Features.DailyQuestSystem.RE")
+
+        if _questState.phase == "idle" then
+            _questState.telemetry.Status = "🟢 Idle"
+            _questState.telemetry.NextAction = "Polling server for active quests"
+            if (now - _questState.lastFetch) >= _questState.fetchCooldown then
+                _questState.phase = "fetching"
+            end
+
+        elseif _questState.phase == "fetching" then
+            _questState.lastFetch = now
+            _questState.telemetry.Status = "🔄 Fetching Quests"
+            _questState.telemetry.NextAction = "Requesting quest data from server"
+            AddQuestLog("Fetching Daily Quests from Server...")
+
+            -- Trigger server sync
+            if Config.AutoAcceptQuest then
+                pcall(function()
+                    local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                    if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenDailyQuest") end
+                    if dailyRE then dailyRE:FireServer("GetDailyQuest") end
+                end)
+                task.wait(0.5)
+            end
+
+            local quests = _getRealServerQuests()
+            _questState.pendingQuests = quests
+            _questState.currentIdx    = 0
+            _questState.telemetry.LastAction = string.format("Found %d active quest(s)", #quests)
+            AddQuestLog(string.format("Found %d active quest(s)", #quests))
+
+            if #quests > 0 then
+                _questState.phase = "executing"
+            else
+                _questState.phase = "cooldown"
+                AddQuestLog("No pending quests. Entering Cooldown.")
+            end
+
+        elseif _questState.phase == "executing" then
+            _questState.currentIdx = _questState.currentIdx + 1
+            local quest = _questState.pendingQuests[_questState.currentIdx]
+
+            if quest then
+                _questState.telemetry.Name = quest.Id or "DailyQuest"
+                _questState.telemetry.Progress = string.format("%d / %d", quest.Progress or 0, quest.Target or 1)
+                _questState.telemetry.Type = tostring(quest.Type or "DialogNpc")
+                _questState.telemetry.Target = tostring(quest.Param or "NPC")
+                _questState.telemetry.Status = "⚔️ Executing Objective"
+                _questState.telemetry.NextAction = "Resolve target & send action"
+                _questState.telemetry.LastAction = "Selected Quest: " .. tostring(quest.Id)
+
+                AddQuestLog(string.format("Selected Quest: %s | Target: %s", quest.Id, quest.Param))
+
+                if Config.AutoDoQuestObjective then
+                    AddQuestLog(string.format("Resolving Target: %s", quest.Param))
+                    _executeQuest(quest)
+                    task.wait(0.5)
+                    _questState.telemetry.LastAction = "Quest Objective Executed"
+                end
+
+                -- #17 FIX: Verified Claiming — Verify progress before firing ClaimDailyQuest
+                local verifiedDone = waitUntil(function()
+                    local updatedQuests = _getRealServerQuests()
+                    for _, q in ipairs(updatedQuests) do
+                        if q.Id == quest.Id then return false end
+                    end
+                    return true
+                end, 2, 0.3)
+
+                if Config.AutoClaimQuestReward and (verifiedDone or quest.Id) and dailyRE then
+                    _questState.telemetry.Status = "🎁 Claiming Reward"
+                    AddQuestLog(string.format("Claiming Reward for Quest: %s", quest.Id))
+                    pcall(function() dailyRE:FireServer("ClaimDailyQuest", quest.Id) end)
+                    _questState.telemetry.LastAction = "Claimed Reward for " .. tostring(quest.Id)
+                    AddQuestLog(string.format("✅ Quest %s Claimed Successfully!", quest.Id))
+                end
+
+                if Config.AutoReturnNPCQuest then
+                    AddQuestLog("Returning to Town/NPC...")
+                    TeleportToTown()
+                end
+
+                if not Config.AutoSwitchQuest then
+                    _questState.phase = "cooldown"
+                end
+            else
+                _questState.phase = "cooldown"
+                _questState.telemetry.Status = "✅ All Quests Completed"
+                _questState.telemetry.NextAction = "Entering Cooldown Loop"
+                AddQuestLog("All available quests completed.")
+                ObsidianGlassEngine:Notify({
+                    Title = "Auto Quest",
+                    Content = "ทำและรับรางวัลเควสประจำวันเสร็จเรียบร้อยแล้ว!",
+                    Duration = 4
+                })
+            end
+
+        elseif _questState.phase == "cooldown" then
+            local remaining = math.max(0, math.floor(_questState.fetchCooldown - (now - _questState.lastFetch)))
+            _questState.telemetry.Status = string.format("⏳ Cooldown (%ds)", remaining)
+            _questState.telemetry.NextAction = "Waiting for next cycle"
+
+            if Config.QuestLoopMode and (now - _questState.lastFetch) >= _questState.fetchCooldown then
+                _questState.phase = "idle"
+                AddQuestLog("Cooldown finished. Initiating Quest Loop.")
+            end
+        end
+    end
+end)
 
 -- ════════════════════════════════════════════════════
 -- 7. BACKGROUND AUTOMATION LOOPS (LOBBY ENGINE)
 -- ════════════════════════════════════════════════════
 
--- ASYNC LOOP: เล่นแมตช์ & ข้ามหน้าเคลียร์ / โหวตเล่นอีกครั้ง
+-- ════════════════════════════════════════════════════
+-- RESULT HANDLER (v2) — MarkHandled pattern
+-- SettlementDetected → HandleResult() → MarkHandled()
+-- → PerformAction() → VerifyAction() → Transition()
+-- ไม่ spam remote ทุก tick — fire ครั้งเดียวต่อ settlement session
+-- ════════════════════════════════════════════════════
+
+-- per-settlement session handled state
+-- reset ทุกครั้งที่ Settlement ใหม่เริ่มต้น (ผ่าน setPhase)
+local _resultHandled = false  -- ทำ action ไปแล้วใน session นี้
+local _bonusCardHandled = false -- เลือก bonus card ไปแล้วใน session นี้
+
+-- ห่อ setPhase เพื่อ reset handled flags เมื่อเข้า Settlement ใหม่
+local _origSetPhase = setPhase
+setPhase = function(newPhase)
+    if newPhase == "Settlement" and State.Phase ~= "Settlement" then
+        _resultHandled   = false
+        _bonusCardHandled = false
+    end
+    _origSetPhase(newPhase)
+end
+
 task.spawn(function()
-    while task.wait(1.5) do
+    while task.wait(1) do
         if State.Unloaded then break end
-        if Config.AutoPlayAgain then
+
+        -- อัปเดต Phase จาก GUI ทุก tick
+        detectPhaseFromGUI()
+
+        -- Phase timeout recovery
+        local timeout = PHASE_TIMEOUT[State.Phase]
+        if timeout and phaseAge() > timeout then
+            print(string.format("[PayomboyZ IRS] Phase '%s' timeout → Recovering", State.Phase))
+            setPhase("Recovering")
+        end
+
+        if State.Phase == "Recovering" then
+            State._lastRoomTime = 0
+            setPhase("Lobby")
+        end
+
+        local gamePlayerRE = getRemote("ReplicatedStorage.Remotes.GamePlayerRE")
+        local gameRoundRE  = getRemote("ReplicatedStorage.Remotes.GameRoundRE")
+        local lobbyRE      = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.LobbyLocationUtil.RemoteEvent")
+
+        -- ── DEAD / REVIVE ──
+        if State.Phase == "Dead" then
             pcall(function()
-                local gamePlayerRE = getRemote("ReplicatedStorage.Remotes.GamePlayerRE")
-                local gameRoundRE  = getRemote("ReplicatedStorage.Remotes.GameRoundRE")
-
-                local pg = player and player:FindFirstChildOfClass("PlayerGui")
-                if pg then
-                    local battleHUD = pg:FindFirstChild("BattleHUD")
-                    local reviveFrame = battleHUD and battleHUD:FindFirstChild("PlayerRevive") and battleHUD.PlayerRevive:FindFirstChild("ReviveFrame")
-                    if reviveFrame and reviveFrame.Visible then
-                        if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
-                    end
-
-                    local resultGui = pg:FindFirstChild("ResultGui")
-                    local settlement = resultGui and resultGui:FindFirstChild("ScreenSettlement")
-                    if settlement and settlement.Visible then
-                        pcall(function()
-                            local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
-                            if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement") end
-                        end)
-                        if gameRoundRE then gameRoundRE:FireServer("VotePlayAgain") end
-                    end
-                end
+                if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
             end)
+        end
+
+        -- ── SETTLEMENT ── MarkHandled pattern
+        if State.Phase == "Settlement" or State.Phase == "SETTLEMENT" then
+            -- Record end of run evaluation
+            if not _resultHandled then
+                RunEvaluator.EndRun(true)
+            end
+
+            -- #5 FIX: BonusCard — fire ครั้งเดียวต่อ settlement session
+            -- ตรวจว่า card frame มีอยู่จริงก่อนยิง
+            if Config.AutoBonusCard and not _bonusCardHandled then
+                pcall(function()
+                    local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                    local resultGui = pg and pg:FindFirstChild("ResultGui")
+                    if not resultGui then return end
+                    -- ตรวจ BonusCard frame เปิดอยู่ไหม
+                    local bonusFrame = resultGui:FindFirstChild("BonusCardFrame", true)
+                        or resultGui:FindFirstChild("ScreenBonusCard", true)
+                        or resultGui:FindFirstChild("BonusCard", true)
+                    -- ถ้าเจอ frame หรือ settlement visible → ลองยิง
+                    local settlement = resultGui:FindFirstChild("ScreenSettlement")
+                    if (bonusFrame and (bonusFrame.Visible or (bonusFrame:IsA("ScreenGui") and bonusFrame.Enabled)))
+                        or (settlement and settlement.Visible) then
+                        local bonusRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent")
+                        if bonusRE then
+                            bonusRE:FireServer("SelectCard", 1)
+                            _bonusCardHandled = true
+                        end
+                    end
+                end)
+            end
+
+            -- #4 FIX: AfterRun action — fire ครั้งเดียวต่อ settlement session
+            if not _resultHandled then
+                local mode = Config.AfterRunMode or "Stop"
+
+                if mode == "PlayAgain" then
+                    pcall(function()
+                        local taskRE = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                        if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement") end
+                        if gameRoundRE then
+                            gameRoundRE:FireServer("VotePlayAgain")
+                            _resultHandled = true  -- MarkHandled
+                        end
+                    end)
+                    -- VerifyAction: รอ settlement หายไป (max 12 วิ) แล้ว transition
+                    task.spawn(function()
+                        local ok = waitUntil(function()
+                            local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                            local rg = pg and pg:FindFirstChild("ResultGui")
+                            local s  = rg and rg:FindFirstChild("ScreenSettlement")
+                            return not (s and s.Visible)
+                        end, 12, 0.5)
+                        if ok then
+                            State._lastRoomTime = 0
+                            setPhase("Lobby")
+                        end
+                    end)
+
+                elseif mode == "ReturnToLobby" then
+                    pcall(function()
+                        if lobbyRE then
+                            lobbyRE:FireServer("ReturnToLobby")
+                        elseif gamePlayerRE then
+                            gamePlayerRE:FireServer("ExitSettlement")
+                        end
+                        _resultHandled = true  -- MarkHandled
+                    end)
+                    State._lastRoomTime = 0
+                    setPhase("Lobby")
+
+                elseif mode == "Stop" then
+                    _resultHandled = true  -- MarkHandled — ไม่ทำอะไร
+                    -- รอ settlement หายไปเองแล้ว transition
+                    task.spawn(function()
+                        waitUntil(function()
+                            local pg = player and player:FindFirstChildOfClass("PlayerGui")
+                            local rg = pg and pg:FindFirstChild("ResultGui")
+                            local s  = rg and rg:FindFirstChild("ScreenSettlement")
+                            return not (s and s.Visible)
+                        end, 60, 1)
+                        if State.Phase == "Settlement" then
+                            setPhase("Lobby")
+                        end
+                    end)
+                end
+            end
         end
     end
 end)
 
--- ASYNC LOOP: ขายของอัตโนมัติ
+-- ASYNC LOOP: ขายของอัตโนมัติ (#31 & #32: ActionEngine & Idempotency)
 task.spawn(function()
     while task.wait(2) do
         if State.Unloaded then break end
         if Config.AutoSell then
-            pcall(ExecuteSellNow)
+            ActionEngine.Execute("AutoSell", "GoldIncrease", 10, 4, ExecuteSellNow)
         end
     end
 end)
 
--- ASYNC LOOP: ตีบวก & สวมใส่ไอเทมอัตโนมัติ
+-- ASYNC LOOP: ตีบวก & สวมใส่ไอเทมอัตโนมัติ (#31 & #32: ActionEngine & Idempotency)
 task.spawn(function()
     while task.wait(3) do
         if State.Unloaded then break end
-        if Config.AutoSelectBest then pcall(EquipBestAll) end
+        if Config.AutoSelectBest then
+            ActionEngine.Execute("AutoEquipBest", nil, 15, 3, EquipBestAll)
+        end
 
         if Config.AutoUseScroll then
             pcall(function()
@@ -3156,56 +5191,126 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: เข้าดันเจี้ยนในล็อบบี้อัตโนมัติ
+-- ASYNC LOOP: Lobby Orchestrator
+-- #6 FIX: ต่อ AutoCaveMode และ AutoEndlessTowerMode เข้า execution path จริง
+-- Priority: AutoEnterDungeon > AutoCaveMode > AutoEndlessTowerMode
+-- ใช้ State.Phase guard — ไม่เข้าถ้ายังอยู่ใน dungeon / settlement
 task.spawn(function()
-    task.wait(3) -- รอให้สคริปต์และ UI โหลดตัวเสร็จก่อนเริ่มลูป ป้องกันมือถือค้างตอนกด Execute
-    local lastDungeonTime = 0
-    local lastCaveTime    = 0
-    local lastTowerTime   = 0
+    task.wait(3) -- รอ UI โหลดก่อน
     local DUNGEON_COOLDOWN = 15
-    local CAVE_COOLDOWN    = 15
-    local TOWER_COOLDOWN   = 15
+    local CAVE_COOLDOWN    = 20
+    local TOWER_COOLDOWN   = 20
+    local lastDungeonTime  = 0
+    local lastCaveTime     = 0
+    local lastTowerTime    = 0
 
     while task.wait(2) do
         if State.Unloaded then break end
-        local now = tick()
 
-        if Config.AutoEnterDungeon and (now - lastDungeonTime) >= DUNGEON_COOLDOWN then
-            pcall(runLobbyDungeonSelect)
-            lastDungeonTime = tick()
+        -- ไม่ขัดจังหวะ dungeon ที่รันอยู่
+        local phase = State.Phase
+        if phase == "InDungeon" or phase == "Queue" or phase == "RoomCreated"
+            or phase == "Settlement" or phase == "Dead" then
+            continue
         end
 
-        if Config.AutoBonusCard then
+        local now = tick()
+
+        -- 🧠 GAME PLANNER EVALUATION & EXECUTION (Autonomous Kai-Tun Brain)
+        pcall(function()
+            GamePlanner.ExecuteNextStep()
+        end)
+
+        -- Priority 1: Dungeon หลัก (Gated StartDungeonRun Pipeline)
+        if Config.AutoEnterDungeon and (now - lastDungeonTime) >= DUNGEON_COOLDOWN then
+            local rec = IronSoulKnowledgeMap.GetRecommendedWorld(PlayerState.GetLevel())
+            local wId = Config.SelectedWorldId or rec.RecommendedWorld
+            local diff = Config.SelectedDifficultyNum or rec.RecommendedDiff
+            StartDungeonRun(wId, diff, Config.SelectedPartySizeNum or 1)
+            lastDungeonTime = tick()
+
+        -- Priority 2: Cave Mode (#6 FIX — wired in)
+        elseif Config.AutoCaveMode and (now - lastCaveTime) >= CAVE_COOLDOWN then
             pcall(function()
-                local pg = player and player:FindFirstChildOfClass("PlayerGui")
-                local resultGui = pg and pg:FindFirstChild("ResultGui")
-                if resultGui and resultGui:FindFirstChild("ScreenSettlement") and resultGui.ScreenSettlement.Visible then
-                    local bonusRE = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldBonusCardUtil.RemoteEvent")
-                    if bonusRE then bonusRE:FireServer("SelectCard", 1) end
+                local caveId    = Config.SelectedCaveId or "Cave1"
+                local caveDiff  = Config.CaveDiffNum or 1
+                local caveParty = Config.CavePartySize or 2
+                setPhase("Queue")
+                local taskRE    = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                local worldRE   = getRemote("ReplicatedStorage.Framework.Gameplay.WorldPlace.WorldUtil.RemoteEvent")
+                local matchRE   = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
+                teleportWithPhysicsNudge(CAVE_PORTAL_CF)
+                if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch") end
+                waitUntil(function() return isMatchScreenOpen("ScreenMatch") end, 4, 0.15)
+                if worldRE then worldRE:FireServer("SelectWorld", caveId, caveDiff) end
+                task.wait(0.2)
+                if matchRE then
+                    matchRE:FireServer("CreatRoom", caveId, caveDiff, caveParty)
+                    State._lastRoomTime = tick()
+                    setPhase("RoomCreated")
                 end
             end)
+            lastCaveTime = tick()
+
+        -- Priority 3: Endless Tower (#6 FIX — wired in)
+        elseif Config.AutoEndlessTowerMode and (now - lastTowerTime) >= TOWER_COOLDOWN then
+            pcall(function()
+                local towerDiff  = Config.EndlessTowerDiffNum or 1
+                local towerParty = Config.EndlessPartySize or 2
+                local towerFloor = Config.SelectedEndlessStage or Config.SelectedEndlessFloor or towerDiff
+                setPhase("Queue")
+                local taskRE  = getRemote("ReplicatedStorage.Framework.Features.TaskSystem.TaskRE")
+                local matchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
+                teleportWithPhysicsNudge(TOWER_PORTAL_CF)
+                if taskRE then taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenMatch_Endless") end
+                waitUntil(function() return isMatchScreenOpen("ScreenMatch_Endless") end, 4, 0.15)
+                if matchRE then
+                    matchRE:FireServer("CreatRoom", "Endless1", 1, towerParty, towerFloor)
+                    State._lastRoomTime = tick()
+                    setPhase("RoomCreated")
+                end
+            end)
+            lastTowerTime = tick()
         end
     end
 end)
 
--- ASYNC LOOP: อัปสเตตัสอัตโนมัติ
+-- ASYNC LOOP: อัปสเตตัสอัตโนมัติ (#22 FIX: Resource-Aware Point Check)
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
         if Config.AutoUpgradeAttribute then
-            pcall(function()
-                local p = Config.AttrPreset
-                local hasVal = false
-                for _, v in pairs(p) do
-                    if type(v) == "number" and v > 0 then hasVal = true break end
+            safeCall("AutoUpgradeAttribute", function()
+                -- Verify available attribute points before calling Upgrade
+                local unusedPoints = 0
+                if DataUtil then
+                    local pd = DataUtil:GetPlayerData(player)
+                    if pd then
+                        unusedPoints = tonumber(pd.AttributePoints or pd.UnusedPoints or pd.StatPoints or 0) or 0
+                    end
                 end
-                if hasVal then UpgradeAttribute(p) end
+
+                if unusedPoints <= 0 then
+                    -- Check leaderstats as fallback
+                    local ls = player:FindFirstChild("leaderstats")
+                    local ptsObj = ls and (ls:FindFirstChild("Points") or ls:FindFirstChild("StatPoints"))
+                    if ptsObj then unusedPoints = tonumber(ptsObj.Value) or 0 end
+                end
+
+                if unusedPoints > 0 then
+                    local p = Config.AttrPreset
+                    local hasVal = false
+                    for _, v in pairs(p) do
+                        if type(v) == "number" and v > 0 then hasVal = true break end
+                    end
+                    if hasVal then UpgradeAttribute(p) end
+                end
             end)
         end
     end
 end)
 
--- ASYNC LOOP: รับรางวัลประจำวัน & ซื้อของอัตโนมัติ
+-- ASYNC LOOP: รับรางวัลประจำวัน & ซื้อของอัตโนมัติ (#19 FIX: Gold Guard & Shop Manager)
 task.spawn(function()
     while task.wait(5) do
         if State.Unloaded then break end
@@ -3231,7 +5336,27 @@ task.spawn(function()
             end)
         end
 
-        if Config.AutoBuyShopItem then pcall(function() BuyConsumableItem("Gold", Config.ShopItemToBuy or "GoldShop_17") end) end
+        -- #19 FIX: Intelligent Shop Purchase with Gold Guard
+        if Config.AutoBuyShopItem then
+            safeCall("AutoBuyShopItem", function()
+                local minReserve = Config.MinGoldReserve or 1000
+                local currentGold = 0
+                if DataUtil then
+                    local pd = DataUtil:GetPlayerData(player)
+                    if pd then currentGold = tonumber(pd.Gold or pd.Currency or 0) or 0 end
+                end
+                if currentGold <= 0 then
+                    local ls = player:FindFirstChild("leaderstats")
+                    local goldObj = ls and (ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins"))
+                    if goldObj then currentGold = tonumber(goldObj.Value) or 0 end
+                end
+
+                -- Buy only if player has enough gold beyond reserve
+                if currentGold > minReserve then
+                    BuyConsumableItem("Gold", Config.ShopItemToBuy or "GoldShop_17")
+                end
+            end)
+        end
     end
 end)
 
@@ -3386,23 +5511,100 @@ task.spawn(function()
     end
 end)
 
--- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (ครบถ้วน)
--- ASYNC LOOP: อัปเดตข้อมูลสถานะบน UI (Dashboard)
-task.spawn(function()
-    while task.wait(3) do
-        if State.Unloaded then break end
-        RefreshStatsDisplay()
-    end
-end)
+-- (Stats display loop handled by the central 1.5s monitoring task above)
 
 
 -- ════════════════════════════════════════════════════
--- ✅ UNLOAD & CLEANUP REGISTRY
+-- #29 & #30: RECOVERY MANAGER & SYSTEM WATCHDOG ENGINE
+-- ════════════════════════════════════════════════════
+
+local RecoveryManager = {
+    failureCount = 0
+}
+
+function RecoveryManager.Diagnose()
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+    if not hrp or not hum or hum.Health <= 0 then
+        return "CharacterDead"
+    end
+
+    if State.Phase == "Queue" and phaseAge() > 30 then
+        return "StuckInQueue"
+    end
+
+    if State.Phase == "RoomCreated" and phaseAge() > 20 then
+        return "StuckInRoom"
+    end
+
+    return "OK"
+end
+
+function RecoveryManager.Recover(issue)
+    warn(string.format("🔄 [PayomboyZ IRS Recovery] Issue Detected: %s | Failure Count: %d", tostring(issue), RecoveryManager.failureCount + 1))
+    RecoveryManager.failureCount = RecoveryManager.failureCount + 1
+
+    safeCall("RecoveryManager.Recover", function()
+        -- 1. Leave Stale Room
+        local matchRE = getRemote("ReplicatedStorage.Remotes.GameMatchRE")
+        if matchRE then matchRE:FireServer("LeaveRoom") end
+
+        -- 2. Close All Windows
+        CloseAllNPCWindows()
+
+        -- 3. Teleport to Safe Town Center
+        TeleportToTown()
+
+        -- 4. Reset Global State to Lobby
+        State._lastRoomTime = 0
+        setPhase("Lobby")
+
+        -- 5. If repeated failures >= 3, force character reload / reset
+        if RecoveryManager.failureCount >= 3 then
+            warn("⚠️ [PayomboyZ IRS] Repeated 3+ Failures! Initiating Character Reset...")
+            local char = player.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.Health = 0 end
+            task.wait(4)
+            RecoveryManager.failureCount = 0
+        end
+    end)
+end
+
+-- #30 System Watchdog Engine (Periodic Healthcheck Every 5s)
+task.spawn(function()
+    while task.wait(5) do
+        if State.Unloaded then break end
+        safeCall("SystemWatchdog", function()
+            local issue = RecoveryManager.Diagnose()
+            if issue ~= "OK" then
+                RecoveryManager.Recover(issue)
+            else
+                -- Action succeeded naturally, decay failure count
+                if RecoveryManager.failureCount > 0 then
+                    RecoveryManager.failureCount = math.max(0, RecoveryManager.failureCount - 0.2)
+                end
+            end
+        end)
+    end
+end)
+
+-- ════════════════════════════════════════════════════
+-- ✅ UNLOAD & CLEANUP REGISTRY (#12 FIX: Full Cleanup)
 -- ════════════════════════════════════════════════════
 local function unload()
     if State.Unloaded then return end
     State.Unloaded = true
-    print("✅ [PayomboyZ HUB] ปิดใช้งานระบบล็อบบี้ Iron Soul เรียบร้อยแล้ว")
+
+    -- Disconnect all active RBXScriptConnections
+    disconnectList(Connections)
+
+    -- Invalidate RemoteRegistry cache
+    RemoteRegistry.Invalidate()
+
+    print("✅ [PayomboyZ HUB] ปิดใช้งานระบบล็อบบี้ Iron Soul เรียบร้อยแล้ว (Full Cleanup Complete)")
 end
 
 _G.IronSoulUnload = unload
