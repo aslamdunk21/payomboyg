@@ -92,7 +92,7 @@ local State = {
 	autoFarmActive = false,
 	autoFarmMode = "value",   -- "value" | "luck"
 	minLuckPoints = 0,
-	autoSellEnabled = false,
+	autoSellEnabled = true,
 	farmBurstCount = 0,
 	lastDigTime = 0,
 	-- Auto Buy Radar
@@ -904,6 +904,7 @@ local ObsidianGlassEngine = (function()
 			if not hasDragged then
 				playClickSound()
 				shell.Visible = not shell.Visible
+				lastActivityTime = os.clock()
 			end
 		end)
 
@@ -911,6 +912,210 @@ local ObsidianGlassEngine = (function()
 			if gameProcessed then return end
 			if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
 				shell.Visible = not shell.Visible
+				lastActivityTime = os.clock()
+			end
+		end)
+
+		-- ── 📡 TOP-RIGHT FARM MONITORING DASHBOARD WIDGET ─────────────────────
+		local monitorWidget = Instance.new("Frame")
+		monitorWidget.Name = "FarmMonitoringWidget"
+		monitorWidget.Size = UDim2.fromOffset(320, 195)
+		monitorWidget.Position = UDim2.new(1, -335, 0, 15)
+		monitorWidget.BackgroundColor3 = Color3.fromRGB(20, 9, 14)
+		monitorWidget.BackgroundTransparency = 0.15
+		monitorWidget.BorderSizePixel = 0
+		monitorWidget.ZIndex = 99990
+		monitorWidget.Parent = gui
+
+		local mwCorner = Instance.new("UICorner")
+		mwCorner.CornerRadius = UDim.new(0, 14)
+		mwCorner.Parent = monitorWidget
+
+		local mwStroke = Instance.new("UIStroke")
+		mwStroke.Color = Color3.fromRGB(255, 45, 85)
+		mwStroke.Thickness = 1.5
+		mwStroke.Transparency = 0.3
+		mwStroke.Parent = monitorWidget
+
+		local mwHeader = Instance.new("Frame")
+		mwHeader.Size = UDim2.new(1, 0, 0, 36)
+		mwHeader.BackgroundColor3 = Color3.fromRGB(32, 14, 20)
+		mwHeader.BackgroundTransparency = 0.2
+		mwHeader.BorderSizePixel = 0
+		mwHeader.Parent = monitorWidget
+
+		local mwhCorner = Instance.new("UICorner")
+		mwhCorner.CornerRadius = UDim.new(0, 14)
+		mwhCorner.Parent = mwHeader
+
+		local mwTitle = Instance.new("TextLabel")
+		mwTitle.Size = UDim2.new(1, -50, 1, 0)
+		mwTitle.Position = UDim2.new(0, 12, 0, 0)
+		mwTitle.BackgroundTransparency = 1
+		mwTitle.Text = "📡 FARM MONITORING DASHBOARD"
+		mwTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+		mwTitle.Font = Enum.Font.GothamBold
+		mwTitle.TextSize = 11
+		mwTitle.TextXAlignment = Enum.TextXAlignment.Left
+		mwTitle.Parent = mwHeader
+
+		local mwMinBtn = Instance.new("TextButton")
+		mwMinBtn.Size = UDim2.fromOffset(24, 24)
+		mwMinBtn.Position = UDim2.new(1, -30, 0, 6)
+		mwMinBtn.BackgroundColor3 = Color3.fromRGB(48, 18, 28)
+		mwMinBtn.Text = "-"
+		mwMinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		mwMinBtn.Font = Enum.Font.GothamBold
+		mwMinBtn.TextSize = 14
+		mwMinBtn.Parent = mwHeader
+
+		local mwmCorner = Instance.new("UICorner")
+		mwmCorner.CornerRadius = UDim.new(0, 6)
+		mwmCorner.Parent = mwMinBtn
+
+		local mwBody = Instance.new("Frame")
+		mwBody.Size = UDim2.new(1, -20, 1, -46)
+		mwBody.Position = UDim2.new(0, 10, 0, 40)
+		mwBody.BackgroundTransparency = 1
+		mwBody.Parent = monitorWidget
+
+		local mwStatus = Instance.new("TextLabel")
+		mwStatus.Size = UDim2.new(1, 0, 0, 20)
+		mwStatus.Position = UDim2.new(0, 0, 0, 0)
+		mwStatus.BackgroundTransparency = 1
+		mwStatus.Text = "🟢 Status: MONITORING ACTIVE"
+		mwStatus.TextColor3 = Color3.fromRGB(46, 224, 140)
+		mwStatus.Font = Enum.Font.GothamBold
+		mwStatus.TextSize = 11
+		mwStatus.TextXAlignment = Enum.TextXAlignment.Left
+		mwStatus.Parent = mwBody
+
+		local mwActivity = Instance.new("TextLabel")
+		mwActivity.Size = UDim2.new(1, 0, 0, 20)
+		mwActivity.Position = UDim2.new(0, 0, 0, 20)
+		mwActivity.BackgroundTransparency = 1
+		mwActivity.Text = "⚡ Task: Ready"
+		mwActivity.TextColor3 = Color3.fromRGB(242, 218, 228)
+		mwActivity.Font = Enum.Font.Gotham
+		mwActivity.TextSize = 11
+		mwActivity.TextXAlignment = Enum.TextXAlignment.Left
+		mwActivity.Parent = mwBody
+
+		local mwDivider = Instance.new("Frame")
+		mwDivider.Size = UDim2.new(1, 0, 0, 1)
+		mwDivider.Position = UDim2.new(0, 0, 0, 44)
+		mwDivider.BackgroundColor3 = Color3.fromRGB(140, 40, 60)
+		mwDivider.BackgroundTransparency = 0.5
+		mwDivider.BorderSizePixel = 0
+		mwDivider.Parent = mwBody
+
+		local mwStat1 = Instance.new("TextLabel")
+		mwStat1.Size = UDim2.new(1, 0, 0, 20)
+		mwStat1.Position = UDim2.new(0, 0, 0, 50)
+		mwStat1.BackgroundTransparency = 1
+		mwStat1.Text = "💎 Crystals Mined: 0  |  🍀 Luck: 0"
+		mwStat1.TextColor3 = Color3.fromRGB(255, 185, 70)
+		mwStat1.Font = Enum.Font.GothamBold
+		mwStat1.TextSize = 11
+		mwStat1.TextXAlignment = Enum.TextXAlignment.Left
+		mwStat1.Parent = mwBody
+
+		local mwStat2 = Instance.new("TextLabel")
+		mwStat2.Size = UDim2.new(1, 0, 0, 20)
+		mwStat2.Position = UDim2.new(0, 0, 0, 72)
+		mwStat2.BackgroundTransparency = 1
+		mwStat2.Text = "🎒 Bag: 0.0 / 0.0 kg  |  ⏱️ Time: 00:00:00"
+		mwStat2.TextColor3 = Color3.fromRGB(255, 255, 255)
+		mwStat2.Font = Enum.Font.Gotham
+		mwStat2.TextSize = 11
+		mwStat2.TextXAlignment = Enum.TextXAlignment.Left
+		mwStat2.Parent = mwBody
+
+		local mwStat3 = Instance.new("TextLabel")
+		mwStat3.Size = UDim2.new(1, 0, 0, 20)
+		mwStat3.Position = UDim2.new(0, 0, 0, 94)
+		mwStat3.BackgroundTransparency = 1
+		mwStat3.Text = "🔒 Auto Hide UI in 5m (Inactivity Guard)"
+		mwStat3.TextColor3 = Color3.fromRGB(210, 168, 182)
+		mwStat3.Font = Enum.Font.Gotham
+		mwStat3.TextSize = 10
+		mwStat3.TextXAlignment = Enum.TextXAlignment.Left
+		mwStat3.Parent = mwBody
+
+		local isMwCollapsed = false
+		mwMinBtn.MouseButton1Click:Connect(function()
+			isMwCollapsed = not isMwCollapsed
+			mwBody.Visible = not isMwCollapsed
+			monitorWidget.Size = isMwCollapsed and UDim2.fromOffset(320, 36) or UDim2.fromOffset(320, 195)
+			mwMinBtn.Text = isMwCollapsed and "+" or "-"
+		end)
+
+		local draggingMw, dragInputMw, dragStartMw, startPosMw
+		mwHeader.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				draggingMw = true
+				dragStartMw = input.Position
+				startPosMw = monitorWidget.Position
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then draggingMw = false end
+				end)
+			end
+		end)
+		mwHeader.InputChanged:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+				dragInputMw = input
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if input == dragInputMw and draggingMw then
+				local delta = input.Position - dragStartMw
+				monitorWidget.Position = UDim2.new(startPosMw.X.Scale, startPosMw.X.Offset + delta.X, startPosMw.Y.Scale, startPosMw.Y.Offset + delta.Y)
+			end
+		end)
+
+		-- ── ⏳ 5-MINUTE INACTIVITY AUTO-HIDE ENGINE ────────────────────────────
+		local lastActivityTime = os.clock()
+		local function registerUserActivity()
+			lastActivityTime = os.clock()
+		end
+
+		UserInputService.InputBegan:Connect(registerUserActivity)
+		UserInputService.InputChanged:Connect(registerUserActivity)
+
+		task.spawn(function()
+			local startTime = os.time()
+			while task.wait(1) do
+				if not gui or not gui.Parent then break end
+
+				local elapsed = os.time() - startTime
+				local hrs = math.floor(elapsed / 3600)
+				local mins = math.floor((elapsed % 3600) / 60)
+				local secs = elapsed % 60
+				local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
+
+				local currentWeight = backpackWeight and backpackWeight() or 0
+				local capWeight = backpackCapacity and backpackCapacity() or 0
+				local capStr = (capWeight == math.huge) and "Inf" or string.format("%.1f", capWeight)
+
+				local minedCount = (AfkSystem and AfkSystem.CrystalsMined) or 0
+				local luckCount = (AfkSystem and AfkSystem.LuckFound) or 0
+				mwStat1.Text = string.format("💎 Crystals Mined: %d  |  🍀 Luck: %d", minedCount, luckCount)
+				mwStat2.Text = string.format("🎒 Bag: %.1f / %s kg  |  ⏱️ Time: %s", currentWeight, capStr, timeStr)
+				
+				if State.statusText and State.statusText ~= "" then
+					mwActivity.Text = "⚡ Task: " .. tostring(State.statusText)
+				end
+
+				local idleSecs = math.floor(os.clock() - lastActivityTime)
+				local remSecs = math.max(0, 300 - idleSecs)
+				if remSecs > 0 then
+					mwStat3.Text = string.format("🔒 Auto Hide UI in %dm %ds (Inactivity Guard)", math.floor(remSecs / 60), remSecs % 60)
+				else
+					mwStat3.Text = "🔒 Main UI Hidden (5m Inactive). Click Toggle Capsule to show."
+					if shell and shell.Visible then
+						shell.Visible = false
+					end
+				end
 			end
 		end)
 
@@ -2820,6 +3025,33 @@ local function getAttr(inst, name)
 	return nil
 end
 
+local function isCrystal(inst)
+	if not inst then return false end
+	if getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil or getAttr(inst, "CrystalName") ~= nil or getAttr(inst, "IsBloodCrystal") ~= nil then
+		return true
+	end
+	if inst.Name and (inst.Name:find("Crystal") or inst.Name:find("Rune")) then
+		return true
+	end
+	return false
+end
+
+local function getPosition(inst)
+	if not inst then return nil end
+	if inst:IsA("BasePart") then
+		return inst.Position
+	elseif inst:IsA("Model") then
+		if inst.PrimaryPart then
+			return inst.PrimaryPart.Position
+		end
+		local ok, pivot = pcall(inst.GetPivot, inst)
+		if ok and pivot then
+			return pivot.Position
+		end
+	end
+	return nil
+end
+
 local function crystalWeight(inst)
 	return tonumber(getAttr(inst, "WeightKg")) or 0
 end
@@ -3291,43 +3523,25 @@ local function isCrystal(inst)
 		return false
 	end
 
-	-- Ignore player characters and GUI elements
-	if inst:FindFirstChildOfClass("Humanoid") or inst:IsA("Player") or inst:IsDescendantOf(GuiRoot) then
-		return false
-	end
-
 	local cached = crystalFlags[inst]
-	if cached == true then
-		return true
+	if cached ~= nil then
+		return cached
 	end
 
 	local result = false
+
 	if inst:IsA("BasePart") or inst:IsA("Model") then
 		local pName = inst.Parent and inst.Parent.Name
 		if pName == "Crystals" or pName == "DroppedCrystals" then
 			result = true
-		end
-
-		if not result then
-			local hasValue = getAttr(inst, "Value") ~= nil or getAttr(inst, "ValueText") ~= nil or getAttr(inst, "Money") ~= nil
-			local hasTier = getAttr(inst, "Tier") ~= nil or getAttr(inst, "TierName") ~= nil or getAttr(inst, "CrystalName") ~= nil
-			
-			if hasValue or hasTier or looksLikeCrystal(inst) then
-				result = true
-			end
-		end
-
-		if not result then
-			if inst:FindFirstChild("CrystalHover", true) or inst:FindFirstChild("LuckBoost", true) then
-				result = true
-			end
+		elseif getAttr(inst, "Value") ~= nil or getAttr(inst, "CrystalName") ~= nil or getAttr(inst, "Tier") ~= nil then
+			result = true
+		elseif inst.Name:find("Crystal", 1, true) ~= nil then
+			result = true
 		end
 	end
 
-	if result then
-		crystalFlags[inst] = true
-	end
-
+	crystalFlags[inst] = result
 	return result
 end
 
@@ -3344,13 +3558,13 @@ local function rebuildContainers()
 	end
 
 	push(Services.Workspace)
+
 	for _, name in ipairs(CONTAINER_NAMES) do
 		push(Services.Workspace:FindFirstChild(name))
 	end
 
 	local things = Services.Workspace:FindFirstChild("Things")
 	if things then
-		push(things)
 		for _, name in ipairs(CONTAINER_NAMES) do
 			push(things:FindFirstChild(name))
 		end
@@ -3361,7 +3575,6 @@ local function rebuildContainers()
 
 	local mountain = Services.Workspace:FindFirstChild("MountainDecorations") or Services.Workspace:FindFirstChild("Mountain")
 	if mountain then
-		push(mountain)
 		for _, name in ipairs(CONTAINER_NAMES) do
 			push(mountain:FindFirstChild(name))
 		end
@@ -5036,7 +5249,9 @@ local function getAimedCrystal()
 
 		seen[inst] = true
 
-		local offset = (inst.Position + ESP.offset) - origin
+		local instPos = getPosition(inst)
+		if not instPos then return end
+		local offset = (instPos + ESP.offset) - origin
 		local magnitude = offset.Magnitude
 		if magnitude > 0 then
 			local dot = direction:Dot(offset / magnitude)
@@ -6709,7 +6924,7 @@ do
 	install()
 end
 
-local Net = {}
+Net = Net or {}
 
 do
 	local function install()
@@ -6951,7 +7166,7 @@ do
 	install()
 end
 
-local Farm = {}
+Farm = Farm or {}
 
 do
 	local function install()
@@ -7006,6 +7221,9 @@ do
 		local active = false
 		local autoRejoin = Config.AutoRejoinBoulders
 		local targets = {}
+		for _, k in ipairs(FARM_KINDS) do
+			targets[k] = true
+		end
 		local phase = "idle"
 		local target, anchor
 		local swingClock = 0
@@ -7458,10 +7676,14 @@ do
 
 		local function boulderRoots()
 			local roots = {}
-			local decorations = Services.Workspace:FindFirstChild("MountainDecorations")
-			local folder = decorations and decorations:FindFirstChild("Boulders")
+			local decorations = Services.Workspace:FindFirstChild("MountainDecorations") or Services.Workspace:FindFirstChild("Mountain")
+			local folder = decorations and (decorations:FindFirstChild("Boulders") or decorations:FindFirstChild("Boulder"))
 			if folder then
 				roots[#roots + 1] = folder
+			end
+			local direct = Services.Workspace:FindFirstChild("Boulders") or Services.Workspace:FindFirstChild("Boulder")
+			if direct then
+				roots[#roots + 1] = direct
 			end
 			local test = Services.Workspace:FindFirstChild("BoulderTest")
 			if test then
@@ -7474,10 +7696,10 @@ do
 			if not inst then
 				return nil
 			end
-			local attrName = getAttr(inst, "BoulderName")
-			local str = tostring(attrName or inst.Name)
+			local attrName = getAttr(inst, "BoulderName") or getAttr(inst, "Kind")
+			local str = tostring(attrName or inst.Name):lower()
 			for _, kind in ipairs(FARM_KINDS) do
-				if str:find(kind, 1, true) then
+				if str:find(kind:lower(), 1, true) then
 					return kind
 				end
 			end
@@ -7711,7 +7933,9 @@ do
 					end
 
 					if scanIndex <= #SCAN_SPOTS then
-						hold(SCAN_SPOTS[scanIndex])
+						local scanCF = SCAN_SPOTS[scanIndex]
+						hold(scanCF)
+						requestStream(scanCF.Position)
 						statusText = string.format("Scanning %d/%d", scanIndex, #SCAN_SPOTS)
 
 						if now >= waitUntil then
@@ -7967,6 +8191,12 @@ do
 			elseif type(value) == "string" then
 				targets[value] = true
 			end
+
+			if not next(targets) then
+				for _, k in ipairs(FARM_KINDS) do
+					targets[k] = true
+				end
+			end
 		end
 
 		local function setActive(value)
@@ -8068,6 +8298,7 @@ do
 			end
 		end)
 
+		Farm.setActive = setActive
 		Farm.stop = stop
 		Farm.equipPick = equipPick
 		Farm.swingGap = swingGap
@@ -8101,7 +8332,7 @@ do
 		local DIG_SINK = 1.2
 		local DIG_LIFT = 6
 		local EQUIP_STEP = 0.5
-		local SELL_MARK = Config.AutoSellThreshold
+		local SELL_MARK = (type(Config.AutoSellThreshold) == "number" and Config.AutoSellThreshold) or 0.5
 		local SELL_WAIT = 7
 		local DIG_REACH = 12
 		local DIG_REFRESH = 5
@@ -8197,7 +8428,7 @@ do
 		end
 
 		local active = false
-		local autoSell = false
+		local autoSell = true
 		local focusLuck = false
 		local minLuckPoints = 4
 		local autoPlantLuck = false
@@ -8522,7 +8753,9 @@ do
 					score = value
 				end
 
-				local distance = (inst.Position - origin).Magnitude
+				local instPos = getPosition(inst)
+				if not instPos then return end
+				local distance = (instPos - origin).Magnitude
 				if distance > COLLECT_RANGE then
 					return
 				end
@@ -8758,7 +8991,7 @@ do
 				end
 			end
 
-			if State.autoSellEnabled and sellPhase == "idle" and (bagRatio() >= SELL_MARK or (lootBlocked and bagRatio() >= 0.25)) then
+			if (autoSell or State.autoSellEnabled ~= false) and sellPhase == "idle" and (bagRatio() >= (SELL_MARK or 0.5) or (lootBlocked and bagRatio() >= 0.25)) then
 				sellReturnCFrame = root.CFrame
 				sellPhase = "travel"
 				sellPhaseClock = now
@@ -8851,7 +9084,11 @@ do
 			end
 
 			if loot and loot.Parent then
-				local spot = loot.Position
+				local spot = getPosition(loot)
+				if not spot then
+					loot = nil
+					return
+				end
 				holdAt(CFrame.new(spot + Vector3.new(0, COLLECT_LIFT, 0), spot), spot)
 				requestStream(spot)
 
