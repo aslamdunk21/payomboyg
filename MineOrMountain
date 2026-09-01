@@ -8318,7 +8318,7 @@ do
 		}
 
 		local SCAN_HOLD = 1.4
-		local PEAK_GAP = 8
+		local PEAK_GAP = 10
 		local PEAK_STEP = 48
 		local PEAK_RINGS = 12
 		local COLUMN_STEP = 8
@@ -8327,12 +8327,12 @@ do
 		local RAY_DROP = 60
 		local ZONE_PAD = 12
 		local SURFACE_GAP = 0.15
-		local COLUMN_DRY = 25
+		local COLUMN_DRY = 40
 		local DIG_BURST = 7
 		local DIG_SINK = 1.2
 		local DIG_LIFT = 6
-		local EQUIP_STEP = 0.5
-		local SELL_MARK = (type(Config.AutoSellThreshold) == "number" and Config.AutoSellThreshold) or 0.5
+		local EQUIP_STEP = 1.0
+		local SELL_MARK = 0.5
 		local SELL_WAIT = 7
 		local DIG_REACH = 12
 		local DIG_REFRESH = 5
@@ -8340,7 +8340,6 @@ do
 		local COLLECT_LIFT = 5
 		local COLLECT_GAP = 0.15
 		local GRAB_GAP = 0.05
-		local MAX_LOOT_TIME = 4.0
 
 		local OFFSETS = { Vector2.new(0, 0) }
 		local PEAK_OFFSETS = { Vector2.new(0, 0) }
@@ -8402,6 +8401,7 @@ do
 
 		local function aimPoint(origin, spot, reach, now)
 			digFilter(now)
+
 			local goals = {
 				spot,
 				spot - Vector3.new(0, 2, 0),
@@ -8411,9 +8411,11 @@ do
 			for _, goal in ipairs(goals) do
 				local delta = goal - origin
 				local distance = delta.Magnitude
+
 				if distance > 0.05 then
 					local span = math.min(distance + 4, reach)
 					local hit = Services.Workspace:Raycast(origin, delta.Unit * span, digParams)
+
 					if hit then
 						return hit.Position
 					end
@@ -8421,29 +8423,22 @@ do
 			end
 
 			local delta = spot - origin
+
 			if delta.Magnitude <= reach then
 				return spot
 			end
+
 			return origin + delta.Unit * reach
 		end
 
 		local active = false
 		local autoSell = true
-		local focusLuck = false
-		local minLuckPoints = 4
-		local autoPlantLuck = false
-		local plantClock = 0
 		local heldPick
 		local loot
 		local lootClock = 0
 		local grabClock = 0
 		local lootHp
 		local lootMax
-		local lootStartTime = 0
-		local lootLastHpChange = 0
-		local lootHpMark
-		local blacklistedLoot = {}
-		local blacklistedColumns = {}
 		local target
 		local columnY
 		local columnDry = 0
@@ -8455,18 +8450,10 @@ do
 		local loaded = false
 		local swingClock = 0
 		local equipClock = 0
-		local sellPhase = "idle"
-		local sellReturnCFrame
-		local sellPhaseClock = 0
-		local plantPhase = "idle"
-		local plantPhaseClock = 0
-		local plantReturnCFrame
-		local plantTools = {}
-		local plantIndex = 1
-		local plantPlotPos
-		local plantGroundPos
+		local sellSpot
+		local sellUntil = 0
 		local lootBlocked = false
-		local farmTiers = {}
+		local sellClock = 0
 		local statusText = "Idle"
 
 		local function toggleValue(name)
@@ -8478,18 +8465,48 @@ do
 			return false
 		end
 
-		local function getSellCFrame()
-			local things = Services.Workspace:FindFirstChild("Things")
-			local prox = things and things:FindFirstChild("SellProx")
-			if prox and prox:IsA("BasePart") then
-				return CFrame.new(prox.Position + Vector3.new(0, 3, 0), prox.Position)
+		local function unfavoriteAll()
+			local cleared = 0
+
+			local function scan(container)
+				if not container then
+					return
+				end
+
+				for _, child in ipairs(container:GetChildren()) do
+					if child:IsA("Tool") and child:GetAttribute("Favorited") == true then
+						pcall(function()
+							child:SetAttribute("Favorited", false)
+						end)
+						fireRemote(Remotes.ToggleFavorite or findRemote("ToggleFavorite"), child, false)
+						cleared += 1
+					end
+				end
 			end
-			local model = things and things:FindFirstChild("SellModel")
-			local part = model and model:FindFirstChild("SellPart")
-			if part and part:IsA("BasePart") then
-				return CFrame.new(part.Position + Vector3.new(0, 3, 0), part.Position)
+
+			scan(LocalPlayer:FindFirstChildOfClass("Backpack"))
+			scan(LocalPlayer.Character)
+
+			return cleared
+		end
+
+		local function doSell()
+			local now = os.clock()
+			if now - sellClock < 1.5 then
+				return false
 			end
-			return CFrame.new(-45.85, 32, 1066.58)
+
+			sellClock = now
+
+			unfavoriteAll()
+			fireRemote(Remotes.GoHome or findRemote("GoHome"), "sell")
+
+			task.delay(0.6, function()
+				unfavoriteAll()
+				fireRemote(Remotes.SellRequest or findRemote("SellRequest"), "all")
+			end)
+
+			return true
 		end
 
 		local function zoneBase()
@@ -8497,7 +8514,7 @@ do
 			if typeof(base) == "number" then
 				return base
 			end
-			return Config.MountainCenter.Y - 500
+			return 0
 		end
 
 		local function zonePeak()
@@ -8505,7 +8522,7 @@ do
 			if typeof(peak) == "number" then
 				return peak
 			end
-			return Config.MountainCenter.Y + 600
+			return zoneBase() + 900
 		end
 
 		local function zoneCenter()
@@ -8513,7 +8530,7 @@ do
 			if spot then
 				return Vector2.new(spot.X, spot.Z)
 			end
-			return Vector2.new(Config.MountainCenter.X, Config.MountainCenter.Z)
+			return nil
 		end
 
 		local function insideZone(x, z)
@@ -8521,6 +8538,7 @@ do
 			if not center then
 				return false
 			end
+
 			return (Vector2.new(x, z) - center).Magnitude <= mountainSpan() + ZONE_PAD
 		end
 
@@ -8540,6 +8558,7 @@ do
 			if not hit or hit.Position.Y <= base + 1 then
 				return nil
 			end
+
 			return hit.Position
 		end
 
@@ -8547,29 +8566,18 @@ do
 			if insideZone(root.Position.X, root.Position.Z) then
 				return root.Position
 			end
+
 			return mountainSpot() or root.Position
 		end
 
-		local function gridKey(x, z)
-			return string.format("%d_%d", math.floor(x / 4), math.floor(z / 4))
-		end
-
 		local function highestColumn(origin, offsets)
-			local now = os.clock()
 			local best
 
 			for _, offset in ipairs(offsets) do
-				local posX = origin.X + offset.X
-				local posZ = origin.Z + offset.Y
-				local key = gridKey(posX, posZ)
+				local spot = surfaceAt(origin.X + offset.X, origin.Z + offset.Y)
 
-				local expire = blacklistedColumns[key]
-				if not expire or now > expire then
-					blacklistedColumns[key] = nil
-					local spot = surfaceAt(posX, posZ)
-					if spot and (not best or spot.Y > best.Y) then
-						best = spot
-					end
+				if spot and (not best or spot.Y > best.Y) then
+					best = spot
 				end
 			end
 
@@ -8578,8 +8586,10 @@ do
 
 		local function pickTarget(origin, now)
 			local center = mountainSpot()
+
 			if center and now - peakClock >= PEAK_GAP then
 				peakClock = now
+
 				local high = highestColumn(center, PEAK_OFFSETS)
 				if high then
 					return high
@@ -8604,7 +8614,7 @@ do
 		end
 
 		local function swing(spot)
-			local event = Remotes.DigRequest
+			local event = (Farm and Farm.digEvent and Farm.digEvent()) or Remotes.DigRequest or findRemote("DigRequest")
 			if not event or not heldPick then
 				return false
 			end
@@ -8619,7 +8629,7 @@ do
 
 			return pcall(function()
 				for step = 0, DIG_BURST - 1 do
-					fireRemote(event, name, aim - Vector3.new(0, step * DIG_SINK, 0))
+					event:FireServer(name, aim - Vector3.new(0, step * DIG_SINK, 0))
 				end
 			end)
 		end
@@ -8629,104 +8639,17 @@ do
 			if capacity == math.huge or capacity <= 0 then
 				return 0
 			end
+
 			return backpackWeight() / capacity
 		end
 
-		local function getPlayerPlot()
-			local lpName = LocalPlayer.Name
-			local slots = Services.Workspace:FindFirstChild("Things") and Services.Workspace.Things:FindFirstChild("Plots") and Services.Workspace.Things.Plots:FindFirstChild("Slots")
-			if slots then
-				local plot = slots:FindFirstChild(lpName)
-				if plot then
-					return plot
-				end
-			end
-			return nil
-		end
-
-		local function getPlotPlantPosition()
-			local plot = getPlayerPlot()
-			if not plot then
-				return nil
-			end
-			local spawn = plot:FindFirstChild("Spawn")
-			local region = plot:FindFirstChild("Region")
-			if region and region:IsA("BasePart") and spawn and spawn:IsA("BasePart") then
-				local corner = region.CFrame * CFrame.new(-region.Size.X/2 + 15, 0, -region.Size.Z/2 + 15)
-				return Vector3.new(corner.Position.X, spawn.Position.Y - 1.5, corner.Position.Z)
-			end
-			if spawn and spawn:IsA("BasePart") then
-				return spawn.Position - Vector3.new(30, 1.5, 30)
-			end
-			local ok, pivot = pcall(plot.GetPivot, plot)
-			if ok and pivot then
-				return pivot.Position
-			end
-			return nil
-		end
-
-		local function getLuckToolsInBackpack()
-			local list = {}
-
-			local function scan(container)
-				if not container then return end
-				for _, child in ipairs(container:GetChildren()) do
-					if child:IsA("Tool") then
-						local isCryst = getAttr(child, "Tier") ~= nil or child:GetAttribute("MeshTemplate") ~= nil
-						if isCryst then
-							local luckPts = math.floor(crystalLuck(child) * 100 + 0.5)
-							if luckPts >= State.minLuckPoints then
-								list[#list + 1] = child
-							end
-						end
-					end
-				end
-			end
-
-			scan(LocalPlayer:FindFirstChildOfClass("Backpack"))
-			scan(LocalPlayer.Character)
-			return list
-		end
-
-		-- Replaced with plantPhase state machine in step()
-
-		local function meetsFarmTierFilter(inst)
-			if not farmTiers or not next(farmTiers) then
-				return true
-			end
-			local selectedMap = normalizeMulti(farmTiers)
-			if not next(selectedMap) then
-				return true
-			end
-			local rName = crystalRarity(inst)
-			local tIndex = crystalTier(inst)
-			local tName = TIER_NAMES[tIndex] or rName
-			if selectedMap[tName] then return true end
-			local rLower = rName:lower()
-			local tLower = tName:lower()
-			for selName, _ in pairs(selectedMap) do
-				local selLower = selName:lower()
-				if rLower:find(selLower, 1, true) or tLower:find(selLower, 1, true) then
-					return true
-				end
-			end
-			return false
-		end
-
 		local function findLoot(free, origin)
-			local now = os.clock()
-			local best, bestScore, bestDistance
+			local best, bestValue, bestDistance
 			local blocked = false
 			local seen = {}
 
-			for inst, expire in pairs(blacklistedLoot) do
-				if now > expire or not inst.Parent then
-					blacklistedLoot[inst] = nil
-				end
-			end
-
 			local function consider(inst)
-				if not inst or seen[inst] or blacklistedLoot[inst] then
+				if not inst or seen[inst] then
 					return
 				end
 				seen[inst] = true
@@ -8735,22 +8658,9 @@ do
 					return
 				end
 
-				local score = 0
-				if State.autoFarmMode == "luck" then
-					local luckPts = math.floor(crystalLuck(inst) * 100 + 0.5)
-					if luckPts < State.minLuckPoints then
-						return
-					end
-					score = luckPts
-				else
-					if not meetsFarmTierFilter(inst) then
-						return
-					end
-					local value = crystalValue(inst)
-					if not meetsFilter(inst, value) then
-						return
-					end
-					score = value
+				local value = crystalValue(inst)
+				if not meetsFilter(inst, value) then
+					return
 				end
 
 				local instPos = getPosition(inst)
@@ -8765,18 +8675,15 @@ do
 					return
 				end
 
-				local better = false
-				if not best then
-					better = true
-				elseif score > bestScore then
-					better = true
-				elseif score == bestScore and distance < bestDistance then
+				local better = not best or value > bestValue
+
+				if not better and value == bestValue and distance < bestDistance then
 					better = true
 				end
 
 				if better then
 					best = inst
-					bestScore = score
+					bestValue = value
 					bestDistance = distance
 				end
 			end
@@ -8813,107 +8720,26 @@ do
 			lootHp = nil
 			lootMax = nil
 			lootBlocked = false
-			lootStartTime = 0
-			lootLastHpChange = 0
-			lootHpMark = nil
-			table.clear(blacklistedLoot)
-			table.clear(blacklistedColumns)
-			table.clear(blacklistedColumns)
-			sellPhase = "idle"
-			sellReturnCFrame = nil
-			sellPhaseClock = 0
-			plantPhase = "idle"
-			plantPhaseClock = 0
-			plantReturnCFrame = nil
+			sellSpot = nil
+			sellUntil = 0
 			heldPick = nil
 			statusText = "Idle"
+			State.statusText = statusText
 
 			Move.setFly(toggleValue("Fly"))
 			Move.setNoclip(toggleValue("Noclip"))
 			Mountain.setAutoGrab(toggleValue("AutoRunePickup"))
 		end
 
-		local function crystalHealth(inst)
-			if not inst then return nil end
-			local hp = getAttr(inst, "MinedHP") or getAttr(inst, "Health") or getAttr(inst, "Hp") or getAttr(inst, "CurrentHealth")
-			return tonumber(hp)
-		end
-
 		local function step(deltaTime)
 			local root = getRoot()
 			if not root then
 				statusText = "Waiting for character"
+				State.statusText = statusText
 				return
 			end
 
 			local now = os.clock()
-
-			if plantPhase ~= "idle" then
-				if plantPhase == "travel" then
-					statusText = "Traveling to plot..."
-					holdAt(plantPlotPos)
-					if (root.Position - plantPlotPos.Position).Magnitude < 10 or (now - plantPhaseClock > 12) then
-						plantPhase = "do_plant"
-						plantPhaseClock = now
-					end
-					return
-				end
-
-				if plantPhase == "do_plant" then
-					statusText = "Planting luck crystals..."
-					holdAt(plantPlotPos)
-					if now - plantPhaseClock >= 0.15 then
-						plantPhaseClock = now
-						if plantIndex <= #plantTools then
-							local tool = plantTools[plantIndex]
-							local col = (plantIndex - 1) % 6
-							local row = math.floor((plantIndex - 1) / 6)
-							local plantSpot = plantGroundPos + Vector3.new(col * 4 - 10, 0, row * 4 - 10)
-							pcall(function()
-								Remotes.PlotPlaceRequest:FireServer(tool.Name, plantSpot, 0, tool)
-							end)
-							plantIndex += 1
-						else
-							plantPhase = "return"
-							plantPhaseClock = now
-						end
-					end
-					return
-				end
-
-				if plantPhase == "return" then
-					statusText = "Returning to mountain..."
-					local destination = plantReturnCFrame or mountainSpot()
-					holdAt(destination)
-					if (root.Position - destination.Position).Magnitude < 12 or (now - plantPhaseClock > 12) then
-						plantPhase = "idle"
-						plantReturnCFrame = nil
-						target = nil
-						columnY = nil
-						surfaceClock = 0
-					end
-					return
-				end
-			end
-
-			if State.autoPlantLuck and plantPhase == "idle" and now - (State.plantClock or 0) >= 2.0 then
-				State.plantClock = now
-				local tools = getLuckToolsInBackpack()
-				if #tools >= 5 then
-					local pos = getPlotPlantPosition()
-					if pos then
-						plantGroundPos = pos
-						plantPlotPos = CFrame.new(pos + Vector3.new(0, 8, 0), pos)
-						plantReturnCFrame = root.CFrame
-						plantTools = tools
-						plantIndex = 1
-						plantPhase = "travel"
-						plantPhaseClock = now
-						statusText = "Heading to plot..."
-						return
-					end
-				end
-			end
 
 			if not loaded then
 				if scanIndex == 0 then
@@ -8924,6 +8750,7 @@ do
 				if scanIndex <= #SCAN_SPOTS then
 					holdAt(SCAN_SPOTS[scanIndex])
 					statusText = string.format("Loading terrain %d/%d", scanIndex, #SCAN_SPOTS)
+					State.statusText = statusText
 
 					if now >= scanUntil then
 						scanIndex += 1
@@ -8937,164 +8764,108 @@ do
 				peakClock = 0
 			end
 
-			if sellPhase ~= "idle" then
-				local sellCFrame = getSellCFrame()
-
-				if sellPhase == "travel" then
-					statusText = "Traveling to sell station..."
-					holdAt(sellCFrame)
-
-					if (root.Position - sellCFrame.Position).Magnitude < 10 or (now - sellPhaseClock > 12) then
-						sellPhase = "do_sell"
-						sellPhaseClock = now
-					end
+			if sellUntil > 0 then
+				if now < sellUntil then
+					statusText = "Selling"
+					State.statusText = statusText
 					return
 				end
 
-				if sellPhase == "do_sell" then
-					statusText = "Selling crystals..."
-					holdAt(sellCFrame)
+				sellUntil = 0
 
-					if now - sellPhaseClock >= 0.3 and now - sellPhaseClock < 0.6 then
-						unfavoriteAll()
-						fireRemote(Remotes.SellRequest, "all")
-
-						local things = Services.Workspace:FindFirstChild("Things")
-						local prox = things and things:FindFirstChild("SellProx")
-						local prompt = prox and prox:FindFirstChildOfClass("ProximityPrompt")
-						if prompt then
-							firePrompt(prompt)
-						end
-					end
-
-					if (now - sellPhaseClock >= 1.5) or (backpackWeight() <= 0) then
-						lootBlocked = false
-						sellPhase = "return"
-						sellPhaseClock = now
-					end
-					return
+				if sellSpot then
+					applyPivot(sellSpot)
+					sellSpot = nil
 				end
 
-				if sellPhase == "return" then
-					statusText = "Returning to mountain..."
-					local destination = sellReturnCFrame or mountainSpot()
-					holdAt(destination)
+				target = nil
+				columnY = nil
+				surfaceClock = 0
+			end
 
-					if (root.Position - destination.Position).Magnitude < 12 or (now - sellPhaseClock > 12) then
-						sellPhase = "idle"
-						sellReturnCFrame = nil
-						target = nil
-						columnY = nil
-						surfaceClock = 0
-					end
+			if (autoSell or State.autoSellEnabled ~= false) and (bagRatio() >= SELL_MARK or lootBlocked) then
+				sellSpot = root.CFrame
+
+				if doSell() then
+					lootBlocked = false
+					sellUntil = now + SELL_WAIT
+					statusText = "Selling"
+					State.statusText = statusText
 					return
 				end
 			end
 
-			if (autoSell or State.autoSellEnabled ~= false) and sellPhase == "idle" and (bagRatio() >= (SELL_MARK or 0.5) or (lootBlocked and bagRatio() >= 0.25)) then
-				sellReturnCFrame = root.CFrame
-				sellPhase = "travel"
-				sellPhaseClock = now
-				statusText = "Heading to sell station..."
-				return
-			end
-
-			if State.autoFarmMode == "luck" then
-				pickupStep(function(inst)
-					local luckPts = math.floor(crystalLuck(inst) * 100 + 0.5)
-					return luckPts >= State.minLuckPoints
-				end)
-			else
-				pickupStep()
-			end
+			pickupStep()
 
 			if heldPick == nil or heldPick.Parent ~= LocalPlayer.Character then
 				equipClock = 0
-				heldPick = Farm.equipPick()
+				heldPick = (Farm and Farm.equipPick and Farm.equipPick()) or equipPick()
 			else
 				equipClock += deltaTime
 				if equipClock >= EQUIP_STEP then
 					equipClock = 0
-					heldPick = Farm.equipPick() or heldPick
+					heldPick = (Farm and Farm.equipPick and Farm.equipPick()) or equipPick() or heldPick
 				end
 			end
 
 			if not heldPick then
-				statusText = "Equipping pickaxe..."
+				statusText = "No pickaxe"
+				State.statusText = statusText
 				return
 			end
 
 			swingClock += deltaTime
-			local rawGap = (Farm and Farm.swingGap) and Farm.swingGap(heldPick) or 0.25
-			local swingNeed = math.max(0.02, (rawGap or 0.25) * 0.4)
+
+			local swingNeed = math.max(0.02, ((Farm and Farm.swingGap and Farm.swingGap(heldPick)) or swingGap(heldPick)) * 0.4)
 			local canSwing = swingClock >= swingNeed
 			local free = backpackFree()
 
-			if loot then
-				local parented = loot.Parent ~= nil
-				local collected = (getAttr(loot, "Collected") == true)
-				local currentHp = crystalHealth(loot)
-
-				if currentHp and currentHp > 0 then
-					if lootHpMark == nil or currentHp < (lootHpMark - 0.001) then
-						lootHpMark = currentHp
-						lootLastHpChange = now
-					end
-				end
-
-				local hpStuck = (now - lootLastHpChange > 12.0) and (now - lootStartTime > 12.0)
-				local maxTimeout = (now - lootStartTime > 40.0)
-				local cantFit = (crystalWeight(loot) > free)
-
-				if not parented or collected or hpStuck or maxTimeout or cantFit then
-					if (hpStuck or maxTimeout) and loot and parented then
-						blacklistedLoot[loot] = now + 20
-					end
-					if parented and (collected or hpStuck or maxTimeout) then
-						AfkSystem.CrystalsMined += 1
-						if crystalLuck(loot) > 0 then
-							AfkSystem.LuckFound += 1
-						end
-					end
-					loot = nil
-					lootHp = nil
-					lootMax = nil
-					lootHpMark = nil
-				end
+			if loot and (not loot.Parent or getAttr(loot, "Collected") == true) then
+				loot = nil
+				lootHp = nil
+				lootMax = nil
 			end
 
 			if loot then
-				local hp = crystalHealth(loot)
+				local hp = tonumber(getAttr(loot, "MinedHP"))
+
 				if hp and (lootMax == nil or hp > lootMax) then
 					lootMax = hp
 				end
+
 				lootHp = hp
 			end
 
 			if not loot and now - lootClock >= COLLECT_GAP then
 				lootClock = now
 				loot, lootBlocked = findLoot(free, root.Position)
+
 				if loot then
-					lootStartTime = now
-					lootLastHpChange = now
-					lootHp = crystalHealth(loot)
+					lootHp = tonumber(getAttr(loot, "MinedHP"))
 					lootMax = lootHp
-					lootHpMark = lootHp
 				end
 			end
 
-			if loot and loot.Parent then
-				local spot = getPosition(loot)
-				if not spot then
-					loot = nil
-					return
-				end
+			if loot then
+				local spot = getPosition(loot) or loot.Position
+
 				holdAt(CFrame.new(spot + Vector3.new(0, COLLECT_LIFT, 0), spot), spot)
+
+				local digSpot = spot
+
+				if not lootHp or lootHp <= 0 then
+					local ground = surfaceAt(spot.X, spot.Z)
+
+					if ground then
+						digSpot = ground
+					end
+				end
+
 				requestStream(spot)
 
 				if canSwing then
 					swingClock -= swingNeed
-					swing(spot)
+					swing(digSpot)
 				end
 
 				if now - grabClock >= GRAB_GAP then
@@ -9104,13 +8875,16 @@ do
 
 				if lootHp and lootHp > 0 then
 					local ratio = 0
+
 					if lootMax and lootMax > 0 then
 						ratio = math.clamp(1 - lootHp / lootMax, 0, 1)
 					end
-					statusText = string.format("Mining %s (%s) %d%%", crystalName(loot), formatShort(crystalValue(loot), "$"), math.floor(ratio * 100))
+
+					statusText = string.format("Breaking crystal %d%%", math.floor(ratio * 100))
 				else
-					statusText = string.format("Collecting %s (%s)...", crystalName(loot), formatShort(crystalValue(loot), "$"))
+					statusText = "Collecting crystals"
 				end
+				State.statusText = statusText
 
 				return
 			end
@@ -9119,6 +8893,7 @@ do
 
 			if target and now - surfaceClock >= SURFACE_GAP then
 				surfaceClock = now
+
 				local spot = surfaceAt(target.X, target.Z)
 
 				if not spot then
@@ -9138,7 +8913,6 @@ do
 					target = spot
 
 					if columnDry >= COLUMN_DRY then
-						blacklistedColumns[gridKey(target.X, target.Z)] = now + 12
 						target = nil
 						columnY = nil
 						columnDry = 0
@@ -9148,17 +8922,21 @@ do
 
 			if not target then
 				local spot = pickTarget(origin, now)
+
 				if not spot then
 					spot = surfaceAt(origin.X, origin.Z)
 				end
 
 				if not spot then
 					requestStream(origin)
+
 					if canSwing then
 						swingClock -= swingNeed
 						swing(root.Position - Vector3.new(0, DIG_REACH * 0.5, 0))
 					end
+
 					statusText = "Loading terrain"
+					State.statusText = statusText
 					return
 				end
 
@@ -9201,15 +8979,13 @@ do
 			lootHp = nil
 			lootMax = nil
 			lootBlocked = false
-			lootStartTime = 0
-			table.clear(blacklistedLoot)
-			table.clear(blacklistedColumns)
 			swingClock = 0
 			equipClock = 0
 			sellSpot = nil
 			sellUntil = 0
 			heldPick = nil
 			statusText = "Starting"
+			State.statusText = statusText
 
 			Move.setFly(false)
 			Move.setNoclip(true)
