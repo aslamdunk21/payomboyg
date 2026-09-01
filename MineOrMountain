@@ -9,13 +9,7 @@ while not localPlayer do
     localPlayer = playersService.LocalPlayer
 end
 
-local playerCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
-local playerHumanoid = playerCharacter:WaitForChild("Humanoid", 10)
-local rootPart = playerCharacter:WaitForChild("HumanoidRootPart", 10)
 
-if not playerHumanoid or not rootPart then return end
-
-task.wait(1)
 
 local Config = {
 	MinCrystalValue = "2m",
@@ -107,6 +101,14 @@ local State = {
 	radarBuyAccumulator = 0,
 }
 
+task.spawn(function()
+	local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local root = char:WaitForChild("HumanoidRootPart", 10)
+	if root then
+		State.rootPart = root
+	end
+end)
+
 local Storage = {
 	afkConns = {},
 	registry = {},
@@ -127,6 +129,7 @@ local Storage = {
 }
 
 local Connections = {}
+local Mountain, Move, Net, Farm, Money = {}, {}, {}, {}, {}
 
 do
 	local function silenceIdle()
@@ -5006,13 +5009,11 @@ local function buyAllBombs()
 	end
 end
 
-local Mountain = {}
-
-local aimParams = RaycastParams.new()
-aimParams.FilterType = Enum.RaycastFilterType.Exclude
-aimParams.IgnoreWater = true
-
 local function getAimedCrystal()
+	local aimParams = RaycastParams.new()
+	aimParams.FilterType = Enum.RaycastFilterType.Exclude
+	aimParams.IgnoreWater = true
+
 	local unitRay = Mouse.UnitRay
 	local origin = unitRay.Origin
 	local direction = unitRay.Direction.Unit
@@ -5192,6 +5193,8 @@ local function getSellCFrame()
 	end
 	return CFrame.new(-45.85, 32, 1066.58)
 end
+
+local sellClock = 0
 
 local function doRemoteSell()
 	local now = os.clock()
@@ -6510,6 +6513,9 @@ do
 			Callback = function(value)
 				State.autoFarmActive = value
 				farmScoreCache = nil
+				if Money and Money.setActive then
+					Money.setActive(value)
+				end
 			end,
 		})
 
@@ -8070,7 +8076,7 @@ do
 	install()
 end
 
-local Money = {}
+Money = Money or {}
 
 do
 	local function install()
@@ -8438,7 +8444,7 @@ do
 						local isCryst = getAttr(child, "Tier") ~= nil or child:GetAttribute("MeshTemplate") ~= nil
 						if isCryst then
 							local luckPts = math.floor(crystalLuck(child) * 100 + 0.5)
-							if luckPts >= minLuckPoints then
+							if luckPts >= State.minLuckPoints then
 								list[#list + 1] = child
 							end
 						end
@@ -8499,9 +8505,9 @@ do
 				end
 
 				local score = 0
-				if focusLuck then
+				if State.autoFarmMode == "luck" then
 					local luckPts = math.floor(crystalLuck(inst) * 100 + 0.5)
-					if luckPts < minLuckPoints then
+					if luckPts < State.minLuckPoints then
 						return
 					end
 					score = luckPts
@@ -8657,8 +8663,8 @@ do
 				end
 			end
 
-			if autoPlantLuck and plantPhase == "idle" and now - plantClock >= 2.0 then
-				plantClock = now
+			if State.autoPlantLuck and plantPhase == "idle" and now - (State.plantClock or 0) >= 2.0 then
+				State.plantClock = now
 				local tools = getLuckToolsInBackpack()
 				if #tools >= 5 then
 					local pos = getPlotPlantPosition()
@@ -8752,7 +8758,7 @@ do
 				end
 			end
 
-			if autoSell and sellPhase == "idle" and (bagRatio() >= SELL_MARK or (lootBlocked and bagRatio() >= 0.25)) then
+			if State.autoSellEnabled and sellPhase == "idle" and (bagRatio() >= SELL_MARK or (lootBlocked and bagRatio() >= 0.25)) then
 				sellReturnCFrame = root.CFrame
 				sellPhase = "travel"
 				sellPhaseClock = now
@@ -8760,10 +8766,10 @@ do
 				return
 			end
 
-			if focusLuck then
+			if State.autoFarmMode == "luck" then
 				pickupStep(function(inst)
 					local luckPts = math.floor(crystalLuck(inst) * 100 + 0.5)
-					return luckPts >= minLuckPoints
+					return luckPts >= State.minLuckPoints
 				end)
 			else
 				pickupStep()
@@ -9052,6 +9058,16 @@ do
 			end)
 		end)
 
+		Connections.moneyConn = Services.RunService.Heartbeat:Connect(function(deltaTime)
+			if active then
+				local ok, err = pcall(step, deltaTime)
+				if not ok then
+					reportError("mountainFarm", err)
+				end
+			end
+		end)
+
+		Money.setActive = setActive
 		Money.stop = stop
 	end
 
