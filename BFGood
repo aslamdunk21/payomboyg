@@ -1,5 +1,30 @@
 
 -- ============================================================
+-- 🌐 CENTRALIZED ROBLOX SERVICES & CORE INITIALIZATION
+-- ============================================================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local LP = Players.LocalPlayer
+if not LP then
+    local start = tick()
+    while not LP and tick() - start < 5 do task.wait(0.1) end
+    LP = Players.LocalPlayer
+end
+if not LP then return end
+
+-- Load Bypass Payload
+pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
+end)
+
+-- ============================================================
 -- 🏴‍☠️ IMMEDIATE AUTO SELECT TEAM (PIRATES)
 -- ============================================================
 local function AutoSelectTeam()
@@ -37,27 +62,6 @@ task.spawn(function()
         task.wait(0.2)
     end
 end)
-
-loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
-
--- ============================================================
--- 🚀 BLOX FRUITS ULTIMATE FLY + BYPASS V6
--- โดย BluezyGPT สำหรับ BZMEMBER
--- รวม Noclip + Fly + Anti-Cheat Bypass แบบจัดเต็ม
--- ============================================================
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local LP = Players.LocalPlayer
-
-if not LP then
-    local start = tick()
-    while not LP and tick() - start < 5 do task.wait(0.1) end
-    LP = Players.LocalPlayer
-end
-if not LP then return end
 
 
 -- ============================================================
@@ -125,40 +129,49 @@ getgenv().Configs = getgenv().Configs or {
     StatBuild = "Melee",
     AutoHaki = true,
     AutoBuyFruit = true,
+    AutoStoreFruit = true,
+    AutoBoss = true,
     TargetFruit = "Kitsune",
     MinBeliReserve = 0,
     StuckDetector = true,
     Saber = true,
-    Bartilo = true
+    Bartilo = true,
+    AutoBuyMelee = true
 }
 
 local ConfigManager = {
     CurrentProfile = "Default Kaitun",
+    DefaultConfig = {
+        AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Melee",
+        AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = true,
+        AutoStoreFruit = true, AutoBoss = true, TargetFruit = "Kitsune", MinBeliReserve = 0,
+        StuckDetector = true, Saber = true, Bartilo = true, AutoBuyMelee = true
+    },
     Profiles = {
         ["Default Kaitun"] = {
             AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Melee",
             AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = true,
-            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+            AutoStoreFruit = true, AutoBoss = true, TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
         },
         ["Fast Progression"] = {
             AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Melee",
             AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = false,
-            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+            AutoStoreFruit = true, AutoBoss = true, TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
         },
         ["Safe Mode"] = {
             AutoFarmLevel = true, BringMob = false, FastAttack = false, SelectWeapon = "Melee",
             AutoStats = true, StatBuild = "Melee", AutoHaki = true, AutoBuyFruit = true,
-            TargetFruit = "Buddha", MinBeliReserve = 500000, StuckDetector = true
+            AutoStoreFruit = true, AutoBoss = false, TargetFruit = "Buddha", MinBeliReserve = 500000, StuckDetector = true
         },
         ["Fruit Hunter"] = {
             AutoFarmLevel = false, BringMob = false, FastAttack = true, SelectWeapon = "Blox Fruit",
             AutoStats = true, StatBuild = "Blox Fruit", AutoHaki = true, AutoBuyFruit = true,
-            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+            AutoStoreFruit = true, AutoBoss = false, TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
         },
         ["Mastery Farm"] = {
             AutoFarmLevel = true, BringMob = true, FastAttack = true, SelectWeapon = "Sword",
             AutoStats = true, StatBuild = "Sword", AutoHaki = true, AutoBuyFruit = false,
-            TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
+            AutoStoreFruit = true, AutoBoss = true, TargetFruit = "Kitsune", MinBeliReserve = 0, StuckDetector = true
         }
     }
 }
@@ -171,6 +184,84 @@ function ConfigManager:LoadProfile(name)
         getgenv().Configs[k] = v
     end
     return true
+end
+
+function ConfigManager:SaveToFile(fileName)
+    fileName = fileName or "PayomboyZ_Config.json"
+    local success = pcall(function()
+        if writefile then
+            writefile(fileName, HttpService:JSONEncode(getgenv().Configs))
+        end
+    end)
+    return success
+end
+
+function ConfigManager:LoadFromFile(fileName)
+    fileName = fileName or "PayomboyZ_Config.json"
+    local success = pcall(function()
+        if isfile and isfile(fileName) and readfile then
+            local raw = readfile(fileName)
+            local parsed = HttpService:JSONDecode(raw)
+            for k, v in pairs(parsed) do
+                getgenv().Configs[k] = v
+            end
+        end
+    end)
+    return success
+end
+
+function ConfigManager:ResetDefault()
+    for k, v in pairs(self.DefaultConfig) do
+        getgenv().Configs[k] = v
+    end
+end
+
+function ConfigManager:ExportToClipboard()
+    pcall(function()
+        local data = HttpService:JSONEncode(getgenv().Configs)
+        if setclipboard then setclipboard(data) end
+    end)
+end
+
+function ConfigManager:ImportFromClipboard()
+    local success = pcall(function()
+        if getclipboard then
+            local raw = getclipboard()
+            local parsed = HttpService:JSONDecode(raw)
+            for k, v in pairs(parsed) do
+                getgenv().Configs[k] = v
+            end
+        end
+    end)
+    return success
+end
+
+-- ============================================================
+-- 🟢 REAL-TIME ERROR MONITOR & SYSTEM HEALTH DASHBOARD
+-- ============================================================
+local ErrorMonitor = {
+    Health = {
+        Movement = "OK",
+        Quest = "OK",
+        Fruit = "OK",
+        UI = "OK",
+        LastError = "None",
+        RecoveryCount = 0
+    }
+}
+
+function ErrorMonitor:Report(subsystem, status, errMessage)
+    self.Health[subsystem] = status
+    if errMessage then
+        self.Health.LastError = string.sub(tostring(errMessage), 1, 40)
+    end
+end
+
+function ErrorMonitor:GetSummary()
+    return string.format("Movement: %s | Quest: %s | Fruit: %s | UI: %s\nLast Error: %s | Recovery: %d",
+        self.Health.Movement, self.Health.Quest, self.Health.Fruit, self.Health.UI,
+        self.Health.LastError, RecoveryService.RecoveryCount or 0
+    )
 end
 
 -- ============================================================
@@ -3187,8 +3278,42 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             local dNameTH = dCfg.NameTH or dCfg.Name or "Dropdown"
             local dNameEN = dCfg.NameEN or dCfg.Name or "Dropdown"
             local rawOptions = dCfg.Options or {}
-            local defaultVal = dCfg.Default or ""
+            local defaultVal = dCfg.Default
+            local isMulti = dCfg.Multi or dCfg.MultiSelect or false
             local callback = dCfg.Callback or function() end
+
+            local selectedMultiMap = {}
+            if isMulti then
+                if type(defaultVal) == "table" then
+                    for _, v in ipairs(defaultVal) do selectedMultiMap[v] = true end
+                elseif type(defaultVal) == "string" and defaultVal ~= "" then
+                    selectedMultiMap[defaultVal] = true
+                end
+            end
+
+            local function getSelectedList()
+                local list = {}
+                for k, v in pairs(selectedMultiMap) do
+                    if v then table.insert(list, k) end
+                end
+                return list
+            end
+
+            local function formatBtnText()
+                if isMulti then
+                    local list = getSelectedList()
+                    if #list == 0 then
+                        return "Select...  ▼"
+                    elseif #list == 1 then
+                        return list[1] .. "  ▼"
+                    else
+                        return tostring(#list) .. " Selected  ▼"
+                    end
+                else
+                    local str = (type(defaultVal) == "string" and defaultVal ~= "" and defaultVal or "Select...")
+                    return str .. "  ▼"
+                end
+            end
 
             local card = Instance.new("Frame")
             card.Size = UDim2.new(1, -10, 0, 44)
@@ -3223,7 +3348,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             selectBtn.Size = UDim2.fromOffset(145, 28)
             selectBtn.Position = UDim2.new(1, -153, 0.5, -14)
             selectBtn.BackgroundColor3 = COLORS.surfaceRaised
-            selectBtn.Text = (defaultVal ~= "" and defaultVal or "Select...") .. "  ▼"
+            selectBtn.Text = formatBtnText()
             selectBtn.TextColor3 = COLORS.primary
             selectBtn.Font = Enum.Font.GothamBold
             selectBtn.TextSize = 11
@@ -3288,31 +3413,59 @@ function ObsidianGlassEngine:CreateWindow(cfg)
                     end
                 end
 
-                local curText = selectBtn.Text:gsub("  ▼", "")
-                for _, opt in ipairs(opts) do
-                    local optBtn = Instance.new("TextButton")
-                    optBtn.Size = UDim2.new(1, 0, 0, 26)
-                    optBtn.BackgroundColor3 = (opt == curText) and COLORS.primary or COLORS.surface
-                    optBtn.BackgroundTransparency = 0.2
-                    optBtn.Text = opt
-                    optBtn.TextColor3 = COLORS.text
-                    optBtn.Font = Enum.Font.GothamBold
-                    optBtn.TextSize = 11
-                    optBtn.ZIndex = 1000000
-                    optBtn.Parent = dropList
+                if isMulti then
+                    for _, opt in ipairs(opts) do
+                        local isSel = (selectedMultiMap[opt] == true)
+                        local optBtn = Instance.new("TextButton")
+                        optBtn.Size = UDim2.new(1, 0, 0, 26)
+                        optBtn.BackgroundColor3 = isSel and COLORS.primary or COLORS.surface
+                        optBtn.BackgroundTransparency = 0.2
+                        optBtn.Text = (isSel and "✓ " or "  ") .. opt
+                        optBtn.TextColor3 = COLORS.text
+                        optBtn.Font = Enum.Font.GothamBold
+                        optBtn.TextSize = 11
+                        optBtn.ZIndex = 1000000
+                        optBtn.Parent = dropList
 
-                    local oCorner = Instance.new("UICorner")
-                    oCorner.CornerRadius = UDim.new(0, 4)
-                    oCorner.Parent = optBtn
+                        local oCorner = Instance.new("UICorner")
+                        oCorner.CornerRadius = UDim.new(0, 4)
+                        oCorner.Parent = optBtn
 
-                    optBtn.MouseButton1Click:Connect(function()
-                        playClickSound()
-                        selectBtn.Text = opt .. "  ▼"
-                        isOpen = false
-                        dropList.Visible = false
-                        dropList.Size = UDim2.new(0, 155, 0, 0)
-                        pcall(callback, opt)
-                    end)
+                        optBtn.MouseButton1Click:Connect(function()
+                            playClickSound()
+                            selectedMultiMap[opt] = not selectedMultiMap[opt]
+                            selectBtn.Text = formatBtnText()
+                            buildList(opts)
+                            pcall(callback, getSelectedList())
+                        end)
+                    end
+                else
+                    local curText = selectBtn.Text:gsub("  ▼", "")
+                    for _, opt in ipairs(opts) do
+                        local optBtn = Instance.new("TextButton")
+                        optBtn.Size = UDim2.new(1, 0, 0, 26)
+                        optBtn.BackgroundColor3 = (opt == curText) and COLORS.primary or COLORS.surface
+                        optBtn.BackgroundTransparency = 0.2
+                        optBtn.Text = opt
+                        optBtn.TextColor3 = COLORS.text
+                        optBtn.Font = Enum.Font.GothamBold
+                        optBtn.TextSize = 11
+                        optBtn.ZIndex = 1000000
+                        optBtn.Parent = dropList
+
+                        local oCorner = Instance.new("UICorner")
+                        oCorner.CornerRadius = UDim.new(0, 4)
+                        oCorner.Parent = optBtn
+
+                        optBtn.MouseButton1Click:Connect(function()
+                            playClickSound()
+                            selectBtn.Text = opt .. "  ▼"
+                            isOpen = false
+                            dropList.Visible = false
+                            dropList.Size = UDim2.new(0, 155, 0, 0)
+                            pcall(callback, opt)
+                        end)
+                    end
                 end
 
                 local calcH = math.min(#opts * 28 + 10, 220)
@@ -4190,13 +4343,15 @@ end
 FruitTab:AddDropdown({
     NameTH = "เลือกผลปีศาจที่ต้องการซื้อ (Target Fruit)",
     NameEN = "Select Target Fruit",
+    Multi = true,
     Options = GetFruitDropdownOptions(),
-    Default = getgenv().Configs.TargetFruit or "Top 5 (Top Tier)",
+    Default = getgenv().Configs.TargetFruit or {"Top 5 (Top Tier)"},
     Callback = function(v)
         getgenv().Configs.TargetFruit = v
+        local str = type(v) == "table" and table.concat(v, ", ") or tostring(v)
         ObsidianGlassEngine:Notify({
             Title = "Auto Buy Fruit",
-            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เลือกผลเป้าหมาย: " .. v) or ("Selected Target Fruit: " .. v),
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เลือกผลเป้าหมาย: " .. str) or ("Selected Target Fruit: " .. str),
             Duration = 3
         })
     end
@@ -4231,6 +4386,67 @@ StatsTab:AddToggle({
     NameEN = "Auto Allocate Stats Points",
     Default = getgenv().Configs.AutoStats,
     Callback = function(v) getgenv().Configs.AutoStats = v end
+})
+
+MiscTab:AddButton({
+    NameTH = "💾 บันทึก Config (Save Config)",
+    NameEN = "💾 Save Config",
+    Callback = function()
+        if ConfigManager:SaveToFile() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Saved config successfully!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📂 โหลด Config (Load Config)",
+    NameEN = "📂 Load Config",
+    Callback = function()
+        if ConfigManager:LoadFromFile() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Loaded config successfully!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🔄 รีเซ็ตค่าเริ่มต้น (Reset Default)",
+    NameEN = "🔄 Reset Default",
+    Callback = function()
+        ConfigManager:ResetDefault()
+        ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Reset config to defaults!" })
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📋 คัดลอก Config (Export Clipboard)",
+    NameEN = "📋 Export Config",
+    Callback = function()
+        ConfigManager:ExportToClipboard()
+        ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Copied config to clipboard!" })
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📥 วาง Config (Import Clipboard)",
+    NameEN = "📥 Import Config",
+    Callback = function()
+        if ConfigManager:ImportFromClipboard() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Imported config from clipboard!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🟢 ตรวจสอบสถานะระบบ (System Health Check)",
+    NameEN = "🟢 System Health Check",
+    Callback = function()
+        local summary = ErrorMonitor:GetSummary()
+        ObsidianGlassEngine:Notify({
+            Title = "🟢 SYSTEM HEALTH",
+            Content = summary,
+            Duration = 6
+        })
+    end
 })
 
 MiscTab:AddButton({
@@ -4296,8 +4512,43 @@ elseif placeid == 7449423635 then
 end
 
 local function GetWorld()
-    if World1 then return 1 elseif World2 then return 2 elseif World3 then return 3 end
-    return 0
+    if World1 then return 1
+    elseif World2 then return 2
+    elseif World3 then return 3
+    end
+    
+    -- Fail-safe Level Fallback for Private Servers / Reserved Places
+    local data = LocalPlayer:FindFirstChild("Data")
+    local lvl = data and data:FindFirstChild("Level") and data.Level.Value or 1
+    if lvl >= 1500 then
+        World3 = true
+        return 3
+    elseif lvl >= 700 then
+        World2 = true
+        return 2
+    else
+        World1 = true
+        return 1
+    end
+end
+
+local WorldState = {
+    Level = 1,
+    Sea = 1,
+    HRP = nil,
+    Char = nil,
+    LastUpdate = 0
+}
+
+function WorldState:Update()
+    local char = LocalPlayer.Character
+    self.Char = char
+    self.HRP = char and char:FindFirstChild("HumanoidRootPart")
+    local data = LocalPlayer:FindFirstChild("Data")
+    self.Level = data and data:FindFirstChild("Level") and data.Level.Value or 1
+    self.Sea = GetWorld()
+    self.LastUpdate = os.clock()
+    return self
 end
 
 local function CheckQuest()
@@ -4772,29 +5023,118 @@ local function KaitunWorld2(Quest, QuestTitle, Level)
                         CommF_:InvokeServer("SetSpawnPoint")
                     end
                 elseif bartiloProg == 2 then
-                    MovementManager:MoveTo(CFrame.new(-1837.46155, 44.2921753, 1656.1987), 150, 3)
-                    task.wait(0.3)
-                    MovementManager:MoveTo(CFrame.new(-1836.0, 11, 1714), 150, 3)
-                    task.wait(0.3)
-                    MovementManager:MoveTo(CFrame.new(-1850.49329, 13.1789551, 1750.89685), 150, 3)
+                    title.Text = "Doing Bartilo Quest | Pressing Mansion Plates"
+                    local codePlates = {
+                        CFrame.new(-1837.46, 44.29, 1656.19),
+                        CFrame.new(-1836.0, 11, 1714),
+                        CFrame.new(-1850.49, 13.17, 1750.89),
+                        CFrame.new(-1858.87, 19.37, 1712.01),
+                        CFrame.new(-1803.94, 16.57, 1750.89),
+                        CFrame.new(-1858.55, 16.86, 1724.79),
+                        CFrame.new(-1869.54, 15.98, 1681.00),
+                        CFrame.new(-1800.09, 16.49, 1684.52),
+                        CFrame.new(-1819.26, 14.79, 1717.90),
+                        CFrame.new(-1813.51, 14.86, 1724.79)
+                    }
+                    for _, cf in ipairs(codePlates) do
+                        MovementManager:MoveTo(cf, 150, 2)
+                        task.wait(0.3)
+                    end
                     KaitunCache:Invalidate("BartiloProgress")
                 end
-            elseif not KaitunCache:Get("TalkedTrevor", function() return CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor") end, 15) then
-                title.Text = "Talking to Trevor / Don Swan"
-                MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
-                CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
-                KaitunCache:Invalidate("TalkedTrevor")
-            elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
-                title.Text = "Defeating Rip Indra Boss"
-                local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
-                if ripIndra then
-                    SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
-                else
-                    MovementManager:MoveTo(CFrame.new(5308, 2, 474), 150, 3)
-                end
             else
-                title.Text = "Travel To Third Sea (Red Head NPC)"
-                CommF_:InvokeServer("TravelThirdSea")
+                -- Bartilo Quest Complete! Proceed with Trevor / Don Swan / Rip Indra Quest chain
+                local talkedTrevor = KaitunCache:Get("TalkedTrevor", function() 
+                    return CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor") 
+                end, 5)
+
+                -- Check Don Swan Boss Status inside Mansion
+                local donSwanBoss = TargetManager:GetBestTarget("Don Swan", 500) or workspace.Enemies:FindFirstChild("Don Swan")
+                local donSwanInRS = ReplicatedStorage:FindFirstChild("Don Swan")
+
+                if donSwanBoss then
+                    title.Text = "Defeating Don Swan Boss (Lv. 1000)"
+                    SmartMoveAndAttack(donSwanBoss, QuestTitle, Quest, false)
+                    KaitunCache:Invalidate("TalkedTrevor")
+                    KaitunCache:Invalidate("TravelThirdSeaProg")
+                elseif donSwanInRS then
+                    title.Text = "Waiting for Don Swan Boss to Spawn..."
+                    MovementManager:MoveTo(CFrame.new(2284.4, 15.2, 867.3), 150, 3)
+                elseif not talkedTrevor and (type(prog) ~= "number" or prog < 1) then
+                    -- Need to talk to Trevor & Give 1M+ Fruit
+                    local fruitTool = Has1MFruitInInventoryOrBackpack()
+                    if fruitTool then
+                        title.Text = "Talking to Trevor (Equipping " .. fruitTool.Name .. ")"
+                        MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
+                        pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
+                        task.wait(0.5)
+                        CommF_:InvokeServer("TalkTrevor", fruitTool.Name)
+                        CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                        KaitunCache:Invalidate("TalkedTrevor")
+                        KaitunCache:Invalidate("TravelThirdSeaProg")
+                        task.wait(1)
+                    else
+                        -- No 1M+ Fruit in possession yet. Attempt Gacha & Dealer buy.
+                        title.Text = "Attempting Gacha & Dealer for 1M+ Fruit..."
+                        pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
+                        task.wait(0.5)
+                        StoreAllFruits()
+
+                        pcall(function()
+                            local stock = CommF_:InvokeServer("GetFruits")
+                            if type(stock) == "table" then
+                                for _, f in pairs(stock) do
+                                    local price = tonumber(f.Price) or 0
+                                    local rawName = f.Name or f.Value or ""
+                                    local inStock = (f.OnSale == true) or (f.InStock == true)
+                                    if inStock and price >= 1000000 then
+                                        local beli = LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli") and LocalPlayer.Data.Beli.Value or 0
+                                        if beli >= price then
+                                            CommF_:InvokeServer("PurchaseRawFruit", rawName)
+                                            task.wait(1)
+                                            StoreAllFruits()
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+
+                        -- Re-check fruit after attempting Gacha/Dealer
+                        fruitTool = Has1MFruitInInventoryOrBackpack()
+                        if not fruitTool then
+                            -- FALLBACK: Do NOT stand idle! Farm level, melee, money while waiting!
+                            title.Text = "Waiting for 1M+ Fruit | Auto Farming Level & Melee..."
+                            if not Quest.Visible then
+                                MovementManager:MoveTo(CFrameQ, 150, 2)
+                                if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+                                    CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+                                    CommF_:InvokeServer("SetSpawnPoint")
+                                end
+                            elseif Quest.Visible then
+                                local targetMob = TargetManager:GetBestTarget(Monster, 600)
+                                if targetMob then
+                                    SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+                                else
+                                    MovementManager:MoveTo(CFrameMon, 150, 2)
+                                end
+                            end
+                        end
+                    end
+                elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
+                    title.Text = "Defeating Rip Indra Boss"
+                    local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
+                    if ripIndra then
+                        SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
+                    else
+                        MovementManager:MoveTo(CFrame.new(-460, 73, 300), 150, 3)
+                    end
+                else
+                    title.Text = "Travel To Third Sea (King Red Head / Captain)"
+                    CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                    CommF_:InvokeServer("TravelThirdSea")
+                    task.wait(2)
+                end
             end
         end
     elseif workspace.Enemies:FindFirstChild("Core") or ReplicatedStorage:FindFirstChild("Core") then
@@ -5108,7 +5448,108 @@ function ProgressionEngine:Evaluate()
     }
 end
 
-local function NormalizeFruitName(str)
+function StoreAllFruits()
+    pcall(function()
+        local bp = LocalPlayer:FindFirstChild("Backpack")
+        local char = LocalPlayer.Character
+        local items = {}
+        if bp then for _, v in ipairs(bp:GetChildren()) do table.insert(items, v) end end
+        if char then for _, v in ipairs(char:GetChildren()) do if v:IsA("Tool") then table.insert(items, v) end end end
+        
+        for _, tool in ipairs(items) do
+            if tool:IsA("Tool") and (tool.ToolTip == "Blox Fruit" or tool.ToolTip == "Demon Fruit" or string.find(tool.Name:lower(), "fruit")) then
+                CommF_:InvokeServer("StoreFruit", tool.Name, tool)
+                task.wait(0.2)
+            end
+        end
+    end)
+end
+
+do
+    getgenv().OneMillionPlusFruits = {
+        "quake", "buddha", "love", "spider", "sound", "phoenix", "portal", "rumble", "pain",
+        "blizzard", "gravity", "mammoth", "t-rex", "dough", "shadow", "venom",
+        "control", "spirit", "dragon", "leopard", "kitsune"
+    }
+
+    getgenv().Melees = {
+        ["Black Leg"] = { NPC = "Dark Step Teacher", Price = { Beli = 150000, Fragments = 0 }, BuyID = "BuyBlackLeg", RequiredMastery = 400, IsCompleted = false, World = 1 },
+        ["Electro"] = { NPC = "Mad Scientist", Price = { Beli = 500000, Fragments = 0 }, BuyID = "BuyElectro", RequiredMastery = 400, IsCompleted = false, World = 1 },
+        ["Fishman Karate"] = { NPC = "Water Kung-fu Teacher", Price = { Beli = 750000, Fragments = 0 }, BuyID = "BuyFishmanKarate", RequiredMastery = 400, IsCompleted = false, World = 1 },
+        ["Dragon Claw"] = { NPC = "Sabi", Price = { Beli = 0, Fragments = 1500 }, BuyID = "BuyDragonClaw", RequiredMastery = 400, IsCompleted = false, World = 2 },
+        ["Superhuman"] = { NPC = "Martial Arts Master", Price = { Beli = 3000000, Fragments = 0 }, BuyID = "BuySuperhuman", RequiredMastery = 300, IsCompleted = false, World = 2 },
+        ["Death Step"] = { NPC = "Phoeyu, the Reformed", Price = { Beli = 2500000, Fragments = 5000 }, BuyID = "BuyDeathStep", RequiredMastery = 400, IsCompleted = false, World = 2 },
+        ["Sharkman Karate"] = { NPC = "Sharkman Teacher", Price = { Beli = 2500000, Fragments = 5000 }, BuyID = "BuySharkmanKarate", RequiredMastery = 400, IsCompleted = false, World = 2 },
+        ["Electric Claw"] = { NPC = "Previous Hero", Price = { Beli = 3000000, Fragments = 5000 }, BuyID = "BuyElectricClaw", RequiredMastery = 400, IsCompleted = false, World = 3 },
+        ["Dragon Talon"] = { NPC = "Uzoth", Price = { Beli = 3000000, Fragments = 5000 }, BuyID = "BuyDragonTalon", RequiredMastery = 400, IsCompleted = false, World = 3 },
+        ["Godhuman"] = { NPC = "Ancient Monk", Price = { Beli = 5000000, Fragments = 5000 }, BuyID = "BuyGodhuman", RequiredMastery = 400, IsCompleted = false, World = 3 }
+    }
+
+    getgenv().Prerequisites = {
+        ["Death Step"] = {"Black Leg"},
+        ["Sharkman Karate"] = {"Fishman Karate"},
+        ["Electric Claw"] = {"Electro"},
+        ["Dragon Talon"] = {"Dragon Claw"},
+        ["Godhuman"] = {"Superhuman", "Death Step", "Sharkman Karate", "Electric Claw", "Dragon Talon"}
+    }
+
+    getgenv().MeleeOrder = {
+        "Black Leg", "Electro", "Fishman Karate", "Dragon Claw",
+        "Superhuman", "Death Step", "Sharkman Karate",
+        "Electric Claw", "Dragon Talon", "Godhuman"
+    }
+end
+
+function Has1MFruitInInventoryOrBackpack()
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    if bp then
+        for _, tool in ipairs(bp:GetChildren()) do
+            if tool:IsA("Tool") and (tool.ToolTip == "Blox Fruit" or tool.ToolTip == "Demon Fruit" or string.find(tool.Name:lower(), "fruit")) then
+                local toolLower = tool.Name:lower()
+                for _, name in ipairs(getgenv().OneMillionPlusFruits) do
+                    if string.find(toolLower, name) then return tool end
+                end
+            end
+        end
+    end
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and (tool.ToolTip == "Blox Fruit" or tool.ToolTip == "Demon Fruit" or string.find(tool.Name:lower(), "fruit")) then
+                local toolLower = tool.Name:lower()
+                for _, name in ipairs(getgenv().OneMillionPlusFruits) do
+                    if string.find(toolLower, name) then return tool end
+                end
+            end
+        end
+    end
+    
+    local invFruits = nil
+    pcall(function() invFruits = CommF_:InvokeServer("getInventoryFruits") end)
+    if type(invFruits) == "table" then
+        for _, item in ipairs(invFruits) do
+            local itemName = item.Name or item.Value or ""
+            local itemLower = itemName:lower()
+            for _, name in ipairs(getgenv().OneMillionPlusFruits) do
+                if string.find(itemLower, name) then
+                    pcall(function() CommF_:InvokeServer("LoadFruit", itemName) end)
+                    task.wait(1)
+                    local bp2 = LocalPlayer:FindFirstChild("Backpack")
+                    if bp2 then
+                        for _, tool in ipairs(bp2:GetChildren()) do
+                            if tool:IsA("Tool") and (tool.ToolTip == "Blox Fruit" or tool.ToolTip == "Demon Fruit" or string.find(tool.Name:lower(), "fruit")) then
+                                return tool
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function NormalizeFruitName(str)
     if not str or type(str) ~= "string" then return "" end
     local base = string.split(str, "-")[1] or str
     base = string.gsub(base, "%s*Fruit$", "")
@@ -5159,21 +5600,8 @@ task.spawn(function()
                         local normFruit = NormalizeFruitName(v.Name)
                         local isTarget = false
 
-                        if selectedTarget == "All Fruits" or selectedTarget == nil or selectedTarget == "" then
-                            isTarget = true
-                        elseif selectedTarget == "Top 5 (Top Tier)" then
-                            for _, top in ipairs(Top5Priority) do
-                                if normFruit == top or string.find(normFruit, top) then
-                                    isTarget = true
-                                    break
-                                end
-                            end
-                        else
-                            local normTarget = NormalizeFruitName(selectedTarget)
-                            if normFruit ~= "" and (normFruit == normTarget or string.find(normFruit, normTarget) or string.find(normTarget, normFruit)) then
-                                isTarget = true
-                            end
-                        end
+                        -- AutoStoreFruit: Always collect ANY fruit on the ground to store into inventory
+                        isTarget = true
 
                         if isTarget then
                             local hrp = WorldState.HRP
@@ -5236,12 +5664,12 @@ task.spawn(function()
                     if getgenv().Configs.AutoBuyMelee and CurMelee then
                         local curToolObj = IsOwn(CurMelee)
                         local curMastery = (curToolObj and curToolObj:FindFirstChild("Level")) and tonumber(curToolObj.Level.Value) or 0
-                        local meleeData = Melees[CurMelee]
+                        local meleeData = getgenv().Melees and getgenv().Melees[CurMelee]
 
                         if CurMelee == "Combat" or (meleeData and curMastery >= meleeData.RequiredMastery) then
-                            for _, meleeName in ipairs(MeleeOrder) do
-                                local v = Melees[meleeName]
-                                if not v.IsCompleted and GetWorld() >= v.World then
+                            for _, meleeName in ipairs(getgenv().MeleeOrder or {}) do
+                                local v = getgenv().Melees and getgenv().Melees[meleeName]
+                                if v and not v.IsCompleted and GetWorld() >= v.World then
                                     local alreadyOwned = false
                                     pcall(function() alreadyOwned = (CommF_:InvokeServer(v.BuyID, true) == 1) end)
 
@@ -5329,7 +5757,7 @@ task.spawn(function()
                     local stockHashParts = {}
                     for _, f in pairs(stock) do
                         local rName = f.Name or f.Value or f.FruitName or ""
-                        local onSale = (f.OnSale == true) or (f.InStock == true)
+                        local onSale = (f.OnSale == true or f.OnSale == 1 or f.InStock == true or f.InStock == 1)
                         if rName ~= "" then
                             table.insert(newStockList, { name = rName, inStock = onSale, price = tonumber(f.Price) or 0 })
                             if onSale then table.insert(stockHashParts, rName) end
@@ -5338,7 +5766,7 @@ task.spawn(function()
                     FruitSystem.State.CurrentStock = newStockList
 
                     local newStockHash = table.concat(stockHashParts, ",")
-                    local stockChanged = (newStockHash ~= FruitSystem.State.LastStockHash)
+                    local stockChanged = (FruitSystem.State.LastStockHash == nil or newStockHash ~= FruitSystem.State.LastStockHash)
                     FruitSystem.State.LastStockHash = newStockHash
 
                     if stockChanged then
@@ -5353,11 +5781,23 @@ task.spawn(function()
                     end
 
                     local targets = {}
-                    if selectedTarget == "Top 5 (Top Tier)" then
-                        targets = Top5Priority
+                    local selTarget = getgenv().Configs.TargetFruit or "Top 5 (Top Tier)"
+                    local selList = {}
+                    if type(selTarget) == "table" then
+                        selList = selTarget
                     else
-                        local clean = string.split(selectedTarget, "-")[1] or selectedTarget
-                        table.insert(targets, clean)
+                        table.insert(selList, selTarget)
+                    end
+
+                    for _, item in ipairs(selList) do
+                        if item == "Top 5 (Top Tier)" then
+                            for _, topF in ipairs(Top5Priority) do
+                                table.insert(targets, topF)
+                            end
+                        else
+                            local clean = string.split(item, "-")[1] or item
+                            table.insert(targets, clean)
+                        end
                     end
                     FruitSystem.State.TargetPriority = targets
 
@@ -5474,6 +5914,27 @@ task.spawn(function()
                 FruitSystem:UpdateUI()
             end)
         end
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎰 AUTO RANDOM FRUIT (GACHA COUSIN ZIOLES) BACKGROUND THREAD
+-- ══════════════════════════════════════════════════════════════════
+task.spawn(function()
+    while scriptRunning do
+        task.wait(20)
+        pcall(function()
+            if getgenv().Configs.AutoRandomFruit or (WorldState and WorldState.Level and WorldState.Level >= 1500 and WorldState.Sea == 2) then
+                local beli = LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli") and LocalPlayer.Data.Beli.Value or 0
+                if beli >= 250000 then
+                    local ok = pcall(function() return CommF_:InvokeServer("Cousin", "Buy") end)
+                    if ok then
+                        task.wait(1)
+                        StoreAllFruits()
+                    end
+                end
+            end
+        end)
     end
 end)
 
