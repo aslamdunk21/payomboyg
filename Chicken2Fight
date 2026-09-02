@@ -3,6 +3,8 @@
 -- Architecture: ConnectionManager -> Live GameState (Validity Checked) -> RecoveryManager -> Action Lock -> Multi-Cadence Scheduler -> Monitoring Dashboard
 -- ======================================================================================
 
+https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ChickChick
+
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
