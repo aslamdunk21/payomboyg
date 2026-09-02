@@ -1,3 +1,7 @@
+if not game:IsLoaded() then
+    pcall(function() game.Loaded:Wait() end)
+end
+
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
@@ -8,7 +12,17 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+if not player then
+    pcall(function()
+        player = Players:FindFirstChildOfClass("Player") or Players.PlayerAdded:Wait()
+    end)
+    while not player do
+        task.wait(0.1)
+        player = Players.LocalPlayer
+    end
+end
+
+local playerGui = player and (player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui"))
 
 local Config = {
     AutoFarm = true,
@@ -166,6 +180,7 @@ local function getSaveData()
         AutoAvoid = Config.AutoAvoid,
         AutoProgressStage = Config.AutoProgressStage,
         AutoReturnToLobby = Config.AutoReturnToLobby,
+        AfterRunMode = Config.AfterRunMode,
         OrbitRadius = Config.OrbitRadius,
         OrbitSpeed = Config.OrbitSpeed,
         AboveHeight = Config.AboveHeight,
@@ -208,7 +223,7 @@ local function loadSettings()
         if type(data) == "table" then
             for _, key in ipairs({
                 "AutoFarm", "AutoSkill", "AutoAttack", "AutoAvoid", "Debug",
-                "AutoProgressStage", "AutoReturnToLobby", "OrbitRadius", "OrbitSpeed",
+                "AutoProgressStage", "AutoReturnToLobby", "AfterRunMode", "OrbitRadius", "OrbitSpeed",
                 "AboveHeight", "UndergroundHeight", "UndergroundMode",
                 "KillAuraRadius", "TargetSearchRadius", "DoorInteractDistance", "DoorOpenWait", "ExitSearchRadius", "ExitRetryDelay", "PerformanceMode", "SafeMode",
                 "EmergencyEscape"
@@ -251,49 +266,44 @@ local function returnToLobby()
     end)
 end
 
-local function playAgain()
-    -- เปิด ScreenSettlement ก่อน แล้วหา Play Again button
-    pcall(function()
-        local taskRE = ReplicatedStorage:FindFirstChild("Framework", true)
-        if taskRE then
-            taskRE = taskRE:FindFirstChild("TaskSystem", true)
-            if taskRE then taskRE = taskRE:FindFirstChild("TaskRE") end
-        end
-        if taskRE then
-            taskRE:FireServer("UpdateTaskProgress", "OpenGUIWindow", "ScreenSettlement")
-            task.wait(0.5)
-        end
-        -- หา Play Again button แล้วคลิก
-        local found = false
-        for _, child in ipairs(playerGui:GetDescendants()) do
-            if child:IsA("TextButton") or child:IsA("ImageButton") then
-                local n = string.lower(child.Name .. (child:IsA("TextButton") and child.Text or ""))
-                if n:find("again") or n:find("replay") or n:find("restart") or n:find("playagain") then
-                    if child.Visible then
+local function clickSettlementButton(mode)
+    task.wait(0.5)
+    local keywords = mode == "Again"
+        and {"again", "replay", "restart", "playagain", "อีกครั้ง", "playagainalonebtn", "playagainbtn"}
+        or  {"lobby", "return", "exit", "ล็อบบี้", "กลับ", "returntolobbybtn"}
+    for _, child in ipairs(playerGui:GetDescendants()) do
+        if child:IsA("TextButton") or child:IsA("ImageButton") then
+            if child.Visible then
+                local combined = string.lower(
+                    child.Name ..
+                    (child:IsA("TextButton") and child.Text or "")
+                )
+                for _, kw in ipairs(keywords) do
+                    if combined:find(kw, 1, true) then
                         pcall(function() child:Activate() end)
-                        found = true
-                        break
+                        task.wait(0.1)
+                        pcall(function()
+                            local vum = game:GetService("VirtualInputManager")
+                            local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                            task.wait(0.05)
+                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                        end)
+                        return true
                     end
                 end
             end
         end
-        if not found then
-            -- fallback: ExitSettlement ก็ยังดีกว่าค้าง
-            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-            local gamePlayerRE = remotes and remotes:FindFirstChild("GamePlayerRE")
-            if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
-        end
-    end)
+    end
+    return false
 end
 
 local function handleAfterRun()
-    -- sync _G ก่อนทำงาน เผื่อ src_irs.txt เปลี่ยน mode
     if _G.IronSoul_AfterRunMode then
         Config.AfterRunMode = _G.IronSoul_AfterRunMode
     end
-    if Config.AfterRunMode == "Again" then
-        playAgain()
-    else
+    local clicked = clickSettlementButton(Config.AfterRunMode)
+    if not clicked then
         returnToLobby()
     end
 end
@@ -3106,20 +3116,70 @@ MainTab:AddToggle("AutoProgressStage", {
     end
 })
 
+MainTab:AddToggle("AutoPlayAgain", {
+    Title = "Auto Play Again (เล่นซ้ำอัตโนมัติเมื่อจบเกม)",
+    Desc = "เมื่อขึ้นหน้าต่างจบเกม (Settlement/Victory) จะสั่งกด Play Again / เล่นอีกรอบ อัตโนมัติ",
+    Default = (Config.AfterRunMode == "Again" and Config.AutoReturnToLobby),
+    Callback = function(val)
+        if val then
+            Config.AfterRunMode = "Again"
+            _G.IronSoul_AfterRunMode = "Again"
+            Config.AutoReturnToLobby = true
+            _G.AutoReturnToLobby = true
+            local lobbyOpt = ObsidianGlassEngine.Options and ObsidianGlassEngine.Options["AutoReturnToLobby"]
+            if lobbyOpt and lobbyOpt.SetValue and lobbyOpt.Value then
+                lobbyOpt:SetValue(false)
+            end
+        else
+            if Config.AfterRunMode == "Again" then
+                Config.AutoReturnToLobby = false
+                _G.AutoReturnToLobby = false
+            end
+        end
+        saveSettings()
+    end
+})
+
 MainTab:AddToggle("AutoReturnToLobby", {
     Title = "Auto Return to Lobby (กลับหน้าเลือกห้องเมื่อจบเกม)",
     Desc = "เมื่อขึ้นหน้าต่างจบเกม (Settlement/Victory) จะสั่งกลับ Lobby อัตโนมัติ",
-    Default = Config.AutoReturnToLobby,
+    Default = (Config.AfterRunMode == "Lobby" and Config.AutoReturnToLobby),
     Callback = function(val)
-        Config.AutoReturnToLobby = val
-        _G.AutoReturnToLobby = val
+        if val then
+            Config.AfterRunMode = "Lobby"
+            _G.IronSoul_AfterRunMode = "Lobby"
+            Config.AutoReturnToLobby = true
+            _G.AutoReturnToLobby = true
+            local againOpt = ObsidianGlassEngine.Options and ObsidianGlassEngine.Options["AutoPlayAgain"]
+            if againOpt and againOpt.SetValue and againOpt.Value then
+                againOpt:SetValue(false)
+            end
+        else
+            if Config.AfterRunMode == "Lobby" then
+                Config.AutoReturnToLobby = false
+                _G.AutoReturnToLobby = false
+            end
+        end
         saveSettings()
+    end
+})
+
+MainTab:AddButton({
+    Title = "🔁 Play Again Now (กดเล่นอีกครั้งทันที)",
+    Callback = function()
+        clickSettlementButton("Again")
+        ObsidianGlassEngine:Notify({
+            Title = "ระบบเล่นอีกครั้ง",
+            Content = "ส่งคำสั่ง Play Again เรียบร้อยแล้ว!",
+            Duration = 3
+        })
     end
 })
 
 MainTab:AddButton({
     Title = "🏠 Return to Lobby Now (กลับหน้าเลือกห้องทันที)",
     Callback = function()
+        clickSettlementButton("Lobby")
         returnToLobby()
         ObsidianGlassEngine:Notify({
             Title = "ระบบกลับหน้าเลือกห้อง",
