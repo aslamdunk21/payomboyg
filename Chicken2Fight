@@ -1,6 +1,6 @@
 -- ======================================================================================
--- [[ PAYOMBOYZ HUB v5.0 - AUTOMATION FRAMEWORK FOR GCF (TUNED ENGINE) ]]
--- Architecture: ConnectionManager -> Live GameState (Validity Checked) -> RecoveryManager -> Action Lock -> Multi-Cadence Scheduler -> Monitoring Dashboard
+-- [[ PAYOMBOYZ HUB v5.0 - STEALTH OPTIMIZED EDITION ]]
+-- Architecture: Passive UI Telemetry + Pure Logic from message (9).txt Baseline
 -- ======================================================================================
 
 local CoreGui = game:GetService("CoreGui")
@@ -112,27 +112,9 @@ local function playClickSound()
     end)
 end
 
-local customAvatarAsset = nil
+-- Stealth Avatar Loader (Zero HTTP/writefile triggers)
 local function loadCustomAvatarImage()
-    if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
-    local fileName = "payomboyz_avatar.jpg"
-    
-    pcall(function()
-        if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-            local getAsset = getcustomasset or getsynasset
-            if not (typeof(isfile) == "function" and isfile(fileName)) then
-                local bytes = game:HttpGet(avatarUrl)
-                if bytes and #bytes > 0 then writefile(fileName, bytes) end
-            end
-            if typeof(isfile) == "function" and isfile(fileName) then customAvatarAsset = getAsset(fileName) end
-        end
-    end)
-
-    if not customAvatarAsset then
-        customAvatarAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
-    end
-    return customAvatarAsset
+    return "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
 end
 
 function ObsidianGlassEngine:Notify(cfg)
@@ -391,7 +373,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     capMetricsLabel.Size = UDim2.new(1, -58, 0, 16)
     capMetricsLabel.Position = UDim2.new(0, 56, 0, 28)
     capMetricsLabel.BackgroundTransparency = 1
-    capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
+    capMetricsLabel.Text = "⚡ 60 FPS  •  📡 Active"
     capMetricsLabel.TextColor3 = COLORS.cyan
     capMetricsLabel.Font = Enum.Font.GothamBold
     capMetricsLabel.TextSize = 10
@@ -504,7 +486,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     local metricsLabel = Instance.new("TextLabel")
     metricsLabel.Size = UDim2.fromScale(1, 1)
     metricsLabel.BackgroundTransparency = 1
-    metricsLabel.Text = "⏱️ 00:00  •  📡 0 ms"
+    metricsLabel.Text = "⏱️ Stealth Engine  •  📡 Online"
     metricsLabel.TextColor3 = COLORS.cyan
     metricsLabel.Font = Enum.Font.GothamBold
     metricsLabel.TextSize = 10
@@ -657,7 +639,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     sTitle.Size = UDim2.new(0, 340, 0, 22)
     sTitle.Position = UDim2.new(0, 14, 0, 24)
     sTitle.BackgroundTransparency = 1
-    sTitle.Text = "[ STATE: INIT ]"
+    sTitle.Text = "[ สถานะ: RUNNING ]"
     sTitle.TextColor3 = COLORS.text
     sTitle.Font = Enum.Font.GothamBold
     sTitle.TextSize = 14
@@ -669,7 +651,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     sSub.Size = UDim2.new(0, 340, 0, 16)
     sSub.Position = UDim2.new(0, 14, 0, 48)
     sSub.BackgroundTransparency = 1
-    sSub.Text = "กำลังวิเคราะห์สภาพแวดล้อมและข้อมูลเกม..."
+    sSub.Text = "ระบบกำลังทำงานในโหมด Stealth"
     sSub.TextColor3 = COLORS.textMuted
     sSub.Font = Enum.Font.Gotham
     sSub.TextSize = 10
@@ -693,7 +675,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     lText.Name = "ActionLockText"
     lText.Size = UDim2.fromScale(1, 1)
     lText.BackgroundTransparency = 1
-    lText.Text = "🔒 LOCK: IDLE\nCONFIDENCE: 100%"
+    lText.Text = "🟢 รันงานคู่ขนาน\nความแม่นยำ: 100%"
     lText.TextColor3 = COLORS.cyan
     lText.Font = Enum.Font.GothamBold
     lText.TextSize = 10
@@ -1116,7 +1098,7 @@ local TelemetryDashboard = {
 }
 
 -----------------------------------------------------------------------------------------
--- 🌐 3. GAME API ABSTRACTION LAYER
+-- 🌐 3. GAME API ABSTRACTION LAYER (MATCHING message (8).txt / message (9).txt)
 -----------------------------------------------------------------------------------------
 
 local playersService = game:GetService("Players")
@@ -1126,18 +1108,23 @@ local localPlayer = playersService.LocalPlayer or playersService.PlayerAdded:Wai
 
 getgenv().autoMasterEngineEnabled = true
 getgenv().autoCollectEggEnabled = false
+getgenv().autoCollectEggLoopActive = false
 getgenv().autoRebirthEnabled = false
+getgenv().autoRebirthLoopActive = false
 getgenv().autoUpgradeFeederEnabled = false
+getgenv().autoUpgradeFeederLoopActive = false
 getgenv().autoBuyFeederEnabled = false
+getgenv().autoBuyFeederLoopActive = false
 getgenv().autoUpgradeCoopEnabled = false
+getgenv().autoUpgradeCoopLoopActive = false
 getgenv().autoTowerEnabled = false
+getgenv().autoTowerLoopActive = false
+getgenv().autoTowerOfferHooked = false
 getgenv().autoTowerLastFloorEnabled = false
 getgenv().towerDelaySeconds = 5
 getgenv().autoScrapEnabled = false
-getgenv().autoWorldEventEnabled = false
-getgenv().autoFusionEnabled = false
-getgenv().walkSpeedEnabled = false
-getgenv().walkSpeedMultiplier = 2
+getgenv().autoScrapLoopActive = false
+getgenv().autoScrapNoclipConnection = nil
 
 local remotesModule = nil
 local rebirthBonusModule = nil
@@ -1147,36 +1134,38 @@ local coopViewModule = nil
 local dataServiceModule = nil
 local chickenModeModule = nil
 
--- Dumped Game Specific Modules
-local sellValueModule = nil
-local fusionRulesModule = nil
-local recyclerLevelsModule = nil
-local rebirthMilestonesModule = nil
-local chickenTypesCatalog = nil
+pcall(function()
+    remotesModule = require(replicatedStorage:WaitForChild("Core", 10):WaitForChild("Remotes", 10))
+end)
 
-pcall(function() remotesModule = require(replicatedStorage:WaitForChild("Core", 10):WaitForChild("Remotes", 10)) end)
 pcall(function()
     local progressionFolder = replicatedStorage:WaitForChild("Core", 10):WaitForChild("Progression", 10)
     rebirthBonusModule = require(progressionFolder:WaitForChild("RebirthBonus", 10))
     rebirthExperimentModule = require(progressionFolder:WaitForChild("RebirthExperiment", 10))
 end)
-pcall(function() dataControllerModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Core", 10):WaitForChild("Data", 10):WaitForChild("DataController", 10)) end)
-pcall(function() coopViewModule = require(replicatedStorage:WaitForChild("Features", 10):WaitForChild("Coop", 10):WaitForChild("CoopView", 10)) end)
-pcall(function() dataServiceModule = require(replicatedStorage:WaitForChild("Packages", 10):WaitForChild("DataService", 10)) end)
-pcall(function() chickenModeModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Features", 10):WaitForChild("Chicken", 10):WaitForChild("ChickenMode", 10)) end)
 
-pcall(function() sellValueModule = require(replicatedStorage:WaitForChild("Features", 5):WaitForChild("Chicken", 5):WaitForChild("SellValue", 5)) end)
-pcall(function() fusionRulesModule = require(replicatedStorage:WaitForChild("Features", 5):WaitForChild("Chicken", 5):WaitForChild("FusionRules", 5)) end)
-pcall(function() recyclerLevelsModule = require(replicatedStorage:WaitForChild("Content", 5):WaitForChild("RecyclerLevels", 5)) end)
-pcall(function() rebirthMilestonesModule = require(replicatedStorage:WaitForChild("Content", 5):WaitForChild("RebirthMilestones", 5)) end)
-pcall(function() chickenTypesCatalog = require(replicatedStorage:WaitForChild("Content", 5):WaitForChild("Catalog", 5):WaitForChild("ChickenTypes", 5)) end)
+pcall(function()
+    dataControllerModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Core", 10):WaitForChild("Data", 10):WaitForChild("DataController", 10))
+end)
+
+pcall(function()
+    coopViewModule = require(replicatedStorage:WaitForChild("Features", 10):WaitForChild("Coop", 10):WaitForChild("CoopView", 10))
+end)
+
+pcall(function()
+    dataServiceModule = require(replicatedStorage:WaitForChild("Packages", 10):WaitForChild("DataService", 10))
+end)
+
+pcall(function()
+    chickenModeModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Features", 10):WaitForChild("Chicken", 10):WaitForChild("ChickenMode", 10))
+end)
 
 local function getCurrentMoney()
     if dataControllerModule and dataControllerModule.money then
         local m = dataControllerModule.money()
         if m and m.toNumber then return m:toNumber() end
     end
-    return nil
+    return 0
 end
 
 local function getCoopData()
@@ -1187,43 +1176,47 @@ local function getCoopData()
 end
 
 local function getScrapStackCount()
-    local char = localPlayer.Character
-    local head = char and char:FindFirstChild("Head")
-    local stack = head and head:FindFirstChild("ScrapStack")
-    if not stack then return 0 end
-    local count = 0
-    for _, part in ipairs(stack:GetDescendants()) do
-        if part:IsA("BasePart") then count = count + 1 end
+    local playerCharacter = localPlayer.Character
+    if not playerCharacter then return 0 end
+    local playerHead = playerCharacter:FindFirstChild("Head")
+    if not playerHead then return 0 end
+    local scrapStack = playerHead:FindFirstChild("ScrapStack")
+    if not scrapStack then return 0 end
+
+    local stackCount = 0
+    for _, stackPart in ipairs(scrapStack:GetDescendants()) do
+        if stackPart:IsA("BasePart") then stackCount = stackCount + 1 end
     end
-    return count
+    return stackCount
 end
 
 local function getOwnedRecycler()
     local recyclersFolder = workspace:FindFirstChild("Recyclers")
     if not recyclersFolder then return nil end
-    local plotNum = localPlayer:GetAttribute("Plot")
-    if plotNum then
-        local rec = recyclersFolder:FindFirstChild("Recycler" .. tostring(plotNum))
-        if rec then return rec end
+    local plotNumber = localPlayer:GetAttribute("Plot")
+
+    if plotNumber then
+        local recyclerModel = recyclersFolder:FindFirstChild("Recycler" .. tostring(plotNumber))
+        if recyclerModel then return recyclerModel end
     end
-    for _, rec in ipairs(recyclersFolder:GetChildren()) do
-        local owner = rec:GetAttribute("owner")
-        if owner and (owner == localPlayer.UserId or owner == tostring(localPlayer.UserId)) then
-            return rec
+
+    for _, recyclerModel in ipairs(recyclersFolder:GetChildren()) do
+        local success, recyclerOwner = pcall(function() return recyclerModel:GetAttribute("owner") end)
+        if success and (recyclerOwner == localPlayer.UserId or recyclerOwner == tostring(localPlayer.UserId)) then
+            return recyclerModel
         end
     end
     return nil
 end
 
 -----------------------------------------------------------------------------------------
--- 🔍 4. LIVE GAME STATE READER & CONFIDENCE VALIDATION
+-- 🔍 4. LIGHTWEIGHT LIVE GAME STATE READER FOR TELEMETRY
 -----------------------------------------------------------------------------------------
 
 local GameState = {
     Money = 0,
     MoneyValid = false,
     ScrapCount = 0,
-    OwnedEggCount = 0,
     RebirthCount = 0,
     TowerBestFloor = 0,
     IsTowerActive = false,
@@ -1231,486 +1224,86 @@ local GameState = {
     CoopSlots = 0,
     FeederCount = 0,
     DataLoaded = false,
-    ConfidenceScore = 0
+    ConfidenceScore = 100
 }
 
-function GameState:Update1s()
-    local m = getCurrentMoney()
-    if m ~= nil then
-        self.Money = m
-        self.MoneyValid = true
-    else
-        self.MoneyValid = false
-    end
+local function updateGameState()
+    pcall(function()
+        local m = getCurrentMoney()
+        if m ~= nil then
+            GameState.Money = m
+            GameState.MoneyValid = true
+        else
+            GameState.MoneyValid = false
+        end
 
-    if dataControllerModule then
-        pcall(function()
+        if dataControllerModule then
             local rData = dataControllerModule.rebirth()
-            self.RebirthCount = rData and rData.count or 0
-            self.TowerBestFloor = dataControllerModule.towerBest() or 0
-        end)
-    end
+            GameState.RebirthCount = rData and rData.count or 0
+            GameState.TowerBestFloor = dataControllerModule.towerBest() or 0
+        end
 
-    if rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
-        pcall(function()
+        if rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
             local usesV2 = rebirthExperimentModule.armOf(localPlayer) == rebirthExperimentModule.VARIANT
-            self.IsRebirthReady = rebirthBonusModule.ready(self.TowerBestFloor, self.RebirthCount, usesV2)
-        end)
-    end
-
-    local coopData = getCoopData()
-    if coopData then
-        self.CoopSlots = tonumber(coopData.slots) or 0
-        self.FeederCount = type(coopData.generators) == "table" and #coopData.generators or 0
-        self.DataLoaded = true
-    else
-        self.DataLoaded = false
-    end
-
-    -- Confidence Calculation
-    local validCount = 0
-    if self.MoneyValid then validCount = validCount + 1 end
-    if self.DataLoaded then validCount = validCount + 1 end
-    if dataControllerModule ~= nil then validCount = validCount + 1 end
-    self.ConfidenceScore = math.floor((validCount / 3) * 100)
-end
-
-function GameState:Update350ms()
-    self.ScrapCount = getScrapStackCount()
-    self.IsTowerActive = localPlayer:GetAttribute("TowerActive") == true
-end
-
------------------------------------------------------------------------------------------
--- 🛠️ 5. RECOVERY MANAGER (HANDLES FAILURES & EDGE CASES)
------------------------------------------------------------------------------------------
-
-local RecoveryManager = { FailureCount = 0 }
-
-function RecoveryManager:ValidateEnvironment()
-    local char = localPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-    if not char or not hum or not root then
-        Logger:Log("RECOVERY", "ไม่พบตัวละคร/RootPart - กำลังรอกลับคืนสภาพ...")
-        return false, "CHARACTER_MISSING"
-    end
-
-    if hum.Health <= 0 then
-        Logger:Log("RECOVERY", "ตัวละครตาย - รอเกิดใหม่...")
-        return false, "CHARACTER_DEAD"
-    end
-
-    if not GameState.DataLoaded and self.FailureCount > 5 then
-        Logger:Log("RECOVERY", "DataService โหลดล่าช้า - พยายามเชื่อมต่อใหม่...")
-        return false, "DATA_LOADING_DELAY"
-    end
-
-    return true, "OK"
-end
-
-function RecoveryManager:HandleActionFailure(actionName, reason)
-    self.FailureCount = self.FailureCount + 1
-    Logger:Log("RECOVERY", string.format("Action [%s] ล้มเหลว (สาเหตุ: %s) -> นับล้มเหลวสะสม: %d", actionName, tostring(reason), self.FailureCount))
-    task.wait(0.5)
-end
-
-function RecoveryManager:ResetFailures()
-    self.FailureCount = 0
-end
-
------------------------------------------------------------------------------------------
--- 🔒 6. ACTION LOCK & HYSTERESIS SYSTEM
------------------------------------------------------------------------------------------
-
-local ActionLock = {
-    CurrentAction = "NONE",
-    ActionStartedAt = 0,
-    ActionTimeout = 0,
-    ActionPriority = 0,
-    Locked = false
-}
-
-function ActionLock:Acquire(actionName, durationSeconds, priority)
-    if self.Locked and self.CurrentAction ~= actionName then
-        local elapsed = os.clock() - self.ActionStartedAt
-        if elapsed < self.ActionTimeout and priority <= self.ActionPriority then
-            return false -- Lock refused, current action has priority/time
-        end
-    end
-
-    self.CurrentAction = actionName
-    self.ActionStartedAt = os.clock()
-    self.ActionTimeout = durationSeconds or 3
-    self.ActionPriority = priority or 1
-    self.Locked = true
-    return true
-end
-
-function ActionLock:Release(actionName)
-    if self.CurrentAction == actionName or actionName == "FORCE" then
-        self.CurrentAction = "NONE"
-        self.Locked = false
-        self.ActionPriority = 0
-    end
-end
-
-function ActionLock:IsLocked()
-    if not self.Locked then return false end
-    if os.clock() - self.ActionStartedAt >= self.ActionTimeout then
-        self.Locked = false
-        self.CurrentAction = "NONE"
-        return false
-    end
-    return true
-end
-
------------------------------------------------------------------------------------------
--- ⚡ 7. NOCLIP & COLLISION RESTORATION MANAGER
------------------------------------------------------------------------------------------
-
-local NoclipManager = { Enabled = false, Connection = nil, CachedParts = {}, OriginalCollisions = {} }
-
-function NoclipManager:Init()
-    local function cacheCharacter(char)
-        self.CachedParts = {}
-        self.OriginalCollisions = {}
-        if not char then return end
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                table.insert(self.CachedParts, part)
-                self.OriginalCollisions[part] = part.CanCollide
-            end
-        end
-    end
-    if localPlayer.Character then cacheCharacter(localPlayer.Character) end
-    ConnectionManager:Add(localPlayer.CharacterAdded:Connect(cacheCharacter), "NoclipCharAdded")
-end
-
-function NoclipManager:Set(state)
-    if self.Enabled == state then return end
-    self.Enabled = state
-    if state then
-        if not self.Connection then
-            self.Connection = ConnectionManager:Add(runService.Stepped:Connect(function()
-                for _, part in ipairs(self.CachedParts) do
-                    if part and part.Parent then part.CanCollide = false end
-                end
-            end), "NoclipStepped")
-        end
-    else
-        if self.Connection then
-            self.Connection:Disconnect()
-            self.Connection = nil
-        end
-        for part, origState in pairs(self.OriginalCollisions) do
-            if part and part.Parent then part.CanCollide = origState end
-        end
-    end
-end
-NoclipManager:Init()
-
------------------------------------------------------------------------------------------
--- 🐓 8. CHICKEN & REBIRTH & ECONOMY MANAGERS
------------------------------------------------------------------------------------------
-
-local ChickenManager = {
-    ProtectedRoutes = {
-        ["Mythic Golden Rooster"] = true,
-        ["Phoenix Chicken"] = true,
-        ["Dragon Fighter Chicken"] = true,
-        ["Celestial Hen"] = true,
-        ["Ancient Titan Chicken"] = true
-    }
-}
-
-function ChickenManager:GetInventory()
-    if dataControllerModule and dataControllerModule.chickens then
-        local cData = dataControllerModule.chickens()
-        if type(cData) == "table" then return cData end
-    end
-    return {}
-end
-
-function ChickenManager:GetBestCombatChicken()
-    local inv = self:GetInventory()
-    local best, maxPower = nil, -1
-    for _, chk in ipairs(inv) do
-        local power = chk.Power or chk.combatPower or chk.damage or 0
-        if power > maxPower then
-            maxPower = power
-            best = chk
-        end
-    end
-    return best
-end
-
-function ChickenManager:EquipBestForMode(modeName)
-    local best = self:GetBestCombatChicken()
-    if best and chickenModeModule then
-        chickenModeModule.order(modeName or "tower")
-        Logger:Log("CHICKEN", "ติดตั้งไก่ต่อสู้สูงสุด (" .. tostring(best.Name or "Best") .. ") สำหรับ " .. tostring(modeName))
-    end
-end
-
-local RebirthPlanner = { PreRebirthInProgress = false }
-
-function RebirthPlanner:ExecuteSequence()
-    if self.PreRebirthInProgress then return end
-    self.PreRebirthInProgress = true
-    Logger:Log("REBIRTH", "เริ่มต้นลำดับขั้นตอน Pre-Rebirth Sequence!")
-
-    if localPlayer:GetAttribute("TowerActive") == true then
-        Logger:Log("REBIRTH", "หยุดหอคอยเพื่อเตรียม Reset...")
-        task.wait(0.5)
-    end
-
-    if getScrapStackCount() > 0 then
-        Logger:Log("REBIRTH", "ฝากเศษเหล็กตกค้างก่อน Rebirth...")
-        NoclipManager:Set(true)
-        depositAtRecycler()
-    end
-
-    Logger:Log("REBIRTH", "นำเงินคงเหลือลงทุนยึดพื้นที่เล้าไก่ก่อน Reset...")
-    pcall(function() remotesModule.invoke(remotesModule.defs.ExpandCoop) end)
-
-    Logger:Log("REBIRTH", "ส่งคำขอ Rebirth ไปยัง Server...")
-    local ok = remotesModule and remotesModule.invoke(remotesModule.defs.Rebirth)
-    if typeof(ok) == "table" and ok.ok == true then
-        Logger:Log("REBIRTH", "ทำรายการ Rebirth สำเร็จเรียบร้อย!")
-        RecoveryManager:ResetFailures()
-        task.wait(3)
-    else
-        RecoveryManager:HandleActionFailure("Rebirth", "Remote return not ok")
-    end
-
-    self.PreRebirthInProgress = false
-end
-
-local EconomyManager = {}
-
-function EconomyManager:EvaluateSpendingPlan()
-    if not GameState.MoneyValid then
-        return { Action = "WAIT_FOR_DATA", ROI = 0, Reason = "ข้อมูลการเงินยังไม่พร้อมใช้งาน" }
-    end
-
-    local money = GameState.Money
-    if GameState.IsRebirthReady then
-        return { Action = "HOLD_FOR_REBIRTH", ROI = 100, Reason = "Rebirth พร้อมใช้งาน - สำรองเงินไว้สำหรับ Rebirth" }
-    end
-
-    local coopData = getCoopData()
-    if not coopData then return { Action = "NONE", ROI = 0, Reason = "ไม่มีข้อมูล Coop Data" } end
-
-    local bestInvestment = { Action = "SAVE", ROI = 0, Reason = "เก็บออมเงินลงทุน" }
-
-    if getgenv().autoUpgradeFeederEnabled and type(coopData.generators) == "table" then
-        for _, gen in ipairs(coopData.generators) do
-            local slot = tonumber(gen.slot)
-            local lvl = tonumber(gen.level)
-            if slot and lvl and coopViewModule.canUpgrade(lvl) then
-                local cost = coopViewModule.upgradeCost(lvl)
-                if money >= cost then
-                    local roiScore = math.floor((1000 / math.max(lvl, 1)) + 50)
-                    if roiScore > bestInvestment.ROI then
-                        bestInvestment = {
-                            Action = "UPGRADE_FEEDER",
-                            Slot = slot,
-                            Cost = cost,
-                            ROI = roiScore,
-                            Reason = string.format("อัปเกรด Feeder ช่อง %d (ROI: %d)", slot, roiScore)
-                        }
-                    end
-                end
-            end
-        end
-    end
-
-    if getgenv().autoBuyFeederEnabled and type(coopData.slots) == "number" and type(coopData.generators) == "table" then
-        local count = #coopData.generators
-        if coopViewModule.canBuyGenerator(coopData.slots, count) then
-            local cost = coopViewModule.buyGeneratorCost(count)
-            if money >= cost then
-                local roiScore = 85
-                if roiScore > bestInvestment.ROI then
-                    bestInvestment = {
-                        Action = "BUY_FEEDER",
-                        Slot = count + 1,
-                        Cost = cost,
-                        ROI = roiScore,
-                        Reason = string.format("ซื้อ Feeder ช่องเพิ่ม %d (ROI: %d)", count + 1, roiScore)
-                    }
-                end
-            end
-        end
-    end
-
-    if getgenv().autoUpgradeCoopEnabled and type(coopData.slots) == "number" then
-        local slots = coopData.slots
-        if coopViewModule.canExpand(slots) then
-            local cost = coopViewModule.expandCost(slots)
-            if money >= cost then
-                local roiScore = 75
-                if roiScore > bestInvestment.ROI then
-                    bestInvestment = {
-                        Action = "EXPAND_COOP",
-                        Cost = cost,
-                        ROI = roiScore,
-                        Reason = string.format("ขยายขนาดเล้าไก่เป็น %d ช่อง (ROI: %d)", slots + 1, roiScore)
-                    }
-                end
-            end
-        end
-    end
-
-    return bestInvestment
-end
-
------------------------------------------------------------------------------------------
--- 🥚 9. EVENT-DRIVEN TRACKERS (EGG, SCRAP, TOWER, WORLD EVENT)
------------------------------------------------------------------------------------------
-
-local EggTracker = { Cache = {} }
-function EggTracker:Init()
-    task.spawn(function()
-        local nestEggsFolder = workspace:WaitForChild("NestEggs", 10)
-        if not nestEggsFolder then return end
-
-        local function addEgg(eggInst)
-            if not eggInst then return end
-            local owner = eggInst:GetAttribute("owner")
-            local eggPart = eggInst:IsA("BasePart") and eggInst or eggInst:FindFirstChildWhichIsA("BasePart", true)
-            if not owner and eggPart then owner = eggPart:GetAttribute("owner") end
-
-            local pos = nil
-            if eggInst:IsA("BasePart") then pos = eggInst.Position
-            elseif eggInst:IsA("Model") then pos = eggInst:GetPivot().Position
-            elseif eggPart then pos = eggPart.Position end
-
-            if pos then
-                EggTracker.Cache[eggInst] = { Instance = eggInst, Position = pos, Owner = tostring(owner or "") }
-            end
+            GameState.IsRebirthReady = rebirthBonusModule.ready(GameState.TowerBestFloor, GameState.RebirthCount, usesV2)
         end
 
-        local function removeEgg(eggInst) EggTracker.Cache[eggInst] = nil end
-        for _, child in ipairs(nestEggsFolder:GetChildren()) do addEgg(child) end
-        ConnectionManager:Add(nestEggsFolder.ChildAdded:Connect(addEgg), "EggChildAdded")
-        ConnectionManager:Add(nestEggsFolder.ChildRemoved:Connect(removeEgg), "EggChildRemoved")
+        local coopData = getCoopData()
+        if coopData then
+            GameState.CoopSlots = tonumber(coopData.slots) or 0
+            GameState.FeederCount = type(coopData.generators) == "table" and #coopData.generators or 0
+            GameState.DataLoaded = true
+        else
+            GameState.DataLoaded = false
+        end
+
+        GameState.ScrapCount = getScrapStackCount()
+        GameState.IsTowerActive = localPlayer:GetAttribute("TowerActive") == true
+
+        local validCount = 0
+        if GameState.MoneyValid then validCount = validCount + 1 end
+        if GameState.DataLoaded then validCount = validCount + 1 end
+        if dataControllerModule ~= nil then validCount = validCount + 1 end
+        GameState.ConfidenceScore = math.floor((validCount / 3) * 100)
     end)
 end
 
-function EggTracker:GetOwnedEggs()
-    local owned = {}
-    local userIdStr = tostring(localPlayer.UserId)
-    for inst, data in pairs(self.Cache) do
-        if inst and inst.Parent and (data.Owner == userIdStr or data.Owner == tostring(localPlayer.UserId)) then
-            table.insert(owned, data)
-        end
-    end
-    return owned
-end
-
-function EggTracker:GetOptimizedRoute(startPos)
-    local owned = self:GetOwnedEggs()
-    if #owned == 0 then return {} end
-    local remaining = { unpack(owned) }
-    local route = {}
-    local currPos = startPos
-
-    while #remaining > 0 do
-        local bestIdx = 1
-        local bestDist = (remaining[1].Position - currPos).Magnitude
-        for i = 2, #remaining do
-            local d = (remaining[i].Position - currPos).Magnitude
-            if d < bestDist then
-                bestDist = d
-                bestIdx = i
-            end
-        end
-        local chosen = table.remove(remaining, bestIdx)
-        table.insert(route, chosen)
-        currPos = chosen.Position
-    end
-    return route
-end
-EggTracker:Init()
-
-local ScrapTracker = { Cache = {} }
-function ScrapTracker:Init()
-    task.spawn(function()
-        local pitFolder = workspace:WaitForChild("PitScrap", 10)
-        if not pitFolder then return end
-
-        local function addScrap(scrapPart)
-            if scrapPart:IsA("BasePart") then
-                local val = scrapPart:GetAttribute("Value") or scrapPart:GetAttribute("ScrapValue") or 10
-                ScrapTracker.Cache[scrapPart] = { Instance = scrapPart, Position = scrapPart.Position, Value = val }
-            end
-        end
-        local function removeScrap(scrapPart) ScrapTracker.Cache[scrapPart] = nil end
-        for _, child in ipairs(pitFolder:GetChildren()) do addScrap(child) end
-        ConnectionManager:Add(pitFolder.ChildAdded:Connect(addScrap), "ScrapChildAdded")
-        ConnectionManager:Add(pitFolder.ChildRemoved:Connect(removeScrap), "ScrapChildRemoved")
-    end)
-end
-
-function ScrapTracker:GetBestScrap(rootPos)
-    local bestScrap = nil
-    local maxScore = -1
-    for part, data in pairs(self.Cache) do
-        if part and part.Parent then
-            local dist = (part.Position - rootPos).Magnitude
-            local timeEst = dist / 24
-            local score = data.Value / math.max(timeEst, 0.5)
-            if score > maxScore then
-                maxScore = score
-                bestScrap = data
-            end
-        end
-    end
-    return bestScrap
-end
-ScrapTracker:Init()
-
-local TowerManager = { Active = false, Hooked = false }
-function TowerManager:Init()
-    ConnectionManager:Add(localPlayer:GetAttributeChangedSignal("TowerActive"):Connect(function()
-        self.Active = localPlayer:GetAttribute("TowerActive") == true
-    end), "TowerActiveAttr")
-    self.Active = localPlayer:GetAttribute("TowerActive") == true
-
-    if remotesModule and not self.Hooked then
-        self.Hooked = true
-        remotesModule.onClient(remotesModule.defs.TowerContinueOffer, function(offerData)
-            if getgenv().autoTowerEnabled and typeof(offerData) == "table" and offerData.open == true then
-                pcall(function() remotesModule.fire(remotesModule.defs.TowerContinueDecline) end)
-            end
-        end)
-    end
-end
-
-function TowerManager:CanStart()
-    if not getgenv().autoTowerEnabled then return false end
-    if self.Active then return false end
-    if GameState.IsRebirthReady then return false end
-    return true
-end
-
-function TowerManager:Start()
-    ChickenManager:EquipBestForMode("tower")
-    if getgenv().autoTowerLastFloorEnabled and dataControllerModule then
-        local lastFloor = tonumber(dataControllerModule.towerBest()) or 0
-        if lastFloor > 0 then
-            remotesModule.invoke(remotesModule.defs.TowerElevator, lastFloor)
-        end
-    end
-    remotesModule.invoke(remotesModule.defs.TowerStart)
-end
-TowerManager:Init()
-
 -----------------------------------------------------------------------------------------
--- 🧠 10. DIRECT AUTOMATION LOOPS (MATCHING message (8).txt LOGIC)
+-- 🧠 5. AUTOMATION FUNCTIONS (100% PURE LOGIC FROM message (9).txt)
 -----------------------------------------------------------------------------------------
+
+local function getEggOwner(eggInstance)
+    local ownerValue = eggInstance:GetAttribute("owner")
+    if ownerValue ~= nil then return ownerValue end
+    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
+    if eggPart then return eggPart:GetAttribute("owner") end
+    return nil
+end
+
+local function getEggPosition(eggInstance)
+    if eggInstance:IsA("BasePart") then return eggInstance.Position end
+    if eggInstance:IsA("Model") then return eggInstance:GetPivot().Position end
+    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
+    if eggPart then return eggPart.Position end
+    return nil
+end
+
+local function getOwnedEggPositions()
+    local ownedEggPositions = {}
+    local nestEggsFolder = workspace:FindFirstChild("NestEggs")
+    if not nestEggsFolder then return ownedEggPositions end
+
+    for _, eggInstance in ipairs(nestEggsFolder:GetChildren()) do
+        local success, ownerValue = pcall(getEggOwner, eggInstance)
+        if success and (ownerValue == localPlayer.UserId or ownerValue == tostring(localPlayer.UserId)) then
+            local positionSuccess, eggPosition = pcall(getEggPosition, eggInstance)
+            if positionSuccess and eggPosition then
+                table.insert(ownedEggPositions, eggPosition)
+            end
+        end
+    end
+    return ownedEggPositions
+end
 
 local function walkToEgg(playerHumanoid, eggPosition)
     local moveStartTime = os.clock()
@@ -1924,12 +1517,12 @@ local function collectNearbyScrap()
 end
 
 -----------------------------------------------------------------------------------------
--- ⏱️ 11. MULTI-CADENCE MONITORING SCHEDULER
+-- ⏱️ 6. LIGHTWEIGHT STEALTH SCHEDULER (PASSIVE TIMER - NO HEARTBEAT ENGINE HOOK)
 -----------------------------------------------------------------------------------------
 
 local DecisionEngine = {
     CurrentState = "RUNNING",
-    CurrentActionDesc = "ระบบกำลังทำงานแบบคู่ขนาน (Multi-Loop Active)",
+    CurrentActionDesc = "ระบบกำลังทำงานในโหมด Stealth",
     StatusCallback = nil
 }
 
@@ -1939,20 +1532,18 @@ function DecisionEngine:UpdateStatus(stateName, desc)
     if self.StatusCallback then pcall(function() self.StatusCallback(stateName, desc) end) end
 end
 
-local Scheduler = { Running = false, Last1s = 0 }
+local Scheduler = { Running = false }
 
 function Scheduler:Start()
     if self.Running then return end
     self.Running = true
 
-    local conn = RunService.Heartbeat:Connect(function()
-        local now = os.clock()
-        if now - self.Last1s >= 1.0 then
-            self.Last1s = now
+    task.spawn(function()
+        while self.Running do
             pcall(function()
                 if getgenv().autoMasterEngineEnabled then
-                    GameState:Update1s()
-                    GameState:Update350ms()
+                    updateGameState()
+
                     local activeList = {}
                     if getgenv().autoCollectEggEnabled then table.insert(activeList, "Egg") end
                     if getgenv().autoRebirthEnabled then table.insert(activeList, "Rebirth") end
@@ -1970,15 +1561,15 @@ function Scheduler:Start()
                     pcall(TelemetryDashboard.UpdateCallback)
                 end
             end)
+            task.wait(1.5)
         end
     end)
 
-    ConnectionManager:Add(conn, "MonitoringSchedulerHeartbeat")
-    Logger:Log("SCHEDULER", "เริ่มต้น Multi-Cadence Monitoring Scheduler")
+    Logger:Log("SCHEDULER", "เริ่มต้น Stealth Telemetry Polling (Passive Mode)")
 end
 
 -----------------------------------------------------------------------------------------
--- 💾 12. CONFIGURATION MANAGER (SAVE / LOAD CONFIG)
+-- 💾 7. CONFIGURATION MANAGER (SAVE / LOAD CONFIG)
 -----------------------------------------------------------------------------------------
 
 getgenv().snowEffectEnabled = true
@@ -2054,7 +1645,7 @@ function ConfigManager:Load()
 end
 
 -----------------------------------------------------------------------------------------
--- 🎛️ 13. UI DASHBOARD & TOGGLE LOOP BINDINGS (THAI LOCALIZED)
+-- 🎛️ 8. UI DASHBOARD & TOGGLE LOOP BINDINGS (THAI LOCALIZED)
 -----------------------------------------------------------------------------------------
 
 local Window = ObsidianGlassEngine:CreateWindow({
@@ -2470,7 +2061,7 @@ local AutoUpgradeFeederToggle = Tabs.Economy:AddToggle("AutoUpgradeFeederToggle"
 })
 AutoUpgradeFeederToggle:OnChanged(function(Value)
     getgenv().autoUpgradeFeederEnabled = Value
-    if Value and not getgenv().autoUpgradeFeederLoopActive then
+    if Value and not getgenv().autoUpgradeFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
         getgenv().autoUpgradeFeederLoopActive = true
         task.spawn(function()
             while getgenv().autoUpgradeFeederEnabled and getgenv().autoMasterEngineEnabled do
@@ -2489,7 +2080,7 @@ local AutoBuyFeederToggle = Tabs.Economy:AddToggle("AutoBuyFeederToggle", {
 })
 AutoBuyFeederToggle:OnChanged(function(Value)
     getgenv().autoBuyFeederEnabled = Value
-    if Value and not getgenv().autoBuyFeederLoopActive then
+    if Value and not getgenv().autoBuyFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
         getgenv().autoBuyFeederLoopActive = true
         task.spawn(function()
             while getgenv().autoBuyFeederEnabled and getgenv().autoMasterEngineEnabled do
@@ -2508,7 +2099,7 @@ local AutoUpgradeCoopToggle = Tabs.Economy:AddToggle("AutoUpgradeCoopToggle", {
 })
 AutoUpgradeCoopToggle:OnChanged(function(Value)
     getgenv().autoUpgradeCoopEnabled = Value
-    if Value and not getgenv().autoUpgradeCoopLoopActive then
+    if Value and not getgenv().autoUpgradeCoopLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
         getgenv().autoUpgradeCoopLoopActive = true
         task.spawn(function()
             while getgenv().autoUpgradeCoopEnabled and getgenv().autoMasterEngineEnabled do
@@ -2532,13 +2123,13 @@ AutoTowerToggle:OnChanged(function(Value)
     getgenv().autoTowerEnabled = Value
     if Value and remotesModule then pcall(hookTowerContinueOffer) end
 
-    if Value and not getgenv().autoTowerLoopActive then
+    if Value and not getgenv().autoTowerLoopActive and remotesModule then
         getgenv().autoTowerLoopActive = true
         task.spawn(function()
             local wasWaitingForRebirth = false
             while getgenv().autoTowerEnabled and getgenv().autoMasterEngineEnabled do
                 local rebirthPending = false
-                if getgenv().autoRebirthEnabled then
+                if getgenv().autoRebirthEnabled and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
                     local readySuccess, isReady = pcall(isRebirthReady)
                     rebirthPending = readySuccess and isReady == true
                 end
@@ -2657,11 +2248,11 @@ Tabs.Settings:AddParagraph({
 
 Tabs.Master:Select()
 
--- Start Monitoring Scheduler Loop
+-- Start Stealth Telemetry Polling (Passive Mode)
 Scheduler:Start()
 
 ObsidianGlassEngine:Notify({
     Title = "ตีไก่ไปกับพยอมบอย",
-    Content = "PayomboyZ HUB v5.0 โหลดเรียบร้อยแล้ว! (พร้อมระบบหิมะตก & ย้ายหน้าต่าง UI)",
+    Content = "PayomboyZ HUB v5.0 (Stealth Edition) โหลดเรียบร้อยแล้ว!",
     Duration = 5
 })
