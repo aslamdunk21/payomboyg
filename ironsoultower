@@ -3153,20 +3153,70 @@ MainTab:AddToggle("AutoProgressStage", {
     end
 })
 
+MainTab:AddToggle("AutoPlayAgain", {
+    Title = "Auto Play Again (เล่นซ้ำอัตโนมัติเมื่อจบเกม)",
+    Desc = "เมื่อขึ้นหน้าต่างจบเกม (Settlement/Victory) จะสั่งกด Play Again / เล่นอีกรอบ อัตโนมัติ",
+    Default = (Config.AfterRunMode == "Again" and Config.AutoReturnToLobby),
+    Callback = function(val)
+        if val then
+            Config.AfterRunMode = "Again"
+            _G.IronSoul_AfterRunMode = "Again"
+            Config.AutoReturnToLobby = true
+            _G.AutoReturnToLobby = true
+            local lobbyOpt = ObsidianGlassEngine.Options and ObsidianGlassEngine.Options["AutoReturnToLobby"]
+            if lobbyOpt and lobbyOpt.SetValue and lobbyOpt.Value then
+                lobbyOpt:SetValue(false)
+            end
+        else
+            if Config.AfterRunMode == "Again" then
+                Config.AutoReturnToLobby = false
+                _G.AutoReturnToLobby = false
+            end
+        end
+        saveSettings()
+    end
+})
+
 MainTab:AddToggle("AutoReturnToLobby", {
     Title = "Auto Return to Lobby (กลับหน้าเลือกห้องเมื่อจบเกม)",
     Desc = "เมื่อขึ้นหน้าต่างจบเกม (Settlement/Victory) จะสั่งกลับ Lobby อัตโนมัติ",
-    Default = Config.AutoReturnToLobby,
+    Default = (Config.AfterRunMode == "Lobby" and Config.AutoReturnToLobby),
     Callback = function(val)
-        Config.AutoReturnToLobby = val
-        _G.AutoReturnToLobby = val
+        if val then
+            Config.AfterRunMode = "Lobby"
+            _G.IronSoul_AfterRunMode = "Lobby"
+            Config.AutoReturnToLobby = true
+            _G.AutoReturnToLobby = true
+            local againOpt = ObsidianGlassEngine.Options and ObsidianGlassEngine.Options["AutoPlayAgain"]
+            if againOpt and againOpt.SetValue and againOpt.Value then
+                againOpt:SetValue(false)
+            end
+        else
+            if Config.AfterRunMode == "Lobby" then
+                Config.AutoReturnToLobby = false
+                _G.AutoReturnToLobby = false
+            end
+        end
         saveSettings()
+    end
+})
+
+MainTab:AddButton({
+    Title = "🔁 Play Again Now (กดเล่นอีกครั้งทันที)",
+    Callback = function()
+        clickSettlementButton("Again")
+        ObsidianGlassEngine:Notify({
+            Title = "ระบบเล่นอีกครั้ง",
+            Content = "ส่งคำสั่ง Play Again เรียบร้อยแล้ว!",
+            Duration = 3
+        })
     end
 })
 
 MainTab:AddButton({
     Title = "🏠 Return to Lobby Now (กลับหน้าเลือกห้องทันที)",
     Callback = function()
+        clickSettlementButton("Lobby")
         returnToLobby()
         ObsidianGlassEngine:Notify({
             Title = "ระบบกลับหน้าเลือกห้อง",
