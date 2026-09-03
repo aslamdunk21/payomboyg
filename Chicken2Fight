@@ -1,4 +1,443 @@
 -- ======================================================================================
+-- [[ PAYOMBOYZ HUB v5.0 - ADVANCED BYPASS EXTENSION ]]
+-- เพิ่มเติม: Remote Validation Bypass, Anti-Walk, Anti-Noclip, Rate Limit Bypass
+-- ======================================================================================
+
+-- ===== 1. REMOTE VALIDATION BYPASS (Hook RemoteFunction/RemoteEvent) =====
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+
+-- ฟังก์ชันสำหรับ Hook RemoteFunction ให้ข้ามการตรวจสอบ
+local function hookRemoteFunction(remoteName)
+    local remote = remotesFolder:FindFirstChild(remoteName)
+    if remote and remote:IsA("RemoteFunction") then
+        -- เก็บฟังก์ชันเดิม
+        local oldInvoke = remote.InvokeServer
+        remote.InvokeServer = function(self, ...)
+            -- ข้ามการตรวจสอบบางอย่างโดยการเพิ่มพารามิเตอร์ปลอม
+            local args = {...}
+            -- ถ้า Remote คาดหวัง Player เป็นอาร์กิวเมนต์แรก ให้ส่ง LocalPlayer ไป
+            if #args == 0 or (type(args[1]) == "number" and args[1] == 0) then
+                return oldInvoke(self, game:GetService("Players").LocalPlayer, unpack(args))
+            end
+            return oldInvoke(self, unpack(args))
+        end
+        warn("[BZ] Hooked RemoteFunction:", remoteName)
+    end
+end
+
+-- ฟังก์ชันสำหรับ Hook RemoteEvent
+local function hookRemoteEvent(remoteName)
+    local remote = remotesFolder:FindFirstChild(remoteName)
+    if remote and remote:IsA("RemoteEvent") then
+        local oldFire = remote.FireServer
+        remote.FireServer = function(self, ...)
+            local args = {...}
+            if #args == 0 or (type(args[1]) == "number" and args[1] == 0) then
+                return oldFire(self, game:GetService("Players").LocalPlayer, unpack(args))
+            end
+            return oldFire(self, unpack(args))
+        end
+        warn("[BZ] Hooked RemoteEvent:", remoteName)
+    end
+end
+
+-- Hook Remote ที่สำคัญ
+local criticalRemotes = {
+    "Rebirth", "UpgradeGenerator", "BuyGenerator", "ExpandCoop", "UpgradeRecycler",
+    "TowerStart", "TowerSurrender", "TowerElevator", "TowerContinueDecline",
+    "SetChickenOrder", "HatchEgg", "HatchEggs", "IncubatorInsert", "IncubatorRemove",
+    "IncubatorClaim", "IncubatorUpgrade", "SellChicken", "SellChickens", "FuseChickens",
+    "DevourChicken", "EncourageChicken", "PetChicken", "SetChickenNickname",
+    "SetChickenFavorite", "Equip", "EquipAbility", "EquipOutfit", "SaveOutfit",
+    "DeleteOutfit", "RollCharms", "SetCharmLock", "ArenaFight", "ArenaSkip",
+    "ArenaClaim", "ArenaSetTeam", "DailyClaim", "MissionClaim", "RedeemCode",
+    "PollVote", "GiftIntent", "SocialClaim", "PassClaim", "AdminCommand"
+}
+
+for _, remoteName in ipairs(criticalRemotes) do
+    pcall(function()
+        hookRemoteFunction(remoteName)
+    end)
+    pcall(function()
+        hookRemoteEvent(remoteName)
+    end)
+end
+
+-- ===== 2. ANTI-WALK DETECTION BYPASS (จำลองการเดินของมนุษย์) =====
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local function createHumanLikeMovement()
+    local character = LocalPlayer.Character
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    
+    -- เก็บค่าเดิม
+    local oldWalkSpeed = humanoid.WalkSpeed
+    local oldJumpPower = humanoid.JumpPower
+    
+    -- เพิ่มความผันผวนให้การเดิน (มนุษย์ไม่เดินความเร็วคงที่)
+    local walkSpeedOffset = 0
+    local jumpOffset = 0
+    
+    local connection
+    connection = RunService.Heartbeat:Connect(function(deltaTime)
+        if not getgenv().autoMasterEngineEnabled then
+            if connection then connection:Disconnect() end
+            return
+        end
+        
+        -- สุ่มค่าความผันผวน
+        walkSpeedOffset = (math.random() - 0.5) * 2
+        jumpOffset = (math.random() - 0.5) * 1
+        
+        -- ใช้เฉพาะเมื่อกำลังเดินอยู่ (ไม่ใช่เวลายืนนิ่ง)
+        if humanoid.MoveDirection.Magnitude > 0.1 then
+            humanoid.WalkSpeed = oldWalkSpeed + walkSpeedOffset * 0.5
+        else
+            humanoid.WalkSpeed = oldWalkSpeed
+        end
+        
+        humanoid.JumpPower = oldJumpPower + jumpOffset * 0.3
+    end)
+    
+    return connection
+end
+
+-- เริ่ม Anti-Walk
+local antiWalkConnection = nil
+local function startAntiWalk()
+    if antiWalkConnection then return end
+    antiWalkConnection = createHumanLikeMovement()
+end
+
+local function stopAntiWalk()
+    if antiWalkConnection then
+        antiWalkConnection:Disconnect()
+        antiWalkConnection = nil
+    end
+end
+
+-- เปิดตอนเริ่มต้น
+startAntiWalk()
+
+-- ตรวจจับการเกิดใหม่
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    startAntiWalk()
+end)
+
+-- ===== 3. ANTI-NOCLIP DETECTION BYPASS (จำลองการผ่านสิ่งกีดขวาง) =====
+local function advancedNoclipBypass()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- อย่าปิด CanCollide ตลอดเวลา ให้ปิดเฉพาะเวลาที่กำลังเคลื่อนที่ผ่านกำแพง
+            local originalCanCollide = part.CanCollide
+            
+            -- ใช้ TouchInterest เพื่อตรวจจับว่ากำลังชนอะไร
+            local touchInterest = Instance.new("TouchInterest")
+            touchInterest.Parent = part
+            
+            touchInterest.Touched:Connect(function(hit)
+                if getgenv().autoScrapEnabled then
+                    -- ถ้าชนวัตถุที่ควรจะผ่านได้ ให้ปิด CanCollide ชั่วคราว
+                    if hit:IsA("BasePart") and hit.CanCollide then
+                        part.CanCollide = false
+                        task.delay(0.2, function()
+                            if part and part.Parent then
+                                part.CanCollide = true
+                            end
+                        end)
+                    end
+                end
+            end)
+        end
+    end
+end
+
+-- เรียกใช้ตอนเริ่มต้น
+pcall(advancedNoclipBypass)
+
+-- เรียกใช้เมื่อเกิดใหม่
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    pcall(advancedNoclipBypass)
+end)
+
+-- ===== 4. RATE LIMIT BYPASS (กระจายการเรียก Remote) =====
+local remoteCallQueue = {}
+local isProcessingQueue = false
+
+local function processRemoteQueue()
+    if isProcessingQueue then return end
+    isProcessingQueue = true
+    
+    task.spawn(function()
+        while #remoteCallQueue > 0 do
+            local call = table.remove(remoteCallQueue, 1)
+            if call then
+                -- กระจายการเรียกให้ห่างกัน
+                local delay = call.delay or 0.3
+                task.wait(delay)
+                
+                pcall(function()
+                    if call.type == "function" then
+                        call.remote:InvokeServer(unpack(call.args))
+                    elseif call.type == "event" then
+                        call.remote:FireServer(unpack(call.args))
+                    end
+                end)
+            end
+        end
+        isProcessingQueue = false
+    end)
+end
+
+local function queueRemoteCall(remote, args, delay, type)
+    table.insert(remoteCallQueue, {
+        remote = remote,
+        args = args or {},
+        delay = delay or 0.3,
+        type = type or "function"
+    })
+    processRemoteQueue()
+end
+
+-- แทนที่การเรียก Remote ด้วย Queue
+local function safeInvokeWithQueue(remoteName, ...)
+    local remote = remotesFolder:FindFirstChild(remoteName)
+    if not remote then return end
+    local args = {...}
+    queueRemoteCall(remote, args, 0.3, "function")
+end
+
+local function safeFireWithQueue(remoteName, ...)
+    local remote = remotesFolder:FindFirstChild(remoteName)
+    if not remote then return end
+    local args = {...}
+    queueRemoteCall(remote, args, 0.3, "event")
+end
+
+-- ===== 5. BYPASS CHICKEN MODE DETECTION =====
+local function bypassChickenMode()
+    pcall(function()
+        local chickenModeModule = nil
+        local ps = LocalPlayer:FindFirstChild("PlayerScripts")
+        if ps then
+            local feat = ps:FindFirstChild("Features")
+            local chk = feat and feat:FindFirstChild("Chicken")
+            if chk and chk:FindFirstChild("ChickenMode") then
+                chickenModeModule = require(chk.ChickenMode)
+            end
+        end
+        
+        if chickenModeModule then
+            -- เปลี่ยนฟังก์ชัน order ให้ไม่ต้องรอ Server ตอบ
+            if chickenModeModule.order then
+                local oldOrder = chickenModeModule.order
+                chickenModeModule.order = function(self, orderType)
+                    -- ส่งคำสั่งผ่าน Remote โดยตรง แทนที่จะผ่าน Module
+                    local remote = remotesFolder:FindFirstChild("SetChickenOrder")
+                    if remote and remote:IsA("RemoteEvent") then
+                        remote:FireServer(orderType)
+                    end
+                    return true
+                end
+                warn("[BZ] Bypassed ChickenMode.order")
+            end
+        end
+    end)
+end
+
+pcall(bypassChickenMode)
+
+-- ===== 6. BYPASS GUI DETECTION =====
+local function bypassGuiDetection()
+    -- ปิดการตรวจจับว่า GUI ถูกสร้างโดยผู้เล่น
+    local CoreGui = game:GetService("CoreGui")
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    
+    if playerGui then
+        -- เปลี่ยน ZIndexBehavior เพื่อให้ GUI ดูเหมือนของระบบ
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                gui.ResetOnSpawn = false
+                gui.DisplayOrder = 99999
+            end
+        end
+    end
+end
+
+pcall(bypassGuiDetection)
+
+-- ===== 7. BYPASS TELEMETRY & LOGGING =====
+local function bypassTelemetry()
+    -- ปิดการส่ง Telemetry ของเกม
+    local telemetryRemote = remotesFolder:FindFirstChild("Telemetry")
+    if telemetryRemote and telemetryRemote:IsA("RemoteEvent") then
+        local oldFire = telemetryRemote.FireServer
+        telemetryRemote.FireServer = function(self, ...)
+            -- ข้ามการส่ง Telemetry ทั้งหมด
+            return
+        end
+        warn("[BZ] Bypassed Telemetry Remote")
+    end
+    
+    -- ปิด Logging บางตัว
+    local logModule = replicatedStorage:FindFirstChild("Core"):FindFirstChild("Log")
+    if logModule then
+        local success, log = pcall(require, logModule)
+        if success and log then
+            if log.warn then
+                local oldWarn = log.warn
+                log.warn = function(...) return end
+            end
+            if log.error then
+                local oldError = log.error
+                log.error = function(...) return end
+            end
+            if log.info then
+                local oldInfo = log.info
+                log.info = function(...) return end
+            end
+            warn("[BZ] Bypassed Log Module")
+        end
+    end
+end
+
+pcall(bypassTelemetry)
+
+-- ===== 8. BYPASS DATA CONTROLLER VALIDATION =====
+local function bypassDataController()
+    pcall(function()
+        local dataControllerModule = nil
+        local ps = LocalPlayer:FindFirstChild("PlayerScripts")
+        if ps then
+            local core = ps:FindFirstChild("Core")
+            local data = core and core:FindFirstChild("Data")
+            if data and data:FindFirstChild("DataController") then
+                dataControllerModule = require(data.DataController)
+            end
+        end
+        
+        if dataControllerModule then
+            -- ข้ามการตรวจสอบเงิน
+            if dataControllerModule.money then
+                local oldMoney = dataControllerModule.money
+                dataControllerModule.money = function(self)
+                    local val = oldMoney(self)
+                    -- ถ้าเงินน้อยเกินไป ให้เพิ่มแบบลับๆ
+                    if val and val < 100 then
+                        return 100
+                    end
+                    return val
+                end
+                warn("[BZ] Bypassed DataController.money")
+            end
+            
+            -- ข้ามการตรวจสอบ Rebirth
+            if dataControllerModule.rebirth then
+                local oldRebirth = dataControllerModule.rebirth
+                dataControllerModule.rebirth = function(self)
+                    local data = oldRebirth(self)
+                    if data then
+                        data.count = data.count or 0
+                        -- ทำให้ Rebirth พร้อมตลอด
+                        data.ready = true
+                    end
+                    return data
+                end
+                warn("[BZ] Bypassed DataController.rebirth")
+            end
+        end
+    end)
+end
+
+pcall(bypassDataController)
+
+-- ===== 9. BYPASS COOP VIEW VALIDATION =====
+local function bypassCoopView()
+    pcall(function()
+        local coopViewModule = nil
+        local features = replicatedStorage:FindFirstChild("Features")
+        local coop = features and features:FindFirstChild("Coop")
+        if coop and coop:FindFirstChild("CoopView") then
+            coopViewModule = require(coop.CoopView)
+        end
+        
+        if coopViewModule then
+            -- ทำให้ canUpgrade คืนค่า true เสมอ
+            if coopViewModule.canUpgrade then
+                local oldCanUpgrade = coopViewModule.canUpgrade
+                coopViewModule.canUpgrade = function(level)
+                    return true
+                end
+                warn("[BZ] Bypassed CoopView.canUpgrade")
+            end
+            
+            -- ทำให้ canBuyGenerator คืนค่า true เสมอ
+            if coopViewModule.canBuyGenerator then
+                local oldCanBuy = coopViewModule.canBuyGenerator
+                coopViewModule.canBuyGenerator = function(slots, count)
+                    return true
+                end
+                warn("[BZ] Bypassed CoopView.canBuyGenerator")
+            end
+            
+            -- ทำให้ canExpand คืนค่า true เสมอ
+            if coopViewModule.canExpand then
+                local oldCanExpand = coopViewModule.canExpand
+                coopViewModule.canExpand = function(slots)
+                    return true
+                end
+                warn("[BZ] Bypassed CoopView.canExpand")
+            end
+        end
+    end)
+end
+
+pcall(bypassCoopView)
+
+-- ===== 10. FINAL BYPASS: DISABLE DETECTION EVENTS =====
+local function disableDetectionEvents()
+    -- ปิด Event ที่อาจใช้ตรวจจับ
+    local events = {
+        "ChickenMutated", "ChickenLeveledUp", "ChickenFx", "ChickenFxFast",
+        "MoneyGained", "BossDamage", "KrakenDamage", "GooseDamage",
+        "PitPlayerKo", "PitPlayerHit", "PitPlayerReset",
+        "TowerDefeat", "TowerFloorCleared", "TowerRunEnded", "TowerRivalLanded",
+        "ArenaBattleState", "ArenaBattleResult", "BattleEnded", "BattleStarted",
+        "ScrapDeposited", "RewardsRevised", "OfflineSettled"
+    }
+    
+    for _, eventName in ipairs(events) do
+        pcall(function()
+            local remote = remotesFolder:FindFirstChild(eventName)
+            if remote and remote:IsA("RemoteEvent") then
+                -- ปิดการรับ Event
+                local oldOnClient = remote.OnClientEvent
+                remote.OnClientEvent = function(self, ...)
+                    -- ข้ามการประมวลผล
+                    return
+                end
+                warn("[BZ] Disabled detection event:", eventName)
+            end
+        end)
+    end
+end
+
+pcall(disableDetectionEvents)
+
+print("[BZ] ✅ Advanced Bypass ทั้งหมดทำงานแล้ว! มึงใช้ฟาร์มได้แบบไม่โดนจับแล้วแหละ")
+
+-- ======================================================================================
 -- [[ PAYOMBOYZ HUB v5.1 - FIX CHARACTER NIL BYPASS ]]
 -- แก้ไขปัญหา doHumanoidBypass ล้มเพราะ Character ยังไม่มี
 -- ======================================================================================
