@@ -61,11 +61,8 @@ local function ClearSavedKeys()
             getgenv().script_key = nil
             getgenv().PayomboyZ_InputKey = nil
         end
-        if getrenv then pcall(function() getrenv().script_key = nil end) end
-        if getfenv then pcall(function() getfenv().script_key = nil end) end
         if _G then _G.script_key = nil end
         if shared then shared.script_key = nil end
-        script_key = nil
     end)
 end
 
@@ -385,90 +382,15 @@ local function PassToKeyChecker(userKey)
         return
     end
 
-    -- 🔒 Luarmor Key: set script_key เฉพาะคีย์ที่จะผ่าน Luarmor เท่านั้น
+    -- 🔒 Luarmor Key: set script_key Standard Global
     if getgenv then getgenv().script_key = userKey end
-    if getrenv then pcall(function() getrenv().script_key = userKey end) end
     _G.script_key = userKey
     shared.script_key = userKey
-    script_key = userKey
-
-    -- 🔒 Luarmor Verification — fast polling + kick hook
-    local watchActive = true
-    local watchStart = tick()
-
-    local function onLuarmorError()
-        if not watchActive then return end
-        watchActive = false
-        ClearSavedKeys()
-        if getgenv then
-            getgenv().PayomboyZ_ShowUI = true
-            getgenv().PayomboyZ_ErrorMsg = "❌ คีย์ผิดหรือหมดอายุ! กรุณากรอกคีย์ใหม่"
-        end
-        task.spawn(function()
-            loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
-        end)
-    end
-
-
-
-    -- ── Hook 2: Polling 50ms สแกนหา Luarmor error GUI และทำลายก่อนผู้ใช้คลิก Leave ──
-    local function isLuarmorError(s)
-        s = s:lower()
-        return s:find("auth error") or s:find("no key found") or s:find("need a script_key")
-            or s:find("invalid key") or s:find("key is invalid") or s:find("not whitelisted")
-            or s:find("whitelist error") or s:find("incorrect key")
-    end
-
-    task.spawn(function()
-        while watchActive and (tick() - watchStart) < 45 do
-            task.wait(0.05)
-            pcall(function()
-                local toScan = {CoreGui}
-                pcall(function() if LocalPlayer.PlayerGui then table.insert(toScan, LocalPlayer.PlayerGui) end end)
-                pcall(function()
-                    if gethui then
-                        local h = gethui()
-                        if typeof(h) == "Instance" then table.insert(toScan, h)
-                        elseif type(h) == "table" then
-                            for _, v in ipairs(h) do
-                                if typeof(v) == "Instance" then table.insert(toScan, v) end
-                            end
-                        end
-                    end
-                end)
-
-                for _, container in ipairs(toScan) do
-                    for _, sg in ipairs(container:GetChildren()) do
-                        if sg:IsA("ScreenGui") and sg.Name ~= "PayomboyZ_SnowyLoader" and sg.Name ~= "PayomboyZ_Escape" then
-                            local found = false
-                            for _, desc in ipairs(sg:GetDescendants()) do
-                                if (desc:IsA("TextLabel") or desc:IsA("TextButton")) then
-                                    if isLuarmorError(desc.Text or "") or isLuarmorError(desc.Name or "") then
-                                        found = true
-                                        break
-                                    end
-                                end
-                            end
-                            if found then
-                                sg.Enabled = false
-                                pcall(function() sg:Destroy() end)
-                                onLuarmorError()
-                                return
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-        watchActive = false
-    end)
 
     -- ── ยิง Luarmor Loader ──
     pcall(function()
         loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
     end)
-
-    task.delay(45, function() watchActive = false end)
 end
 
 -- ==============================================================================
