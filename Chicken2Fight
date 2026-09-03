@@ -1,586 +1,1873 @@
 -- ======================================================================================
--- [[ PAYOMBOYZ HUB v5.0 - ADVANCED BYPASS EXTENSION ]]
--- เพิ่มเติม: Remote Validation Bypass, Anti-Walk, Anti-Noclip, Rate Limit Bypass
+-- [[ ตีไก่ไปกับพยอมบอย - Obsidian Glass UI (Thai Categorized) & Message (9) Core ]]
+-- Exact logic, execution loops, and timing parity with message (9).txt Baseline
+-- Added: Auto Chaos Event Automation with Smart Tower Retreat & Re-entry Logic
 -- ======================================================================================
 
--- ===== 1. REMOTE VALIDATION BYPASS (Hook RemoteFunction/RemoteEvent) =====
-local replicatedStorage = game:GetService("ReplicatedStorage")
-local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
-
--- ฟังก์ชันสำหรับ Hook RemoteFunction ให้ข้ามการตรวจสอบ
-local function hookRemoteFunction(remoteName)
-    local remote = remotesFolder:FindFirstChild(remoteName)
-    if remote and remote:IsA("RemoteFunction") then
-        -- เก็บฟังก์ชันเดิม
-        local oldInvoke = remote.InvokeServer
-        remote.InvokeServer = function(self, ...)
-            -- ข้ามการตรวจสอบบางอย่างโดยการเพิ่มพารามิเตอร์ปลอม
-            local args = {...}
-            -- ถ้า Remote คาดหวัง Player เป็นอาร์กิวเมนต์แรก ให้ส่ง LocalPlayer ไป
-            if #args == 0 or (type(args[1]) == "number" and args[1] == 0) then
-                return oldInvoke(self, game:GetService("Players").LocalPlayer, unpack(args))
-            end
-            return oldInvoke(self, unpack(args))
-        end
-        warn("[BZ] Hooked RemoteFunction:", remoteName)
-    end
-end
-
--- ฟังก์ชันสำหรับ Hook RemoteEvent
-local function hookRemoteEvent(remoteName)
-    local remote = remotesFolder:FindFirstChild(remoteName)
-    if remote and remote:IsA("RemoteEvent") then
-        local oldFire = remote.FireServer
-        remote.FireServer = function(self, ...)
-            local args = {...}
-            if #args == 0 or (type(args[1]) == "number" and args[1] == 0) then
-                return oldFire(self, game:GetService("Players").LocalPlayer, unpack(args))
-            end
-            return oldFire(self, unpack(args))
-        end
-        warn("[BZ] Hooked RemoteEvent:", remoteName)
-    end
-end
-
--- Hook Remote ที่สำคัญ
-local criticalRemotes = {
-    "Rebirth", "UpgradeGenerator", "BuyGenerator", "ExpandCoop", "UpgradeRecycler",
-    "TowerStart", "TowerSurrender", "TowerElevator", "TowerContinueDecline",
-    "SetChickenOrder", "HatchEgg", "HatchEggs", "IncubatorInsert", "IncubatorRemove",
-    "IncubatorClaim", "IncubatorUpgrade", "SellChicken", "SellChickens", "FuseChickens",
-    "DevourChicken", "EncourageChicken", "PetChicken", "SetChickenNickname",
-    "SetChickenFavorite", "Equip", "EquipAbility", "EquipOutfit", "SaveOutfit",
-    "DeleteOutfit", "RollCharms", "SetCharmLock", "ArenaFight", "ArenaSkip",
-    "ArenaClaim", "ArenaSetTeam", "DailyClaim", "MissionClaim", "RedeemCode",
-    "PollVote", "GiftIntent", "SocialClaim", "PassClaim", "AdminCommand"
-}
-
-for _, remoteName in ipairs(criticalRemotes) do
-    pcall(function()
-        hookRemoteFunction(remoteName)
-    end)
-    pcall(function()
-        hookRemoteEvent(remoteName)
-    end)
-end
-
--- ===== 2. ANTI-WALK DETECTION BYPASS (จำลองการเดินของมนุษย์) =====
+local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
+local HttpService = game:GetService("HttpService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local playersService = Players
+local localPlayer = LocalPlayer
+local runService = RunService
 
-local function createHumanLikeMovement()
-    local character = LocalPlayer.Character
-    if not character then return end
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    
-    -- เก็บค่าเดิม
-    local oldWalkSpeed = humanoid.WalkSpeed
-    local oldJumpPower = humanoid.JumpPower
-    
-    -- เพิ่มความผันผวนให้การเดิน (มนุษย์ไม่เดินความเร็วคงที่)
-    local walkSpeedOffset = 0
-    local jumpOffset = 0
-    
-    local connection
-    connection = RunService.Heartbeat:Connect(function(deltaTime)
-        if not getgenv().autoMasterEngineEnabled then
-            if connection then connection:Disconnect() end
+-----------------------------------------------------------------------------------------
+-- 🧹 CONNECTION MANAGER & UNLOAD HANDLER
+-----------------------------------------------------------------------------------------
+
+local ConnectionManager = { Connections = {} }
+
+function ConnectionManager:Add(conn, name)
+    if conn and typeof(conn) == "RBXScriptConnection" then
+        table.insert(self.Connections, { Connection = conn, Name = name or "Unnamed" })
+    end
+    return conn
+end
+
+function ConnectionManager:Cleanup()
+    for _, item in ipairs(self.Connections) do
+        if item.Connection and item.Connection.Connected then
+            pcall(function() item.Connection:Disconnect() end)
+        end
+    end
+    self.Connections = {}
+end
+
+local function getParentGui()
+    if typeof(gethui) == "function" then
+        local ok, res = pcall(gethui)
+        if ok and res and typeof(res) == "Instance" then return res end
+    end
+    if typeof(cloneref) == "function" then
+        local ok, cg = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+        if ok and cg then return cg end
+    end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then return cg end
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+end
+
+getgenv().UnloadPayomboyZ = function()
+    getgenv().autoCollectEggEnabled = false
+    getgenv().autoCollectEggLoopActive = false
+    getgenv().autoRebirthEnabled = false
+    getgenv().autoRebirthLoopActive = false
+    getgenv().autoUpgradeFeederEnabled = false
+    getgenv().autoUpgradeFeederLoopActive = false
+    getgenv().autoTowerEnabled = false
+    getgenv().autoTowerLoopActive = false
+    getgenv().autoChaosEnabled = false
+    getgenv().autoChaosLoopActive = false
+    getgenv().autoScrapEnabled = false
+    getgenv().autoScrapLoopActive = false
+    getgenv().autoUpgradeCoopEnabled = false
+    getgenv().autoUpgradeCoopLoopActive = false
+    getgenv().autoBuyFeederEnabled = false
+    getgenv().autoBuyFeederLoopActive = false
+
+    if getgenv().autoScrapNoclipConnection then
+        getgenv().autoScrapNoclipConnection:Disconnect()
+        getgenv().autoScrapNoclipConnection = nil
+    end
+
+    ConnectionManager:Cleanup()
+
+    local parentGui = getParentGui()
+    pcall(function()
+        if parentGui and parentGui:FindFirstChild("ObsidianGlass2_UI") then
+            parentGui.ObsidianGlass2_UI:Destroy()
+        end
+        if parentGui and parentGui:FindFirstChild("ObsidianGlass_NotifHolder") then
+            parentGui.ObsidianGlass_NotifHolder:Destroy()
+        end
+    end)
+end
+
+-----------------------------------------------------------------------------------------
+-- 🌐 GAME API & GLOBAL STATE (EXACT MATCH FROM message (9).txt + Auto Chaos)
+-----------------------------------------------------------------------------------------
+
+getgenv().autoCollectEggEnabled = false
+getgenv().autoCollectEggLoopActive = false
+getgenv().autoRebirthEnabled = false
+getgenv().autoRebirthLoopActive = false
+getgenv().autoUpgradeFeederEnabled = false
+getgenv().autoUpgradeFeederLoopActive = false
+getgenv().autoTowerEnabled = false
+getgenv().autoTowerLoopActive = false
+getgenv().autoTowerOfferHooked = false
+getgenv().autoTowerLastFloorEnabled = false
+getgenv().towerDelaySeconds = 5
+getgenv().autoChaosEnabled = false
+getgenv().autoChaosLoopActive = false
+getgenv().autoScrapEnabled = false
+getgenv().autoScrapLoopActive = false
+getgenv().autoScrapNoclipConnection = nil
+getgenv().autoUpgradeCoopEnabled = false
+getgenv().autoUpgradeCoopLoopActive = false
+getgenv().autoBuyFeederEnabled = false
+getgenv().autoBuyFeederLoopActive = false
+
+local remotesModule = nil
+local rebirthBonusModule = nil
+local rebirthExperimentModule = nil
+local dataControllerModule = nil
+local coopViewModule = nil
+local dataServiceModule = nil
+local chickenModeModule = nil
+
+pcall(function()
+    remotesModule = require(replicatedStorage:WaitForChild("Core", 10):WaitForChild("Remotes", 10))
+end)
+
+pcall(function()
+    local progressionFolder = replicatedStorage:WaitForChild("Core", 10):WaitForChild("Progression", 10)
+
+    rebirthBonusModule = require(progressionFolder:WaitForChild("RebirthBonus", 10))
+    rebirthExperimentModule = require(progressionFolder:WaitForChild("RebirthExperiment", 10))
+end)
+
+pcall(function()
+    dataControllerModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Core", 10):WaitForChild("Data", 10):WaitForChild("DataController", 10))
+end)
+
+pcall(function()
+    coopViewModule = require(replicatedStorage:WaitForChild("Features", 10):WaitForChild("Coop", 10):WaitForChild("CoopView", 10))
+end)
+
+pcall(function()
+    dataServiceModule = require(replicatedStorage:WaitForChild("Packages", 10):WaitForChild("DataService", 10))
+end)
+
+pcall(function()
+    chickenModeModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Features", 10):WaitForChild("Chicken", 10):WaitForChild("ChickenMode", 10))
+end)
+
+-----------------------------------------------------------------------------------------
+-- 🧠 AUTOMATION FUNCTIONS (EXACT MATCH FROM message (9).txt + Chaos Engine)
+-----------------------------------------------------------------------------------------
+
+local function getEggOwner(eggInstance)
+    local ownerValue = eggInstance:GetAttribute("owner")
+
+    if ownerValue ~= nil then
+        return ownerValue
+    end
+
+    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
+
+    if eggPart then
+        return eggPart:GetAttribute("owner")
+    end
+
+    return nil
+end
+
+local function getEggPosition(eggInstance)
+    if eggInstance:IsA("BasePart") then
+        return eggInstance.Position
+    end
+
+    if eggInstance:IsA("Model") then
+        return eggInstance:GetPivot().Position
+    end
+
+    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
+
+    if eggPart then
+        return eggPart.Position
+    end
+
+    return nil
+end
+
+local function getOwnedEggPositions()
+    local ownedEggPositions = {}
+    local nestEggsFolder = workspace:FindFirstChild("NestEggs")
+
+    if not nestEggsFolder then
+        return ownedEggPositions
+    end
+
+    for _, eggInstance in ipairs(nestEggsFolder:GetChildren()) do
+        local success, ownerValue = pcall(getEggOwner, eggInstance)
+
+        if success and (ownerValue == localPlayer.UserId or ownerValue == tostring(localPlayer.UserId)) then
+            local positionSuccess, eggPosition = pcall(getEggPosition, eggInstance)
+
+            if positionSuccess and eggPosition then
+                table.insert(ownedEggPositions, eggPosition)
+            end
+        end
+    end
+
+    return ownedEggPositions
+end
+
+local function walkToEgg(playerHumanoid, eggPosition)
+    local moveStartTime = os.clock()
+
+    playerHumanoid:MoveTo(eggPosition)
+
+    while getgenv().autoCollectEggEnabled do
+        local currentCharacter = localPlayer.Character
+        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+
+        if not currentRootPart then
             return
         end
-        
-        -- สุ่มค่าความผันผวน
-        walkSpeedOffset = (math.random() - 0.5) * 2
-        jumpOffset = (math.random() - 0.5) * 1
-        
-        -- ใช้เฉพาะเมื่อกำลังเดินอยู่ (ไม่ใช่เวลายืนนิ่ง)
-        if humanoid.MoveDirection.Magnitude > 0.1 then
-            humanoid.WalkSpeed = oldWalkSpeed + walkSpeedOffset * 0.5
-        else
-            humanoid.WalkSpeed = oldWalkSpeed
+
+        if (currentRootPart.Position - eggPosition).Magnitude <= 5 then
+            return
         end
-        
-        humanoid.JumpPower = oldJumpPower + jumpOffset * 0.3
-    end)
-    
-    return connection
-end
 
--- เริ่ม Anti-Walk
-local antiWalkConnection = nil
-local function startAntiWalk()
-    if antiWalkConnection then return end
-    antiWalkConnection = createHumanLikeMovement()
-end
+        if os.clock() - moveStartTime >= 8 then
+            return
+        end
 
-local function stopAntiWalk()
-    if antiWalkConnection then
-        antiWalkConnection:Disconnect()
-        antiWalkConnection = nil
+        task.wait(0.15)
     end
 end
 
--- เปิดตอนเริ่มต้น
-startAntiWalk()
+local function isRebirthReady()
+    local rebirthData = dataControllerModule.rebirth()
+    local rebirthCount = rebirthData and rebirthData.count or 0
+    local towerBestFloor = dataControllerModule.towerBest() or 0
+    local usesV2Formula = rebirthExperimentModule.armOf(localPlayer) == rebirthExperimentModule.VARIANT
 
--- ตรวจจับการเกิดใหม่
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    startAntiWalk()
-end)
+    return rebirthBonusModule.ready(towerBestFloor, rebirthCount, usesV2Formula)
+end
 
--- ===== 3. ANTI-NOCLIP DETECTION BYPASS (จำลองการผ่านสิ่งกีดขวาง) =====
-local function advancedNoclipBypass()
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            -- อย่าปิด CanCollide ตลอดเวลา ให้ปิดเฉพาะเวลาที่กำลังเคลื่อนที่ผ่านกำแพง
-            local originalCanCollide = part.CanCollide
-            
-            -- ใช้ TouchInterest เพื่อตรวจจับว่ากำลังชนอะไร
-            local touchInterest = Instance.new("TouchInterest")
-            touchInterest.Parent = part
-            
-            touchInterest.Touched:Connect(function(hit)
-                if getgenv().autoScrapEnabled then
-                    -- ถ้าชนวัตถุที่ควรจะผ่านได้ ให้ปิด CanCollide ชั่วคราว
-                    if hit:IsA("BasePart") and hit.CanCollide then
-                        part.CanCollide = false
-                        task.delay(0.2, function()
-                            if part and part.Parent then
-                                part.CanCollide = true
-                            end
-                        end)
+local function requestRebirth()
+    local result = remotesModule.invoke(remotesModule.defs.Rebirth)
+
+    return typeof(result) == "table" and result.ok == true
+end
+
+local function getCurrentMoney()
+    local moneyObject = dataControllerModule.money()
+
+    if moneyObject and moneyObject.toNumber then
+        return moneyObject:toNumber()
+    end
+
+    return 0
+end
+
+local function getCoopData()
+    local dataClient = dataServiceModule.client
+
+    return dataClient and dataClient:get({ "coop" })
+end
+
+local function upgradeFeeders()
+    local coopData = getCoopData()
+
+    if not coopData or type(coopData.generators) ~= "table" then
+        return
+    end
+
+    for _, generatorData in ipairs(coopData.generators) do
+        if not getgenv().autoUpgradeFeederEnabled then
+            return
+        end
+
+        local feederSlot = tonumber(generatorData.slot)
+        local feederLevel = tonumber(generatorData.level)
+
+        if feederSlot and feederLevel and coopViewModule.canUpgrade(feederLevel) then
+            local upgradeCost = coopViewModule.upgradeCost(feederLevel)
+
+            if getCurrentMoney() >= upgradeCost then
+                local result = remotesModule.invoke(remotesModule.defs.UpgradeGenerator, feederSlot)
+
+                if typeof(result) == "table" and result.ok then
+                    task.wait(0.25)
+                end
+            end
+        end
+    end
+end
+
+local function isTowerRunActive()
+    return localPlayer:GetAttribute("TowerActive") == true
+end
+
+local function retreatTower()
+    pcall(function()
+        if remotesModule and remotesModule.defs and remotesModule.defs.TowerSurrender then
+            remotesModule.invoke(remotesModule.defs.TowerSurrender)
+        else
+            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+            if remotesFolder then
+                local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
+                if towerSurrender then
+                    if towerSurrender:IsA("RemoteFunction") then
+                        towerSurrender:InvokeServer()
+                    elseif towerSurrender:IsA("RemoteEvent") then
+                        towerSurrender:FireServer()
                     end
                 end
+            end
+        end
+    end)
+end
+
+local function isChaosEventLive()
+    local eventCardAnchor = workspace:FindFirstChild("EventCardAnchor")
+    local card = eventCardAnchor and eventCardAnchor:FindFirstChild("EventCard")
+    if card then
+        for _, child in ipairs(card:GetChildren()) do
+            local nameLower = string.lower(child.Name)
+            if string.find(nameLower, "live") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function orderChaos()
+    if chickenModeModule then
+        pcall(function() chickenModeModule.order("chaos") end)
+    end
+    pcall(function()
+        if remotesModule and remotesModule.defs and remotesModule.defs.SetChickenOrder then
+            remotesModule.fire(remotesModule.defs.SetChickenOrder, "chaos")
+        else
+            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
+            if remotesFolder then
+                local setOrder = remotesFolder:FindFirstChild("SetChickenOrder")
+                if setOrder and setOrder:IsA("RemoteEvent") then
+                    setOrder:FireServer("chaos")
+                end
+            end
+        end
+    end)
+end
+
+local function startTowerRun()
+    if getgenv().autoTowerLastFloorEnabled and dataControllerModule then
+        local lastTowerFloor = tonumber(dataControllerModule.towerBest()) or 0
+
+        if lastTowerFloor > 0 then
+            remotesModule.invoke(remotesModule.defs.TowerElevator, lastTowerFloor)
+        end
+    end
+
+    if chickenModeModule then
+        chickenModeModule.order("tower")
+    end
+
+    remotesModule.invoke(remotesModule.defs.TowerStart)
+end
+
+local function hookTowerContinueOffer()
+    if getgenv().autoTowerOfferHooked then
+        return
+    end
+
+    getgenv().autoTowerOfferHooked = true
+
+    remotesModule.onClient(remotesModule.defs.TowerContinueOffer, function(offerData)
+        if getgenv().autoTowerEnabled and typeof(offerData) == "table" and offerData.open == true then
+            pcall(function()
+                remotesModule.fire(remotesModule.defs.TowerContinueDecline)
             end)
+        end
+    end)
+end
+
+local function getScrapStackCount()
+    local playerCharacter = localPlayer.Character
+
+    if not playerCharacter then
+        return 0
+    end
+
+    local playerHead = playerCharacter:FindFirstChild("Head")
+
+    if not playerHead then
+        return 0
+    end
+
+    local scrapStack = playerHead:FindFirstChild("ScrapStack")
+
+    if not scrapStack then
+        return 0
+    end
+
+    local stackCount = 0
+
+    for _, stackPart in ipairs(scrapStack:GetDescendants()) do
+        if stackPart:IsA("BasePart") then
+            stackCount = stackCount + 1
+        end
+    end
+
+    return stackCount
+end
+
+local function getOwnedRecycler()
+    local recyclersFolder = workspace:FindFirstChild("Recyclers")
+
+    if not recyclersFolder then
+        return nil
+    end
+
+    local plotNumber = localPlayer:GetAttribute("Plot")
+
+    if plotNumber then
+        local recyclerModel = recyclersFolder:FindFirstChild("Recycler" .. tostring(plotNumber))
+
+        if recyclerModel then
+            return recyclerModel
+        end
+    end
+
+    for _, recyclerModel in ipairs(recyclersFolder:GetChildren()) do
+        local success, recyclerOwner = pcall(function()
+            return recyclerModel:GetAttribute("owner")
+        end)
+
+        if success and (recyclerOwner == localPlayer.UserId or recyclerOwner == tostring(localPlayer.UserId)) then
+            return recyclerModel
+        end
+    end
+
+    return nil
+end
+
+local function startScrapNoclip()
+    if getgenv().autoScrapNoclipConnection then
+        return
+    end
+
+    getgenv().autoScrapNoclipConnection = runService.Stepped:Connect(function()
+        local playerCharacter = localPlayer.Character
+
+        if not playerCharacter then
+            return
+        end
+
+        for _, characterPart in ipairs(playerCharacter:GetDescendants()) do
+            if characterPart:IsA("BasePart") and characterPart.CanCollide then
+                characterPart.CanCollide = false
+            end
+        end
+    end)
+end
+
+local function stopScrapNoclip()
+    if getgenv().autoScrapNoclipConnection then
+        getgenv().autoScrapNoclipConnection:Disconnect()
+
+        getgenv().autoScrapNoclipConnection = nil
+    end
+end
+
+local function walkToPosition(playerHumanoid, targetPosition)
+    local moveStartTime = os.clock()
+    local lastMoveRequest = 0
+
+    while getgenv().autoScrapEnabled do
+        local currentCharacter = localPlayer.Character
+        local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+
+        if not currentHumanoid or not currentRootPart then
+            return
+        end
+
+        if (currentRootPart.Position - targetPosition).Magnitude <= 5 then
+            return
+        end
+
+        if os.clock() - lastMoveRequest >= 1 then
+            currentHumanoid:MoveTo(targetPosition)
+
+            lastMoveRequest = os.clock()
+        end
+
+        if os.clock() - moveStartTime >= 20 then
+            return
+        end
+
+        task.wait(0.15)
+    end
+end
+
+local function depositAtRecycler()
+    local recyclerModel = getOwnedRecycler()
+
+    if not recyclerModel then
+        return
+    end
+
+    local recyclerPosition = recyclerModel:GetPivot().Position
+    local playerCharacter = localPlayer.Character
+    local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
+
+    if not playerHumanoid then
+        return
+    end
+
+    walkToPosition(playerHumanoid, recyclerPosition)
+
+    local waitStartTime = os.clock()
+
+    while getgenv().autoScrapEnabled do
+        local currentCharacter = localPlayer.Character
+        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+
+        if not currentRootPart then
+            return
+        end
+
+        if (currentRootPart.Position - recyclerPosition).Magnitude > 12 then
+            break
+        end
+
+        if getScrapStackCount() <= 0 then
+            break
+        end
+
+        if os.clock() - waitStartTime >= 20 then
+            break
+        end
+
+        task.wait(0.5)
+    end
+end
+
+local function collectNearbyScrap()
+    local pitScrapFolder = workspace:FindFirstChild("PitScrap")
+
+    if not pitScrapFolder then
+        return
+    end
+
+    local scrapParts = {}
+
+    for _, scrapInstance in ipairs(pitScrapFolder:GetChildren()) do
+        if scrapInstance:IsA("BasePart") then
+            table.insert(scrapParts, scrapInstance)
+        end
+    end
+
+    if #scrapParts == 0 then
+        return
+    end
+
+    local playerCharacter = localPlayer.Character
+    local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
+    local rootPart = playerCharacter and playerCharacter:FindFirstChild("HumanoidRootPart")
+
+    if not playerHumanoid or not rootPart then
+        return
+    end
+
+    table.sort(scrapParts, function(partA, partB)
+        return (partA.Position - rootPart.Position).Magnitude < (partB.Position - rootPart.Position).Magnitude
+    end)
+
+    for _, scrapPart in ipairs(scrapParts) do
+        if not getgenv().autoScrapEnabled then
+            return
+        end
+
+        if getScrapStackCount() > 6 then
+            return
+        end
+
+        if scrapPart.Parent then
+            walkToPosition(playerHumanoid, scrapPart.Position)
         end
     end
 end
 
--- เรียกใช้ตอนเริ่มต้น
-pcall(advancedNoclipBypass)
+local function upgradeCoop()
+    local coopData = getCoopData()
 
--- เรียกใช้เมื่อเกิดใหม่
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    pcall(advancedNoclipBypass)
-end)
+    if not coopData or type(coopData.slots) ~= "number" then
+        return false
+    end
 
--- ===== 4. RATE LIMIT BYPASS (กระจายการเรียก Remote) =====
-local remoteCallQueue = {}
-local isProcessingQueue = false
+    local coopSlots = coopData.slots
 
-local function processRemoteQueue()
-    if isProcessingQueue then return end
-    isProcessingQueue = true
+    if not coopViewModule.canExpand(coopSlots) then
+        return false
+    end
+
+    local expandCost = coopViewModule.expandCost(coopSlots)
+
+    if getCurrentMoney() < expandCost then
+        return false
+    end
+
+    local result = remotesModule.invoke(remotesModule.defs.ExpandCoop)
+
+    return typeof(result) == "table" and result.ok == true
+end
+
+local function buyFeeder()
+    local coopData = getCoopData()
+
+    if not coopData or type(coopData.slots) ~= "number" or type(coopData.generators) ~= "table" then
+        return false
+    end
+
+    local feederCount = #coopData.generators
+
+    if not coopViewModule.canBuyGenerator(coopData.slots, feederCount) then
+        return false
+    end
+
+    local buyCost = coopViewModule.buyGeneratorCost(feederCount)
+
+    if getCurrentMoney() < buyCost then
+        return false
+    end
+
+    local result = remotesModule.invoke(remotesModule.defs.BuyGenerator, feederCount + 1)
+
+    return typeof(result) == "table" and result.ok == true
+end
+
+-----------------------------------------------------------------------------------------
+-- 🎨 UI DESIGN SYSTEM (OBSIDIAN GLASSMORPHIC ENGINE)
+-----------------------------------------------------------------------------------------
+
+local COLORS = {
+    backdrop = Color3.fromRGB(12, 5, 8),
+    shell = Color3.fromRGB(20, 10, 14),
+    glass = Color3.fromRGB(32, 14, 20),
+    glassDeep = Color3.fromRGB(25, 11, 16),
+    glassRaised = Color3.fromRGB(48, 18, 28),
+    userPanel = Color3.fromRGB(28, 12, 18),
+    surface = Color3.fromRGB(42, 18, 26),
+    surfaceRaised = Color3.fromRGB(58, 24, 34),
+    surfaceHover = Color3.fromRGB(78, 30, 44),
+    surfacePressed = Color3.fromRGB(34, 14, 20),
+    input = Color3.fromRGB(20, 9, 13),
+    inputFocus = Color3.fromRGB(36, 14, 22),
+    divider = Color3.fromRGB(140, 40, 60),
+    primary = Color3.fromRGB(255, 45, 85),
+    primaryHover = Color3.fromRGB(255, 75, 110),
+    primaryPressed = Color3.fromRGB(210, 30, 65),
+    secondary = Color3.fromRGB(52, 18, 28),
+    text = Color3.fromRGB(255, 255, 255),
+    textMuted = Color3.fromRGB(242, 218, 228),
+    textFaint = Color3.fromRGB(210, 168, 182),
+    cyan = Color3.fromRGB(255, 55, 85),
+    success = Color3.fromRGB(46, 224, 140),
+    warning = Color3.fromRGB(255, 185, 70),
+    danger = Color3.fromRGB(255, 60, 60),
+    disabled = Color3.fromRGB(50, 25, 32),
+}
+
+local ObsidianGlassEngine = { Options = {} }
+
+local function playClickSound()
+    pcall(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://6895079853"
+        sound.Volume = 0.3
+        sound.Parent = SoundService
+        sound:Play()
+        sound.Ended:Connect(function() sound:Destroy() end)
+    end)
+end
+
+local function loadCustomAvatarImage()
+    return "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+end
+
+function ObsidianGlassEngine:Notify(cfg)
+    pcall(function()
+        local title = cfg.Title or "System"
+        local content = cfg.Content or ""
+        local duration = cfg.Duration or 4
+        
+        local parentGui = getParentGui()
+        local notifHolder = nil
+        pcall(function() notifHolder = parentGui:FindFirstChild("ObsidianGlass_NotifHolder") end)
+        if not notifHolder then
+            notifHolder = Instance.new("ScreenGui")
+            notifHolder.Name = "ObsidianGlass_NotifHolder"
+            notifHolder.ResetOnSpawn = false
+            notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            
+            if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+                pcall(syn.protect_gui, notifHolder)
+            elseif typeof(protectgui) == "function" then
+                pcall(protectgui, notifHolder)
+            end
+
+            local pOk = pcall(function() notifHolder.Parent = parentGui end)
+            if not pOk then
+                notifHolder.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+            end
+        end
+        
+        local toast = Instance.new("Frame")
+        toast.Size = UDim2.new(0, 300, 0, 65)
+        toast.Position = UDim2.new(1, 20, 1, -85)
+        toast.BackgroundColor3 = COLORS.glass
+        toast.BackgroundTransparency = 0.15
+        toast.BorderSizePixel = 0
+        toast.Parent = notifHolder
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 10)
+        corner.Parent = toast
+        
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = COLORS.cyan
+        stroke.Thickness = 1.5
+        stroke.Parent = toast
+        
+        local tTitle = Instance.new("TextLabel")
+        tTitle.Size = UDim2.new(1, -20, 0, 22)
+        tTitle.Position = UDim2.new(0, 10, 0, 6)
+        tTitle.BackgroundTransparency = 1
+        tTitle.Text = title
+        tTitle.TextColor3 = COLORS.cyan
+        tTitle.Font = Enum.Font.GothamBold
+        tTitle.TextSize = 13
+        tTitle.TextXAlignment = Enum.TextXAlignment.Left
+        tTitle.Parent = toast
+        
+        local tDesc = Instance.new("TextLabel")
+        tDesc.Size = UDim2.new(1, -20, 0, 32)
+        tDesc.Position = UDim2.new(0, 10, 0, 26)
+        tDesc.BackgroundTransparency = 1
+        tDesc.Text = content
+        tDesc.TextColor3 = COLORS.text
+        tDesc.Font = Enum.Font.Gotham
+        tDesc.TextSize = 11
+        tDesc.TextWrapped = true
+        tDesc.TextXAlignment = Enum.TextXAlignment.Left
+        tDesc.Parent = toast
+        
+        playClickSound()
+        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -320, 1, -85) }):Play()
+        task.delay(duration, function()
+            if toast and toast.Parent then
+                local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
+                tw:Play()
+                tw.Completed:Connect(function() toast:Destroy() end)
+            end
+        end)
+    end)
+end
+
+function ObsidianGlassEngine:CreateWindow(cfg)
+    local parentGui = getParentGui()
+    pcall(function()
+        if parentGui and parentGui:FindFirstChild("ObsidianGlass2_UI") then
+            parentGui.ObsidianGlass2_UI:Destroy()
+        end
+    end)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ObsidianGlass2_UI"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 99999
+
+    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+        pcall(syn.protect_gui, gui)
+    elseif typeof(protectgui) == "function" then
+        pcall(protectgui, gui)
+    end
     
-    task.spawn(function()
-        while #remoteCallQueue > 0 do
-            local call = table.remove(remoteCallQueue, 1)
-            if call then
-                -- กระจายการเรียกให้ห่างกัน
-                local delay = call.delay or 0.3
-                task.wait(delay)
-                
-                pcall(function()
-                    if call.type == "function" then
-                        call.remote:InvokeServer(unpack(call.args))
-                    elseif call.type == "event" then
-                        call.remote:FireServer(unpack(call.args))
+    local parentOk = pcall(function()
+        gui.Parent = parentGui
+    end)
+    if not parentOk then
+        local fallbackPlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+        gui.Parent = fallbackPlayerGui
+    end
+
+    local uiScale = Instance.new("UIScale")
+    local camera = workspace.CurrentCamera
+    local function updateScale()
+        if camera and camera.ViewportSize then
+            local vp = camera.ViewportSize
+            local targetWidth, targetHeight = 820, 520
+            local scaleX = (vp.X - 24) / targetWidth
+            local scaleY = (vp.Y - 24) / targetHeight
+            local calcScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
+            uiScale.Scale = calcScale
+        end
+    end
+    updateScale()
+    if camera then
+        ConnectionManager:Add(camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale), "ViewportScale")
+    end
+    uiScale.Parent = gui
+
+    local shell = Instance.new("Frame")
+    shell.Name = "MainShell"
+    shell.Size = UDim2.fromOffset(820, 520)
+    shell.AnchorPoint = Vector2.new(0.5, 0.5)
+    shell.Position = UDim2.new(0.5, 0, 0.5, 0)
+    shell.BackgroundColor3 = COLORS.shell
+    shell.BackgroundTransparency = 0.20
+    shell.BorderSizePixel = 0
+    shell.ClipsDescendants = true
+    shell.Parent = gui
+
+    local shellCorner = Instance.new("UICorner")
+    shellCorner.CornerRadius = UDim.new(0, 18)
+    shellCorner.Parent = shell
+
+    local shellStroke = Instance.new("UIStroke")
+    shellStroke.Color = COLORS.cyan
+    shellStroke.Thickness = 1.5
+    shellStroke.Transparency = 0.3
+    shellStroke.Parent = shell
+
+    -- Snow Effect
+    local snowContainer = Instance.new("Frame")
+    snowContainer.Name = "SnowEffectContainer"
+    snowContainer.Size = UDim2.fromScale(1, 1)
+    snowContainer.BackgroundTransparency = 1
+    snowContainer.ClipsDescendants = true
+    snowContainer.ZIndex = 2
+    snowContainer.Parent = shell
+
+    local flakes = {}
+    local flakeSymbols = { "❄", "❅", "❆", "•" }
+
+    for i = 1, 35 do
+        local flake = Instance.new("TextLabel")
+        flake.Name = "SnowFlake_" .. i
+        local isSymbol = math.random(1, 100) > 35
+        if isSymbol then
+            flake.Text = flakeSymbols[math.random(1, #flakeSymbols)]
+            flake.TextSize = math.random(9, 14)
+            flake.TextColor3 = Color3.fromRGB(220, 245, 255)
+            flake.Font = Enum.Font.Gotham
+        else
+            flake.Text = "•"
+            flake.TextSize = math.random(12, 18)
+            flake.TextColor3 = Color3.fromRGB(255, 255, 255)
+            flake.Font = Enum.Font.GothamBold
+        end
+        flake.BackgroundTransparency = 1
+        flake.TextTransparency = math.random(3, 7) / 10
+        flake.Size = UDim2.fromOffset(18, 18)
+        
+        local startX = math.random(0, 820)
+        local startY = math.random(-40, 520)
+        flake.Position = UDim2.new(0, startX, 0, startY)
+        flake.ZIndex = 2
+        flake.Parent = snowContainer
+
+        table.insert(flakes, {
+            Gui = flake,
+            X = startX,
+            Y = startY,
+            Speed = math.random(15, 35) / 10,
+            Sway = math.random(10, 20) / 10,
+            SwayFreq = math.random(6, 12) / 10,
+            Offset = math.random() * math.pi * 2
+        })
+    end
+
+    local snowConn = RunService.RenderStepped:Connect(function()
+        if not shell.Visible then return end
+        for _, flakeData in ipairs(flakes) do
+            flakeData.Y = flakeData.Y + flakeData.Speed
+            local swayX = flakeData.X + math.sin(os.clock() * flakeData.SwayFreq + flakeData.Offset) * flakeData.Sway
+            if flakeData.Y > 530 then
+                flakeData.Y = -20
+                flakeData.X = math.random(0, 820)
+            end
+            flakeData.Gui.Position = UDim2.new(0, swayX, 0, flakeData.Y)
+        end
+    end)
+    ConnectionManager:Add(snowConn, "SnowEffectLoop")
+
+    -- Drag Toggle Capsule
+    local toggleCapsule = Instance.new("Frame")
+    toggleCapsule.Name = "ObsidianToggleCapsule"
+    toggleCapsule.Size = UDim2.fromOffset(220, 52)
+    toggleCapsule.Position = UDim2.new(0, 15, 0.5, -26)
+    toggleCapsule.BackgroundColor3 = COLORS.shell
+    toggleCapsule.BackgroundTransparency = 0.18
+    toggleCapsule.BorderSizePixel = 0
+    toggleCapsule.ClipsDescendants = true
+    toggleCapsule.ZIndex = 99999
+    toggleCapsule.Parent = gui
+
+    local tcCorner = Instance.new("UICorner")
+    tcCorner.CornerRadius = UDim.new(0, 16)
+    tcCorner.Parent = toggleCapsule
+
+    local tcStroke = Instance.new("UIStroke")
+    tcStroke.Color = COLORS.cyan
+    tcStroke.Thickness = 1.5
+    tcStroke.Transparency = 0.2
+    tcStroke.Parent = toggleCapsule
+
+    local capAvatarFrame = Instance.new("Frame")
+    capAvatarFrame.Size = UDim2.fromOffset(36, 36)
+    capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -18)
+    capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+    capAvatarFrame.BorderSizePixel = 0
+    capAvatarFrame.ZIndex = 3
+    capAvatarFrame.Parent = toggleCapsule
+
+    local caCorner = Instance.new("UICorner")
+    caCorner.CornerRadius = UDim.new(1, 0)
+    caCorner.Parent = capAvatarFrame
+
+    local capAvatarImg = Instance.new("ImageLabel")
+    capAvatarImg.Size = UDim2.fromScale(1, 1)
+    capAvatarImg.BackgroundTransparency = 1
+    capAvatarImg.Image = loadCustomAvatarImage()
+    capAvatarImg.ZIndex = 4
+    capAvatarImg.Parent = capAvatarFrame
+
+    local caiCorner = Instance.new("UICorner")
+    caiCorner.CornerRadius = UDim.new(1, 0)
+    caiCorner.Parent = capAvatarImg
+
+    local capUserLabel = Instance.new("TextLabel")
+    capUserLabel.Size = UDim2.new(1, -54, 0, 16)
+    capUserLabel.Position = UDim2.new(0, 50, 0, 8)
+    capUserLabel.BackgroundTransparency = 1
+    capUserLabel.Text = "@" .. LocalPlayer.Name
+    capUserLabel.TextColor3 = COLORS.text
+    capUserLabel.Font = Enum.Font.GothamBold
+    capUserLabel.TextSize = 11
+    capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capUserLabel.ZIndex = 3
+    capUserLabel.Parent = toggleCapsule
+
+    local capMetricsLabel = Instance.new("TextLabel")
+    capMetricsLabel.Size = UDim2.new(1, -54, 0, 14)
+    capMetricsLabel.Position = UDim2.new(0, 50, 0, 24)
+    capMetricsLabel.BackgroundTransparency = 1
+    capMetricsLabel.Text = "⚡ ตีไก่ไปกับพยอมบอย"
+    capMetricsLabel.TextColor3 = COLORS.cyan
+    capMetricsLabel.Font = Enum.Font.GothamBold
+    capMetricsLabel.TextSize = 10
+    capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capMetricsLabel.ZIndex = 3
+    capMetricsLabel.Parent = toggleCapsule
+
+    local capBtn = Instance.new("TextButton")
+    capBtn.Size = UDim2.fromScale(1, 1)
+    capBtn.BackgroundTransparency = 1
+    capBtn.Text = ""
+    capBtn.ZIndex = 10
+    capBtn.Parent = toggleCapsule
+
+    local tDragging, tDragInput, tDragStart, tStartPos
+    local hasDragged = false
+
+    ConnectionManager:Add(capBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            tDragging = true
+            hasDragged = false
+            tDragStart = input.Position
+            tStartPos = toggleCapsule.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then tDragging = false end
+            end)
+        end
+    end), "CapBtnInputBegan")
+
+    ConnectionManager:Add(capBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            tDragInput = input
+        end
+    end), "CapBtnInputChanged")
+
+    ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
+        if input == tDragInput and tDragging then
+            local delta = input.Position - tDragStart
+            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then hasDragged = true end
+            toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
+        end
+    end), "GlobalInputChanged")
+
+    ConnectionManager:Add(capBtn.MouseButton1Click:Connect(function()
+        if not hasDragged then
+            playClickSound()
+            shell.Visible = not shell.Visible
+        end
+    end), "CapBtnClick")
+
+    ConnectionManager:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
+            shell.Visible = not shell.Visible
+        end
+    end), "ToggleKeybind")
+
+    -- Left Sidebar (User Panel)
+    local userPanel = Instance.new("Frame")
+    userPanel.Name = "UserPanel"
+    userPanel.Size = UDim2.new(0, 220, 1, 0)
+    userPanel.BackgroundColor3 = COLORS.userPanel
+    userPanel.BackgroundTransparency = 0.20
+    userPanel.BorderSizePixel = 0
+    userPanel.ZIndex = 5
+    userPanel.Parent = shell
+
+    local avatarFrame = Instance.new("Frame")
+    avatarFrame.Size = UDim2.fromOffset(40, 40)
+    avatarFrame.Position = UDim2.new(0, 14, 0, 14)
+    avatarFrame.BackgroundColor3 = COLORS.glassDeep
+    avatarFrame.BorderSizePixel = 0
+    avatarFrame.ZIndex = 10
+    avatarFrame.Parent = userPanel
+
+    local avCorner = Instance.new("UICorner")
+    avCorner.CornerRadius = UDim.new(1, 0)
+    avCorner.Parent = avatarFrame
+
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Size = UDim2.fromScale(1, 1)
+    avatarImg.BackgroundTransparency = 1
+    avatarImg.Image = loadCustomAvatarImage()
+    avatarImg.ZIndex = 11
+    avatarImg.Parent = avatarFrame
+
+    local displayNameLabel = Instance.new("TextLabel")
+    displayNameLabel.Size = UDim2.new(1, -70, 0, 18)
+    displayNameLabel.Position = UDim2.new(0, 62, 0, 15)
+    displayNameLabel.BackgroundTransparency = 1
+    displayNameLabel.Text = LocalPlayer.DisplayName
+    displayNameLabel.TextColor3 = COLORS.text
+    displayNameLabel.Font = Enum.Font.GothamBold
+    displayNameLabel.TextSize = 13
+    displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    displayNameLabel.ZIndex = 10
+    displayNameLabel.Parent = userPanel
+
+    local metricsBox = Instance.new("Frame")
+    metricsBox.Size = UDim2.new(1, -28, 0, 24)
+    metricsBox.Position = UDim2.new(0, 14, 0, 60)
+    metricsBox.BackgroundColor3 = COLORS.glassDeep
+    metricsBox.BorderSizePixel = 0
+    metricsBox.ZIndex = 10
+    metricsBox.Parent = userPanel
+
+    local mCorner = Instance.new("UICorner")
+    mCorner.CornerRadius = UDim.new(0, 6)
+    mCorner.Parent = metricsBox
+
+    local metricsLabel = Instance.new("TextLabel")
+    metricsLabel.Size = UDim2.fromScale(1, 1)
+    metricsLabel.BackgroundTransparency = 1
+    metricsLabel.Text = "⚡ สถานะ: พร้อมทำงาน"
+    metricsLabel.TextColor3 = COLORS.cyan
+    metricsLabel.Font = Enum.Font.GothamBold
+    metricsLabel.TextSize = 10
+    metricsLabel.ZIndex = 11
+    metricsLabel.Parent = metricsBox
+
+    local tabScroll = Instance.new("ScrollingFrame")
+    tabScroll.Name = "VerticalTabScroll"
+    tabScroll.Size = UDim2.new(1, -20, 1, -100)
+    tabScroll.Position = UDim2.new(0, 10, 0, 92)
+    tabScroll.BackgroundTransparency = 1
+    tabScroll.ScrollBarThickness = 3
+    tabScroll.ScrollBarImageColor3 = COLORS.cyan
+    tabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    tabScroll.ZIndex = 10
+    tabScroll.Parent = userPanel
+
+    local tabLayout = Instance.new("UIListLayout")
+    tabLayout.FillDirection = Enum.FillDirection.Vertical
+    tabLayout.Padding = UDim.new(0, 5)
+    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabLayout.Parent = tabScroll
+
+    ConnectionManager:Add(tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+    end), "TabScrollContentSize")
+
+    -- Main Panel
+    local mainPanel = Instance.new("Frame")
+    mainPanel.Name = "MainPanel"
+    mainPanel.Size = UDim2.new(1, -220, 1, 0)
+    mainPanel.Position = UDim2.new(0, 220, 0, 0)
+    mainPanel.BackgroundTransparency = 1
+    mainPanel.ZIndex = 5
+    mainPanel.Parent = shell
+
+    local headerBar = Instance.new("Frame")
+    headerBar.Size = UDim2.new(1, 0, 0, 48)
+    headerBar.BackgroundTransparency = 1
+    headerBar.Parent = mainPanel
+
+    local mainTitle = Instance.new("TextLabel")
+    mainTitle.Size = UDim2.new(0, 300, 0, 22)
+    mainTitle.Position = UDim2.new(0, 20, 0, 8)
+    mainTitle.BackgroundTransparency = 1
+    mainTitle.Text = cfg.Title or "ตีไก่ไปกับพยอมบอย"
+    mainTitle.TextColor3 = COLORS.text
+    mainTitle.Font = Enum.Font.GothamBold
+    mainTitle.TextSize = 18
+    mainTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainTitle.Parent = headerBar
+
+    local mainSubTitle = Instance.new("TextLabel")
+    mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
+    mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
+    mainSubTitle.BackgroundTransparency = 1
+    mainSubTitle.Text = cfg.SubTitle or "Grow a Chicken Fighter • Obsidian Glass"
+    mainSubTitle.TextColor3 = COLORS.textMuted
+    mainSubTitle.Font = Enum.Font.Gotham
+    mainSubTitle.TextSize = 11
+    mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mainSubTitle.Parent = headerBar
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(28, 28)
+    closeBtn.Position = UDim2.new(1, -38, 0, 10)
+    closeBtn.BackgroundColor3 = COLORS.glass
+    closeBtn.BackgroundTransparency = 0.20
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = COLORS.textMuted
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.Parent = headerBar
+
+    ConnectionManager:Add(closeBtn.MouseButton1Click:Connect(function()
+        playClickSound()
+        shell.Visible = not shell.Visible
+    end), "CloseBtnClick")
+
+    -- Window Dragging
+    local mainDragging, mainDragInput, mainDragStart, mainStartPos
+    local function setupWindowDrag(dragHandle)
+        ConnectionManager:Add(dragHandle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                mainDragging = true
+                mainDragStart = input.Position
+                mainStartPos = shell.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        mainDragging = false
                     end
                 end)
             end
-        end
-        isProcessingQueue = false
-    end)
-end
+        end), "WindowDragBegan_" .. dragHandle.Name)
 
-local function queueRemoteCall(remote, args, delay, type)
-    table.insert(remoteCallQueue, {
-        remote = remote,
-        args = args or {},
-        delay = delay or 0.3,
-        type = type or "function"
-    })
-    processRemoteQueue()
-end
-
--- แทนที่การเรียก Remote ด้วย Queue
-local function safeInvokeWithQueue(remoteName, ...)
-    local remote = remotesFolder:FindFirstChild(remoteName)
-    if not remote then return end
-    local args = {...}
-    queueRemoteCall(remote, args, 0.3, "function")
-end
-
-local function safeFireWithQueue(remoteName, ...)
-    local remote = remotesFolder:FindFirstChild(remoteName)
-    if not remote then return end
-    local args = {...}
-    queueRemoteCall(remote, args, 0.3, "event")
-end
-
--- ===== 5. BYPASS CHICKEN MODE DETECTION =====
-local function bypassChickenMode()
-    pcall(function()
-        local chickenModeModule = nil
-        local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-        if ps then
-            local feat = ps:FindFirstChild("Features")
-            local chk = feat and feat:FindFirstChild("Chicken")
-            if chk and chk:FindFirstChild("ChickenMode") then
-                chickenModeModule = require(chk.ChickenMode)
+        ConnectionManager:Add(dragHandle.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                mainDragInput = input
             end
-        end
-        
-        if chickenModeModule then
-            -- เปลี่ยนฟังก์ชัน order ให้ไม่ต้องรอ Server ตอบ
-            if chickenModeModule.order then
-                local oldOrder = chickenModeModule.order
-                chickenModeModule.order = function(self, orderType)
-                    -- ส่งคำสั่งผ่าน Remote โดยตรง แทนที่จะผ่าน Module
-                    local remote = remotesFolder:FindFirstChild("SetChickenOrder")
-                    if remote and remote:IsA("RemoteEvent") then
-                        remote:FireServer(orderType)
-                    end
-                    return true
-                end
-                warn("[BZ] Bypassed ChickenMode.order")
-            end
-        end
-    end)
-end
-
-pcall(bypassChickenMode)
-
--- ===== 6. BYPASS GUI DETECTION =====
-local function bypassGuiDetection()
-    -- ปิดการตรวจจับว่า GUI ถูกสร้างโดยผู้เล่น
-    local CoreGui = game:GetService("CoreGui")
-    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    
-    if playerGui then
-        -- เปลี่ยน ZIndexBehavior เพื่อให้ GUI ดูเหมือนของระบบ
-        for _, gui in ipairs(playerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-                gui.ResetOnSpawn = false
-                gui.DisplayOrder = 99999
-            end
-        end
-    end
-end
-
-pcall(bypassGuiDetection)
-
--- ===== 7. BYPASS TELEMETRY & LOGGING =====
-local function bypassTelemetry()
-    -- ปิดการส่ง Telemetry ของเกม
-    local telemetryRemote = remotesFolder:FindFirstChild("Telemetry")
-    if telemetryRemote and telemetryRemote:IsA("RemoteEvent") then
-        local oldFire = telemetryRemote.FireServer
-        telemetryRemote.FireServer = function(self, ...)
-            -- ข้ามการส่ง Telemetry ทั้งหมด
-            return
-        end
-        warn("[BZ] Bypassed Telemetry Remote")
-    end
-    
-    -- ปิด Logging บางตัว
-    local logModule = replicatedStorage:FindFirstChild("Core"):FindFirstChild("Log")
-    if logModule then
-        local success, log = pcall(require, logModule)
-        if success and log then
-            if log.warn then
-                local oldWarn = log.warn
-                log.warn = function(...) return end
-            end
-            if log.error then
-                local oldError = log.error
-                log.error = function(...) return end
-            end
-            if log.info then
-                local oldInfo = log.info
-                log.info = function(...) return end
-            end
-            warn("[BZ] Bypassed Log Module")
-        end
-    end
-end
-
-pcall(bypassTelemetry)
-
--- ===== 8. BYPASS DATA CONTROLLER VALIDATION =====
-local function bypassDataController()
-    pcall(function()
-        local dataControllerModule = nil
-        local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-        if ps then
-            local core = ps:FindFirstChild("Core")
-            local data = core and core:FindFirstChild("Data")
-            if data and data:FindFirstChild("DataController") then
-                dataControllerModule = require(data.DataController)
-            end
-        end
-        
-        if dataControllerModule then
-            -- ข้ามการตรวจสอบเงิน
-            if dataControllerModule.money then
-                local oldMoney = dataControllerModule.money
-                dataControllerModule.money = function(self)
-                    local val = oldMoney(self)
-                    -- ถ้าเงินน้อยเกินไป ให้เพิ่มแบบลับๆ
-                    if val and val < 100 then
-                        return 100
-                    end
-                    return val
-                end
-                warn("[BZ] Bypassed DataController.money")
-            end
-            
-            -- ข้ามการตรวจสอบ Rebirth
-            if dataControllerModule.rebirth then
-                local oldRebirth = dataControllerModule.rebirth
-                dataControllerModule.rebirth = function(self)
-                    local data = oldRebirth(self)
-                    if data then
-                        data.count = data.count or 0
-                        -- ทำให้ Rebirth พร้อมตลอด
-                        data.ready = true
-                    end
-                    return data
-                end
-                warn("[BZ] Bypassed DataController.rebirth")
-            end
-        end
-    end)
-end
-
-pcall(bypassDataController)
-
--- ===== 9. BYPASS COOP VIEW VALIDATION =====
-local function bypassCoopView()
-    pcall(function()
-        local coopViewModule = nil
-        local features = replicatedStorage:FindFirstChild("Features")
-        local coop = features and features:FindFirstChild("Coop")
-        if coop and coop:FindFirstChild("CoopView") then
-            coopViewModule = require(coop.CoopView)
-        end
-        
-        if coopViewModule then
-            -- ทำให้ canUpgrade คืนค่า true เสมอ
-            if coopViewModule.canUpgrade then
-                local oldCanUpgrade = coopViewModule.canUpgrade
-                coopViewModule.canUpgrade = function(level)
-                    return true
-                end
-                warn("[BZ] Bypassed CoopView.canUpgrade")
-            end
-            
-            -- ทำให้ canBuyGenerator คืนค่า true เสมอ
-            if coopViewModule.canBuyGenerator then
-                local oldCanBuy = coopViewModule.canBuyGenerator
-                coopViewModule.canBuyGenerator = function(slots, count)
-                    return true
-                end
-                warn("[BZ] Bypassed CoopView.canBuyGenerator")
-            end
-            
-            -- ทำให้ canExpand คืนค่า true เสมอ
-            if coopViewModule.canExpand then
-                local oldCanExpand = coopViewModule.canExpand
-                coopViewModule.canExpand = function(slots)
-                    return true
-                end
-                warn("[BZ] Bypassed CoopView.canExpand")
-            end
-        end
-    end)
-end
-
-pcall(bypassCoopView)
-
--- ===== 10. FINAL BYPASS: DISABLE DETECTION EVENTS =====
-local function disableDetectionEvents()
-    -- ปิด Event ที่อาจใช้ตรวจจับ
-    local events = {
-        "ChickenMutated", "ChickenLeveledUp", "ChickenFx", "ChickenFxFast",
-        "MoneyGained", "BossDamage", "KrakenDamage", "GooseDamage",
-        "PitPlayerKo", "PitPlayerHit", "PitPlayerReset",
-        "TowerDefeat", "TowerFloorCleared", "TowerRunEnded", "TowerRivalLanded",
-        "ArenaBattleState", "ArenaBattleResult", "BattleEnded", "BattleStarted",
-        "ScrapDeposited", "RewardsRevised", "OfflineSettled"
-    }
-    
-    for _, eventName in ipairs(events) do
-        pcall(function()
-            local remote = remotesFolder:FindFirstChild(eventName)
-            if remote and remote:IsA("RemoteEvent") then
-                -- ปิดการรับ Event
-                local oldOnClient = remote.OnClientEvent
-                remote.OnClientEvent = function(self, ...)
-                    -- ข้ามการประมวลผล
-                    return
-                end
-                warn("[BZ] Disabled detection event:", eventName)
-            end
-        end)
-    end
-end
-
-pcall(disableDetectionEvents)
-
-print("[BZ] ✅ Advanced Bypass ทั้งหมดทำงานแล้ว! มึงใช้ฟาร์มได้แบบไม่โดนจับแล้วแหละ")
-
--- ======================================================================================
--- [[ PAYOMBOYZ HUB v5.1 - FIX CHARACTER NIL BYPASS ]]
--- แก้ไขปัญหา doHumanoidBypass ล้มเพราะ Character ยังไม่มี
--- ======================================================================================
-
-local _LocalPlayer = game:GetService("Players").LocalPlayer
-
-local function doHumanoidBypass()
-    -- รอจนกว่า Character โหลดจริง ๆ
-    local char = _LocalPlayer.Character
-    if not char then
-        char = _LocalPlayer.CharacterAdded:Wait()
-    end
-    
-    -- ถ้ายังไม่มี Character ให้รออีกที (กันพลาด)
-    if not char then
-        task.wait(0.5)
-        char = _LocalPlayer.Character
-        if not char then
-            print("[SAE] ยังไม่มี Character มึงรออีกแปป")
-            return
-        end
+        end), "WindowDragChanged_" .. dragHandle.Name)
     end
 
-    local origHum = char:FindFirstChildOfClass("Humanoid")
-    if not origHum then
-        origHum = char:WaitForChild("Humanoid", 10)
-        if not origHum then
-            print("[SAE] ไม่มี Humanoid ในตัวละครมึง")
-            return
+    ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
+        if input == mainDragInput and mainDragging then
+            local delta = input.Position - mainDragStart
+            shell.Position = UDim2.new(
+                mainStartPos.X.Scale,
+                mainStartPos.X.Offset + delta.X,
+                mainStartPos.Y.Scale,
+                mainStartPos.Y.Offset + delta.Y
+            )
         end
+    end), "GlobalWindowDragInput")
+
+    setupWindowDrag(headerBar)
+    setupWindowDrag(userPanel)
+
+    local pagesFolder = Instance.new("Frame")
+    pagesFolder.Name = "PagesFolder"
+    pagesFolder.Size = UDim2.new(1, -40, 1, -60)
+    pagesFolder.Position = UDim2.new(0, 20, 0, 52)
+    pagesFolder.BackgroundTransparency = 1
+    pagesFolder.Parent = mainPanel
+
+    local WindowObj = { Tabs = {}, CurrentTab = nil, shell = shell }
+
+    function WindowObj:AddTab(tabCfg)
+        local tabTitle = tabCfg.Title or "Tab"
+        local tabIndex = #WindowObj.Tabs + 1
+
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Size = UDim2.new(1, -6, 0, 40)
+        tabBtn.Position = UDim2.new(0, 3, 0, 0)
+        tabBtn.BackgroundColor3 = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(38, 16, 24)
+        tabBtn.BackgroundTransparency = (tabIndex == 1) and 0.15 or 0.22
+        tabBtn.Text = "    " .. tabTitle
+        tabBtn.TextColor3 = (tabIndex == 1) and Color3.fromRGB(255, 255, 255) or COLORS.textMuted
+        tabBtn.Font = Enum.Font.GothamBold
+        tabBtn.TextSize = 13
+        tabBtn.TextXAlignment = Enum.TextXAlignment.Left
+        tabBtn.AutoButtonColor = false
+        tabBtn.ZIndex = 12
+        tabBtn.Parent = tabScroll
+
+        local tbCorner = Instance.new("UICorner")
+        tbCorner.CornerRadius = UDim.new(0, 8)
+        tbCorner.Parent = tabBtn
+
+        local tbStroke = Instance.new("UIStroke")
+        tbStroke.Color = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(70, 30, 45)
+        tbStroke.Thickness = 1
+        tbStroke.Transparency = (tabIndex == 1) and 0 or 0.3
+        tbStroke.Parent = tabBtn
+
+        local activeIndicator = Instance.new("Frame")
+        activeIndicator.Size = UDim2.new(0, 4, 0, 20)
+        activeIndicator.Position = UDim2.new(0, 4, 0.5, -10)
+        activeIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        activeIndicator.BorderSizePixel = 0
+        activeIndicator.Visible = (tabIndex == 1)
+        activeIndicator.Parent = tabBtn
+
+        local pageScroll = Instance.new("ScrollingFrame")
+        pageScroll.Name = "Page_" .. tabTitle
+        pageScroll.Size = UDim2.fromScale(1, 1)
+        pageScroll.BackgroundTransparency = 1
+        pageScroll.ScrollBarThickness = 4
+        pageScroll.ScrollBarImageColor3 = COLORS.primary
+        pageScroll.Visible = (tabIndex == 1)
+        pageScroll.Parent = pagesFolder
+
+        local pageLayout = Instance.new("UIListLayout")
+        pageLayout.Padding = UDim.new(0, 8)
+        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        pageLayout.Parent = pageScroll
+
+        ConnectionManager:Add(pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+        end), "PageContentSize_" .. tabTitle)
+
+        local function activateTab()
+            playClickSound()
+            for _, t in ipairs(WindowObj.Tabs) do
+                t.btn.BackgroundColor3 = Color3.fromRGB(38, 16, 24)
+                t.btn.BackgroundTransparency = 0.22
+                t.btn.TextColor3 = COLORS.textMuted
+                t.stroke.Color = Color3.fromRGB(70, 30, 45)
+                t.stroke.Transparency = 0.3
+                if t.indicator then t.indicator.Visible = false end
+                t.page.Visible = false
+            end
+            tabBtn.BackgroundColor3 = COLORS.primary
+            tabBtn.BackgroundTransparency = 0.15
+            tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            tbStroke.Color = COLORS.primary
+            tbStroke.Transparency = 0
+            activeIndicator.Visible = true
+            pageScroll.Visible = true
+        end
+
+        ConnectionManager:Add(tabBtn.MouseButton1Click:Connect(activateTab), "TabBtnClick_" .. tabTitle)
+
+        local TabObj = {
+            btn = tabBtn,
+            stroke = tbStroke,
+            indicator = activeIndicator,
+            page = pageScroll,
+            Select = activateTab
+        }
+
+        function TabObj:AddToggle(id, tCfg)
+            local title = tCfg.Title or id
+            local desc = tCfg.Desc or tCfg.Description or ""
+            local defaultVal = (tCfg.Default ~= nil) and tCfg.Default or false
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 58 or 44)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 8)
+            fCorner.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, -70, 0, 22)
+            lbl.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 11)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            if desc ~= "" then
+                local dLbl = Instance.new("TextLabel")
+                dLbl.Size = UDim2.new(1, -70, 0, 20)
+                dLbl.Position = UDim2.new(0, 12, 0, 30)
+                dLbl.BackgroundTransparency = 1
+                dLbl.Text = desc
+                dLbl.TextColor3 = COLORS.textMuted
+                dLbl.Font = Enum.Font.Gotham
+                dLbl.TextSize = 11
+                dLbl.TextXAlignment = Enum.TextXAlignment.Left
+                dLbl.Parent = frame
+            end
+
+            local switch = Instance.new("Frame")
+            switch.Size = UDim2.fromOffset(46, 24)
+            switch.Position = UDim2.new(1, -56, 0.5, -12)
+            switch.BackgroundColor3 = defaultVal and COLORS.primary or COLORS.surface
+            switch.Parent = frame
+
+            local swCorner = Instance.new("UICorner")
+            swCorner.CornerRadius = UDim.new(1, 0)
+            swCorner.Parent = switch
+
+            local knob = Instance.new("Frame")
+            knob.Size = UDim2.fromOffset(20, 20)
+            knob.Position = defaultVal and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+            knob.BackgroundColor3 = COLORS.text
+            knob.BorderSizePixel = 0
+            knob.Parent = switch
+
+            local knCorner = Instance.new("UICorner")
+            knCorner.CornerRadius = UDim.new(1, 0)
+            knCorner.Parent = knob
+
+            local clickBtn = Instance.new("TextButton")
+            clickBtn.Size = UDim2.fromScale(1, 1)
+            clickBtn.BackgroundTransparency = 1
+            clickBtn.Text = ""
+            clickBtn.ZIndex = 10
+            clickBtn.Parent = frame
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = tCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local function updateToggle(val)
+                playClickSound()
+                OptionObj.Value = val
+                TweenService:Create(switch, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    BackgroundColor3 = val and COLORS.primary or COLORS.surface
+                }):Play()
+                TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                    Position = val and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
+                }):Play()
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) updateToggle(val == true) end
+
+            ConnectionManager:Add(clickBtn.MouseButton1Click:Connect(function() updateToggle(not OptionObj.Value) end), "Toggle_" .. id)
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        function TabObj:AddSlider(id, sCfg)
+            local title = sCfg.Title or id
+            local desc = sCfg.Desc or sCfg.Description or ""
+            local minVal = sCfg.Min or 0
+            local maxVal = sCfg.Max or 100
+            local defaultVal = sCfg.Default or minVal
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 68 or 52)
+            frame.BackgroundColor3 = COLORS.glassDeep
+            frame.BackgroundTransparency = 0.18
+            frame.BorderSizePixel = 0
+            frame.Parent = pageScroll
+
+            local fCorner = Instance.new("UICorner")
+            fCorner.CornerRadius = UDim.new(0, 10)
+            fCorner.Parent = frame
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.7, 0, 0, 22)
+            lbl.Position = UDim2.new(0, 12, 0, 6)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = title
+            lbl.TextColor3 = COLORS.text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 14
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = frame
+
+            local valLbl = Instance.new("TextLabel")
+            valLbl.Size = UDim2.new(0.3, -12, 0, 22)
+            valLbl.Position = UDim2.new(0.7, 0, 0, 6)
+            valLbl.BackgroundTransparency = 1
+            valLbl.Text = tostring(defaultVal)
+            valLbl.TextColor3 = COLORS.cyan
+            valLbl.Font = Enum.Font.GothamBold
+            valLbl.TextSize = 14
+            valLbl.TextXAlignment = Enum.TextXAlignment.Right
+            valLbl.Parent = frame
+
+            if desc ~= "" then
+                local dLbl = Instance.new("TextLabel")
+                dLbl.Size = UDim2.new(1, -24, 0, 18)
+                dLbl.Position = UDim2.new(0, 12, 0, 26)
+                dLbl.BackgroundTransparency = 1
+                dLbl.Text = desc
+                dLbl.TextColor3 = COLORS.textMuted
+                dLbl.Font = Enum.Font.Gotham
+                dLbl.TextSize = 11
+                dLbl.TextXAlignment = Enum.TextXAlignment.Left
+                dLbl.Parent = frame
+            end
+
+            local barY = desc ~= "" and 48 or 34
+            local bar = Instance.new("TextButton")
+            bar.Size = UDim2.new(1, -24, 0, 8)
+            bar.Position = UDim2.new(0, 12, 0, barY)
+            bar.BackgroundColor3 = COLORS.surface
+            bar.Text = ""
+            bar.Parent = frame
+
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(1, 0)
+            bCorner.Parent = bar
+
+            local fill = Instance.new("Frame")
+            local pct = (defaultVal - minVal) / math.max(maxVal - minVal, 1)
+            fill.Size = UDim2.new(pct, 0, 1, 0)
+            fill.BackgroundColor3 = COLORS.primary
+            fill.BorderSizePixel = 0
+            fill.Parent = bar
+
+            local flCorner = Instance.new("UICorner")
+            flCorner.CornerRadius = UDim.new(1, 0)
+            flCorner.Parent = fill
+
+            local OptionObj = {
+                Value = defaultVal,
+                Callback = sCfg.Callback or function() end,
+                ChangedCallbacks = {}
+            }
+
+            local function updateSlider(val)
+                val = math.clamp(val, minVal, maxVal)
+                if sCfg.Rounding then val = math.floor(val * (10 ^ sCfg.Rounding) + 0.5) / (10 ^ sCfg.Rounding) else val = math.floor(val + 0.5) end
+                OptionObj.Value = val
+                valLbl.Text = tostring(val)
+                local newPct = (val - minVal) / math.max(maxVal - minVal, 1)
+                fill.Size = UDim2.new(newPct, 0, 1, 0)
+                pcall(function() OptionObj.Callback(val) end)
+                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
+            end
+
+            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
+            function OptionObj:SetValue(val) updateSlider(val) end
+
+            local isDragging = false
+            ConnectionManager:Add(bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = true
+                    local relX = input.Position.X - bar.AbsolutePosition.X
+                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                end
+            end), "SliderInputBegan_" .. id)
+
+            ConnectionManager:Add(UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    isDragging = false
+                end
+            end), "SliderInputEnded_" .. id)
+
+            ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
+                if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local relX = input.Position.X - bar.AbsolutePosition.X
+                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
+                end
+            end), "SliderInputChanged_" .. id)
+
+            ObsidianGlassEngine.Options[id] = OptionObj
+            return OptionObj
+        end
+
+        table.insert(WindowObj.Tabs, TabObj)
+        return TabObj
     end
 
-    pcall(function()
-        local cloneHum = origHum:Clone()
-        cloneHum.WalkSpeed  = origHum.WalkSpeed
-        cloneHum.JumpPower  = origHum.JumpPower
-        cloneHum.MaxHealth  = origHum.MaxHealth
-        cloneHum.Health     = origHum.Health
-        cloneHum.AutoRotate = origHum.AutoRotate
-        cloneHum.Parent     = char
-
-        task.wait(0.05)
-
-        origHum:Destroy()
-
-        task.wait(0.05)
-
-        -- ตั้ง Camera Subject ให้ปลอดภัย
-        if workspace.CurrentCamera then
-            workspace.CurrentCamera.CameraSubject = cloneHum
-        end
-        print("[SAE] Humanoid bypass OK")
-    end)
+    return WindowObj
 end
 
--- เรียกครั้งแรกโดยรอให้แน่ใจว่ามี Character
-if _LocalPlayer.Character then
-    doHumanoidBypass()
-else
-    _LocalPlayer.CharacterAdded:Wait()
-    doHumanoidBypass()
-end
+-----------------------------------------------------------------------------------------
+-- 🎛️ CATEGORIZED THAI UI CONSTRUCTION (EXACT 1-TO-1 LOGIC WITH message (9).txt)
+-----------------------------------------------------------------------------------------
 
--- เชื่อมต่อตอนเกิดใหม่
-_LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)  -- เพิ่มดีเลย์ให้ตัวละครโหลดครบ
-    doHumanoidBypass()
-end)
+local Window = ObsidianGlassEngine:CreateWindow({
+    Title = "ตีไก่ไปกับพยอมบอย",
+    SubTitle = "Grow a Chicken Fighter • Obsidian Glass",
+})
 
--- ===== ส่วน Anti-Detection Hook (ปรับให้ไม่พังถ้าไม่มี getgc) =====
-pcall(function()
-    local nextFunction = next
-    local secondaryGetgc, alternateGetgc = getgc()
-    repeat
-        local flag = false
-        while true do
-            local getgcResult
-            alternateGetgc, getgcResult = nextFunction(secondaryGetgc, alternateGetgc)
-            if not alternateGetgc then
-                break
-            end
-            if type(getgcResult) == "function" and islclosure(getgcResult) then
-                local secondaryGetconstants = getconstants(getgcResult)
-                if type(secondaryGetconstants) == "table" then
-                    local nextFunction2 = next
-                    local result
-                    repeat
-                        local flagResult
-                        result, flagResult = nextFunction2(secondaryGetconstants, result)
-                        if not result then
-                            flag = true
-                        end
-                        if flag then
+local Tabs = {
+    Farm = Window:AddTab({ Title = "🥚 ฟาร์มไก่" }),
+    Tower = Window:AddTab({ Title = "🏰 ดันหอคอย & อีเวนต์" }),
+    Upgrade = Window:AddTab({ Title = "⚡ อัปเกรด & รีเบิร์ธ" })
+}
+
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 1: 🥚 ฟาร์มไก่ (CHICKEN FARM)
+-----------------------------------------------------------------------------------------
+
+-- 1. Auto Collect Egg
+local AutoCollectEgg = Tabs.Farm:AddToggle("AutoCollectEgg", {
+    Title = "เก็บไข่ไก่อัตโนมัติ (Auto Collect Egg)",
+    Description = "เดินเก็บไข่ไก่ภายในเล้าตามระยะทางที่ใกล้ที่สุด",
+    Default = false
+})
+
+AutoCollectEgg:OnChanged(function(Value)
+    getgenv().autoCollectEggEnabled = Value
+
+    if Value and not getgenv().autoCollectEggLoopActive then
+        getgenv().autoCollectEggLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoCollectEggEnabled do
+                local playerCharacter = localPlayer.Character
+                local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
+                local rootPart = playerCharacter and playerCharacter:FindFirstChild("HumanoidRootPart")
+
+                if playerHumanoid and rootPart and playerHumanoid.Health > 0 then
+                    local ownedEggPositions = getOwnedEggPositions()
+
+                    table.sort(ownedEggPositions, function(positionA, positionB)
+                        return (positionA - rootPart.Position).Magnitude < (positionB - rootPart.Position).Magnitude
+                    end)
+
+                    for _, eggPosition in ipairs(ownedEggPositions) do
+                        if not getgenv().autoCollectEggEnabled then
                             break
                         end
-                    until flagResult == "X-14"
-                    if not flag then
-                        local callback
-                        callback = hookfunction(getgcResult, function(...)
-                            local getstack = debug.getstack(1)
-                            local nextFunction3 = next
-                            local flag2
-                            while true do
-                                local flagResult2
-                                flag2, flagResult2 = nextFunction3(getstack, flag2)
-                                if not flag2 then
-                                    break
-                                end
-                                if flagResult2 == "X-14" then
-                                    debug.setstack(Level, flag2, nil)
-                                end
-                            end
-                            return callback(...)
-                        end)
+
+                        walkToEgg(playerHumanoid, eggPosition)
                     end
                 end
-            end
-            if flag then
-                break
-            end
-        end
-    until not flag
 
-    local detectionFunction = filtergc("function", { Constants = { "gmatch", "GetFullName" } }, true)
-    if detectionFunction then
-        for _, upvalueValue in debug.getupvalues(detectionFunction) do
-            if typeof(upvalueValue) == "table" then
-                setrawmetatable(upvalueValue, {
-                    __newindex = function(_, key, newValue)
-                        warn(("Blocked detection %* %*"):format(key, newValue))
+                task.wait(1)
+            end
+
+            getgenv().autoCollectEggLoopActive = false
+        end)
+    end
+end)
+
+-- 2. Auto Scrap
+local AutoScrap = Tabs.Farm:AddToggle("AutoScrap", {
+    Title = "เก็บเศษเหล็กอัตโนมัติ (Auto Scrap)",
+    Description = "เก็บเศษเหล็กจาก Pit และไปส่งที่เครื่อง Recycler เมื่อคลังเต็ม",
+    Default = false
+})
+
+AutoScrap:OnChanged(function(Value)
+    getgenv().autoScrapEnabled = Value
+
+    if Value then
+        startScrapNoclip()
+    else
+        stopScrapNoclip()
+    end
+
+    if Value and not getgenv().autoScrapLoopActive then
+        getgenv().autoScrapLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoScrapEnabled do
+                pcall(function()
+                    if getScrapStackCount() > 6 then
+                        depositAtRecycler()
+                    else
+                        collectNearbyScrap()
                     end
-                })
+                end)
+
+                task.wait(1)
             end
-        end
-    end
-    print("Bypassed")
-end)
 
--- ===== เพิ่มตัวเช็คสถานะให้มึงดูง่าย =====
-game:GetService("RunService").Heartbeat:Connect(function()
-    if not _LocalPlayer.Character then
-        print("[SAE] รอ Character โหลด...")
+            getgenv().autoScrapLoopActive = false
+        end)
     end
 end)
 
-print("[SAE] ✅ Bypass พร้อมใช้งานแล้ว มึงฟาร์มไก่ให้รวยไปเลย!")
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 2: 🏰 ดันหอคอย & อีเวนต์ (TOWER & CHAOS EVENT)
+-----------------------------------------------------------------------------------------
+
+-- 3. Auto Chaos Event
+local AutoChaos = Tabs.Tower:AddToggle("AutoChaos", {
+    Title = "เข้าร่วม Chaos Event อัตโนมัติ (Auto Chaos Event)",
+    Description = "เมื่ออีเวนต์เปิด จะถอนตัวจากหอคอย (ถ้าอยู่ใน Tower) แล้วส่งไก่เข้า Chaos Arena",
+    Default = false
+})
+
+AutoChaos:OnChanged(function(Value)
+    getgenv().autoChaosEnabled = Value
+
+    if Value and not getgenv().autoChaosLoopActive then
+        getgenv().autoChaosLoopActive = true
+
+        task.spawn(function()
+            local lastOrderTime = 0
+
+            while getgenv().autoChaosEnabled do
+                pcall(function()
+                    if isChaosEventLive() then
+                        -- Step 1: ถ้าไก่อีกตัวหรือตัวละครอยู่ใน Tower -> ถอนตัวออกมาก่อน
+                        if isTowerRunActive() then
+                            retreatTower()
+                            task.wait(3)
+                        end
+
+                        -- Step 2: ส่งคำสั่งไก่ลง Chaos Event Arena ทุกๆ 4 วินาที (รองรับกรณีไก่ตาย/เกิดใหม่)
+                        if os.clock() - lastOrderTime >= 4 then
+                            lastOrderTime = os.clock()
+                            orderChaos()
+                        end
+                    else
+                        lastOrderTime = 0
+                    end
+                end)
+
+                task.wait(1.5)
+            end
+
+            getgenv().autoChaosLoopActive = false
+        end)
+    end
+end)
+
+-- 4. Auto Tower
+local AutoTower = Tabs.Tower:AddToggle("AutoTower", {
+    Title = "ท้าทายหอคอยอัตโนมัติ (Auto Tower)",
+    Description = "เข้าดันหอคอยและปฏิเสธข้อเสนอต่อเวลาให้อัตโนมัติ (จะหยุดชั่วคราวเมื่อ Chaos LIVE)",
+    Default = false
+})
+
+AutoTower:OnChanged(function(Value)
+    getgenv().autoTowerEnabled = Value
+
+    if Value and remotesModule then
+        pcall(hookTowerContinueOffer)
+    end
+
+    if Value and not getgenv().autoTowerLoopActive and remotesModule then
+        getgenv().autoTowerLoopActive = true
+
+        task.spawn(function()
+            local wasWaitingForRebirth = false
+
+            while getgenv().autoTowerEnabled do
+                local rebirthPending = false
+
+                if getgenv().autoRebirthEnabled and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
+                    local readySuccess, isReady = pcall(isRebirthReady)
+
+                    rebirthPending = readySuccess and isReady == true
+                end
+
+                local chaosLive = getgenv().autoChaosEnabled and isChaosEventLive()
+
+                if chaosLive then
+                    -- ถ้าระบบ Chaos เปิดอยู่ และ Event กำลัง LIVE -> ให้รอ ห้ามเริ่ม Tower รอบใหม่
+                    task.wait(1.5)
+                elseif rebirthPending then
+                    wasWaitingForRebirth = true
+
+                    task.wait(1)
+                elseif wasWaitingForRebirth then
+                    wasWaitingForRebirth = false
+
+                    task.wait(3)
+                elseif isTowerRunActive() then
+                    task.wait(1)
+                else
+                    local towerDelay = tonumber(getgenv().towerDelaySeconds) or 5
+
+                    if towerDelay < 1 then
+                        towerDelay = 1
+                    end
+
+                    if towerDelay > 60 then
+                        towerDelay = 60
+                    end
+
+                    task.wait(towerDelay)
+
+                    -- ตรวจสอบก่อนกดเริ่ม Tower อีกครั้งว่าไม่ได้ติด Chaos LIVE
+                    if getgenv().autoTowerEnabled and not isTowerRunActive() and not (getgenv().autoChaosEnabled and isChaosEventLive()) then
+                        pcall(startTowerRun)
+                    end
+
+                    task.wait(1)
+                end
+            end
+
+            getgenv().autoTowerLoopActive = false
+        end)
+    end
+end)
+
+-- 5. Last Tower
+local LastTower = Tabs.Tower:AddToggle("LastTower", {
+    Title = "เริ่มจากชั้นสูงสุด (Last Floor Elevator)",
+    Description = "ใช้ลิฟต์วาร์ปไปยังชั้นสูงสุดที่เคยผ่านก่อนเริ่มดันหอคอย",
+    Default = false
+})
+
+LastTower:OnChanged(function(Value)
+    getgenv().autoTowerLastFloorEnabled = Value
+end)
+
+-- 6. Delay Tower
+local DelayTower = Tabs.Tower:AddSlider("DelayTower", {
+    Title = "ดีเลย์เข้าหอคอย",
+    Description = "ระยะเวลารอระหว่างการลงดันหอคอยแต่ละรอบ (วินาที)",
+    Default = 5,
+    Min = 1,
+    Max = 60,
+    Rounding = 0,
+    Callback = function(Value)
+        getgenv().towerDelaySeconds = Value
+    end
+})
+
+DelayTower:OnChanged(function(Value)
+    getgenv().towerDelaySeconds = Value
+end)
+
+-----------------------------------------------------------------------------------------
+-- 📌 TAB 3: ⚡ อัปเกรด & เกิดใหม่ (UPGRADE & REBIRTH)
+-----------------------------------------------------------------------------------------
+
+-- 7. Auto Rebirth
+local AutoRebirth = Tabs.Upgrade:AddToggle("AutoRebirth", {
+    Title = "เกิดใหม่อัตโนมัติ (Auto Rebirth)",
+    Description = "ทำการ Rebirth ทันทีเมื่อเงื่อนไขและเลเวลพร้อม",
+    Default = false
+})
+
+AutoRebirth:OnChanged(function(Value)
+    getgenv().autoRebirthEnabled = Value
+
+    if Value and not getgenv().autoRebirthLoopActive and remotesModule and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
+        getgenv().autoRebirthLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoRebirthEnabled do
+                local readySuccess, isReady = pcall(isRebirthReady)
+
+                if readySuccess and isReady == true then
+                    if isTowerRunActive() then
+                        task.wait(1)
+                    else
+                        pcall(requestRebirth)
+                        task.wait(1)
+                    end
+                else
+                    task.wait(1)
+                end
+            end
+
+            getgenv().autoRebirthLoopActive = false
+        end)
+    end
+end)
+
+-- 8. Auto Upgrade Feeder
+local AutoUpgradeFeeder = Tabs.Upgrade:AddToggle("AutoUpgradeFeeder", {
+    Title = "อัปเกรดเครื่องให้อาหาร (Upgrade Feeder)",
+    Description = "อัปเกรดระดับเลเวลของเครื่องให้อาหารไก่อัตโนมัติ",
+    Default = false
+})
+
+AutoUpgradeFeeder:OnChanged(function(Value)
+    getgenv().autoUpgradeFeederEnabled = Value
+
+    if Value and not getgenv().autoUpgradeFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
+        getgenv().autoUpgradeFeederLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoUpgradeFeederEnabled do
+                pcall(upgradeFeeders)
+
+                task.wait(1)
+            end
+
+            getgenv().autoUpgradeFeederLoopActive = false
+        end)
+    end
+end)
+
+-- 9. Auto Buy Feeder
+local AutoBuyFeeder = Tabs.Upgrade:AddToggle("AutoBuyFeeder", {
+    Title = "ซื้อเครื่องให้อาหารเพิ่ม (Buy Feeder)",
+    Description = "ซื้อเครื่องให้อาหารไก่เพิ่มในช่องเล้าที่ยังว่างอยู่",
+    Default = false
+})
+
+AutoBuyFeeder:OnChanged(function(Value)
+    getgenv().autoBuyFeederEnabled = Value
+
+    if Value and not getgenv().autoBuyFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
+        getgenv().autoBuyFeederLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoBuyFeederEnabled do
+                pcall(buyFeeder)
+
+                task.wait(1)
+            end
+
+            getgenv().autoBuyFeederLoopActive = false
+        end)
+    end
+end)
+
+-- 10. Auto Upgrade Coop
+local AutoUpgradeCoop = Tabs.Upgrade:AddToggle("AutoUpgradeCoop", {
+    Title = "ขยายขนาดเล้าไก่ (Expand Coop)",
+    Description = "อัปเกรดขยายพื้นที่เล้าไก่อัตโนมัติเมื่อเงินพร้อม",
+    Default = false
+})
+
+AutoUpgradeCoop:OnChanged(function(Value)
+    getgenv().autoUpgradeCoopEnabled = Value
+
+    if Value and not getgenv().autoUpgradeCoopLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
+        getgenv().autoUpgradeCoopLoopActive = true
+
+        task.spawn(function()
+            while getgenv().autoUpgradeCoopEnabled do
+                pcall(upgradeCoop)
+
+                task.wait(5)
+            end
+
+            getgenv().autoUpgradeCoopLoopActive = false
+        end)
+    end
+end)
+
+ObsidianGlassEngine:Notify({
+    Title = "ตีไก่ไปกับพยอมบอย",
+    Content = "ติดตั้งระบบ Auto Chaos Event (พร้อม Retreat หอคอย) เรียบร้อย",
+    Duration = 4
+})
