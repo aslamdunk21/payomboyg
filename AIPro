@@ -6,7 +6,7 @@
 -- 🔒 AUTHENTICATION & DIRECT EXECUTION GUARD
 -- บังคับเช็คคีย์จาก Loader (start.txt บน Github) ก่อนเท่านั้น ไม่สามารถเข้าใช้งานจาก AIsrc.lua โดยตรงได้
 -----------------------------------------------------------------------------------------
-local START_LOADER_URL = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/refs/heads/main/loader"
+local START_LOADER_URL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/StartAI"
 local SAVED_KEY_FILE = "PayomboyZ_AI_Hub_Key.txt"
 local SPECIAL_KEY_VVIP = "PAYOMVVIP280342PBGZ19"
 
