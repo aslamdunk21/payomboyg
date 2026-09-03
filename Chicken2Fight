@@ -1,2215 +1,2571 @@
--- ======================================================================================
--- [[ ตีไก่ไปกับพยอมบอย - Obsidian Glass UI (Thai Categorized) & Message (9) Core ]]
--- Exact logic, execution loops, and timing parity with message (9).txt Baseline
--- Added: Auto Chaos Event Automation with Smart Tower Retreat & Re-entry Logic
--- ======================================================================================
+-- ==============================================================================
+-- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
+-- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
+-- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
+-- ==============================================================================
 
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local SoundService = game:GetService("SoundService")
-local HttpService = game:GetService("HttpService")
-local replicatedStorage = game:GetService("ReplicatedStorage")
-local playersService = Players
-local localPlayer = LocalPlayer
-local runService = RunService
-
------------------------------------------------------------------------------------------
--- 🧹 CONNECTION MANAGER & UNLOAD HANDLER
------------------------------------------------------------------------------------------
-
-local ConnectionManager = { Connections = {} }
-
-function ConnectionManager:Add(conn, name)
-    if conn and typeof(conn) == "RBXScriptConnection" then
-        table.insert(self.Connections, { Connection = conn, Name = name or "Unnamed" })
-    end
-    return conn
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
 
-function ConnectionManager:Cleanup()
-    for _, item in ipairs(self.Connections) do
-        if item.Connection and item.Connection.Connected then
-            pcall(function() item.Connection:Disconnect() end)
-        end
-    end
-    self.Connections = {}
-end
-
-local function getParentGui()
-    if typeof(gethui) == "function" then
-        local ok, res = pcall(gethui)
-        if ok and res and typeof(res) == "Instance" then return res end
-    end
-    if typeof(cloneref) == "function" then
-        local ok, cg = pcall(function() return cloneref(game:GetService("CoreGui")) end)
-        if ok and cg then return cg end
-    end
-    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then return cg end
-    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
-end
-
-getgenv().UnloadPayomboyZ = function()
-    getgenv().autoCollectEggEnabled = false
-    getgenv().autoCollectEggLoopActive = false
-    getgenv().autoRebirthEnabled = false
-    getgenv().autoRebirthLoopActive = false
-    getgenv().autoUpgradeFeederEnabled = false
-    getgenv().autoUpgradeFeederLoopActive = false
-    getgenv().autoTowerEnabled = false
-    getgenv().autoTowerLoopActive = false
-    getgenv().autoChaosEnabled = false
-    getgenv().autoChaosLoopActive = false
-    getgenv().autoScrapEnabled = false
-    getgenv().autoScrapLoopActive = false
-    getgenv().autoUpgradeCoopEnabled = false
-    getgenv().autoUpgradeCoopLoopActive = false
-    getgenv().autoBuyFeederEnabled = false
-    getgenv().autoBuyFeederLoopActive = false
-    getgenv().autoUpgradeRecyclerEnabled = false
-    getgenv().autoUpgradeRecyclerLoopActive = false
-
-    if getgenv().autoScrapNoclipConnection then
-        getgenv().autoScrapNoclipConnection:Disconnect()
-        getgenv().autoScrapNoclipConnection = nil
-    end
-
-    ConnectionManager:Cleanup()
-
-    local parentGui = getParentGui()
-    pcall(function()
-        if parentGui and parentGui:FindFirstChild("ObsidianGlass2_UI") then
-            parentGui.ObsidianGlass2_UI:Destroy()
-        end
-        if parentGui and parentGui:FindFirstChild("ObsidianGlass_NotifHolder") then
-            parentGui.ObsidianGlass_NotifHolder:Destroy()
-        end
-        if parentGui and parentGui:FindFirstChild("KaitunDashboardHUD") then
-            parentGui.KaitunDashboardHUD:Destroy()
-        end
-    end)
-end
-
------------------------------------------------------------------------------------------
--- 🌐 GAME API & GLOBAL STATE (EXACT MATCH FROM message (9).txt + Auto Chaos)
------------------------------------------------------------------------------------------
-
-getgenv().autoCollectEggEnabled = false
-getgenv().autoCollectEggLoopActive = false
-getgenv().autoRebirthEnabled = false
-getgenv().autoRebirthLoopActive = false
-getgenv().autoUpgradeFeederEnabled = false
-getgenv().autoUpgradeFeederLoopActive = false
-getgenv().autoTowerEnabled = false
-getgenv().autoTowerLoopActive = false
-getgenv().autoTowerOfferHooked = false
-getgenv().autoTowerLastFloorEnabled = false
-getgenv().towerDelaySeconds = 5
-getgenv().autoChaosEnabled = false
-getgenv().autoChaosLoopActive = false
-getgenv().autoScrapEnabled = false
-getgenv().autoScrapLoopActive = false
-getgenv().autoScrapNoclipConnection = nil
-getgenv().autoUpgradeCoopEnabled = false
-getgenv().autoUpgradeCoopLoopActive = false
-getgenv().autoBuyFeederEnabled = false
-getgenv().autoBuyFeederLoopActive = false
-
-local remotesModule = nil
-local rebirthBonusModule = nil
-local rebirthExperimentModule = nil
-local dataControllerModule = nil
-local coopViewModule = nil
-local dataServiceModule = nil
-local chickenModeModule = nil
-
-pcall(function()
-    remotesModule = require(replicatedStorage:WaitForChild("Core", 10):WaitForChild("Remotes", 10))
-end)
-
-pcall(function()
-    local progressionFolder = replicatedStorage:WaitForChild("Core", 10):WaitForChild("Progression", 10)
-
-    rebirthBonusModule = require(progressionFolder:WaitForChild("RebirthBonus", 10))
-    rebirthExperimentModule = require(progressionFolder:WaitForChild("RebirthExperiment", 10))
-end)
-
-pcall(function()
-    dataControllerModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Core", 10):WaitForChild("Data", 10):WaitForChild("DataController", 10))
-end)
-
-pcall(function()
-    coopViewModule = require(replicatedStorage:WaitForChild("Features", 10):WaitForChild("Coop", 10):WaitForChild("CoopView", 10))
-end)
-
-pcall(function()
-    dataServiceModule = require(replicatedStorage:WaitForChild("Packages", 10):WaitForChild("DataService", 10))
-end)
-
-pcall(function()
-    chickenModeModule = require(localPlayer:WaitForChild("PlayerScripts", 10):WaitForChild("Features", 10):WaitForChild("Chicken", 10):WaitForChild("ChickenMode", 10))
-end)
-
------------------------------------------------------------------------------------------
--- 🧠 AUTOMATION FUNCTIONS (EXACT MATCH FROM message (9).txt + Chaos Engine)
------------------------------------------------------------------------------------------
-
-local function getEggOwner(eggInstance)
-    local ownerValue = eggInstance:GetAttribute("owner")
-
-    if ownerValue ~= nil then
-        return ownerValue
-    end
-
-    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
-
-    if eggPart then
-        return eggPart:GetAttribute("owner")
-    end
-
-    return nil
-end
-
-local function getEggPosition(eggInstance)
-    if eggInstance:IsA("BasePart") then
-        return eggInstance.Position
-    end
-
-    if eggInstance:IsA("Model") then
-        return eggInstance:GetPivot().Position
-    end
-
-    local eggPart = eggInstance:FindFirstChildWhichIsA("BasePart", true)
-
-    if eggPart then
-        return eggPart.Position
-    end
-
-    return nil
-end
-
-local function getOwnedEggPositions()
-    local ownedEggPositions = {}
-    local nestEggsFolder = workspace:FindFirstChild("NestEggs")
-
-    if not nestEggsFolder then
-        return ownedEggPositions
-    end
-
-    for _, eggInstance in ipairs(nestEggsFolder:GetChildren()) do
-        local success, ownerValue = pcall(getEggOwner, eggInstance)
-
-        if success and (ownerValue == localPlayer.UserId or ownerValue == tostring(localPlayer.UserId)) then
-            local positionSuccess, eggPosition = pcall(getEggPosition, eggInstance)
-
-            if positionSuccess and eggPosition then
-                table.insert(ownedEggPositions, eggPosition)
-            end
-        end
-    end
-
-    return ownedEggPositions
-end
-
-local function walkToEgg(playerHumanoid, eggPosition)
-    local moveStartTime = os.clock()
-
-    playerHumanoid:MoveTo(eggPosition)
-
-    while getgenv().autoCollectEggEnabled do
-        local currentCharacter = localPlayer.Character
-        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-
-        if not currentRootPart then
-            return
-        end
-
-        if (currentRootPart.Position - eggPosition).Magnitude <= 5 then
-            return
-        end
-
-        if os.clock() - moveStartTime >= 8 then
-            return
-        end
-
-        task.wait(0.15)
-    end
-end
-
-local function isRebirthReady()
-    local rebirthData = dataControllerModule.rebirth()
-    local rebirthCount = rebirthData and rebirthData.count or 0
-    local towerBestFloor = dataControllerModule.towerBest() or 0
-    local usesV2Formula = rebirthExperimentModule.armOf(localPlayer) == rebirthExperimentModule.VARIANT
-
-    return rebirthBonusModule.ready(towerBestFloor, rebirthCount, usesV2Formula)
-end
-
-local function requestRebirth()
-    local result = remotesModule.invoke(remotesModule.defs.Rebirth)
-
-    return typeof(result) == "table" and result.ok == true
-end
-
-local function upgradeRecycler()
-    local ok, result = pcall(function()
-        if remotesModule and remotesModule.defs and remotesModule.defs.UpgradeRecycler then
-            return remotesModule.invoke(remotesModule.defs.UpgradeRecycler)
-        end
-        local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
-        if remotesFolder then
-            local remote = remotesFolder:FindFirstChild("UpgradeRecycler") or remotesFolder:WaitForChild("UpgradeRecycler", 2)
-            if remote then
-                if remote:IsA("RemoteFunction") then
-                    return remote:InvokeServer()
-                elseif remote:IsA("RemoteEvent") then
-                    remote:FireServer()
-                    return true
-                end
-            end
-        end
-        return game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("UpgradeRecycler"):InvokeServer()
-    end)
-    return ok and (result == true or (typeof(result) == "table" and result.ok == true))
-end
-
-local function getCurrentMoney()
-    local moneyObject = dataControllerModule.money()
-
-    if moneyObject and moneyObject.toNumber then
-        return moneyObject:toNumber()
-    end
-
-    return 0
-end
-
-local function getCoopData()
-    local dataClient = dataServiceModule.client
-
-    return dataClient and dataClient:get({ "coop" })
-end
-
-local function upgradeFeeders()
-    local coopData = getCoopData()
-
-    if not coopData or type(coopData.generators) ~= "table" then
-        return
-    end
-
-    for _, generatorData in ipairs(coopData.generators) do
-        if not getgenv().autoUpgradeFeederEnabled then
-            return
-        end
-
-        local feederSlot = tonumber(generatorData.slot)
-        local feederLevel = tonumber(generatorData.level)
-
-        if feederSlot and feederLevel and coopViewModule.canUpgrade(feederLevel) then
-            local upgradeCost = coopViewModule.upgradeCost(feederLevel)
-
-            if getCurrentMoney() >= upgradeCost then
-                local result = remotesModule.invoke(remotesModule.defs.UpgradeGenerator, feederSlot)
-
-                if typeof(result) == "table" and result.ok then
-                    task.wait(0.25)
-                end
-            end
-        end
-    end
-end
-
-local function isTowerRunActive()
-    if localPlayer:GetAttribute("TowerActive") == true or localPlayer:GetAttribute("InTower") == true or localPlayer:GetAttribute("TowerFloor") ~= nil then
-        return true
-    end
-    local char = localPlayer.Character
-    if char and char:GetAttribute("TowerActive") == true then
-        return true
-    end
-    return false
-end
-
-local function retreatTower()
-    pcall(function()
-        if remotesModule and remotesModule.defs and remotesModule.defs.TowerSurrender then
-            pcall(function() remotesModule.invoke(remotesModule.defs.TowerSurrender) end)
-        end
-    end)
-    pcall(function()
-        local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3)
-        if remotesFolder then
-            local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
-            if towerSurrender then
-                if towerSurrender:IsA("RemoteFunction") then
-                    towerSurrender:InvokeServer()
-                elseif towerSurrender:IsA("RemoteEvent") then
-                    towerSurrender:FireServer()
-                end
-            end
-        end
-    end)
-    pcall(function()
-        game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3):WaitForChild("TowerSurrender", 3):InvokeServer()
-    end)
-end
-
-local function isChaosEventLive()
-    local eventCardAnchor = workspace:FindFirstChild("EventCardAnchor")
-    local card = eventCardAnchor and eventCardAnchor:FindFirstChild("EventCard")
-    if card then
-        for _, child in ipairs(card:GetChildren()) do
-            local nameLower = string.lower(child.Name)
-            if string.find(nameLower, "live") then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function orderChaos()
-    if chickenModeModule then
-        pcall(function() chickenModeModule.order("chaos") end)
-    end
-    pcall(function()
-        if remotesModule and remotesModule.defs and remotesModule.defs.SetChickenOrder then
-            remotesModule.fire(remotesModule.defs.SetChickenOrder, "chaos")
-        else
-            local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 5)
-            if remotesFolder then
-                local setOrder = remotesFolder:FindFirstChild("SetChickenOrder")
-                if setOrder and setOrder:IsA("RemoteEvent") then
-                    setOrder:FireServer("chaos")
-                end
-            end
-        end
-    end)
-end
-
-local function startTowerRun()
-    if getgenv().autoTowerLastFloorEnabled and dataControllerModule then
-        local lastTowerFloor = tonumber(dataControllerModule.towerBest()) or 0
-
-        if lastTowerFloor > 0 then
-            remotesModule.invoke(remotesModule.defs.TowerElevator, lastTowerFloor)
-        end
-    end
-
-    if chickenModeModule then
-        chickenModeModule.order("tower")
-    end
-
-    remotesModule.invoke(remotesModule.defs.TowerStart)
-end
-
-local function hookTowerContinueOffer()
-    if getgenv().autoTowerOfferHooked then
-        return
-    end
-
-    getgenv().autoTowerOfferHooked = true
-
-    remotesModule.onClient(remotesModule.defs.TowerContinueOffer, function(offerData)
-        if getgenv().autoTowerEnabled and typeof(offerData) == "table" and offerData.open == true then
-            pcall(function()
-                remotesModule.fire(remotesModule.defs.TowerContinueDecline)
-            end)
-        end
-    end)
-end
-
-local function getScrapStackCount()
-    local playerCharacter = localPlayer.Character
-
-    if not playerCharacter then
-        return 0
-    end
-
-    local playerHead = playerCharacter:FindFirstChild("Head")
-
-    if not playerHead then
-        return 0
-    end
-
-    local scrapStack = playerHead:FindFirstChild("ScrapStack")
-
-    if not scrapStack then
-        return 0
-    end
-
-    local stackCount = 0
-
-    for _, stackPart in ipairs(scrapStack:GetDescendants()) do
-        if stackPart:IsA("BasePart") then
-            stackCount = stackCount + 1
-        end
-    end
-
-    return stackCount
-end
-
-local function getOwnedRecycler()
-    local recyclersFolder = workspace:FindFirstChild("Recyclers")
-
-    if not recyclersFolder then
-        return nil
-    end
-
-    local plotNumber = localPlayer:GetAttribute("Plot")
-
-    if plotNumber then
-        local recyclerModel = recyclersFolder:FindFirstChild("Recycler" .. tostring(plotNumber))
-
-        if recyclerModel then
-            return recyclerModel
-        end
-    end
-
-    for _, recyclerModel in ipairs(recyclersFolder:GetChildren()) do
-        local success, recyclerOwner = pcall(function()
-            return recyclerModel:GetAttribute("owner")
-        end)
-
-        if success and (recyclerOwner == localPlayer.UserId or recyclerOwner == tostring(localPlayer.UserId)) then
-            return recyclerModel
-        end
-    end
-
-    return nil
-end
-
-local function startScrapNoclip()
-    if getgenv().autoScrapNoclipConnection then
-        return
-    end
-
-    getgenv().autoScrapNoclipConnection = runService.Stepped:Connect(function()
-        local playerCharacter = localPlayer.Character
-
-        if not playerCharacter then
-            return
-        end
-
-        for _, characterPart in ipairs(playerCharacter:GetDescendants()) do
-            if characterPart:IsA("BasePart") and characterPart.CanCollide then
-                characterPart.CanCollide = false
-            end
-        end
-    end)
-end
-
-local function stopScrapNoclip()
-    if getgenv().autoScrapNoclipConnection then
-        getgenv().autoScrapNoclipConnection:Disconnect()
-
-        getgenv().autoScrapNoclipConnection = nil
-    end
-end
-
-local function walkToPosition(playerHumanoid, targetPosition, breakCondition)
-    local moveStartTime = os.clock()
-    local lastMoveRequest = 0
-
-    while getgenv().autoScrapEnabled do
-        if breakCondition and breakCondition() then return end
-
-        local currentCharacter = localPlayer.Character
-        local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
-        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-
-        if not currentHumanoid or not currentRootPart then
-            return
-        end
-
-        if (currentRootPart.Position - targetPosition).Magnitude <= 4.5 then
-            return
-        end
-
-        if os.clock() - lastMoveRequest >= 0.25 then
-            currentHumanoid:MoveTo(targetPosition)
-            lastMoveRequest = os.clock()
-        end
-
-        if os.clock() - moveStartTime >= 10 then
-            return
-        end
-
-        task.wait(0.05)
-    end
-end
-
-local function depositAtRecycler()
-    local recyclerModel = getOwnedRecycler()
-
-    if not recyclerModel then
-        return
-    end
-
-    local recyclerPosition = recyclerModel:GetPivot().Position
-    local playerCharacter = localPlayer.Character
-    local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
-
-    if not playerHumanoid then
-        return
-    end
-
-    walkToPosition(playerHumanoid, recyclerPosition, function()
-        return getScrapStackCount() <= 0
-    end)
-
-    local waitStartTime = os.clock()
-
-    while getgenv().autoScrapEnabled do
-        local currentCharacter = localPlayer.Character
-        local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
-
-        if not currentRootPart then
-            return
-        end
-
-        if (currentRootPart.Position - recyclerPosition).Magnitude > 12 then
-            break
-        end
-
-        if getScrapStackCount() <= 0 then
-            break
-        end
-
-        if os.clock() - waitStartTime >= 5 then
-            break
-        end
-
-        task.wait(0.1)
-    end
-end
-
-local function collectNearbyScrap()
-    if getScrapStackCount() >= 6 then return end
-
-    local pitScrapFolder = workspace:FindFirstChild("PitScrap")
-
-    if not pitScrapFolder then
-        return
-    end
-
-    local scrapParts = {}
-
-    for _, scrapInstance in ipairs(pitScrapFolder:GetChildren()) do
-        if scrapInstance:IsA("BasePart") and scrapInstance.Parent then
-            table.insert(scrapParts, scrapInstance)
-        end
-    end
-
-    if #scrapParts == 0 then
-        return
-    end
-
-    local playerCharacter = localPlayer.Character
-    local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
-    local rootPart = playerCharacter and playerCharacter:FindFirstChild("HumanoidRootPart")
-
-    if not playerHumanoid or not rootPart then
-        return
-    end
-
-    table.sort(scrapParts, function(partA, partB)
-        return (partA.Position - rootPart.Position).Magnitude < (partB.Position - rootPart.Position).Magnitude
-    end)
-
-    for _, scrapPart in ipairs(scrapParts) do
-        if not getgenv().autoScrapEnabled then
-            return
-        end
-
-        if getScrapStackCount() >= 6 then
-            return
-        end
-
-        if scrapPart and scrapPart.Parent then
-            walkToPosition(playerHumanoid, scrapPart.Position, function()
-                return not scrapPart.Parent or getScrapStackCount() >= 6
-            end)
-        end
-    end
-end
-
-local function upgradeCoop()
-    local coopData = getCoopData()
-
-    if not coopData or type(coopData.slots) ~= "number" then
-        return false
-    end
-
-    local coopSlots = coopData.slots
-
-    if not coopViewModule.canExpand(coopSlots) then
-        return false
-    end
-
-    local expandCost = coopViewModule.expandCost(coopSlots)
-
-    if getCurrentMoney() < expandCost then
-        return false
-    end
-
-    local result = remotesModule.invoke(remotesModule.defs.ExpandCoop)
-
-    return typeof(result) == "table" and result.ok == true
-end
-
-local function buyFeeder()
-    local coopData = getCoopData()
-
-    if not coopData or type(coopData.slots) ~= "number" or type(coopData.generators) ~= "table" then
-        return false
-    end
-
-    local feederCount = #coopData.generators
-
-    if not coopViewModule.canBuyGenerator(coopData.slots, feederCount) then
-        return false
-    end
-
-    local buyCost = coopViewModule.buyGeneratorCost(feederCount)
-
-    if getCurrentMoney() < buyCost then
-        return false
-    end
-
-    local result = remotesModule.invoke(remotesModule.defs.BuyGenerator, feederCount + 1)
-
-    return typeof(result) == "table" and result.ok == true
-end
-
------------------------------------------------------------------------------------------
--- 🎨 UI DESIGN SYSTEM (OBSIDIAN GLASSMORPHIC ENGINE)
------------------------------------------------------------------------------------------
-
-local COLORS = {
-    backdrop = Color3.fromRGB(12, 5, 8),
-    shell = Color3.fromRGB(20, 10, 14),
-    glass = Color3.fromRGB(32, 14, 20),
-    glassDeep = Color3.fromRGB(25, 11, 16),
-    glassRaised = Color3.fromRGB(48, 18, 28),
-    userPanel = Color3.fromRGB(28, 12, 18),
-    surface = Color3.fromRGB(42, 18, 26),
-    surfaceRaised = Color3.fromRGB(58, 24, 34),
-    surfaceHover = Color3.fromRGB(78, 30, 44),
-    surfacePressed = Color3.fromRGB(34, 14, 20),
-    input = Color3.fromRGB(20, 9, 13),
-    inputFocus = Color3.fromRGB(36, 14, 22),
-    divider = Color3.fromRGB(140, 40, 60),
-    primary = Color3.fromRGB(255, 45, 85),
-    primaryHover = Color3.fromRGB(255, 75, 110),
-    primaryPressed = Color3.fromRGB(210, 30, 65),
-    secondary = Color3.fromRGB(52, 18, 28),
-    text = Color3.fromRGB(255, 255, 255),
-    textMuted = Color3.fromRGB(242, 218, 228),
-    textFaint = Color3.fromRGB(210, 168, 182),
-    cyan = Color3.fromRGB(255, 55, 85),
-    success = Color3.fromRGB(46, 224, 140),
-    warning = Color3.fromRGB(255, 185, 70),
-    danger = Color3.fromRGB(255, 60, 60),
-    disabled = Color3.fromRGB(50, 25, 32),
+local LuarmorConfig = {
+    ScriptId = "PayomboyZ_Hub",
+    SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
+    GetKeyURL = "https://ads.luarmor.net/get_key?for=PBG-fVUxHRHebIHz",
+    DiscordURL = "https://discord.gg/GBKDAe23C",
+    VVIPURL = "https://payomboyz.rexzy.xyz/",
+    LogoPath = "PayomboyZ_Logo.jpg",
+    LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
+    StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
+    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
+    SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
-local ObsidianGlassEngine = { Options = {} }
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local MarketplaceService = game:GetService("MarketplaceService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
 
-local function playClickSound()
+-- ==============================================================================
+-- 🔑 ระบบจัดการ Key (ดึงจากไฟล์ / ดึงจากตัวรัน / บันทึกลงเครื่อง)
+-- ==============================================================================
+local function ClearSavedKeys()
     pcall(function()
-        local sound = Instance.new("Sound")
-        sound.SoundId = "rbxassetid://6895079853"
-        sound.Volume = 0.3
-        sound.Parent = SoundService
-        sound:Play()
-        sound.Ended:Connect(function() sound:Destroy() end)
+        local filesToDelete = {
+            LuarmorConfig.SavedKeyFile,
+            "PayomboyZ_LuarmorKey.txt",
+            "PayomboyZ_VVIPKey.txt",
+            "PayomboyZ_SavedKey.txt"
+        }
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        for _, file in ipairs(filesToDelete) do
+            pcall(function()
+                if isfile and isfile(file) then
+                    if del then
+                        del(file)
+                    elseif type(writefile) == "function" then
+                        writefile(file, "")
+                    end
+                end
+            end)
+        end
+    end)
+    pcall(function()
+        if getgenv then
+            getgenv().script_key = nil
+            getgenv().PayomboyZ_InputKey = nil
+        end
+        if getrenv then pcall(function() getrenv().script_key = nil end) end
+        if getfenv then pcall(function() getfenv().script_key = nil end) end
+        if _G then _G.script_key = nil end
+        if shared then shared.script_key = nil end
+        script_key = nil
     end)
 end
 
-local function loadCustomAvatarImage()
-    return "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
-end
-
-function ObsidianGlassEngine:Notify(cfg)
+local function LoadSavedKey()
+    local saved = ""
     pcall(function()
-        local title = cfg.Title or "System"
-        local content = cfg.Content or ""
-        local duration = cfg.Duration or 4
-        
-        local parentGui = getParentGui()
-        local notifHolder = nil
-        pcall(function() notifHolder = parentGui:FindFirstChild("ObsidianGlass_NotifHolder") end)
-        if not notifHolder then
-            notifHolder = Instance.new("ScreenGui")
-            notifHolder.Name = "ObsidianGlass_NotifHolder"
-            notifHolder.ResetOnSpawn = false
-            notifHolder.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            
-            if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
-                pcall(syn.protect_gui, notifHolder)
-            elseif typeof(protectgui) == "function" then
-                pcall(protectgui, notifHolder)
-            end
-
-            local pOk = pcall(function() notifHolder.Parent = parentGui end)
-            if not pOk then
-                notifHolder.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+        if isfile and readfile then
+            if isfile(LuarmorConfig.SavedKeyFile) then
+                saved = readfile(LuarmorConfig.SavedKeyFile)
+            elseif isfile("PayomboyZ_LuarmorKey.txt") then
+                saved = readfile("PayomboyZ_LuarmorKey.txt")
+            elseif isfile("PayomboyZ_VVIPKey.txt") then
+                saved = readfile("PayomboyZ_VVIPKey.txt")
             end
         end
-        
-        local toast = Instance.new("Frame")
-        toast.Size = UDim2.new(0, 300, 0, 65)
-        toast.Position = UDim2.new(1, 20, 1, -85)
-        toast.BackgroundColor3 = COLORS.glass
-        toast.BackgroundTransparency = 0.15
-        toast.BorderSizePixel = 0
-        toast.Parent = notifHolder
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 10)
-        corner.Parent = toast
-        
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = COLORS.cyan
-        stroke.Thickness = 1.5
-        stroke.Parent = toast
-        
-        local tTitle = Instance.new("TextLabel")
-        tTitle.Size = UDim2.new(1, -20, 0, 22)
-        tTitle.Position = UDim2.new(0, 10, 0, 6)
-        tTitle.BackgroundTransparency = 1
-        tTitle.Text = title
-        tTitle.TextColor3 = COLORS.cyan
-        tTitle.Font = Enum.Font.GothamBold
-        tTitle.TextSize = 13
-        tTitle.TextXAlignment = Enum.TextXAlignment.Left
-        tTitle.Parent = toast
-        
-        local tDesc = Instance.new("TextLabel")
-        tDesc.Size = UDim2.new(1, -20, 0, 32)
-        tDesc.Position = UDim2.new(0, 10, 0, 26)
-        tDesc.BackgroundTransparency = 1
-        tDesc.Text = content
-        tDesc.TextColor3 = COLORS.text
-        tDesc.Font = Enum.Font.Gotham
-        tDesc.TextSize = 11
-        tDesc.TextWrapped = true
-        tDesc.TextXAlignment = Enum.TextXAlignment.Left
-        tDesc.Parent = toast
-        
-        playClickSound()
-        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Position = UDim2.new(1, -320, 1, -85) }):Play()
-        task.delay(duration, function()
-            if toast and toast.Parent then
-                local tw = TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), { Position = UDim2.new(1, 20, 1, -85) })
-                tw:Play()
-                tw.Completed:Connect(function() toast:Destroy() end)
+    end)
+    if type(saved) == "string" then
+        return saved:gsub("%s+", "")
+    end
+    return ""
+end
+
+local function GetPassedScriptKey()
+    local key = nil
+    pcall(function()
+        if getgenv then
+            local genvKey = getgenv().script_key or getgenv().PayomboyZ_InputKey
+            if type(genvKey) == "string" and genvKey ~= "" then
+                key = genvKey
             end
+        end
+        if not key and type(_G.script_key) == "string" and _G.script_key ~= "" then
+            key = _G.script_key
+        end
+        if not key and type(shared.script_key) == "string" and shared.script_key ~= "" then
+            key = shared.script_key
+        end
+        if not key and type(script_key) == "string" and script_key ~= "" then
+            key = script_key
+        end
+    end)
+    if key and type(key) == "string" then
+        return key:gsub("%s+", "")
+    end
+    return ""
+end
+
+local function SaveKey(userKey)
+    if not userKey or userKey == "" then return end
+    userKey = userKey:gsub("%s+", "")
+    pcall(function()
+        if writefile then
+            writefile(LuarmorConfig.SavedKeyFile, userKey)
+            writefile("PayomboyZ_LuarmorKey.txt", userKey)
+            writefile("PayomboyZ_VVIPKey.txt", userKey)
+        end
+    end)
+end
+
+local function copyText(value)
+    local copier = setclipboard or toclipboard
+    if type(copier) ~= "function" then
+        return false
+    end
+    return pcall(copier, tostring(value))
+end
+
+local function executorName()
+    if type(identifyexecutor) == "function" then
+        local ok, name = pcall(identifyexecutor)
+        if ok and name then return tostring(name) end
+    end
+    return "Unknown"
+end
+
+local function deviceName()
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        return "Mobile"
+    end
+    return "PC"
+end
+
+local function readableHwid()
+    local providers = { gethwid, get_hwid }
+    if syn and type(syn.gethwid) == "function" then
+        table.insert(providers, syn.gethwid)
+    end
+    for _, provider in ipairs(providers) do
+        if type(provider) == "function" then
+            local ok, value = pcall(provider)
+            if ok and value and tostring(value) ~= "" then
+                return tostring(value)
+            end
+        end
+    end
+    return nil
+end
+
+-- ==============================================================================
+-- 🎮 ระบบดึงข้อมูลแมพแบบ Dynamic อ่านจาก loader.txt โดยตรงอัตโนมัติ
+-- ==============================================================================
+local function GetDynamicSupportedGames()
+    local games = {}
+
+    -- 1. อ่านตรงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (ป้องกัน Cache ด้วย ?t=tick())
+    local loaderCode = ""
+    pcall(function()
+        loaderCode = game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
+    end)
+
+    -- หาก HttpGet ไม่สำเร็จ (เน็ตหลุด) ค่อยดึงจาก Memory หรือไฟล์ในเครื่องเป็น Fallback
+    if loaderCode == "" and isfile and readfile then
+        pcall(function()
+            local paths = {
+                "loader.txt",
+                "Loader.txt",
+                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+            }
+            for _, p in ipairs(paths) do
+                if isfile(p) then
+                    local code = readfile(p)
+                    if code and #code > 0 then loaderCode = code; break end
+                end
+            end
+        end)
+    end
+
+    -- 2. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    if loaderCode ~= "" then
+        local normalStart = loaderCode:find("NormalRouter%s*=")
+        local vvipStart = loaderCode:find("VVIPRouter%s*=")
+        local pcallStart = loaderCode:find("pcall%s*%(") or #loaderCode
+
+        local normalSection = (normalStart and vvipStart) and loaderCode:sub(normalStart, vvipStart - 1) or loaderCode
+        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, pcallStart) or loaderCode
+
+        for placeIdStr, name in normalSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
+            local pid = tonumber(placeIdStr)
+            if pid then games[pid] = name end
+        end
+
+        for placeIdStr, name in vvipSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
+            local pid = tonumber(placeIdStr)
+            if pid then games[pid] = name .. " (VVIP)" end
+        end
+    end
+
+    -- 3. รวมข้อมูลจาก Memory (_G / getgenv) เผื่อมีแมพที่พึ่งโหลดเข้า Memory
+    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
+    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+    if type(nRouter) == "table" then
+        for id, data in pairs(nRouter) do
+            if data and data.Name then games[id] = data.Name end
+        end
+    end
+    if type(vRouter) == "table" then
+        for id, data in pairs(vRouter) do
+            if data and data.Name then games[id] = data.Name .. " (VVIP)" end
+        end
+    end
+
+    return games
+end
+
+local function resolveGameName()
+    local placeId = game.PlaceId
+    local supportedGames = GetDynamicSupportedGames()
+    if supportedGames[placeId] then
+        return supportedGames[placeId]
+    end
+    local gameName = nil
+    pcall(function()
+        local info = MarketplaceService:GetProductInfo(placeId)
+        if info and info.Name then
+            gameName = info.Name
+        end
+    end)
+    return gameName or ("Place: " .. tostring(placeId))
+end
+
+-- ==============================================================================
+-- 🖼️ ระบบโหลดรูปภาพโลโก้จาก Github (ใช้ใน Service Banner)
+-- ==============================================================================
+local function LoadCustomLogo(imageLabel)
+    task.spawn(function()
+        local loaded = false
+        pcall(function()
+            if isfile and not isfile(LuarmorConfig.LogoPath) and writefile then
+                local rawData = game:HttpGet(LuarmorConfig.LogoURL)
+                if rawData and #rawData > 0 then
+                    writefile(LuarmorConfig.LogoPath, rawData)
+                end
+            end
+            
+            if getcustomasset and isfile and isfile(LuarmorConfig.LogoPath) then
+                imageLabel.Image = getcustomasset(LuarmorConfig.LogoPath)
+                loaded = true
+            elseif getsynasset and isfile and isfile(LuarmorConfig.LogoPath) then
+                imageLabel.Image = getsynasset(LuarmorConfig.LogoPath)
+                loaded = true
+            end
+        end)
+        if not loaded then
+            imageLabel.Image = LuarmorConfig.LogoURL
+        end
+    end)
+end
+
+-- ==============================================================================
+-- 📢 ระบบแจ้งเตือน Toast
+-- ==============================================================================
+local function ShowToast(title, message, isError)
+    pcall(function()
+        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+        local ToastGui = Instance.new("ScreenGui")
+        ToastGui.Name = "PayomboyZ_Toast"
+        ToastGui.ResetOnSpawn = false
+        pcall(function() ToastGui.Parent = CoreGui end)
+        if not ToastGui.Parent then ToastGui.Parent = PlayerGui end
+
+        local Frame = Instance.new("Frame")
+        Frame.Size = UDim2.new(0, 330, 0, 60)
+        Frame.Position = UDim2.new(1, -350, 0, 20)
+        Frame.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
+        Frame.BorderSizePixel = 0
+        Frame.Parent = ToastGui
+
+        local Corner = Instance.new("UICorner")
+        Corner.CornerRadius = UDim.new(0, 10)
+        Corner.Parent = Frame
+
+        local Stroke = Instance.new("UIStroke")
+        Stroke.Color = isError and Color3.fromRGB(255, 60, 60) or Color3.fromRGB(255, 55, 85)
+        Stroke.Transparency = 0.2
+        Stroke.Thickness = 1.5
+        Stroke.Parent = Frame
+
+        local TText = Instance.new("TextLabel")
+        TText.Size = UDim2.new(1, -20, 0, 20)
+        TText.Position = UDim2.new(0, 10, 0, 8)
+        TText.BackgroundTransparency = 1
+        TText.Text = title
+        TText.Font = Enum.Font.GothamBold
+        TText.TextSize = 13
+        TText.TextColor3 = Color3.fromRGB(255, 55, 85)
+        TText.TextXAlignment = Enum.TextXAlignment.Left
+        TText.Parent = Frame
+
+        local MText = Instance.new("TextLabel")
+        MText.Size = UDim2.new(1, -20, 0, 20)
+        MText.Position = UDim2.new(0, 10, 0, 30)
+        MText.BackgroundTransparency = 1
+        MText.Text = message
+        MText.Font = Enum.Font.Gotham
+        MText.TextSize = 11
+        MText.TextColor3 = Color3.fromRGB(242, 218, 228)
+        MText.TextXAlignment = Enum.TextXAlignment.Left
+        MText.Parent = Frame
+
+        task.delay(4, function()
+            if ToastGui then ToastGui:Destroy() end
         end)
     end)
 end
 
-function ObsidianGlassEngine:CreateWindow(cfg)
-    local parentGui = getParentGui()
+if getgenv then
+    getgenv().PayomboyZ_ShowToast = ShowToast
+end
+
+-- ==============================================================================
+-- 🔑 ฟังก์ชันส่ง Key เข้าสู่ Luarmor Engine
+-- ==============================================================================
+local function PassToKeyChecker(userKey)
+    if not userKey or userKey == "" then return end
+    userKey = userKey:gsub("%s+", "")
+
+    SaveKey(userKey)
+    if getgenv then getgenv().PayomboyZ_InputKey = userKey end
+
+    -- 🌟 VVIP Key: bypass Luarmor โดยตรง — ห้าม set script_key เป็น VVIP key
+    -- เพราะ VVIP key ไม่มีใน Luarmor database, LoaderURL อาจ Luarmor-protected
+    if userKey == LuarmorConfig.SpecialKey then
+        local loaderLoaded = false
+        pcall(function()
+            local paths = {
+                "loader.txt",
+                "Loader.txt",
+                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+            }
+            if isfile and readfile then
+                for _, p in ipairs(paths) do
+                    if isfile(p) then
+                        local code = readfile(p)
+                        if code and #code > 0 then
+                            local fn = loadstring(code)
+                            if fn then
+                                loaderLoaded = true
+                                fn()
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        if not loaderLoaded then
+            pcall(function()
+                loadstring(game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
+            end)
+        end
+        return
+    end
+
+    -- 🔒 Luarmor Key: set script_key เฉพาะคีย์ที่จะผ่าน Luarmor เท่านั้น
+    if getgenv then getgenv().script_key = userKey end
+    if getrenv then pcall(function() getrenv().script_key = userKey end) end
+    _G.script_key = userKey
+    shared.script_key = userKey
+    script_key = userKey
+
+    -- 🔒 Luarmor Verification — fast polling + kick hook
+    local watchActive = true
+    local watchStart = tick()
+
+    local function onLuarmorError()
+        if not watchActive then return end
+        watchActive = false
+        ClearSavedKeys()
+        if getgenv then
+            getgenv().PayomboyZ_ShowUI = true
+            getgenv().PayomboyZ_ErrorMsg = "❌ คีย์ผิดหรือหมดอายุ! กรุณากรอกคีย์ใหม่"
+        end
+        task.spawn(function()
+            loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
+        end)
+    end
+
+
+
+    -- ── Hook 2: Polling 50ms สแกนหา Luarmor error GUI และทำลายก่อนผู้ใช้คลิก Leave ──
+    local function isLuarmorError(s)
+        s = s:lower()
+        return s:find("auth error") or s:find("no key found") or s:find("need a script_key")
+            or s:find("invalid key") or s:find("key is invalid") or s:find("not whitelisted")
+            or s:find("whitelist error") or s:find("incorrect key")
+    end
+
+    task.spawn(function()
+        while watchActive and (tick() - watchStart) < 45 do
+            task.wait(0.05)
+            pcall(function()
+                local toScan = {CoreGui}
+                pcall(function() if LocalPlayer.PlayerGui then table.insert(toScan, LocalPlayer.PlayerGui) end end)
+                pcall(function()
+                    if gethui then
+                        local h = gethui()
+                        if typeof(h) == "Instance" then table.insert(toScan, h)
+                        elseif type(h) == "table" then
+                            for _, v in ipairs(h) do
+                                if typeof(v) == "Instance" then table.insert(toScan, v) end
+                            end
+                        end
+                    end
+                end)
+
+                for _, container in ipairs(toScan) do
+                    for _, sg in ipairs(container:GetChildren()) do
+                        if sg:IsA("ScreenGui") and sg.Name ~= "PayomboyZ_SnowyLoader" and sg.Name ~= "PayomboyZ_Escape" then
+                            local found = false
+                            for _, desc in ipairs(sg:GetDescendants()) do
+                                if (desc:IsA("TextLabel") or desc:IsA("TextButton")) then
+                                    if isLuarmorError(desc.Text or "") or isLuarmorError(desc.Name or "") then
+                                        found = true
+                                        break
+                                    end
+                                end
+                            end
+                            if found then
+                                sg.Enabled = false
+                                pcall(function() sg:Destroy() end)
+                                onLuarmorError()
+                                return
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        watchActive = false
+    end)
+
+    -- ── ยิง Luarmor Loader ──
     pcall(function()
-        if parentGui and parentGui:FindFirstChild("ObsidianGlass2_UI") then
-            parentGui.ObsidianGlass2_UI:Destroy()
+        loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
+    end)
+
+    task.delay(45, function() watchActive = false end)
+end
+
+-- ==============================================================================
+-- 🚀 HOP SERVER CONFIRM POPUP (Obsidian Glass + Snow + Roll Back Animation)
+-- ==============================================================================
+local function ShowHopConfirmPopup(gameData)
+    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    local existing = parentGui:FindFirstChild("PayomboyZ_HopPopup")
+    if existing then existing:Destroy() end
+
+    local CH = {
+        shell = Color3.fromRGB(20, 10, 14), glassDeep = Color3.fromRGB(25, 11, 16),
+        glassRaised = Color3.fromRGB(48, 18, 28), surfaceRaised = Color3.fromRGB(58, 24, 34),
+        surfaceHover = Color3.fromRGB(78, 30, 44), primary = Color3.fromRGB(255, 45, 85),
+        primaryHover = Color3.fromRGB(255, 75, 110), primaryPressed = Color3.fromRGB(210, 30, 65),
+        danger = Color3.fromRGB(255, 60, 60), success = Color3.fromRGB(46, 224, 140),
+        vvipGold = Color3.fromRGB(255, 200, 60), cyan = Color3.fromRGB(255, 55, 85),
+    }
+
+    local popGui = Instance.new("ScreenGui")
+    popGui.Name = "PayomboyZ_HopPopup"
+    popGui.ResetOnSpawn = false; popGui.IgnoreGuiInset = true
+    popGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    popGui.DisplayOrder = 999999; popGui.Parent = parentGui
+
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.fromScale(1, 1)
+    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    overlay.BackgroundTransparency = 1; overlay.BorderSizePixel = 0
+    overlay.ZIndex = 1; overlay.Parent = popGui
+
+    local card = Instance.new("Frame")
+    card.Name = "HopCard"; card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.new(0.5, 0, 0.38, 0)
+    card.Size = UDim2.fromOffset(380, 230); card.Rotation = -10
+    card.BackgroundColor3 = CH.shell; card.BackgroundTransparency = 0.08
+    card.BorderSizePixel = 0; card.ClipsDescendants = true
+    card.ZIndex = 2; card.Parent = popGui
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0, 18); cardCorner.Parent = card
+    local cardStroke = Instance.new("UIStroke")
+    cardStroke.Color = CH.cyan; cardStroke.Thickness = 1.5
+    cardStroke.Transparency = 0.2; cardStroke.Parent = card
+
+    -- ❄️ Snow
+    local snowLayer = Instance.new("Frame")
+    snowLayer.Size = UDim2.fromScale(1, 1); snowLayer.BackgroundTransparency = 1
+    snowLayer.ZIndex = 3; snowLayer.Parent = card
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 22 do
+            local dot = Instance.new("Frame")
+            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+            dot.BackgroundColor3 = Color3.fromRGB(210, 235, 255)
+            dot.BackgroundTransparency = math.random(25, 65) / 100
+            dot.BorderSizePixel = 0; dot.ZIndex = 3; dot.Parent = snowLayer
+            local dC = Instance.new("UICorner"); dC.CornerRadius = UDim.new(1, 0); dC.Parent = dot
+            dots[#dots + 1] = { frame = dot, speed = math.random(12, 32) / 10000, drift = math.random(-8, 8) / 10000, pos = dot.Position.Y.Scale }
+        end
+        while task.wait(0.03) do
+            if not popGui or not popGui.Parent then break end
+            for _, d in ipairs(dots) do
+                d.pos = d.pos + d.speed
+                if d.pos > 1.05 then d.pos = -0.05 end
+                d.frame.Position = UDim2.new((d.frame.Position.X.Scale + d.drift) % 1.0, 0, d.pos, 0)
+            end
+        end
+    end)
+
+    -- Icon
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size = UDim2.fromOffset(64, 64); iconFrame.Position = UDim2.new(0, 22, 0, 22)
+    iconFrame.BackgroundColor3 = CH.glassDeep; iconFrame.BorderSizePixel = 0
+    iconFrame.ZIndex = 5; iconFrame.Parent = card
+    local iconCorner = Instance.new("UICorner"); iconCorner.CornerRadius = UDim.new(0, 10); iconCorner.Parent = iconFrame
+    local iconStroke = Instance.new("UIStroke")
+    iconStroke.Color = (gameData.Type == "VVIP") and CH.vvipGold or CH.cyan
+    iconStroke.Thickness = 1.5; iconStroke.Parent = iconFrame
+    local iconImg = Instance.new("ImageLabel")
+    iconImg.Size = UDim2.fromScale(1, 1); iconImg.BackgroundTransparency = 1
+    iconImg.Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId or gameData.PlaceId) .. "&w=150&h=150"
+    iconImg.ScaleType = Enum.ScaleType.Crop; iconImg.ZIndex = 6; iconImg.Parent = iconFrame
+    local iC = Instance.new("UICorner"); iC.CornerRadius = UDim.new(0, 10); iC.Parent = iconImg
+    task.spawn(function()
+        pcall(function()
+            local info = MarketplaceService:GetProductInfo(gameData.PlaceId)
+            if info and info.IconImageAssetId and info.IconImageAssetId > 0 and iconImg.Parent then
+                iconImg.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
+            end
+        end)
+    end)
+
+    -- Badge
+    local catBadge = Instance.new("TextLabel")
+    catBadge.Size = UDim2.fromOffset(60, 18); catBadge.Position = UDim2.new(0, 22, 0, 92)
+    catBadge.BackgroundColor3 = (gameData.Type == "VVIP") and CH.vvipGold or CH.success
+    catBadge.BackgroundTransparency = 0.15
+    catBadge.Text = (gameData.Type == "VVIP") and "👑 VVIP" or "🟢 FREE"
+    catBadge.TextColor3 = Color3.fromRGB(15, 10, 12); catBadge.Font = Enum.Font.GothamBold
+    catBadge.TextSize = 10; catBadge.ZIndex = 5; catBadge.Parent = card
+    local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 5); cbC.Parent = catBadge
+
+    -- Texts
+    local function makeLabel(parent, text, pos, size, font, tsize, color, align)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = size; lbl.Position = pos; lbl.BackgroundTransparency = 1
+        lbl.Text = text; lbl.TextColor3 = color or Color3.fromRGB(255,255,255)
+        lbl.Font = font or Enum.Font.GothamBold; lbl.TextSize = tsize or 12
+        lbl.TextXAlignment = align or Enum.TextXAlignment.Left
+        lbl.TextWrapped = true; lbl.TextTruncate = Enum.TextTruncate.AtEnd
+        lbl.ZIndex = 5; lbl.Parent = parent; return lbl
+    end
+
+    makeLabel(card, gameData.FullName or gameData.Name, UDim2.new(0,100,0,22), UDim2.new(1,-108,0,22), Enum.Font.GothamBold, 16, Color3.fromRGB(255,255,255))
+    makeLabel(card, "ต้องการเข้าเล่นแมพนี้หรือไม่?", UDim2.new(0,100,0,44), UDim2.new(1,-108,0,36), Enum.Font.Gotham, 11, Color3.fromRGB(255,255,255))
+
+    local divLine = Instance.new("Frame")
+    divLine.Size = UDim2.new(1,-40,0,1); divLine.Position = UDim2.new(0,20,0,122)
+    divLine.BackgroundColor3 = CH.glassRaised; divLine.BorderSizePixel = 0
+    divLine.ZIndex = 5; divLine.Parent = card
+
+    local descBox = Instance.new("Frame")
+    descBox.Size = UDim2.new(1,-40,0,48); descBox.Position = UDim2.new(0,20,0,132)
+    descBox.BackgroundColor3 = CH.glassDeep; descBox.BackgroundTransparency = 0.15
+    descBox.BorderSizePixel = 0; descBox.ZIndex = 5; descBox.Parent = card
+    local descBoxC = Instance.new("UICorner"); descBoxC.CornerRadius = UDim.new(0,8); descBoxC.Parent = descBox
+    makeLabel(descBox, "🎮 " .. (gameData.Keywords or ""), UDim2.new(0,10,0,0), UDim2.new(1,-20,1,0), Enum.Font.Gotham, 10, Color3.fromRGB(255,255,255))
+
+    makeLabel(card, "📌 PlaceId: " .. tostring(gameData.PlaceId), UDim2.new(0,20,0,184), UDim2.new(1,-40,0,14), Enum.Font.GothamBold, 9, Color3.fromRGB(200,200,200))
+
+    -- Cancel
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Size = UDim2.fromOffset(156, 38); cancelBtn.Position = UDim2.new(0,20,1,-54)
+    cancelBtn.BackgroundColor3 = CH.surfaceRaised; cancelBtn.BackgroundTransparency = 0.18
+    cancelBtn.Text = "❌  ยกเลิก"; cancelBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    cancelBtn.Font = Enum.Font.GothamBold; cancelBtn.TextSize = 12
+    cancelBtn.BorderSizePixel = 0; cancelBtn.ZIndex = 5; cancelBtn.Parent = card
+    local canC = Instance.new("UICorner"); canC.CornerRadius = UDim.new(0,10); canC.Parent = cancelBtn
+
+    -- Hop button
+    local hopBtn = Instance.new("TextButton")
+    hopBtn.Size = UDim2.fromOffset(218, 38); hopBtn.Position = UDim2.new(1,-238,1,-54)
+    hopBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85); hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
+    hopBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    hopBtn.Font = Enum.Font.GothamBold; hopBtn.TextSize = 12
+    hopBtn.BorderSizePixel = 0; hopBtn.ZIndex = 5; hopBtn.Parent = card
+    local hopC = Instance.new("UICorner"); hopC.CornerRadius = UDim.new(0,10); hopC.Parent = hopBtn
+
+    local function closePopup()
+        TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5,0,0.62,0), Size = UDim2.fromOffset(380,230), Rotation = 8
+        }):Play()
+        TweenService:Create(overlay, TweenInfo.new(0.22), { BackgroundTransparency = 1 }):Play()
+        task.delay(0.28, function() if popGui and popGui.Parent then popGui:Destroy() end end)
+    end
+
+    cancelBtn.MouseButton1Click:Connect(closePopup)
+    overlay.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            closePopup()
+        end
+    end)
+
+    hopBtn.MouseButton1Click:Connect(function()
+        hopBtn.Active = false
+        task.spawn(function()
+            local placeId = gameData.PlaceId
+            local ok = false
+            hopBtn.Text = "🔄 [1/3] Teleport..."
+            TweenService:Create(hopBtn, TweenInfo.new(0.15), { BackgroundColor3 = CH.primaryPressed }):Play()
+            pcall(function() TeleportService:Teleport(placeId); ok = true end)
+            if ok then return end; task.wait(0.35)
+            hopBtn.Text = "🔄 [2/3] TeleportAsync..."
+            pcall(function()
+                local opts = Instance.new("TeleportOptions"); opts.ShouldReserveServer = false
+                TeleportService:TeleportAsync(placeId, {LocalPlayer}, opts); ok = true
+            end)
+            if ok then return end; task.wait(0.35)
+            hopBtn.Text = "🔄 [3/3] Reserve & Join..."
+            pcall(function()
+                local code = TeleportService:ReserveServer(placeId)
+                if code and code ~= "" then TeleportService:TeleportToPrivateServer(placeId, code, {LocalPlayer}); ok = true end
+            end)
+            if ok then return end
+            hopBtn.Text = "❌ Teleport ล้มเหลว"
+            TweenService:Create(hopBtn, TweenInfo.new(0.2), { BackgroundColor3 = CH.danger }):Play()
+            task.delay(3, function()
+                if hopBtn and hopBtn.Parent then
+                    hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"; hopBtn.Active = true
+                    TweenService:Create(hopBtn, TweenInfo.new(0.25), { BackgroundColor3 = CH.primary }):Play()
+                end
+            end)
+        end)
+    end)
+
+    -- Roll-back entrance animation
+    TweenService:Create(overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.55 }):Play()
+    TweenService:Create(card, TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5,0,0.5,0), Size = UDim2.fromOffset(420,260), Rotation = 0
+    }):Play()
+end
+
+-- ==============================================================================
+-- 🎨 SNOWY HUB STYLE MODERN LOADER UI GENERATOR FOR PAYOMBOYZ HUB
+-- ==============================================================================
+local function CreateLoaderUI(initialStatus, defaultKeyText)
+    local parent = nil
+    pcall(function()
+        if type(gethui) == "function" then parent = gethui() end
+    end)
+    if not parent then
+        pcall(function() parent = CoreGui end)
+    end
+    if not parent then
+        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
+    end
+
+    pcall(function()
+        if parent then
+            local previous = parent:FindFirstChild("PayomboyZ_SnowyLoader")
+            if previous then previous:Destroy() end
         end
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "ObsidianGlass2_UI"
+    gui.Name = "PayomboyZ_SnowyLoader"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 99999
+    gui.Parent = parent
 
-    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
-        pcall(syn.protect_gui, gui)
-    elseif typeof(protectgui) == "function" then
-        pcall(protectgui, gui)
-    end
-    
-    local parentOk = pcall(function()
-        gui.Parent = parentGui
-    end)
-    if not parentOk then
-        local fallbackPlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
-        gui.Parent = fallbackPlayerGui
+    local COLORS = {
+        backdrop = Color3.fromRGB(12, 5, 8),
+        shell = Color3.fromRGB(20, 10, 14),
+        glass = Color3.fromRGB(32, 14, 20),
+        glassDeep = Color3.fromRGB(25, 11, 16),
+        glassRaised = Color3.fromRGB(48, 18, 28),
+        userPanel = Color3.fromRGB(28, 12, 18),
+        surface = Color3.fromRGB(42, 18, 26),
+        surfaceRaised = Color3.fromRGB(58, 24, 34),
+        surfaceHover = Color3.fromRGB(78, 30, 44),
+        surfacePressed = Color3.fromRGB(34, 14, 20),
+        input = Color3.fromRGB(20, 9, 13),
+        inputFocus = Color3.fromRGB(36, 14, 22),
+        divider = Color3.fromRGB(140, 40, 60),
+        primary = Color3.fromRGB(255, 45, 85),
+        primaryHover = Color3.fromRGB(255, 75, 110),
+        primaryPressed = Color3.fromRGB(210, 30, 65),
+        secondary = Color3.fromRGB(52, 18, 28),
+        secondaryHover = Color3.fromRGB(68, 24, 36),
+        secondaryPressed = Color3.fromRGB(40, 14, 22),
+        text = Color3.fromRGB(255, 255, 255),
+        textMuted = Color3.fromRGB(242, 218, 228),
+        textFaint = Color3.fromRGB(210, 168, 182),
+        cyan = Color3.fromRGB(255, 55, 85),
+        success = Color3.fromRGB(46, 224, 140),
+        warning = Color3.fromRGB(255, 185, 70),
+        danger = Color3.fromRGB(255, 60, 60),
+        premium = Color3.fromRGB(255, 45, 85),
+        premiumSurface = Color3.fromRGB(36, 14, 22),
+        premiumAction = Color3.fromRGB(255, 45, 85),
+        premiumHover = Color3.fromRGB(255, 75, 110),
+        premiumPressed = Color3.fromRGB(210, 30, 65),
+        disabled = Color3.fromRGB(50, 25, 32),
+    }
+
+    local MOTION = {
+        quick = 0.12,
+        normal = 0.22,
+        slow = 0.34,
+    }
+
+    local LUCIDE = {
+        user = { image = "rbxassetid://16898613869", size = Vector2.new(48, 48), offset = Vector2.new(661, 869) },
+        settings = { image = "rbxassetid://16898613777", size = Vector2.new(48, 48), offset = Vector2.new(771, 257) },
+        shield = { image = "rbxassetid://16898613777", size = Vector2.new(48, 48), offset = Vector2.new(869, 0) },
+        globe = { image = "rbxassetid://16898613509", size = Vector2.new(48, 48), offset = Vector2.new(771, 563) },
+        save = { image = "rbxassetid://16898613699", size = Vector2.new(48, 48), offset = Vector2.new(918, 453) },
+        minus = { image = "rbxassetid://7734000129" },
+        x = { image = "rbxassetid://7743878857" },
+        key = { image = "rbxassetid://7733965118" },
+        ["shield-check"] = { image = "rbxassetid://7734056411" },
+        ["message-circle"] = { image = "rbxassetid://7733993311" },
+        copy = { image = "rbxassetid://7733764083" },
+        monitor = { image = "rbxassetid://7734002839" },
+        smartphone = { image = "rbxassetid://7734058979" },
+        gamepad = { image = "rbxassetid://7733799901" },
+        clock = { image = "rbxassetid://7733734848" },
+        wifi = { image = "rbxassetid://7743878148" },
+        ["external-link"] = { image = "rbxassetid://7743866903" },
+        ["alert-circle"] = { image = "rbxassetid://7733658271" },
+        ["check-circle"] = { image = "rbxassetid://7733919427" },
+        info = { image = "rbxassetid://7733964719" },
+        server = { image = "rbxassetid://7734053426" },
+    }
+
+    local DESKTOP_WIDTH = 930
+    local COMPACT_WIDTH = 644
+    local SHELL_HEIGHT = 620
+    local SNOW_TEXTURE = "rbxthumb://type=Asset&id=68072539&w=150&h=150"
+    local DESKTOP_SNOWFLAKES = 18
+    local COMPACT_SNOWFLAKES = 10
+    local activeTweens = setmetatable({}, { __mode = "k" })
+
+    local clickSound = Instance.new("Sound")
+    clickSound.Name = "PayomboyZClick"
+    clickSound.SoundId = "rbxassetid://6895079853"
+    clickSound.Volume = 0.42
+    clickSound.PlaybackSpeed = 1
+    clickSound.Looped = false
+    clickSound.Parent = gui
+
+    local function playClickSound()
+        pcall(function()
+            clickSound.TimePosition = 0
+            clickSound:Play()
+        end)
     end
 
-    local uiScale = Instance.new("UIScale")
-    local camera = workspace.CurrentCamera
-    local function updateScale()
-        if camera and camera.ViewportSize then
-            local vp = camera.ViewportSize
-            local targetWidth, targetHeight = 820, 520
-            local scaleX = (vp.X - 24) / targetWidth
-            local scaleY = (vp.Y - 24) / targetHeight
-            local calcScale = math.clamp(math.min(scaleX, scaleY), 0.45, 1.0)
-            uiScale.Scale = calcScale
+    local function create(className, properties, targetParent)
+        local object = Instance.new(className)
+        for key, value in pairs(properties or {}) do
+            object[key] = value
         end
+        object.Parent = targetParent
+        return object
     end
-    updateScale()
-    if camera then
-        ConnectionManager:Add(camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale), "ViewportScale")
+
+    local function round(object, radius)
+        return create("UICorner", { CornerRadius = UDim.new(0, radius or 12) }, object)
     end
-    uiScale.Parent = gui
 
-    local shell = Instance.new("Frame")
-    shell.Name = "MainShell"
-    shell.Size = UDim2.fromOffset(820, 520)
-    shell.AnchorPoint = Vector2.new(0.5, 0.5)
-    shell.Position = UDim2.new(0.5, 0, 0.5, 0)
-    shell.BackgroundColor3 = COLORS.shell
-    shell.BackgroundTransparency = 0.20
-    shell.BorderSizePixel = 0
-    shell.ClipsDescendants = true
-    shell.Parent = gui
+    local function glassSurface(object, topColor, bottomColor, transparency, radius)
+        object.BackgroundColor3 = topColor or COLORS.glass
+        object.BackgroundTransparency = transparency or 0.3
+        object.BorderSizePixel = 0
+        object.ClipsDescendants = true
+        round(object, radius or 14)
+        create("UIGradient", {
+            Color = ColorSequence.new(
+                topColor or COLORS.glassRaised,
+                bottomColor or COLORS.glassDeep
+            ),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.02),
+                NumberSequenceKeypoint.new(1, 0.10),
+            }),
+            Rotation = 105,
+        }, object)
+        return object
+    end
 
-    local shellCorner = Instance.new("UICorner")
-    shellCorner.CornerRadius = UDim.new(0, 18)
-    shellCorner.Parent = shell
-
-    local shellStroke = Instance.new("UIStroke")
-    shellStroke.Color = COLORS.cyan
-    shellStroke.Thickness = 1.5
-    shellStroke.Transparency = 0.3
-    shellStroke.Parent = shell
-
-    -- Snow Effect
-    local snowContainer = Instance.new("Frame")
-    snowContainer.Name = "SnowEffectContainer"
-    snowContainer.Size = UDim2.fromScale(1, 1)
-    snowContainer.BackgroundTransparency = 1
-    snowContainer.ClipsDescendants = true
-    snowContainer.ZIndex = 2
-    snowContainer.Parent = shell
-
-    local flakes = {}
-    local flakeSymbols = { "❄", "❅", "❆", "•" }
-
-    for i = 1, 35 do
-        local flake = Instance.new("TextLabel")
-        flake.Name = "SnowFlake_" .. i
-        local isSymbol = math.random(1, 100) > 35
-        if isSymbol then
-            flake.Text = flakeSymbols[math.random(1, #flakeSymbols)]
-            flake.TextSize = math.random(9, 14)
-            flake.TextColor3 = Color3.fromRGB(220, 245, 255)
-            flake.Font = Enum.Font.Gotham
+    local function applyLucideData(icon, iconName)
+        local data = LUCIDE[iconName] or LUCIDE.info
+        icon.Image = data.image
+        if data.offset and data.size then
+            icon.ImageRectOffset = data.offset
+            icon.ImageRectSize = data.size
         else
-            flake.Text = "•"
-            flake.TextSize = math.random(12, 18)
-            flake.TextColor3 = Color3.fromRGB(255, 255, 255)
-            flake.Font = Enum.Font.GothamBold
+            icon.ImageRectOffset = Vector2.new(0, 0)
+            icon.ImageRectSize = Vector2.new(0, 0)
         end
-        flake.BackgroundTransparency = 1
-        flake.TextTransparency = math.random(3, 7) / 10
-        flake.Size = UDim2.fromOffset(18, 18)
-        
-        local startX = math.random(0, 820)
-        local startY = math.random(-40, 520)
-        flake.Position = UDim2.new(0, startX, 0, startY)
-        flake.ZIndex = 2
-        flake.Parent = snowContainer
-
-        table.insert(flakes, {
-            Gui = flake,
-            X = startX,
-            Y = startY,
-            Speed = math.random(15, 35) / 10,
-            Sway = math.random(10, 20) / 10,
-            SwayFreq = math.random(6, 12) / 10,
-            Offset = math.random() * math.pi * 2
-        })
     end
 
-    local snowConn = RunService.RenderStepped:Connect(function()
-        if not shell.Visible then return end
-        for _, flakeData in ipairs(flakes) do
-            flakeData.Y = flakeData.Y + flakeData.Speed
-            local swayX = flakeData.X + math.sin(os.clock() * flakeData.SwayFreq + flakeData.Offset) * flakeData.Sway
-            if flakeData.Y > 530 then
-                flakeData.Y = -20
-                flakeData.X = math.random(0, 820)
+    local function lucideIcon(parentObject, iconName, position, size, color, zIndex)
+        local icon = create("ImageLabel", {
+            Name = "LucideIcon",
+            BackgroundTransparency = 1,
+            Position = position,
+            Size = size,
+            ImageColor3 = color or COLORS.textMuted,
+            ScaleType = Enum.ScaleType.Fit,
+            ZIndex = zIndex or 4,
+        }, parentObject)
+        applyLucideData(icon, iconName)
+        return icon
+    end
+
+    local function playTween(object, duration, properties, easingStyle, easingDirection, channel)
+        local bucket = activeTweens[object]
+        if not bucket then
+            bucket = {}
+            activeTweens[object] = bucket
+        end
+        local key = channel or "default"
+        local previous = bucket[key]
+        if previous then previous:Cancel() end
+        local tween = TweenService:Create(
+            object,
+            TweenInfo.new(
+                duration,
+                easingStyle or Enum.EasingStyle.Quint,
+                easingDirection or Enum.EasingDirection.Out
+            ),
+            properties
+        )
+        bucket[key] = tween
+        tween.Completed:Connect(function()
+            if bucket[key] == tween then
+                bucket[key] = nil
             end
-            flakeData.Gui.Position = UDim2.new(0, swayX, 0, flakeData.Y)
+        end)
+        tween:Play()
+        return tween
+    end
+
+    local function textLabel(parentObject, text, position, size, font, textSize, color, alignment)
+        return create("TextLabel", {
+            BackgroundTransparency = 1,
+            Position = position,
+            Size = size,
+            Font = font or Enum.Font.Gotham,
+            Text = text,
+            TextColor3 = color or COLORS.text,
+            TextSize = textSize or 13,
+            TextXAlignment = alignment or Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Center,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+        }, parentObject)
+    end
+
+    local function bindButtonMotion(button, baseColor, hoverColor, pressedColor)
+        local scale = button:FindFirstChildOfClass("UIScale")
+        local function animate(color, value)
+            if button:GetAttribute("MotionDisabled") then return end
+            playTween(button, MOTION.quick, { BackgroundColor3 = color })
+            if scale then
+                playTween(scale, MOTION.quick, { Scale = value })
+            end
+        end
+
+        button.MouseEnter:Connect(function() animate(hoverColor, 1.015) end)
+        button.MouseLeave:Connect(function() animate(baseColor, 1) end)
+        button.MouseButton1Down:Connect(function() animate(pressedColor, 0.975) end)
+        button.MouseButton1Up:Connect(function() animate(hoverColor, 1.01) end)
+    end
+
+    local function makeButton(parentObject, name, text, position, size, baseColor, hoverColor, pressedColor, iconName)
+        local button = create("TextButton", {
+            Name = name,
+            Position = position,
+            Size = size,
+            BackgroundColor3 = baseColor,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Active = true,
+            Text = "",
+            TextColor3 = COLORS.text,
+        }, parentObject)
+        round(button, 11)
+        create("UIScale", { Scale = 1 }, button)
+        local content = create("Frame", {
+            Name = "ButtonContent",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(0, 18),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            ZIndex = 5,
+        }, button)
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Center,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, iconName and 8 or 0),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, content)
+        if iconName then
+            local icon = lucideIcon(content, iconName, UDim2.new(), UDim2.fromOffset(16, 16), COLORS.text, 5)
+            icon.LayoutOrder = 1
+            icon.ImageTransparency = 0.08
+        end
+        local label = textLabel(content, text, UDim2.new(), UDim2.fromOffset(0, 18), Enum.Font.GothamBold, 13, COLORS.text, Enum.TextXAlignment.Center)
+        label.Name = "ButtonLabel"
+        label.AutomaticSize = Enum.AutomaticSize.X
+        label.LayoutOrder = 2
+        label.TextTruncate = Enum.TextTruncate.None
+        label.ZIndex = 5
+        bindButtonMotion(button, baseColor, hoverColor or COLORS.surfaceHover, pressedColor or COLORS.surfacePressed)
+        button.Activated:Connect(function()
+            if button.Active and not button:GetAttribute("MotionDisabled") then
+                playClickSound()
+            end
+        end)
+        return button
+    end
+
+    local function setButtonText(button, value)
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then label.Text = tostring(value or "") end
+    end
+
+    local function setButtonTextSize(button, value)
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then label.TextSize = value end
+    end
+
+    local function makeIconButton(parentObject, name, iconName, position, baseColor, hoverColor, pressedColor)
+        local button = create("ImageButton", {
+            Name = name,
+            Position = position,
+            Size = UDim2.fromOffset(32, 32),
+            BackgroundColor3 = baseColor,
+            BackgroundTransparency = 0.18,
+            BorderSizePixel = 0,
+            AutoButtonColor = false,
+            Active = true,
+            Image = "",
+        }, parentObject)
+        round(button, 10)
+        create("UIScale", { Scale = 1 }, button)
+        lucideIcon(button, iconName, UDim2.fromOffset(8, 8), UDim2.fromOffset(16, 16), COLORS.textMuted, 5)
+        bindButtonMotion(button, baseColor, hoverColor, pressedColor)
+        button.Activated:Connect(function()
+            if button.Active and not button:GetAttribute("MotionDisabled") then
+                playClickSound()
+            end
+        end)
+        return button
+    end
+
+    local function setButtonEnabled(button, enabled)
+        button.Active = enabled
+        button:SetAttribute("MotionDisabled", not enabled)
+        playTween(button, MOTION.quick, {
+            BackgroundColor3 = enabled and COLORS.secondary or COLORS.disabled,
+        })
+        local label = button:FindFirstChild("ButtonLabel", true)
+        if label then playTween(label, MOTION.quick, { TextTransparency = enabled and 0 or 0.28 }) end
+        local icon = button:FindFirstChild("LucideIcon", true)
+        if icon then playTween(icon, MOTION.quick, { ImageTransparency = enabled and 0.08 or 0.45 }) end
+    end
+
+    -- Backdrop
+    local backdrop = create("Frame", {
+        Name = "Backdrop",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = COLORS.backdrop,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, gui)
+    create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 6, 12)),
+            ColorSequenceKeypoint.new(0.55, Color3.fromRGB(12, 5, 8)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 8, 16)),
+        }),
+        Rotation = 18,
+    }, backdrop)
+
+    -- Shell Frame
+    local shell = create("CanvasGroup", {
+        Name = "Shell",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(DESKTOP_WIDTH, SHELL_HEIGHT),
+        BackgroundTransparency = 1,
+        GroupTransparency = 1,
+    }, backdrop)
+    local shellScale = create("UIScale", { Scale = 0.96 }, shell)
+
+    local shellChrome = create("Frame", {
+        Name = "Chrome",
+        Size = UDim2.fromScale(1, 1),
+        BorderSizePixel = 0,
+        ZIndex = 2,
+    }, shell)
+    glassSurface(shellChrome, COLORS.glassRaised, COLORS.shell, 0.12, 22)
+
+    local shellStroke = create("UIStroke", {
+        Name = "ShellStroke",
+        Color = COLORS.cyan,
+        Thickness = 1.5,
+        Transparency = 0.3,
+    }, shellChrome)
+
+    -- ❄️ PARTICLES ANIMATION LAYER (OBSIDIAN GLASS 2 SNOW ENGINE)
+    local snowLayer = create("Frame", {
+        Name = "SnowLayer",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        Active = false,
+        ZIndex = 2,
+    }, shellChrome)
+
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 35 do
+            local dot = create("Frame", {
+                Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4)),
+                Position = UDim2.new(math.random(), 0, math.random(), 0),
+                BackgroundColor3 = Color3.fromRGB(220, 240, 255),
+                BackgroundTransparency = math.random(30, 70) / 100,
+                BorderSizePixel = 0,
+                ZIndex = 2,
+            }, snowLayer)
+
+            round(dot, 4)
+
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 40) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
+
+        while task.wait(0.03) do
+            if not gui or not gui.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
         end
     end)
-    ConnectionManager:Add(snowConn, "SnowEffectLoop")
 
-    -- Drag Toggle Capsule
-    local toggleCapsule = Instance.new("Frame")
-    toggleCapsule.Name = "ObsidianToggleCapsule"
-    toggleCapsule.Size = UDim2.fromOffset(220, 52)
-    toggleCapsule.Position = UDim2.new(0, 15, 0.5, -26)
-    toggleCapsule.BackgroundColor3 = COLORS.shell
-    toggleCapsule.BackgroundTransparency = 0.18
-    toggleCapsule.BorderSizePixel = 0
-    toggleCapsule.ClipsDescendants = true
-    toggleCapsule.ZIndex = 99999
-    toggleCapsule.Parent = gui
+    -- 💎 UNIVERSAL DRAGGABLE TOGGLE CAPSULE WITH SNOW, IMAGE & METRICS (FPS/PING)
+    local toggleCapsule = create("Frame", {
+        Name = "ObsidianToggleCapsule",
+        Size = UDim2.fromOffset(230, 58),
+        Position = UDim2.new(0, 15, 0.5, -29),
+        BackgroundColor3 = COLORS.shell,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+        ZIndex = 99999,
+    }, gui)
+    round(toggleCapsule, 16)
 
-    local tcCorner = Instance.new("UICorner")
-    tcCorner.CornerRadius = UDim.new(0, 16)
-    tcCorner.Parent = toggleCapsule
+    local tcStroke = create("UIStroke", {
+        Color = COLORS.cyan,
+        Thickness = 1.5,
+        Transparency = 0.2,
+    }, toggleCapsule)
 
-    local tcStroke = Instance.new("UIStroke")
-    tcStroke.Color = COLORS.cyan
-    tcStroke.Thickness = 1.5
-    tcStroke.Transparency = 0.2
-    tcStroke.Parent = toggleCapsule
+    -- ❄️ MINI SNOW LAYER INSIDE TOGGLE CAPSULE
+    local capsuleSnowLayer = create("Frame", {
+        Name = "CapsuleSnowLayer",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        ZIndex = 1,
+    }, toggleCapsule)
 
-    local capAvatarFrame = Instance.new("Frame")
-    capAvatarFrame.Size = UDim2.fromOffset(36, 36)
-    capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -18)
-    capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
-    capAvatarFrame.BorderSizePixel = 0
-    capAvatarFrame.ZIndex = 3
-    capAvatarFrame.Parent = toggleCapsule
+    task.spawn(function()
+        local dots = {}
+        for i = 1, 12 do
+            local dot = create("Frame", {
+                Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3)),
+                Position = UDim2.new(math.random(), 0, math.random(), 0),
+                BackgroundColor3 = Color3.fromRGB(220, 240, 255),
+                BackgroundTransparency = math.random(30, 70) / 100,
+                BorderSizePixel = 0,
+                ZIndex = 1,
+            }, capsuleSnowLayer)
 
-    local caCorner = Instance.new("UICorner")
-    caCorner.CornerRadius = UDim.new(1, 0)
-    caCorner.Parent = capAvatarFrame
+            round(dot, 3)
 
-    local capAvatarImg = Instance.new("ImageLabel")
-    capAvatarImg.Size = UDim2.fromScale(1, 1)
-    capAvatarImg.BackgroundTransparency = 1
-    capAvatarImg.Image = loadCustomAvatarImage()
-    capAvatarImg.ZIndex = 4
-    capAvatarImg.Parent = capAvatarFrame
+            dots[#dots + 1] = {
+                frame = dot,
+                speed = math.random(15, 35) / 10000,
+                drift = math.random(-10, 10) / 10000,
+                pos = dot.Position.Y.Scale
+            }
+        end
 
-    local caiCorner = Instance.new("UICorner")
-    caiCorner.CornerRadius = UDim.new(1, 0)
-    caiCorner.Parent = capAvatarImg
+        while task.wait(0.03) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
+            for _, data in ipairs(dots) do
+                data.pos = data.pos + data.speed
+                if data.pos > 1.05 then data.pos = -0.05 end
+                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            end
+        end
+    end)
 
-    local capUserLabel = Instance.new("TextLabel")
-    capUserLabel.Size = UDim2.new(1, -54, 0, 16)
-    capUserLabel.Position = UDim2.new(0, 50, 0, 8)
-    capUserLabel.BackgroundTransparency = 1
-    capUserLabel.Text = "@" .. LocalPlayer.Name
-    capUserLabel.TextColor3 = COLORS.text
-    capUserLabel.Font = Enum.Font.GothamBold
-    capUserLabel.TextSize = 11
-    capUserLabel.TextXAlignment = Enum.TextXAlignment.Left
+    -- 🖼️ AVATAR IMAGE BOX
+    local capAvatarFrame = create("Frame", {
+        Size = UDim2.fromOffset(42, 42),
+        Position = UDim2.new(0, 8, 0.5, -21),
+        BackgroundColor3 = COLORS.glassDeep,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, toggleCapsule)
+    round(capAvatarFrame, 21)
+
+    create("UIStroke", {
+        Color = COLORS.primary,
+        Thickness = 1.5,
+    }, capAvatarFrame)
+
+    local capAvatarImg = create("ImageLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://0",
+        ZIndex = 4,
+    }, capAvatarFrame)
+    round(capAvatarImg, 21)
+
+    pcall(function()
+        capAvatarImg.Image = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size420x420
+        )
+    end)
+
+    -- 👤 USERNAME & ⚡ METRICS (FPS & PING)
+    local capUserLabel = textLabel(toggleCapsule, "@" .. LocalPlayer.Name, UDim2.new(0, 56, 0, 10), UDim2.new(1, -58, 0, 18), Enum.Font.GothamBold, 12, COLORS.text)
     capUserLabel.ZIndex = 3
-    capUserLabel.Parent = toggleCapsule
 
-    local capMetricsLabel = Instance.new("TextLabel")
-    capMetricsLabel.Size = UDim2.new(1, -54, 0, 14)
-    capMetricsLabel.Position = UDim2.new(0, 50, 0, 24)
-    capMetricsLabel.BackgroundTransparency = 1
-    capMetricsLabel.Text = "⚡ ตีไก่ไปกับพยอมบอย"
-    capMetricsLabel.TextColor3 = COLORS.cyan
-    capMetricsLabel.Font = Enum.Font.GothamBold
-    capMetricsLabel.TextSize = 10
-    capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local capMetricsLabel = textLabel(toggleCapsule, "⚡ 60 FPS  •  📡 0 ms", UDim2.new(0, 56, 0, 28), UDim2.new(1, -58, 0, 16), Enum.Font.GothamBold, 10, COLORS.cyan)
     capMetricsLabel.ZIndex = 3
-    capMetricsLabel.Parent = toggleCapsule
 
-    local capBtn = Instance.new("TextButton")
-    capBtn.Size = UDim2.fromScale(1, 1)
-    capBtn.BackgroundTransparency = 1
-    capBtn.Text = ""
-    capBtn.ZIndex = 10
-    capBtn.Parent = toggleCapsule
+    -- 🔄 REALTIME FPS & PING UPDATE LOOP FOR TOGGLE CAPSULE
+    task.spawn(function()
+        local frameCount = 0
+        local lastFpsTime = tick()
+        local fpsVal = 60
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            frameCount = frameCount + 1
+            local now = tick()
+            if now - lastFpsTime >= 1 then
+                fpsVal = frameCount
+                frameCount = 0
+                lastFpsTime = now
+            end
+        end)
+
+        while task.wait(0.8) do
+            if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then
+                if renderConn then renderConn:Disconnect() end
+                break
+            end
+            local pingVal = 0
+            pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+        end
+    end)
+
+    -- 🖱️ CLICKABLE BUTTON & DRAGGABLE HANDLER
+    local capBtn = create("TextButton", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Text = "",
+        ZIndex = 10,
+    }, toggleCapsule)
 
     local tDragging, tDragInput, tDragStart, tStartPos
     local hasDragged = false
 
-    ConnectionManager:Add(capBtn.InputBegan:Connect(function(input)
+    capBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             tDragging = true
             hasDragged = false
             tDragStart = input.Position
             tStartPos = toggleCapsule.Position
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then tDragging = false end
+                if input.UserInputState == Enum.UserInputState.End then
+                    tDragging = false
+                end
             end)
         end
-    end), "CapBtnInputBegan")
+    end)
 
-    ConnectionManager:Add(capBtn.InputChanged:Connect(function(input)
+    capBtn.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             tDragInput = input
         end
-    end), "CapBtnInputChanged")
+    end)
 
-    ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
+    UserInputService.InputChanged:Connect(function(input)
         if input == tDragInput and tDragging then
             local delta = input.Position - tDragStart
-            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then hasDragged = true end
+            if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
+                hasDragged = true
+            end
             toggleCapsule.Position = UDim2.new(tStartPos.X.Scale, tStartPos.X.Offset + delta.X, tStartPos.Y.Scale, tStartPos.Y.Offset + delta.Y)
         end
-    end), "GlobalInputChanged")
+    end)
 
-    ConnectionManager:Add(capBtn.MouseButton1Click:Connect(function()
+    capBtn.MouseButton1Click:Connect(function()
         if not hasDragged then
             playClickSound()
             shell.Visible = not shell.Visible
         end
-    end), "CapBtnClick")
+    end)
 
-    ConnectionManager:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- ⌨️ KEYBIND TOGGLE (KEY [K] / [RightControl])
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
             shell.Visible = not shell.Visible
         end
-    end), "ToggleKeybind")
+    end)
 
-    -- Left Sidebar (User Panel)
-    local userPanel = Instance.new("Frame")
-    userPanel.Name = "UserPanel"
-    userPanel.Size = UDim2.new(0, 220, 1, 0)
-    userPanel.BackgroundColor3 = COLORS.userPanel
-    userPanel.BackgroundTransparency = 0.20
-    userPanel.BorderSizePixel = 0
-    userPanel.ZIndex = 5
-    userPanel.Parent = shell
+    -- Left Column (User Panel)
+    local userPanel = create("Frame", {
+        Name = "UserInfo",
+        Position = UDim2.fromOffset(8, 8),
+        Size = UDim2.fromOffset(278, 604),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
 
-    local avatarFrame = Instance.new("Frame")
-    avatarFrame.Size = UDim2.fromOffset(40, 40)
-    avatarFrame.Position = UDim2.new(0, 14, 0, 14)
-    avatarFrame.BackgroundColor3 = COLORS.glassDeep
-    avatarFrame.BorderSizePixel = 0
-    avatarFrame.ZIndex = 10
-    avatarFrame.Parent = userPanel
+    -- Right Column (Main Panel)
+    local mainPanel = create("Frame", {
+        Name = "Main",
+        Position = UDim2.fromOffset(294, 8),
+        Size = UDim2.fromOffset(628, 604),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
 
-    local avCorner = Instance.new("UICorner")
-    avCorner.CornerRadius = UDim.new(1, 0)
-    avCorner.Parent = avatarFrame
+    local columnDivider = create("Frame", {
+        Name = "ColumnDivider",
+        Position = UDim2.fromOffset(286, 20),
+        Size = UDim2.new(0, 1, 1, -40),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.84,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+    }, shellChrome)
 
-    local avatarImg = Instance.new("ImageLabel")
-    avatarImg.Size = UDim2.fromScale(1, 1)
-    avatarImg.BackgroundTransparency = 1
-    avatarImg.Image = loadCustomAvatarImage()
-    avatarImg.ZIndex = 11
-    avatarImg.Parent = avatarFrame
+    -- Left Panel Content with Dual-Tab Navigation (User Info | Game Support)
+    local userTabBtn = create("TextButton", {
+        Name = "TabUserInfo",
+        Position = UDim2.fromOffset(14, 10),
+        Size = UDim2.fromOffset(120, 32),
+        BackgroundColor3 = COLORS.surfaceRaised,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 5,
+    }, userPanel)
+    round(userTabBtn, 8)
+    local userTabIcon = lucideIcon(userTabBtn, "user", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.cyan, 6)
+    local userTabLabel = textLabel(userTabBtn, "User Info", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamBold, 10, COLORS.cyan)
+    userTabLabel.ZIndex = 6
 
-    local displayNameLabel = Instance.new("TextLabel")
-    displayNameLabel.Size = UDim2.new(1, -70, 0, 18)
-    displayNameLabel.Position = UDim2.new(0, 62, 0, 15)
-    displayNameLabel.BackgroundTransparency = 1
-    displayNameLabel.Text = LocalPlayer.DisplayName
-    displayNameLabel.TextColor3 = COLORS.text
-    displayNameLabel.Font = Enum.Font.GothamBold
-    displayNameLabel.TextSize = 13
-    displayNameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    displayNameLabel.ZIndex = 10
-    displayNameLabel.Parent = userPanel
+    local gamesTabBtn = create("TextButton", {
+        Name = "TabGameSupport",
+        Position = UDim2.fromOffset(142, 10),
+        Size = UDim2.fromOffset(122, 32),
+        BackgroundColor3 = COLORS.glassDeep,
+        BackgroundTransparency = 0.4,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        Text = "",
+        ZIndex = 5,
+    }, userPanel)
+    round(gamesTabBtn, 8)
+    local gamesTabIcon = lucideIcon(gamesTabBtn, "gamepad", UDim2.fromOffset(8, 8), UDim2.fromOffset(14, 14), COLORS.textFaint, 6)
+    local gamesTabLabel = textLabel(gamesTabBtn, "Games (12)", UDim2.fromOffset(28, 0), UDim2.new(1, -30, 1, 0), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    gamesTabLabel.ZIndex = 6
 
-    local metricsBox = Instance.new("Frame")
-    metricsBox.Size = UDim2.new(1, -28, 0, 24)
-    metricsBox.Position = UDim2.new(0, 14, 0, 60)
-    metricsBox.BackgroundColor3 = COLORS.glassDeep
-    metricsBox.BorderSizePixel = 0
-    metricsBox.ZIndex = 10
-    metricsBox.Parent = userPanel
+    create("Frame", {
+        Position = UDim2.fromOffset(18, 48),
+        Size = UDim2.new(1, -36, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.72,
+        BorderSizePixel = 0,
+    }, userPanel)
 
-    local mCorner = Instance.new("UICorner")
-    mCorner.CornerRadius = UDim.new(0, 6)
-    mCorner.Parent = metricsBox
+    local userInfoContainer = create("Frame", {
+        Name = "UserInfoContainer",
+        Position = UDim2.fromOffset(0, 50),
+        Size = UDim2.new(1, 0, 1, -50),
+        BackgroundTransparency = 1,
+        ZIndex = 4,
+    }, userPanel)
 
-    local metricsLabel = Instance.new("TextLabel")
-    metricsLabel.Size = UDim2.fromScale(1, 1)
-    metricsLabel.BackgroundTransparency = 1
-    metricsLabel.Text = "⚡ สถานะ: พร้อมทำงาน"
-    metricsLabel.TextColor3 = COLORS.cyan
-    metricsLabel.Font = Enum.Font.GothamBold
-    metricsLabel.TextSize = 10
-    metricsLabel.ZIndex = 11
-    metricsLabel.Parent = metricsBox
+    local gameSupportContainer = create("Frame", {
+        Name = "GameSupportContainer",
+        Position = UDim2.fromOffset(0, 50),
+        Size = UDim2.new(1, 0, 1, -50),
+        BackgroundTransparency = 1,
+        Visible = false,
+        ZIndex = 4,
+    }, userPanel)
 
-    local tabScroll = Instance.new("ScrollingFrame")
-    tabScroll.Name = "VerticalTabScroll"
-    tabScroll.Size = UDim2.new(1, -20, 1, -100)
-    tabScroll.Position = UDim2.new(0, 10, 0, 92)
-    tabScroll.BackgroundTransparency = 1
-    tabScroll.ScrollBarThickness = 3
-    tabScroll.ScrollBarImageColor3 = COLORS.cyan
-    tabScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    tabScroll.ZIndex = 10
-    tabScroll.Parent = userPanel
-
-    local tabLayout = Instance.new("UIListLayout")
-    tabLayout.FillDirection = Enum.FillDirection.Vertical
-    tabLayout.Padding = UDim.new(0, 5)
-    tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    tabLayout.Parent = tabScroll
-
-    ConnectionManager:Add(tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
-    end), "TabScrollContentSize")
-
-    -- Main Panel
-    local mainPanel = Instance.new("Frame")
-    mainPanel.Name = "MainPanel"
-    mainPanel.Size = UDim2.new(1, -220, 1, 0)
-    mainPanel.Position = UDim2.new(0, 220, 0, 0)
-    mainPanel.BackgroundTransparency = 1
-    mainPanel.ZIndex = 5
-    mainPanel.Parent = shell
-
-    local headerBar = Instance.new("Frame")
-    headerBar.Size = UDim2.new(1, 0, 0, 48)
-    headerBar.BackgroundTransparency = 1
-    headerBar.Parent = mainPanel
-
-    local mainTitle = Instance.new("TextLabel")
-    mainTitle.Size = UDim2.new(0, 300, 0, 22)
-    mainTitle.Position = UDim2.new(0, 20, 0, 8)
-    mainTitle.BackgroundTransparency = 1
-    mainTitle.Text = cfg.Title or "ตีไก่ไปกับพยอมบอย"
-    mainTitle.TextColor3 = COLORS.text
-    mainTitle.Font = Enum.Font.GothamBold
-    mainTitle.TextSize = 18
-    mainTitle.TextXAlignment = Enum.TextXAlignment.Left
-    mainTitle.Parent = headerBar
-
-    local mainSubTitle = Instance.new("TextLabel")
-    mainSubTitle.Size = UDim2.new(0, 350, 0, 16)
-    mainSubTitle.Position = UDim2.new(0, 20, 0, 28)
-    mainSubTitle.BackgroundTransparency = 1
-    mainSubTitle.Text = cfg.SubTitle or "Grow a Chicken Fighter • Obsidian Glass"
-    mainSubTitle.TextColor3 = COLORS.textMuted
-    mainSubTitle.Font = Enum.Font.Gotham
-    mainSubTitle.TextSize = 11
-    mainSubTitle.TextXAlignment = Enum.TextXAlignment.Left
-    mainSubTitle.Parent = headerBar
-
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.fromOffset(28, 28)
-    closeBtn.Position = UDim2.new(1, -38, 0, 10)
-    closeBtn.BackgroundColor3 = COLORS.glass
-    closeBtn.BackgroundTransparency = 0.20
-    closeBtn.Text = "X"
-    closeBtn.TextColor3 = COLORS.textMuted
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 14
-    closeBtn.Parent = headerBar
-
-    ConnectionManager:Add(closeBtn.MouseButton1Click:Connect(function()
+    local function switchLeftTab(tabName)
         playClickSound()
-        shell.Visible = not shell.Visible
-    end), "CloseBtnClick")
+        if tabName == "user" then
+            userInfoContainer.Visible = true
+            gameSupportContainer.Visible = false
+            playTween(userTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.surfaceRaised, BackgroundTransparency = 0 })
+            playTween(userTabLabel, MOTION.quick, { TextColor3 = COLORS.cyan })
+            userTabLabel.Font = Enum.Font.GothamBold
+            userTabIcon.ImageColor3 = COLORS.cyan
 
-    -- Window Dragging
-    local mainDragging, mainDragInput, mainDragStart, mainStartPos
-    local function setupWindowDrag(dragHandle)
-        ConnectionManager:Add(dragHandle.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                mainDragging = true
-                mainDragStart = input.Position
-                mainStartPos = shell.Position
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        mainDragging = false
-                    end
-                end)
-            end
-        end), "WindowDragBegan_" .. dragHandle.Name)
+            playTween(gamesTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.glassDeep, BackgroundTransparency = 0.4 })
+            playTween(gamesTabLabel, MOTION.quick, { TextColor3 = COLORS.textFaint })
+            gamesTabLabel.Font = Enum.Font.GothamMedium
+            gamesTabIcon.ImageColor3 = COLORS.textFaint
+        else
+            userInfoContainer.Visible = false
+            gameSupportContainer.Visible = true
+            playTween(gamesTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.surfaceRaised, BackgroundTransparency = 0 })
+            playTween(gamesTabLabel, MOTION.quick, { TextColor3 = COLORS.cyan })
+            gamesTabLabel.Font = Enum.Font.GothamBold
+            gamesTabIcon.ImageColor3 = COLORS.cyan
 
-        ConnectionManager:Add(dragHandle.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-                mainDragInput = input
-            end
-        end), "WindowDragChanged_" .. dragHandle.Name)
+            playTween(userTabBtn, MOTION.quick, { BackgroundColor3 = COLORS.glassDeep, BackgroundTransparency = 0.4 })
+            playTween(userTabLabel, MOTION.quick, { TextColor3 = COLORS.textFaint })
+            userTabLabel.Font = Enum.Font.GothamMedium
+            userTabIcon.ImageColor3 = COLORS.textFaint
+        end
     end
 
-    ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
-        if input == mainDragInput and mainDragging then
-            local delta = input.Position - mainDragStart
-            shell.Position = UDim2.new(
-                mainStartPos.X.Scale,
-                mainStartPos.X.Offset + delta.X,
-                mainStartPos.Y.Scale,
-                mainStartPos.Y.Offset + delta.Y
-            )
+    userTabBtn.MouseButton1Click:Connect(function() switchLeftTab("user") end)
+    gamesTabBtn.MouseButton1Click:Connect(function() switchLeftTab("games") end)
+
+    local avatarHalo = create("Frame", {
+        Name = "AvatarHalo",
+        Position = UDim2.new(0.5, -50, 0, 8),
+        Size = UDim2.fromOffset(100, 100),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userInfoContainer)
+    round(avatarHalo, 50)
+    local avatarRing = create("Frame", {
+        Name = "AvatarGradientRing",
+        Position = UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(92, 92),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, avatarHalo)
+    round(avatarRing, 46)
+    local avatarRingStroke = create("UIStroke", {
+        Name = "AvatarRingStroke",
+        Color = COLORS.cyan,
+        Thickness = 3,
+        Transparency = 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, avatarRing)
+    create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 75, 110)),
+            ColorSequenceKeypoint.new(0.52, COLORS.primary),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 35, 70)),
+        }),
+        Rotation = 35,
+    }, avatarRingStroke)
+    local avatarSeparator = create("Frame", {
+        Name = "AvatarSeparator",
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(88, 88),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, avatarRing)
+    round(avatarSeparator, 44)
+    local avatar = create("ImageLabel", {
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(84, 84),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Image = "rbxassetid://0",
+        ScaleType = Enum.ScaleType.Crop,
+    }, avatarSeparator)
+    round(avatar, 42)
+    local onlineDot = create("Frame", {
+        Name = "OnlineDotBacking",
+        Position = UDim2.new(1, -26, 1, -26),
+        Size = UDim2.fromOffset(22, 22),
+        BackgroundColor3 = COLORS.shell,
+        BorderSizePixel = 0,
+    }, avatarHalo)
+    round(onlineDot, 11)
+    local onlineCore = create("Frame", {
+        Position = UDim2.fromOffset(5, 5),
+        Size = UDim2.fromOffset(12, 12),
+        BackgroundColor3 = COLORS.success,
+        BorderSizePixel = 0,
+    }, onlineDot)
+    round(onlineCore, 6)
+    local onlinePulseUp = TweenService:Create(
+        onlineCore,
+        TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        { BackgroundColor3 = Color3.fromRGB(90, 255, 186) }
+    )
+    onlinePulseUp:Play()
+    gui.Destroying:Connect(function() onlinePulseUp:Cancel() end)
+
+    pcall(function()
+        avatar.Image = Players:GetUserThumbnailAsync(
+            LocalPlayer.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size420x420
+        )
+    end)
+
+    local displayName = LocalPlayer and (LocalPlayer.DisplayName or LocalPlayer.Name) or "PayomboyZ User"
+    local userName = LocalPlayer and LocalPlayer.Name or "unknown"
+    textLabel(userInfoContainer, displayName, UDim2.fromOffset(18, 114), UDim2.new(1, -36, 0, 22), Enum.Font.GothamBold, 14, COLORS.text, Enum.TextXAlignment.Center)
+    textLabel(userInfoContainer, "@" .. userName, UDim2.fromOffset(18, 135), UDim2.new(1, -36, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint, Enum.TextXAlignment.Center)
+
+    local detectedGame = resolveGameName()
+    local infoGroup = create("Frame", {
+        Name = "ProfileDetails",
+        Position = UDim2.fromOffset(18, 164),
+        Size = UDim2.new(1, -36, 0, 166),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userInfoContainer)
+    local stats = {
+        { "Executor", executorName(), "monitor", COLORS.textMuted },
+        { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
+        { "HWID", readableHwid() and "Available" or "Security By Luarmor", "shield", COLORS.textMuted },
+        { "Game", detectedGame, "gamepad", COLORS.success },
+    }
+    for index, item in ipairs(stats) do
+        local y = (index - 1) * 41
+        lucideIcon(infoGroup, item[3], UDim2.fromOffset(14, y + 12), UDim2.fromOffset(16, 16), item[4], 5)
+        textLabel(infoGroup, item[1], UDim2.fromOffset(42, y + 4), UDim2.fromOffset(78, 15), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+        textLabel(infoGroup, item[2], UDim2.fromOffset(42, y + 18), UDim2.new(1, -56, 0, 18), Enum.Font.GothamMedium, 10, item[4])
+        if index < #stats then
+            create("Frame", {
+                Position = UDim2.fromOffset(42, y + 40),
+                Size = UDim2.new(1, -56, 0, 1),
+                BackgroundColor3 = COLORS.divider,
+                BackgroundTransparency = 0.84,
+                BorderSizePixel = 0,
+            }, infoGroup)
         end
-    end), "GlobalWindowDragInput")
-
-    setupWindowDrag(headerBar)
-    setupWindowDrag(userPanel)
-
-    local pagesFolder = Instance.new("Frame")
-    pagesFolder.Name = "PagesFolder"
-    pagesFolder.Size = UDim2.new(1, -40, 1, -60)
-    pagesFolder.Position = UDim2.new(0, 20, 0, 52)
-    pagesFolder.BackgroundTransparency = 1
-    pagesFolder.Parent = mainPanel
-
-    local WindowObj = { Tabs = {}, CurrentTab = nil, shell = shell }
-
-    function WindowObj:AddTab(tabCfg)
-        local tabTitle = tabCfg.Title or "Tab"
-        local tabIndex = #WindowObj.Tabs + 1
-
-        local tabBtn = Instance.new("TextButton")
-        tabBtn.Size = UDim2.new(1, -6, 0, 40)
-        tabBtn.Position = UDim2.new(0, 3, 0, 0)
-        tabBtn.BackgroundColor3 = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(38, 16, 24)
-        tabBtn.BackgroundTransparency = (tabIndex == 1) and 0.15 or 0.22
-        tabBtn.Text = "    " .. tabTitle
-        tabBtn.TextColor3 = (tabIndex == 1) and Color3.fromRGB(255, 255, 255) or COLORS.textMuted
-        tabBtn.Font = Enum.Font.GothamBold
-        tabBtn.TextSize = 13
-        tabBtn.TextXAlignment = Enum.TextXAlignment.Left
-        tabBtn.AutoButtonColor = false
-        tabBtn.ZIndex = 12
-        tabBtn.Parent = tabScroll
-
-        local tbCorner = Instance.new("UICorner")
-        tbCorner.CornerRadius = UDim.new(0, 8)
-        tbCorner.Parent = tabBtn
-
-        local tbStroke = Instance.new("UIStroke")
-        tbStroke.Color = (tabIndex == 1) and COLORS.primary or Color3.fromRGB(70, 30, 45)
-        tbStroke.Thickness = 1
-        tbStroke.Transparency = (tabIndex == 1) and 0 or 0.3
-        tbStroke.Parent = tabBtn
-
-        local activeIndicator = Instance.new("Frame")
-        activeIndicator.Size = UDim2.new(0, 4, 0, 20)
-        activeIndicator.Position = UDim2.new(0, 4, 0.5, -10)
-        activeIndicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        activeIndicator.BorderSizePixel = 0
-        activeIndicator.Visible = (tabIndex == 1)
-        activeIndicator.Parent = tabBtn
-
-        local pageScroll = Instance.new("ScrollingFrame")
-        pageScroll.Name = "Page_" .. tabTitle
-        pageScroll.Size = UDim2.fromScale(1, 1)
-        pageScroll.BackgroundTransparency = 1
-        pageScroll.ScrollBarThickness = 4
-        pageScroll.ScrollBarImageColor3 = COLORS.primary
-        pageScroll.Visible = (tabIndex == 1)
-        pageScroll.Parent = pagesFolder
-
-        local pageLayout = Instance.new("UIListLayout")
-        pageLayout.Padding = UDim.new(0, 8)
-        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        pageLayout.Parent = pageScroll
-
-        ConnectionManager:Add(pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
-        end), "PageContentSize_" .. tabTitle)
-
-        local function activateTab()
-            playClickSound()
-            for _, t in ipairs(WindowObj.Tabs) do
-                t.btn.BackgroundColor3 = Color3.fromRGB(38, 16, 24)
-                t.btn.BackgroundTransparency = 0.22
-                t.btn.TextColor3 = COLORS.textMuted
-                t.stroke.Color = Color3.fromRGB(70, 30, 45)
-                t.stroke.Transparency = 0.3
-                if t.indicator then t.indicator.Visible = false end
-                t.page.Visible = false
-            end
-            tabBtn.BackgroundColor3 = COLORS.primary
-            tabBtn.BackgroundTransparency = 0.15
-            tabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            tbStroke.Color = COLORS.primary
-            tbStroke.Transparency = 0
-            activeIndicator.Visible = true
-            pageScroll.Visible = true
-        end
-
-        ConnectionManager:Add(tabBtn.MouseButton1Click:Connect(activateTab), "TabBtnClick_" .. tabTitle)
-
-        local TabObj = {
-            btn = tabBtn,
-            stroke = tbStroke,
-            indicator = activeIndicator,
-            page = pageScroll,
-            Select = activateTab
-        }
-
-        function TabObj:AddToggle(id, tCfg)
-            local title = tCfg.Title or id
-            local desc = tCfg.Desc or tCfg.Description or ""
-            local defaultVal = (tCfg.Default ~= nil) and tCfg.Default or false
-
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 58 or 44)
-            frame.BackgroundColor3 = COLORS.glassDeep
-            frame.BackgroundTransparency = 0.18
-            frame.BorderSizePixel = 0
-            frame.Parent = pageScroll
-
-            local fCorner = Instance.new("UICorner")
-            fCorner.CornerRadius = UDim.new(0, 8)
-            fCorner.Parent = frame
-
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1, -70, 0, 22)
-            lbl.Position = UDim2.new(0, 12, 0, desc ~= "" and 8 or 11)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = title
-            lbl.TextColor3 = COLORS.text
-            lbl.Font = Enum.Font.GothamBold
-            lbl.TextSize = 14
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = frame
-
-            if desc ~= "" then
-                local dLbl = Instance.new("TextLabel")
-                dLbl.Size = UDim2.new(1, -70, 0, 20)
-                dLbl.Position = UDim2.new(0, 12, 0, 30)
-                dLbl.BackgroundTransparency = 1
-                dLbl.Text = desc
-                dLbl.TextColor3 = COLORS.textMuted
-                dLbl.Font = Enum.Font.Gotham
-                dLbl.TextSize = 11
-                dLbl.TextXAlignment = Enum.TextXAlignment.Left
-                dLbl.Parent = frame
-            end
-
-            local switch = Instance.new("Frame")
-            switch.Size = UDim2.fromOffset(46, 24)
-            switch.Position = UDim2.new(1, -56, 0.5, -12)
-            switch.BackgroundColor3 = defaultVal and COLORS.primary or COLORS.surface
-            switch.Parent = frame
-
-            local swCorner = Instance.new("UICorner")
-            swCorner.CornerRadius = UDim.new(1, 0)
-            swCorner.Parent = switch
-
-            local knob = Instance.new("Frame")
-            knob.Size = UDim2.fromOffset(20, 20)
-            knob.Position = defaultVal and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
-            knob.BackgroundColor3 = COLORS.text
-            knob.BorderSizePixel = 0
-            knob.Parent = switch
-
-            local knCorner = Instance.new("UICorner")
-            knCorner.CornerRadius = UDim.new(1, 0)
-            knCorner.Parent = knob
-
-            local clickBtn = Instance.new("TextButton")
-            clickBtn.Size = UDim2.fromScale(1, 1)
-            clickBtn.BackgroundTransparency = 1
-            clickBtn.Text = ""
-            clickBtn.ZIndex = 10
-            clickBtn.Parent = frame
-
-            local OptionObj = {
-                Value = defaultVal,
-                Callback = tCfg.Callback or function() end,
-                ChangedCallbacks = {}
-            }
-
-            local function updateToggle(val)
-                playClickSound()
-                OptionObj.Value = val
-                TweenService:Create(switch, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-                    BackgroundColor3 = val and COLORS.primary or COLORS.surface
-                }):Play()
-                TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-                    Position = val and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
-                }):Play()
-                pcall(function() OptionObj.Callback(val) end)
-                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
-            end
-
-            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
-            function OptionObj:SetValue(val) updateToggle(val == true) end
-
-            ConnectionManager:Add(clickBtn.MouseButton1Click:Connect(function() updateToggle(not OptionObj.Value) end), "Toggle_" .. id)
-            ObsidianGlassEngine.Options[id] = OptionObj
-            return OptionObj
-        end
-
-        function TabObj:AddSlider(id, sCfg)
-            local title = sCfg.Title or id
-            local desc = sCfg.Desc or sCfg.Description or ""
-            local minVal = sCfg.Min or 0
-            local maxVal = sCfg.Max or 100
-            local defaultVal = sCfg.Default or minVal
-
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, -10, 0, desc ~= "" and 68 or 52)
-            frame.BackgroundColor3 = COLORS.glassDeep
-            frame.BackgroundTransparency = 0.18
-            frame.BorderSizePixel = 0
-            frame.Parent = pageScroll
-
-            local fCorner = Instance.new("UICorner")
-            fCorner.CornerRadius = UDim.new(0, 10)
-            fCorner.Parent = frame
-
-            local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(0.7, 0, 0, 22)
-            lbl.Position = UDim2.new(0, 12, 0, 6)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = title
-            lbl.TextColor3 = COLORS.text
-            lbl.Font = Enum.Font.GothamBold
-            lbl.TextSize = 14
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            lbl.Parent = frame
-
-            local valLbl = Instance.new("TextLabel")
-            valLbl.Size = UDim2.new(0.3, -12, 0, 22)
-            valLbl.Position = UDim2.new(0.7, 0, 0, 6)
-            valLbl.BackgroundTransparency = 1
-            valLbl.Text = tostring(defaultVal)
-            valLbl.TextColor3 = COLORS.cyan
-            valLbl.Font = Enum.Font.GothamBold
-            valLbl.TextSize = 14
-            valLbl.TextXAlignment = Enum.TextXAlignment.Right
-            valLbl.Parent = frame
-
-            if desc ~= "" then
-                local dLbl = Instance.new("TextLabel")
-                dLbl.Size = UDim2.new(1, -24, 0, 18)
-                dLbl.Position = UDim2.new(0, 12, 0, 26)
-                dLbl.BackgroundTransparency = 1
-                dLbl.Text = desc
-                dLbl.TextColor3 = COLORS.textMuted
-                dLbl.Font = Enum.Font.Gotham
-                dLbl.TextSize = 11
-                dLbl.TextXAlignment = Enum.TextXAlignment.Left
-                dLbl.Parent = frame
-            end
-
-            local barY = desc ~= "" and 48 or 34
-            local bar = Instance.new("TextButton")
-            bar.Size = UDim2.new(1, -24, 0, 8)
-            bar.Position = UDim2.new(0, 12, 0, barY)
-            bar.BackgroundColor3 = COLORS.surface
-            bar.Text = ""
-            bar.Parent = frame
-
-            local bCorner = Instance.new("UICorner")
-            bCorner.CornerRadius = UDim.new(1, 0)
-            bCorner.Parent = bar
-
-            local fill = Instance.new("Frame")
-            local pct = (defaultVal - minVal) / math.max(maxVal - minVal, 1)
-            fill.Size = UDim2.new(pct, 0, 1, 0)
-            fill.BackgroundColor3 = COLORS.primary
-            fill.BorderSizePixel = 0
-            fill.Parent = bar
-
-            local flCorner = Instance.new("UICorner")
-            flCorner.CornerRadius = UDim.new(1, 0)
-            flCorner.Parent = fill
-
-            local OptionObj = {
-                Value = defaultVal,
-                Callback = sCfg.Callback or function() end,
-                ChangedCallbacks = {}
-            }
-
-            local function updateSlider(val)
-                val = math.clamp(val, minVal, maxVal)
-                if sCfg.Rounding then val = math.floor(val * (10 ^ sCfg.Rounding) + 0.5) / (10 ^ sCfg.Rounding) else val = math.floor(val + 0.5) end
-                OptionObj.Value = val
-                valLbl.Text = tostring(val)
-                local newPct = (val - minVal) / math.max(maxVal - minVal, 1)
-                fill.Size = UDim2.new(newPct, 0, 1, 0)
-                pcall(function() OptionObj.Callback(val) end)
-                for _, cb in ipairs(OptionObj.ChangedCallbacks) do pcall(function() cb(val) end) end
-            end
-
-            function OptionObj:OnChanged(cb) table.insert(OptionObj.ChangedCallbacks, cb) end
-            function OptionObj:SetValue(val) updateSlider(val) end
-
-            local isDragging = false
-            ConnectionManager:Add(bar.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    isDragging = true
-                    local relX = input.Position.X - bar.AbsolutePosition.X
-                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
-                end
-            end), "SliderInputBegan_" .. id)
-
-            ConnectionManager:Add(UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    isDragging = false
-                end
-            end), "SliderInputEnded_" .. id)
-
-            ConnectionManager:Add(UserInputService.InputChanged:Connect(function(input)
-                if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                    local relX = input.Position.X - bar.AbsolutePosition.X
-                    updateSlider(minVal + (relX / bar.AbsoluteSize.X) * (maxVal - minVal))
-                end
-            end), "SliderInputChanged_" .. id)
-
-            ObsidianGlassEngine.Options[id] = OptionObj
-            return OptionObj
-        end
-
-        table.insert(WindowObj.Tabs, TabObj)
-        return TabObj
     end
 
-    -- ⏱️ AUTO MINIMIZE MAIN UI AFTER 5 MINUTES (300 SECONDS)
-    task.delay(300, function()
-        pcall(function()
-            if shell and shell.Parent and shell.Visible then
-                shell.Visible = false
-                ObsidianGlassEngine:Notify({
-                    Title = "⏱️ พับหน้าต่าง UI หลักอัตโนมัติ",
-                    Content = "ครบกำหนด 5 นาที: พับหน้าต่าง UI หลักลงแล้ว (กด [K] หรือคลิกปุ่มลอยเพื่อเปิด UI ได้ทุกเมื่อ)",
-                    Duration = 6
+    local metricsStrip = create("Frame", {
+        Name = "Metrics",
+        Position = UDim2.fromOffset(18, 342),
+        Size = UDim2.new(1, -36, 0, 66),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userInfoContainer)
+    create("Frame", {
+        Position = UDim2.new(0.5, 0, 0, 12),
+        Size = UDim2.new(0, 1, 1, -24),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.78,
+        BorderSizePixel = 0,
+    }, metricsStrip)
+
+    local sessionCard = create("Frame", {
+        Size = UDim2.new(0.5, 0, 1, 0),
+        BackgroundTransparency = 1,
+    }, metricsStrip)
+    lucideIcon(sessionCard, "clock", UDim2.fromOffset(14, 16), UDim2.fromOffset(16, 16), COLORS.cyan, 5)
+    textLabel(sessionCard, "Session", UDim2.fromOffset(38, 9), UDim2.new(1, -48, 0, 18), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+    local sessionText = textLabel(sessionCard, "00:00", UDim2.fromOffset(38, 27), UDim2.new(1, -48, 0, 22), Enum.Font.GothamBold, 12, COLORS.cyan)
+
+    local pingCard = create("Frame", {
+        Position = UDim2.fromScale(0.5, 0),
+        Size = UDim2.new(0.5, 0, 1, 0),
+        BackgroundTransparency = 1,
+    }, metricsStrip)
+    lucideIcon(pingCard, "wifi", UDim2.fromOffset(14, 16), UDim2.fromOffset(16, 16), COLORS.success, 5)
+    textLabel(pingCard, "Ping", UDim2.fromOffset(38, 9), UDim2.new(1, -48, 0, 18), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+    local pingText = textLabel(pingCard, "-- ms", UDim2.fromOffset(38, 27), UDim2.new(1, -48, 0, 22), Enum.Font.GothamBold, 12, COLORS.success)
+
+    local connectionCard = create("Frame", {
+        Position = UDim2.fromOffset(18, 452),
+        Size = UDim2.new(1, -36, 0, 68),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, userInfoContainer)
+    lucideIcon(connectionCard, "check-circle", UDim2.fromOffset(14, 24), UDim2.fromOffset(20, 20), COLORS.success, 5)
+    textLabel(connectionCard, "Connected to PayomboyZ Hub", UDim2.fromOffset(44, 11), UDim2.new(1, -56, 0, 24), Enum.Font.GothamBold, 12, COLORS.success)
+    textLabel(connectionCard, "PayomboyZ Hub is ready", UDim2.fromOffset(44, 35), UDim2.new(1, -56, 0, 18), Enum.Font.Gotham, 9, COLORS.textMuted)
+
+    -- 🎮 GAME SUPPORT PANEL CONTENT
+    local gameSupportHeader = create("Frame", {
+        Position = UDim2.fromOffset(14, 6),
+        Size = UDim2.new(1, -28, 0, 36),
+        BackgroundTransparency = 1,
+    }, gameSupportContainer)
+
+    lucideIcon(gameSupportHeader, "gamepad", UDim2.fromOffset(4, 8), UDim2.fromOffset(18, 18), COLORS.cyan, 5)
+    textLabel(gameSupportHeader, "GAME SUPPORT", UDim2.fromOffset(28, 4), UDim2.new(1, -30, 0, 16), Enum.Font.GothamBold, 11, COLORS.cyan)
+    textLabel(gameSupportHeader, "Official Supported Game Loaders", UDim2.fromOffset(28, 20), UDim2.new(1, -30, 0, 14), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+
+    local gamesScroll = create("ScrollingFrame", {
+        Name = "GamesScrollList",
+        Position = UDim2.fromOffset(14, 46),
+        Size = UDim2.new(1, -28, 1, -54),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.fromScale(0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = COLORS.cyan,
+        ScrollBarImageTransparency = 0.4,
+        ClipsDescendants = true,
+    }, gameSupportContainer)
+
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Vertical,
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, gamesScroll)
+
+    local supportedGamesList = {
+        -- FREE GAMES
+        {
+            Name = "Attack On Titan Rev.",
+            FullName = "Attack On Titan Revolution",
+            PlaceId = 13379208636,
+            AltPlaceIds = { 14916516914, 14932214603 },
+            IconId = 13379208636,
+            Type = "FREE",
+            Keywords = "AOTR • Titan Farm",
+        },
+        {
+            Name = "Anime Card Farm",
+            FullName = "Anime Card Farm",
+            PlaceId = 125039473548047,
+            AltPlaceIds = {},
+            IconId = 125039473548047,
+            Type = "FREE",
+            Keywords = "Auto Pack • Reroll",
+        },
+        {
+            Name = "Arena Sniper",
+            FullName = "Arena Sniper",
+            PlaceId = 122446657157717,
+            AltPlaceIds = { 126042865144779, 119259569670784, 90165746516953 },
+            IconId = 122446657157717,
+            Type = "FREE",
+            Keywords = "Auto Kill • Sniper",
+        },
+        {
+            Name = "Roll Anime To Fight",
+            FullName = "Roll Anime To Fight",
+            PlaceId = 107653945083776,
+            AltPlaceIds = {},
+            IconId = 107653945083776,
+            Type = "FREE",
+            Keywords = "RATF • Auto Roll",
+        },
+        {
+            Name = "Gakuran",
+            FullName = "Gakuran",
+            PlaceId = 128736949265057,
+            AltPlaceIds = {},
+            IconId = 128736949265057,
+            Type = "FREE",
+            Keywords = "GKR • Auto Farm",
+        },
+        {
+            Name = "99 Nights",
+            FullName = "99 Night in the forest",
+            PlaceId = 126509999114328,
+            AltPlaceIds = { 79546208627805 },
+            IconId = 126509999114328,
+            Type = "FREE",
+            Keywords = "99Nights • Forest",
+        },
+        {
+            Name = "Blox Fruit",
+            FullName = "Blox Fruit",
+            PlaceId = 2753915549,
+            AltPlaceIds = {},
+            IconId = 2753915549,
+            Type = "FREE",
+            Keywords = "BF • Auto Farm",
+        },
+        {
+            Name = "Roll a Gnome",
+            FullName = "Roll a Gnome",
+            PlaceId = 117539213094671,
+            AltPlaceIds = {},
+            IconId = 117539213094671,
+            Type = "FREE",
+            Keywords = "Gnome • Auto Roll",
+        },
+
+        -- VVIP GAMES
+        {
+            Name = "Mine a Mountain",
+            FullName = "Mine a Mountain",
+            PlaceId = 125927821145949,
+            AltPlaceIds = {},
+            IconId = 125927821145949,
+            Type = "VVIP",
+            Keywords = "MaM • Auto Mine",
+        },
+        {
+            Name = "Murder Mystery 2",
+            FullName = "Murder Mystery 2",
+            PlaceId = 142823291,
+            AltPlaceIds = {},
+            IconId = 142823291,
+            Type = "VVIP",
+            Keywords = "MM2 • Coin Farm",
+        },
+        {
+            Name = "Capybara Vs Plant",
+            FullName = "Capybara Vs Plant",
+            PlaceId = 104973076655377,
+            AltPlaceIds = {},
+            IconId = 104973076655377,
+            Type = "VVIP",
+            Keywords = "CvsP • Auto Plant",
+        },
+        {
+            Name = "Steal An Egg",
+            FullName = "Steal An Egg",
+            PlaceId = 107778070777162,
+            AltPlaceIds = {},
+            IconId = 107778070777162,
+            Type = "VVIP",
+            Keywords = "SaE • Auto Egg",
+        },
+        {
+            Name = "Anime Expedition",
+            FullName = "Anime Expedition",
+            PlaceId = 84515722934860,
+            AltPlaceIds = {},
+            IconId = 84515722934860,
+            Type = "VVIP",
+            Keywords = "AE • Auto Expedition",
+        },
+        {
+            Name = "Iron Soul",
+            FullName = "Iron Soul",
+            PlaceId = 117533937949084,
+            AltPlaceIds = { 116456628154258, 132445869992129 },
+            IconId = 117533937949084,
+            Type = "VVIP",
+            Keywords = "IRS • Auto Boss",
+        },
+    }
+
+    pcall(function()
+        local dynamicMapData = GetDynamicSupportedGames()
+        local existingPlaceIds = {}
+        for _, g in ipairs(supportedGamesList) do
+            existingPlaceIds[g.PlaceId] = true
+            if g.AltPlaceIds then
+                for _, alt in ipairs(g.AltPlaceIds) do existingPlaceIds[alt] = true end
+            end
+        end
+        for pid, gName in pairs(dynamicMapData) do
+            if not existingPlaceIds[pid] then
+                existingPlaceIds[pid] = true
+                local isVvip = gName:find("%(VVIP%)")
+                local cleanName = gName:gsub("%s*%(VVIP%)", "")
+                table.insert(supportedGamesList, {
+                    Name = cleanName,
+                    FullName = cleanName,
+                    PlaceId = pid,
+                    AltPlaceIds = {},
+                    IconId = pid,
+                    Type = isVvip and "VVIP" or "FREE",
+                    Keywords = (isVvip and "VVIP" or "FREE") .. " • Auto Farm",
                 })
             end
-        end)
-    end)
-
-    return WindowObj
-end
-
------------------------------------------------------------------------------------------
--- 🎛️ CATEGORIZED THAI UI CONSTRUCTION (EXACT 1-TO-1 LOGIC WITH message (9).txt)
------------------------------------------------------------------------------------------
-
-local Window = ObsidianGlassEngine:CreateWindow({
-    Title = "ตีไก่ไปกับพยอมบอย",
-    SubTitle = "Grow a Chicken Fighter • Obsidian Glass",
-})
-
------------------------------------------------------------------------------------------
--- 📊 KAITUN PRO MONITORING DASHBOARD (TOP-RIGHT HUD)
------------------------------------------------------------------------------------------
-
-local KaitunDashboard = {
-    Frame = nil,
-    StartTime = os.time(),
-    StatusLbl = nil,
-    MissionLbl = nil,
-    EventLbl = nil,
-    ResourceLbl = nil,
-    AccountLbl = nil,
-    ProgressLbl = nil
-}
-
-local function formatMoney(amount)
-    amount = tonumber(amount) or 0
-    if amount >= 1e12 then
-        return string.format("%.2fT", amount / 1e12)
-    elseif amount >= 1e9 then
-        return string.format("%.2fB", amount / 1e9)
-    elseif amount >= 1e6 then
-        return string.format("%.2fM", amount / 1e6)
-    elseif amount >= 1e3 then
-        return string.format("%.2fK", amount / 1e3)
-    else
-        return tostring(math.floor(amount))
-    end
-end
-
-local function formatTime(seconds)
-    seconds = tonumber(seconds) or 0
-    local hrs = math.floor(seconds / 3600)
-    local mins = math.floor((seconds % 3600) / 60)
-    local secs = math.floor(seconds % 60)
-    return string.format("%02d:%02d:%02d", hrs, mins, secs)
-end
-
-function KaitunDashboard:Init()
-    local parentGui = getParentGui()
-    pcall(function()
-        if parentGui and parentGui:FindFirstChild("KaitunDashboardHUD") then
-            parentGui.KaitunDashboardHUD:Destroy()
         end
     end)
 
-    local hudGui = Instance.new("ScreenGui")
-    hudGui.Name = "KaitunDashboardHUD"
-    hudGui.ResetOnSpawn = false
-    hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    hudGui.DisplayOrder = 99990
+    local currentPlaceId = game.PlaceId
+    for index, gameData in ipairs(supportedGamesList) do
+        local isCurrentGame = (currentPlaceId == gameData.PlaceId)
+        if not isCurrentGame and gameData.AltPlaceIds then
+            for _, altId in ipairs(gameData.AltPlaceIds) do
+                if currentPlaceId == altId then
+                    isCurrentGame = true
+                    break
+                end
+            end
+        end
 
-    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
-        pcall(syn.protect_gui, hudGui)
-    elseif typeof(protectgui) == "function" then
-        pcall(protectgui, hudGui)
+        local gameCard = create("Frame", {
+            Name = "GameCard_" .. index,
+            Size = UDim2.new(1, 0, 0, 62),
+            BackgroundColor3 = isCurrentGame and COLORS.surfaceRaised or COLORS.glassDeep,
+            BackgroundTransparency = 0.25,
+            BorderSizePixel = 0,
+            LayoutOrder = index,
+        }, gamesScroll)
+        round(gameCard, 10)
+
+        create("UIStroke", {
+            Color = isCurrentGame and COLORS.cyan or COLORS.divider,
+            Thickness = isCurrentGame and 1.5 or 1,
+            Transparency = isCurrentGame and 0.15 or 0.75,
+        }, gameCard)
+
+        -- Roblox Game Icon (rbxthumb with MarketplaceService Fallback)
+        local iconFrame = create("Frame", {
+            Position = UDim2.fromOffset(8, 8),
+            Size = UDim2.fromOffset(46, 46),
+            BackgroundColor3 = COLORS.surface,
+            BorderSizePixel = 0,
+        }, gameCard)
+        round(iconFrame, 8)
+
+        local fallbackGamepad = lucideIcon(iconFrame, "gamepad", UDim2.fromOffset(13, 13), UDim2.fromOffset(20, 20), COLORS.cyan, 1)
+
+        local iconImg = create("ImageLabel", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId) .. "&w=150&h=150",
+            ScaleType = Enum.ScaleType.Crop,
+            ZIndex = 2,
+        }, iconFrame)
+        round(iconImg, 8)
+
+        -- Multi-tier thumbnail fetcher fallback
+        task.spawn(function()
+            pcall(function()
+                local placeId = gameData.PlaceId or gameData.IconId
+                if placeId and placeId > 0 then
+                    local info = MarketplaceService:GetProductInfo(placeId)
+                    if info and info.IconImageAssetId and info.IconImageAssetId > 0 then
+                        if iconImg and iconImg.Parent then
+                            iconImg.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
+                        end
+                    end
+                end
+            end)
+        end)
+
+        -- Game Details
+        textLabel(gameCard, gameData.Name, UDim2.fromOffset(62, 8), UDim2.new(1, -120, 0, 18), Enum.Font.GothamBold, 11, COLORS.text)
+        textLabel(gameCard, gameData.Keywords, UDim2.fromOffset(62, 26), UDim2.new(1, -120, 0, 14), Enum.Font.GothamMedium, 9, COLORS.textFaint)
+
+        if isCurrentGame then
+            textLabel(gameCard, "🟢 ACTIVE NOW", UDim2.fromOffset(62, 42), UDim2.new(1, -120, 0, 12), Enum.Font.GothamBold, 8, COLORS.success)
+        end
+
+        -- Type Badge (FREE / VVIP)
+        local badge = create("Frame", {
+            Position = UDim2.new(1, -50, 0, 8),
+            Size = UDim2.fromOffset(42, 18),
+            BackgroundColor3 = gameData.Type == "VVIP" and COLORS.primary or COLORS.surfaceRaised,
+            BorderSizePixel = 0,
+        }, gameCard)
+        round(badge, 6)
+
+        textLabel(badge, gameData.Type, UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), Enum.Font.GothamBold, 8, gameData.Type == "VVIP" and COLORS.text or COLORS.success, Enum.TextXAlignment.Center)
+
+        -- 🎮 เล่น button
+        local playBtn = Instance.new("TextButton")
+        playBtn.Size = UDim2.fromOffset(46, 22)
+        playBtn.Position = UDim2.new(1, -56, 1, -30)
+        playBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
+        playBtn.Text = "🎮 เล่น"
+        playBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        playBtn.Font = Enum.Font.GothamBold
+        playBtn.TextSize = 9
+        playBtn.BorderSizePixel = 0
+        playBtn.ZIndex = 5
+        playBtn.Parent = gameCard
+        local playBtnC = Instance.new("UICorner")
+        playBtnC.CornerRadius = UDim.new(0, 5)
+        playBtnC.Parent = playBtn
+        playBtn.MouseEnter:Connect(function()
+            TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = COLORS.primaryHover }):Play()
+        end)
+        playBtn.MouseLeave:Connect(function()
+            TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(255, 45, 85) }):Play()
+        end)
+        playBtn.MouseButton1Click:Connect(function()
+            ShowHopConfirmPopup(gameData)
+        end)
     end
 
-    local pOk = pcall(function() hudGui.Parent = parentGui end)
-    if not pOk then
-        hudGui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    -- Right Panel Header
+    local header = create("Frame", {
+        Name = "Header",
+        Size = UDim2.new(1, 0, 0, 62),
+        BackgroundTransparency = 1,
+        Active = true,
+    }, mainPanel)
+    textLabel(header, "PayomboyZ Hub", UDim2.fromOffset(22, 8), UDim2.fromOffset(200, 30), Enum.Font.GothamBold, 22, COLORS.text)
+    textLabel(header, "Obsidian Glassmorphic 2 Engine", UDim2.fromOffset(23, 35), UDim2.fromOffset(260, 16), Enum.Font.Gotham, 9, COLORS.textFaint)
+
+    local minimize = makeIconButton(
+        header,
+        "Minimize",
+        "minus",
+        UDim2.new(1, -82, 0, 14),
+        COLORS.surfaceRaised,
+        COLORS.surfaceHover,
+        COLORS.surfacePressed
+    )
+    local close = makeIconButton(
+        header,
+        "Close",
+        "x",
+        UDim2.new(1, -44, 0, 14),
+        COLORS.surfaceRaised,
+        Color3.fromRGB(74, 38, 53),
+        Color3.fromRGB(54, 27, 40)
+    )
+    create("Frame", {
+        Position = UDim2.fromOffset(20, 61),
+        Size = UDim2.new(1, -40, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.74,
+        BorderSizePixel = 0,
+    }, header)
+
+    -- Service Banner Card
+    local serviceCard = create("Frame", {
+        Name = "ServiceCard",
+        Position = UDim2.fromOffset(20, 74),
+        Size = UDim2.new(1, -40, 0, 88),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, mainPanel)
+    local serviceLogoSlot = create("Frame", {
+        Name = "ServiceLogoSlot",
+        Position = UDim2.fromOffset(0, 2),
+        Size = UDim2.fromOffset(116, 82),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+    }, serviceCard)
+    local logo = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(80, 80),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScaleType = Enum.ScaleType.Fit,
+    }, serviceLogoSlot)
+    round(logo, 40)
+    LoadCustomLogo(logo)
+
+    textLabel(serviceCard, "ACTIVE SERVICE", UDim2.fromOffset(128, 11), UDim2.new(1, -318, 0, 17), Enum.Font.GothamBold, 9, COLORS.success)
+    textLabel(serviceCard, "PayomboyZ Studios", UDim2.fromOffset(128, 29), UDim2.new(1, -318, 0, 24), Enum.Font.GothamBold, 15, COLORS.text)
+    textLabel(serviceCard, "Verified client delivery", UDim2.fromOffset(128, 54), UDim2.new(1, -318, 0, 18), Enum.Font.Gotham, 10, COLORS.textFaint)
+    local secureBadge = create("Frame", {
+        Position = UDim2.new(1, -180, 0.5, -17),
+        Size = UDim2.fromOffset(168, 34),
+        BackgroundColor3 = COLORS.glassDeep,
+        BackgroundTransparency = 0.18,
+        BorderSizePixel = 0,
+    }, serviceCard)
+    round(secureBadge, 9)
+    create("UIStroke", {
+        Color = COLORS.cyan,
+        Thickness = 1,
+        Transparency = 0.3,
+    }, secureBadge)
+    lucideIcon(secureBadge, "shield-check", UDim2.fromOffset(10, 9), UDim2.fromOffset(16, 16), COLORS.success, 5)
+    textLabel(secureBadge, "Security By Luarmour", UDim2.fromOffset(32, 0), UDim2.new(1, -36, 1, 0), Enum.Font.GothamBold, 9, COLORS.success)
+
+    textLabel(mainPanel, "SECURE ACCESS", UDim2.fromOffset(22, 174), UDim2.new(1, -44, 0, 16), Enum.Font.GothamBold, 9, COLORS.cyan)
+    textLabel(mainPanel, "Enter your key to launch PayomboyZ Hub", UDim2.fromOffset(22, 190), UDim2.new(1, -44, 0, 19), Enum.Font.Gotham, 11, COLORS.textMuted)
+
+    -- Key Input
+    local input = create("TextBox", {
+        Name = "KeyInput",
+        Position = UDim2.fromOffset(20, 214),
+        Size = UDim2.new(1, -40, 0, 50),
+        BackgroundColor3 = COLORS.input,
+        BackgroundTransparency = 0.24,
+        BorderSizePixel = 0,
+        ClearTextOnFocus = false,
+        Font = Enum.Font.GothamMedium,
+        PlaceholderText = "Paste your key here...",
+        PlaceholderColor3 = COLORS.textMuted,
+        Text = defaultKeyText or "",
+        TextColor3 = COLORS.text,
+        TextTransparency = 0,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 4,
+    }, mainPanel)
+    round(input, 12)
+    local inputFocused = false
+    local inputBorder = create("UIStroke", {
+        Name = "KeyInputBorder",
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Color = COLORS.cyan,
+        Thickness = 1.35,
+        Transparency = 0.18,
+    }, input)
+    local inputBorderGradient = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 20, 50)),
+            ColorSequenceKeypoint.new(0.44, Color3.fromRGB(255, 45, 85)),
+            ColorSequenceKeypoint.new(0.52, Color3.fromRGB(255, 120, 150)),
+            ColorSequenceKeypoint.new(0.60, Color3.fromRGB(255, 45, 85)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 20, 50)),
+        }),
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.58),
+            NumberSequenceKeypoint.new(0.40, 0.38),
+            NumberSequenceKeypoint.new(0.50, 0),
+            NumberSequenceKeypoint.new(0.62, 0.38),
+            NumberSequenceKeypoint.new(1, 0.58),
+        }),
+        Rotation = 0,
+    }, inputBorder)
+    local inputBorderSpin = TweenService:Create(
+        inputBorderGradient,
+        TweenInfo.new(2.65, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+        { Rotation = 360 }
+    )
+    inputBorderSpin:Play()
+    gui.Destroying:Connect(function() inputBorderSpin:Cancel() end)
+    local inputKeyIcon = lucideIcon(mainPanel, "key", UDim2.fromOffset(36, 230), UDim2.fromOffset(18, 18), COLORS.textMuted, 5)
+    create("UIPadding", {
+        PaddingLeft = UDim.new(0, 46),
+        PaddingRight = UDim.new(0, 16),
+    }, input)
+
+    -- Primary Buttons Row
+    local primaryRow = create("Frame", {
+        Position = UDim2.fromOffset(20, 276),
+        Size = UDim2.new(1, -40, 0, 46),
+        BackgroundTransparency = 1,
+    }, mainPanel)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 10),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, primaryRow)
+    local getKey = makeButton(primaryRow, "GetKey", "Get Key", UDim2.new(), UDim2.new(0.5, -5, 1, 0), COLORS.primary, COLORS.primaryHover, COLORS.primaryPressed, "key")
+    getKey.LayoutOrder = 1
+    local redeem = makeButton(primaryRow, "Redeem", "Verify Key", UDim2.new(), UDim2.new(0.5, -5, 1, 0), COLORS.secondary, COLORS.secondaryHover, COLORS.secondaryPressed, "shield-check")
+    redeem.LayoutOrder = 2
+
+    -- Utility Buttons Row
+    local utilityRow = create("Frame", {
+        Position = UDim2.fromOffset(20, 334),
+        Size = UDim2.new(1, -40, 0, 38),
+        BackgroundTransparency = 1,
+    }, mainPanel)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, utilityRow)
+    local discord = makeButton(utilityRow, "Discord", "Discord", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "message-circle")
+    discord.LayoutOrder = 1
+    local copyHwid = makeButton(utilityRow, "CopyHWID", "Copy HWID", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "copy")
+    copyHwid.LayoutOrder = 2
+    local settingsButton = makeButton(utilityRow, "Settings", "Settings", UDim2.new(), UDim2.new(1 / 3, -6, 1, 0), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "settings")
+    settingsButton.LayoutOrder = 3
+    setButtonTextSize(discord, 11)
+    setButtonTextSize(copyHwid, 11)
+    setButtonTextSize(settingsButton, 11)
+
+    -- Status Card
+    local statusCard = create("Frame", {
+        Name = "StatusCard",
+        Position = UDim2.fromOffset(20, 384),
+        Size = UDim2.new(1, -40, 0, 46),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+    }, mainPanel)
+    local statusAccent = create("Frame", {
+        Position = UDim2.fromOffset(0, 8),
+        Size = UDim2.new(0, 3, 1, -16),
+        BackgroundColor3 = COLORS.cyan,
+        BorderSizePixel = 0,
+    }, statusCard)
+    round(statusAccent, 2)
+    local statusIcon = lucideIcon(statusCard, "info", UDim2.fromOffset(16, 15), UDim2.fromOffset(16, 16), COLORS.cyan, 5)
+    local statusSummary = textLabel(statusCard, "", UDim2.fromOffset(42, 13), UDim2.new(1, -58, 0, 20), Enum.Font.GothamBold, 11, COLORS.textMuted)
+    statusSummary.Name = "StatusSummary"
+    local statusDetail = textLabel(statusCard, "", UDim2.fromOffset(42, 34), UDim2.new(1, -58, 0, 38), Enum.Font.Gotham, 9, COLORS.textMuted)
+    statusDetail.Name = "StatusDetail"
+    statusDetail.TextWrapped = true
+    statusDetail.TextTruncate = Enum.TextTruncate.None
+    statusDetail.TextYAlignment = Enum.TextYAlignment.Top
+    statusDetail.Visible = false
+    local copyError = makeButton(statusCard, "CopyError", "Copy Error", UDim2.new(1, -108, 0, 8), UDim2.fromOffset(94, 26), COLORS.surfaceRaised, COLORS.surfaceHover, COLORS.surfacePressed, "copy")
+    setButtonTextSize(copyError, 9)
+    copyError.Visible = false
+
+    -- Premium / VIP Card
+    local accessCard = create("Frame", {
+        Name = "PremiumAccess",
+        Position = UDim2.fromOffset(20, 442),
+        Size = UDim2.new(1, -40, 0, 146),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ClipsDescendants = true,
+    }, mainPanel)
+    create("Frame", {
+        Name = "PremiumDivider",
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.new(1, 0, 0, 1),
+        BackgroundColor3 = COLORS.divider,
+        BackgroundTransparency = 0.84,
+        BorderSizePixel = 0,
+    }, accessCard)
+    local premiumBadge = textLabel(accessCard, "PAYOMBOYZ VIP", UDim2.fromOffset(18, 14), UDim2.fromOffset(86, 18), Enum.Font.GothamBold, 8, COLORS.primary, Enum.TextXAlignment.Center)
+    premiumBadge.BackgroundTransparency = 0
+    premiumBadge.BackgroundColor3 = COLORS.surfaceRaised
+    round(premiumBadge, 6)
+    textLabel(accessCard, "VVIP Exclusive Access", UDim2.fromOffset(18, 40), UDim2.new(1, -170, 0, 22), Enum.Font.GothamBold, 15, COLORS.text)
+    textLabel(accessCard, "Unlock Mine a Mountain, MM2 & exclusive features", UDim2.fromOffset(18, 64), UDim2.new(1, -170, 0, 19), Enum.Font.GothamMedium, 11, COLORS.textMuted)
+    textLabel(accessCard, "Join Discord to Upgrade to VVIP", UDim2.fromOffset(18, 87), UDim2.new(1, -170, 0, 18), Enum.Font.GothamMedium, 10, COLORS.premium)
+    local premiumPerks = textLabel(accessCard, "VVIP Maps  |  Priority Support  |  Auto Farm Engine", UDim2.fromOffset(18, 111), UDim2.new(1, -170, 0, 19), Enum.Font.GothamMedium, 10, COLORS.textFaint)
+    local plansSlot = create("Frame", {
+        Name = "PlansSlot",
+        Position = UDim2.new(1, -136, 0.5, -20),
+        Size = UDim2.fromOffset(118, 40),
+        BackgroundTransparency = 1,
+    }, accessCard)
+    local premiumButton = makeButton(plansSlot, "PremiumPlans", "Get VVIP", UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1), COLORS.premiumAction, COLORS.premiumHover, COLORS.premiumPressed, "external-link")
+    setButtonTextSize(premiumButton, 12)
+    local plansScale = create("UIScale", { Scale = 1 }, plansSlot)
+    local plansMotionStartedAt = os.clock()
+    local plansMotionConnection = RunService.RenderStepped:Connect(function()
+        if not gui.Parent or not premiumButton.Parent then return end
+        local phase = os.clock() - plansMotionStartedAt
+        premiumButton.Position = UDim2.fromOffset(
+            math.cos(phase * 0.90) * 2.0,
+            math.sin(phase * 1.10) * 3.0
+        )
+        premiumButton.Rotation = math.sin(phase * 0.74 + 0.55) * 0.65
+        plansScale.Scale = 1 + math.sin(phase * 0.62 + 1.20) * 0.012
+    end)
+    gui.Destroying:Connect(function()
+        if plansMotionConnection then plansMotionConnection:Disconnect() end
+    end)
+
+    local lastErrorDetail = ""
+    local function setStatusLayout(hasDetail, tone)
+        local statusHeight = hasDetail and 82 or 46
+        local accessY = hasDetail and 478 or 442
+        local accessHeight = hasDetail and 110 or 146
+        if hasDetail then
+            statusDetail.Visible = true
+            copyError.Visible = true
+        else
+            statusDetail.Visible = false
+            copyError.Visible = false
+        end
+        premiumPerks.Visible = not hasDetail
+        playTween(statusCard, MOTION.normal, { Size = UDim2.new(1, -40, 0, statusHeight) })
+        playTween(accessCard, MOTION.normal, {
+            Position = UDim2.fromOffset(20, accessY),
+            Size = UDim2.new(1, -40, 0, accessHeight),
+        })
+        playTween(statusSummary, MOTION.quick, {
+            Position = UDim2.fromOffset(42, hasDetail and 8 or 13),
+            Size = UDim2.new(1, hasDetail and -160 or -58, 0, 20),
+            TextColor3 = tone,
+        })
+        playTween(statusIcon, MOTION.quick, { Position = UDim2.fromOffset(16, hasDetail and 10 or 15) })
+        statusSummary.TextXAlignment = Enum.TextXAlignment.Left
     end
 
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "DashboardFrame"
-    mainFrame.Size = UDim2.fromOffset(330, 182)
-    mainFrame.AnchorPoint = Vector2.new(1, 0)
-    mainFrame.Position = UDim2.new(1, -15, 0, 15)
-    mainFrame.BackgroundColor3 = COLORS.shell
-    mainFrame.BackgroundTransparency = 0.15
-    mainFrame.BorderSizePixel = 0
-    mainFrame.ClipsDescendants = true
-    mainFrame.ZIndex = 99990
-    mainFrame.Parent = hudGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 14)
-    corner.Parent = mainFrame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = COLORS.primary
-    stroke.Thickness = 1.6
-    stroke.Transparency = 0.2
-    stroke.Parent = mainFrame
-
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 32)
-    header.BackgroundColor3 = COLORS.glassDeep
-    header.BackgroundTransparency = 0.2
-    header.BorderSizePixel = 0
-    header.ZIndex = 99991
-    header.Parent = mainFrame
-
-    local hCorner = Instance.new("UICorner")
-    hCorner.CornerRadius = UDim.new(0, 14)
-    hCorner.Parent = header
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, -40, 1, 0)
-    titleLbl.Position = UDim2.new(0, 12, 0, 0)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = "👑 PAYOMBOYZ KAITUN PRO <font color=\"#00f0ff\">[HUD]</font>"
-    titleLbl.RichText = true
-    titleLbl.TextColor3 = COLORS.text
-    titleLbl.Font = Enum.Font.GothamBold
-    titleLbl.TextSize = 12
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.ZIndex = 99992
-    titleLbl.Parent = header
-
-    local minBtn = Instance.new("TextButton")
-    minBtn.Size = UDim2.fromOffset(22, 22)
-    minBtn.Position = UDim2.new(1, -28, 0.5, -11)
-    minBtn.BackgroundColor3 = COLORS.glass
-    minBtn.BackgroundTransparency = 0.3
-    minBtn.Text = "─"
-    minBtn.TextColor3 = COLORS.textMuted
-    minBtn.Font = Enum.Font.GothamBold
-    minBtn.TextSize = 12
-    minBtn.ZIndex = 99993
-    minBtn.Parent = header
-
-    local mbCorner = Instance.new("UICorner")
-    mbCorner.CornerRadius = UDim.new(0, 6)
-    mbCorner.Parent = minBtn
-
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Name = "ContentArea"
-    contentFrame.Size = UDim2.new(1, -20, 1, -38)
-    contentFrame.Position = UDim2.new(0, 10, 0, 34)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.ZIndex = 99991
-    contentFrame.Parent = mainFrame
-
-    local function createLabel(name, posY, fontSize, textColor, isRich)
-        local lbl = Instance.new("TextLabel")
-        lbl.Name = name
-        lbl.Size = UDim2.new(1, 0, 0, 20)
-        lbl.Position = UDim2.new(0, 0, 0, posY)
-        lbl.BackgroundTransparency = 1
-        lbl.TextColor3 = textColor or COLORS.text
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = fontSize or 11
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.RichText = isRich == true
-        lbl.ZIndex = 99992
-        lbl.Parent = contentFrame
-        return lbl
+    local function setStatus(message, color, detail)
+        local tone = color or COLORS.textMuted
+        local safeDetail = tostring(detail or ""):gsub("[%c]+", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+        local hasDetail = safeDetail ~= ""
+        statusSummary.Text = tostring(message or "")
+        local iconName = "info"
+        if tone == COLORS.success then
+            iconName = "check-circle"
+        elseif tone == COLORS.warning or tone == COLORS.danger then
+            iconName = "alert-circle"
+        end
+        applyLucideData(statusIcon, iconName)
+        playTween(statusIcon, MOTION.quick, { ImageColor3 = tone })
+        playTween(statusAccent, MOTION.quick, { BackgroundColor3 = tone })
+        setStatusLayout(hasDetail, tone)
+        lastErrorDetail = safeDetail
+        if hasDetail then
+            statusDetail.Text = #safeDetail > 190 and (safeDetail:sub(1, 187) .. "...") or safeDetail
+            warn("[PayomboyZ Hub] " .. tostring(message or "Error") .. " " .. safeDetail)
+        else
+            statusDetail.Text = ""
+        end
     end
 
-    self.StatusLbl = createLabel("StatusLbl", 0, 11, COLORS.text)
-    self.MissionLbl = createLabel("MissionLbl", 20, 11, COLORS.textMuted)
-    self.EventLbl = createLabel("EventLbl", 40, 11, COLORS.success, true)
-    self.ResourceLbl = createLabel("ResourceLbl", 60, 10, Color3.fromRGB(255, 110, 160))
-    self.AccountLbl = createLabel("AccountLbl", 80, 10, Color3.fromRGB(100, 220, 255))
-    self.ProgressLbl = createLabel("ProgressLbl", 102, 10, Color3.fromRGB(255, 215, 0), true)
+    if initialStatus then
+        setStatus(initialStatus, COLORS.warning)
+    else
+        setStatus("Ready for " .. detectedGame .. ".", COLORS.cyan)
+    end
 
-    local isCollapsed = false
-    ConnectionManager:Add(minBtn.MouseButton1Click:Connect(function()
-        playClickSound()
-        isCollapsed = not isCollapsed
-        contentFrame.Visible = not isCollapsed
-        mainFrame.Size = isCollapsed and UDim2.fromOffset(330, 32) or UDim2.fromOffset(330, 182)
-        minBtn.Text = isCollapsed and "+" or "─"
-    end), "HudMinBtnClick")
+    local busy = false
+    local function redeemKey()
+        if busy then return end
+        local rawKey = input.Text or ""
+        local key = rawKey:gsub("%s+", "")
+        if key == "" then
+            setStatus("กรุณากรอก Key ก่อนกดปุ่มนี้", COLORS.warning)
+            return
+        end
 
-    self.Frame = mainFrame
+        busy = true
+        setButtonEnabled(redeem, false)
+
+        -- 🌟 VVIP Key: bypass Luarmor โดยตรง
+        if key == LuarmorConfig.SpecialKey then
+            task.spawn(function()
+                setButtonText(redeem, "[1/3] Verifying VVIP...")
+                setStatus("👑 [1/3] Verifying VVIP Key...", COLORS.cyan)
+                task.wait(0.3)
+
+                setButtonText(redeem, "[2/3] Connecting...")
+                setStatus("🚀 [2/3] Bypassing Luarmor → Loading Hub...", COLORS.cyan)
+                task.wait(0.3)
+
+                setButtonText(redeem, "[3/3] Launching!")
+                setStatus("✅ [3/3] VVIP Access Granted! Launching now...", COLORS.success)
+                task.wait(0.35)
+
+                if gui and gui.Parent then gui:Destroy() end
+                PassToKeyChecker(key)
+            end)
+            return
+        end
+
+        -- 🔒 Luarmor Key: แสดง 1/5..5/5 แล้วปิด UI → ยิง Luarmor ทันที
+        -- ErrorWatcher ใน PassToKeyChecker จะจัดการถ้าคีย์ผิด/หมดอายุ
+        task.spawn(function()
+            setButtonText(redeem, "[1/5] Checking...")
+            setStatus("🔍 [1/5] Checking Key format & length...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[2/5] Connecting...")
+            setStatus("📡 [2/5] Connecting to Luarmor API...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[3/5] Verifying...")
+            setStatus("🛡️ [3/5] Verifying HWID & Whitelist...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[4/5] Saving...")
+            setStatus("💾 [4/5] Saving key to device...", COLORS.cyan)
+            task.wait(0.4)
+
+            setButtonText(redeem, "[5/5] Launching!")
+            setStatus("🚀 [5/5] Launching PayomboyZ Hub...", COLORS.success)
+            task.wait(0.4)
+
+            -- ปิด UI แล้วยิง Luarmor ทันที — ไม่ kick ผู้ใช้ออกจากเกม
+            -- ถ้า Luarmor ขึ้น error, ErrorWatcher จะลบคีย์ผิด + เปิด UI ใหม่โดยอัตโนมัติ
+            if gui and gui.Parent then gui:Destroy() end
+            PassToKeyChecker(key)
+        end)
+    end
+
+    copyError.Activated:Connect(function()
+        if lastErrorDetail ~= "" and copyText(lastErrorDetail) then
+            setButtonText(copyError, "Copied")
+            task.delay(1.2, function()
+                if copyError.Parent then setButtonText(copyError, "Copy Error") end
+            end)
+        end
+    end)
+
+    getKey.Activated:Connect(function()
+        if copyText(LuarmorConfig.GetKeyURL) then
+            setStatus("คัดลอกลิงก์รับ Key เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(LuarmorConfig.GetKeyURL, COLORS.warning)
+        end
+    end)
+
+    discord.Activated:Connect(function()
+        if copyText(LuarmorConfig.DiscordURL) then
+            setStatus("คัดลอกลิงก์ Discord เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(LuarmorConfig.DiscordURL, COLORS.warning)
+        end
+    end)
+
+    copyHwid.Activated:Connect(function()
+        local hwid = readableHwid()
+        if hwid and copyText(hwid) then
+            setStatus("คัดลอก HWID เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus("ระบบเปิดใช้งานด้วย Special Key VVIP", COLORS.success)
+        end
+    end)
+
+    premiumButton.Activated:Connect(function()
+        local vvipUrl = LuarmorConfig.VVIPURL or "https://payomboyz.rexzy.xyz/"
+        if copyText(vvipUrl) then
+            setStatus("คัดลอกลิงก์เว็บ VVIP เรียบร้อยแล้ว!", COLORS.success)
+        else
+            setStatus(vvipUrl, COLORS.warning)
+        end
+    end)
+
+    input.Focused:Connect(function()
+        inputFocused = true
+        playTween(input, MOTION.quick, { BackgroundColor3 = COLORS.inputFocus })
+        playTween(inputBorder, MOTION.quick, { Transparency = 0.06 })
+        playTween(inputKeyIcon, MOTION.quick, { ImageColor3 = COLORS.cyan })
+    end)
+
+    input.FocusLost:Connect(function()
+        inputFocused = false
+        playTween(input, MOTION.quick, { BackgroundColor3 = COLORS.input })
+        playTween(inputBorder, MOTION.quick, { Transparency = 0.18 })
+        playTween(inputKeyIcon, MOTION.quick, { ImageColor3 = COLORS.textFaint })
+    end)
+
+    local waitingKeyStates = {
+        "Waiting for key",
+        "Waiting for key.",
+        "Waiting for key..",
+        "Waiting for key...",
+    }
+    task.spawn(function()
+        local waitingIndex = 1
+        while gui.Parent do
+            if input.Text == "" and not inputFocused then
+                input.PlaceholderText = waitingKeyStates[waitingIndex]
+                waitingIndex = waitingIndex % #waitingKeyStates + 1
+            end
+            task.wait(0.45)
+        end
+    end)
+
+    local detailsVisible = true
+    local requestedDetails = true
+    local viewportCompact = false
+    local detailsTransitioning = false
+    local detailsTransitionVersion = 0
+    local updateResponsiveScale
+
+    local function setDetailsVisible(visible, announce)
+        visible = visible and not viewportCompact
+        if visible == detailsVisible and not detailsTransitioning then
+            return
+        end
+
+        detailsTransitionVersion = detailsTransitionVersion + 1
+        local transitionVersion = detailsTransitionVersion
+        detailsTransitioning = true
+        detailsVisible = visible
+
+        columnDivider.Visible = true
+        if visible then
+            userPanel.Visible = true
+            userPanel.Position = UDim2.fromOffset(-286, 8)
+            columnDivider.BackgroundTransparency = 1
+            playTween(shell, MOTION.slow, {
+                Size = UDim2.fromOffset(DESKTOP_WIDTH, SHELL_HEIGHT),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "layout")
+            playTween(mainPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(294, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            playTween(columnDivider, MOTION.slow, {
+                BackgroundTransparency = 0.84,
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            local profileTween = playTween(userPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(8, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            profileTween.Completed:Connect(function()
+                if transitionVersion == detailsTransitionVersion then
+                    detailsTransitioning = false
+                end
+            end)
+        else
+            playTween(shell, MOTION.slow, {
+                Size = UDim2.fromOffset(COMPACT_WIDTH, SHELL_HEIGHT),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "layout")
+            playTween(mainPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(8, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            playTween(columnDivider, MOTION.slow, {
+                BackgroundTransparency = 1,
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            local profileTween = playTween(userPanel, MOTION.slow, {
+                Position = UDim2.fromOffset(-286, 8),
+            }, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut, "details")
+            profileTween.Completed:Connect(function()
+                if gui.Parent and transitionVersion == detailsTransitionVersion and not detailsVisible then
+                    userPanel.Visible = false
+                    columnDivider.Visible = false
+                    detailsTransitioning = false
+                end
+            end)
+        end
+        if announce then
+            setStatus(visible and "Profile details shown." or "Compact mode enabled.", COLORS.textMuted)
+        end
+        if updateResponsiveScale then
+            task.defer(updateResponsiveScale)
+        end
+    end
+
+    settingsButton.Activated:Connect(function()
+        if detailsTransitioning then return end
+        if viewportCompact then
+            setStatus("Profile is hidden on compact screens.", COLORS.warning)
+            return
+        end
+        requestedDetails = not requestedDetails
+        setDetailsVisible(requestedDetails, true)
+    end)
+
+    minimize.Activated:Connect(function()
+        if detailsTransitioning then return end
+        requestedDetails = false
+        setDetailsVisible(false, true)
+    end)
+
+    local closing = false
+    local function closeLoader()
+        if closing then return end
+        closing = true
+        playTween(backdrop, MOTION.normal, { BackgroundTransparency = 1 })
+        playTween(shellScale, MOTION.normal, { Scale = shellScale.Scale * 0.96 })
+        local tween = playTween(shell, MOTION.normal, { GroupTransparency = 1 }, nil, nil, "visibility")
+        tween.Completed:Connect(function()
+            if gui.Parent then gui:Destroy() end
+        end)
+    end
+
+    close.Activated:Connect(closeLoader)
+    redeem.Activated:Connect(redeemKey)
+    input.FocusLost:Connect(function(enterPressed)
+        if enterPressed then redeemKey() end
+    end)
+
+    local startedAt = os.clock()
+    task.spawn(function()
+        while gui.Parent do
+            local elapsed = math.floor(os.clock() - startedAt)
+            sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
+            local ping = "--"
+            pcall(function()
+                ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString():match("[%d%.]+") or "--"
+            end)
+            pingText.Text = tostring(ping) .. " ms"
+            task.wait(1)
+        end
+    end)
+
+    local dragging = false
+    local dragStart
+    local shellStart
+    header.InputBegan:Connect(function(inputObject)
+        if inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = inputObject.Position
+            shellStart = shell.Position
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(inputObject)
+        if inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inputObject)
+        if dragging and (inputObject.UserInputType == Enum.UserInputType.MouseMovement or inputObject.UserInputType == Enum.UserInputType.Touch) then
+            local delta = inputObject.Position - dragStart
+            shell.Position = UDim2.new(
+                shellStart.X.Scale,
+                shellStart.X.Offset + delta.X,
+                shellStart.Y.Scale,
+                shellStart.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    local entered = false
+    local responsiveScale = 1
+    updateResponsiveScale = function()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        local baseWidth = detailsVisible and DESKTOP_WIDTH or COMPACT_WIDTH
+        responsiveScale = math.min(
+            1,
+            math.max(0.42, (viewport.X - 24) / baseWidth),
+            math.max(0.42, (viewport.Y - 24) / SHELL_HEIGHT)
+        )
+        if entered then
+            playTween(shellScale, MOTION.normal, { Scale = responsiveScale })
+        else
+            shellScale.Scale = responsiveScale * 0.96
+        end
+    end
+
+    local function applyResponsiveLayout()
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        viewportCompact = viewport.X < 860
+        setDetailsVisible(requestedDetails and not viewportCompact, false)
+        updateResponsiveScale()
+    end
+
+    applyResponsiveLayout()
+    pcall(function()
+        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+    end)
+
+    task.defer(function()
+        if not gui.Parent then return end
+        entered = true
+        playTween(backdrop, MOTION.slow, { BackgroundTransparency = 0.78 })
+        playTween(shell, MOTION.slow, { GroupTransparency = 0 }, nil, nil, "visibility")
+        playTween(shellScale, MOTION.slow, { Scale = responsiveScale })
+    end)
+end
+
+-- ==============================================================================
+-- 🚀 SMART AUTO-LOGIN FLOW
+-- ==============================================================================
+if getgenv and getgenv().PayomboyZ_LoggedOut then
+    getgenv().PayomboyZ_LoggedOut = nil
+    ClearSavedKeys()
+    CreateLoaderUI("✅ ออกจากระบบเรียบร้อยแล้ว กรุณากรอกคีย์ใหม่", "")
+    return
+end
+
+if getgenv and getgenv().PayomboyZ_ShowUI then
+    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
+    getgenv().PayomboyZ_ShowUI = false
+    return
+end
+
+local passedKey = GetPassedScriptKey()
+local savedKey = LoadSavedKey()
+local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
+
+if passedKey ~= "" then
+    -- บันทึก Key ที่ผู้ใช้ใส่ในตัวรันสคริปต์ทันที และทำการเข้าใช้งานระบบโดยอัตโนมัติ
+    SaveKey(passedKey)
+    ShowToast("🔑 PayomboyZ Hub", "พบ Key จากตัวรันสคริปต์! กำลังเข้าสู่ระบบ...", false)
+    PassToKeyChecker(passedKey)
+elseif savedKey ~= "" then
+    -- ==============================================================================
+    -- 🚀 INSTANT AUTO-LOGIN & ESCAPE HATCH
+    -- ==============================================================================
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local EscapeGui = Instance.new("ScreenGui")
+    EscapeGui.Name = "PayomboyZ_Escape"
+    EscapeGui.ResetOnSpawn = false
+    EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+    pcall(function() EscapeGui.Parent = CoreGui end)
+    if not EscapeGui.Parent then EscapeGui.Parent = PlayerGui end
+
+    local EscBtn = Instance.new("TextButton")
+    EscBtn.Size = UDim2.new(0, 170, 0, 32)
+    EscBtn.Position = UDim2.new(0.5, -85, 0, -40)
+    EscBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
+    EscBtn.Text = "❌ ลบคีย์เดิม (Reset Key)"
+    EscBtn.Font = Enum.Font.GothamBold
+    EscBtn.TextSize = 12
+    EscBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    EscBtn.BorderSizePixel = 0
+    EscBtn.Parent = EscapeGui
+
+    local EscCorner = Instance.new("UICorner")
+    EscCorner.CornerRadius = UDim.new(0, 6)
+    EscCorner.Parent = EscBtn
+
+    local EscStroke = Instance.new("UIStroke")
+    EscStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    EscStroke.Color = Color3.fromRGB(255, 255, 255)
+    EscStroke.Transparency = 0.2
+    EscStroke.Thickness = 1
+    EscStroke.Parent = EscBtn
 
     task.spawn(function()
-        while mainFrame and mainFrame.Parent do
-            pcall(function() self:Update() end)
-            task.wait(0.5)
+        local ts = game:GetService("TweenService")
+        ts:Create(EscBtn, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(0.5, -85, 0, 20)}):Play()
+    end)
+
+    EscBtn.MouseButton1Click:Connect(function()
+        ClearSavedKeys()
+        EscBtn.Text = "✅ ลบคีย์แล้ว! กำลังเปิดหน้าต่างใหม่..."
+        EscBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        task.wait(1.2)
+        
+        if EscapeGui then EscapeGui:Destroy() end
+        
+        if getgenv then 
+            getgenv().PayomboyZ_ShowUI = true 
+            getgenv().PayomboyZ_ErrorMsg = "✅ ลบคีย์เดิมสำเร็จ! กรุณาใส่คีย์ใหม่"
+        end
+        loadstring(game:HttpGet(LuarmorConfig.StartURL))()
+    end)
+
+    task.delay(12, function()
+        if EscapeGui then
+            local ts = game:GetService("TweenService")
+            local tw = ts:Create(EscBtn, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2.new(0.5, -85, 0, -50)})
+            tw:Play()
+            tw.Completed:Connect(function() pcall(function() EscapeGui:Destroy() end) end)
         end
     end)
+
+    ShowToast("🔑 PayomboyZ Hub", "พบ Key เดิม! กำลังเชื่อมต่ออัตโนมัติ...", false)
+    PassToKeyChecker(savedKey)
+else
+    -- ถ้าไม่มีคีย์ ให้สร้าง UI โดยปล่อยช่องกรอก Key เป็นว่างไว้
+    CreateLoaderUI(nil, "")
 end
-
-function KaitunDashboard:Update()
-    if not self.Frame or not self.Frame.Parent then return end
-
-    pcall(function()
-        local moneyVal = getCurrentMoney()
-
-        local rebirthCount = 0
-        if dataControllerModule and dataControllerModule.rebirth then
-            local rData = dataControllerModule.rebirth()
-            if rData and rData.count then rebirthCount = rData.count end
-        end
-
-        local towerFloor = 0
-        if dataControllerModule and dataControllerModule.towerBest then
-            towerFloor = tonumber(dataControllerModule.towerBest()) or 0
-        end
-
-        local scrapCount = getScrapStackCount()
-        local eggCount = #getOwnedEggPositions()
-
-        local feederCount = 0
-        local coopSlots = 0
-        local coopData = getCoopData()
-        if coopData then
-            if type(coopData.generators) == "table" then feederCount = #coopData.generators end
-            if type(coopData.slots) == "number" then coopSlots = coopData.slots end
-        end
-
-        local eventLive = isChaosEventLive()
-        local eventText = eventLive and "<font color=\"#ff3b3b\">🔥 LIVE (บอสไก่เดือด)</font>" or "<font color=\"#888888\">💤 STANDBY</font>"
-
-        local curTask = "IDLE"
-        local statusThai = "กำลังสแตนด์บายพักผ่อน"
-
-        if getgenv().autoChaosEnabled and eventLive then
-            curTask = "CHAOS_EVENT"
-            statusThai = "⚔️ ลุย Chaos Event Arena"
-        elseif getgenv().autoTowerEnabled and isTowerRunActive() then
-            curTask = "TOWER_RUN"
-            statusThai = "🏰 ตะลุยดันหอคอย (Auto Tower)"
-        elseif getgenv().autoRebirthEnabled and isRebirthReady and isRebirthReady() then
-            curTask = "REBIRTH_ROUTINE"
-            statusThai = "⚡ เคลียร์เงื่อนไขเตรียม Rebirth"
-        elseif getgenv().autoScrapEnabled and scrapCount > 6 then
-            curTask = "DEPOSIT_SCRAP"
-            statusThai = "🗑️ นำเศษเหล็กไปส่งเครื่อง Recycler"
-        elseif getgenv().autoCollectEggEnabled and eggCount > 0 then
-            curTask = "COLLECT_EGGS"
-            statusThai = "🥚 เดินเก็บไข่ไก่รอบเล้า"
-        elseif getgenv().autoScrapEnabled then
-            curTask = "COLLECT_SCRAP"
-            statusThai = "🔧 เก็บเศษเหล็กขยะใน PIT"
-        end
-
-        local priorityMap = {
-            CHAOS_EVENT = "[P0] CHAOS_EVENT",
-            REBIRTH_ROUTINE = "[P1] REBIRTH_ROUTINE",
-            DEPOSIT_SCRAP = "[P1] DEPOSIT_SCRAP",
-            TOWER_RUN = "[P2] AUTO_TOWER",
-            COLLECT_EGGS = "[P3] COLLECT_EGGS",
-            COLLECT_SCRAP = "[P4] COLLECT_SCRAP",
-            IDLE = "[P5] STANDBY_IDLE"
-        }
-
-        local pText = priorityMap[curTask] or ("[P1] " .. curTask)
-
-        local elapsedTime = os.time() - self.StartTime
-        local timeStr = formatTime(elapsedTime)
-
-        local score = math.clamp(math.floor((rebirthCount * 20) + (towerFloor * 2) + (coopSlots * 5)), 0, 100)
-        local barFilled = math.floor(score / 10)
-        local barEmpty = 10 - barFilled
-        local progressBar = string.rep("█", barFilled) .. string.rep("░", barEmpty)
-
-        if self.StatusLbl then self.StatusLbl.Text = "⚡ แอ็กชัน: " .. statusThai end
-        if self.MissionLbl then self.MissionLbl.Text = "🎯 ภารกิจหลัก: " .. pText end
-        if self.EventLbl then self.EventLbl.Text = "⚔️ Chaos Event: " .. eventText end
-        if self.ResourceLbl then self.ResourceLbl.Text = string.format("🗑️ ขยะ: %d/6  |  🥚 ไข่: %d  |  🍗 รางอาหาร: %d Slot", scrapCount, eggCount, feederCount) end
-        if self.AccountLbl then self.AccountLbl.Text = string.format("💰 เงิน: $%s  |  📊 Rebirth: %d  |  🏰 หอคอย: ชั้น %d", formatMoney(moneyVal), rebirthCount, towerFloor) end
-        if self.ProgressLbl then self.ProgressLbl.Text = string.format("🔥 KAITUN SCORE: [<font color=\"#00ffaa\">%s</font>] %d%% (⏱️ %s)", progressBar, score, timeStr) end
-    end)
-end
-
-pcall(function() KaitunDashboard:Init() end)
-
-local Tabs = {
-    Farm = Window:AddTab({ Title = "🥚 ฟาร์มไก่" }),
-    Tower = Window:AddTab({ Title = "🏰 ดันหอคอย & อีเวนต์" }),
-    Upgrade = Window:AddTab({ Title = "⚡ อัปเกรด & รีเบิร์ธ" })
-}
-
------------------------------------------------------------------------------------------
--- 📌 TAB 1: 🥚 ฟาร์มไก่ (CHICKEN FARM)
------------------------------------------------------------------------------------------
-
--- 1. Auto Collect Egg
-local AutoCollectEgg = Tabs.Farm:AddToggle("AutoCollectEgg", {
-    Title = "เก็บไข่ไก่อัตโนมัติ (Auto Collect Egg)",
-    Description = "เดินเก็บไข่ไก่ภายในเล้าตามระยะทางที่ใกล้ที่สุด",
-    Default = false
-})
-
-AutoCollectEgg:OnChanged(function(Value)
-    getgenv().autoCollectEggEnabled = Value
-
-    if Value and not getgenv().autoCollectEggLoopActive then
-        getgenv().autoCollectEggLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoCollectEggEnabled do
-                local playerCharacter = localPlayer.Character
-                local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
-                local rootPart = playerCharacter and playerCharacter:FindFirstChild("HumanoidRootPart")
-
-                if playerHumanoid and rootPart and playerHumanoid.Health > 0 then
-                    local ownedEggPositions = getOwnedEggPositions()
-
-                    table.sort(ownedEggPositions, function(positionA, positionB)
-                        return (positionA - rootPart.Position).Magnitude < (positionB - rootPart.Position).Magnitude
-                    end)
-
-                    for _, eggPosition in ipairs(ownedEggPositions) do
-                        if not getgenv().autoCollectEggEnabled then
-                            break
-                        end
-
-                        walkToEgg(playerHumanoid, eggPosition)
-                    end
-                end
-
-                task.wait(1)
-            end
-
-            getgenv().autoCollectEggLoopActive = false
-        end)
-    end
-end)
-
--- 2. Auto Scrap
-local AutoScrap = Tabs.Farm:AddToggle("AutoScrap", {
-    Title = "เก็บเศษเหล็กอัตโนมัติ (Auto Scrap)",
-    Description = "เก็บเศษเหล็กจาก Pit และไปส่งที่เครื่อง Recycler เมื่อคลังเต็ม",
-    Default = false
-})
-
-AutoScrap:OnChanged(function(Value)
-    getgenv().autoScrapEnabled = Value
-
-    if Value then
-        startScrapNoclip()
-    else
-        stopScrapNoclip()
-    end
-
-    if Value and not getgenv().autoScrapLoopActive then
-        getgenv().autoScrapLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoScrapEnabled do
-                pcall(function()
-                    if getScrapStackCount() > 6 then
-                        depositAtRecycler()
-                    else
-                        collectNearbyScrap()
-                    end
-                end)
-
-                task.wait(1)
-            end
-
-            getgenv().autoScrapLoopActive = false
-        end)
-    end
-end)
-
------------------------------------------------------------------------------------------
--- 📌 TAB 2: 🏰 ดันหอคอย & อีเวนต์ (TOWER & CHAOS EVENT)
------------------------------------------------------------------------------------------
-
--- 3. Auto Chaos Event
-local AutoChaos = Tabs.Tower:AddToggle("AutoChaos", {
-    Title = "เข้าร่วม Chaos Event อัตโนมัติ (Auto Chaos Event)",
-    Description = "เมื่ออีเวนต์เปิด จะถอนตัวจากหอคอย (ถ้าอยู่ใน Tower) แล้วส่งไก่เข้า Chaos Arena",
-    Default = false
-})
-
-AutoChaos:OnChanged(function(Value)
-    getgenv().autoChaosEnabled = Value
-
-    if Value and not getgenv().autoChaosLoopActive then
-        getgenv().autoChaosLoopActive = true
-
-        task.spawn(function()
-            local lastOrderTime = 0
-
-            while getgenv().autoChaosEnabled do
-                pcall(function()
-                    if isChaosEventLive() then
-                        -- Step 1: เมื่อ Event มา บังคับยิงสัญญาณ TowerSurrender ถอนตัวออกทันที (ไม่ว่าไก่อื่นหรือเรากำลังติดดันอยู่)
-                        retreatTower()
-
-                        -- Step 2: ส่งคำสั่งไก่ลง Chaos Event Arena ทุกๆ 4 วินาที (รองรับกรณีไก่ตาย/เกิดใหม่)
-                        if os.clock() - lastOrderTime >= 4 then
-                            lastOrderTime = os.clock()
-                            orderChaos()
-                        end
-                    else
-                        lastOrderTime = 0
-                    end
-                end)
-
-                task.wait(1.5)
-            end
-
-            getgenv().autoChaosLoopActive = false
-        end)
-    end
-end)
-
--- 4. Auto Tower
-local AutoTower = Tabs.Tower:AddToggle("AutoTower", {
-    Title = "ท้าทายหอคอยอัตโนมัติ (Auto Tower)",
-    Description = "เข้าดันหอคอยและปฏิเสธข้อเสนอต่อเวลาให้อัตโนมัติ (จะหยุดชั่วคราวเมื่อ Chaos LIVE)",
-    Default = false
-})
-
-AutoTower:OnChanged(function(Value)
-    getgenv().autoTowerEnabled = Value
-
-    if Value and remotesModule then
-        pcall(hookTowerContinueOffer)
-    end
-
-    if Value and not getgenv().autoTowerLoopActive and remotesModule then
-        getgenv().autoTowerLoopActive = true
-
-        task.spawn(function()
-            local wasWaitingForRebirth = false
-
-            while getgenv().autoTowerEnabled do
-                local rebirthPending = false
-
-                if getgenv().autoRebirthEnabled and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
-                    local readySuccess, isReady = pcall(isRebirthReady)
-
-                    rebirthPending = readySuccess and isReady == true
-                end
-
-                local chaosLive = getgenv().autoChaosEnabled and isChaosEventLive()
-
-                if chaosLive then
-                    -- ถ้าระบบ Chaos เปิดอยู่ และ Event กำลัง LIVE -> ให้รอ ห้ามเริ่ม Tower รอบใหม่
-                    task.wait(1.5)
-                elseif rebirthPending then
-                    wasWaitingForRebirth = true
-
-                    task.wait(1)
-                elseif wasWaitingForRebirth then
-                    wasWaitingForRebirth = false
-
-                    task.wait(3)
-                elseif isTowerRunActive() then
-                    task.wait(1)
-                else
-                    local towerDelay = tonumber(getgenv().towerDelaySeconds) or 5
-
-                    if towerDelay < 1 then
-                        towerDelay = 1
-                    end
-
-                    if towerDelay > 60 then
-                        towerDelay = 60
-                    end
-
-                    task.wait(towerDelay)
-
-                    -- ตรวจสอบก่อนกดเริ่ม Tower อีกครั้งว่าไม่ได้ติด Chaos LIVE
-                    if getgenv().autoTowerEnabled and not isTowerRunActive() and not (getgenv().autoChaosEnabled and isChaosEventLive()) then
-                        pcall(startTowerRun)
-                    end
-
-                    task.wait(1)
-                end
-            end
-
-            getgenv().autoTowerLoopActive = false
-        end)
-    end
-end)
-
--- 5. Last Tower
-local LastTower = Tabs.Tower:AddToggle("LastTower", {
-    Title = "เริ่มจากชั้นสูงสุด (Last Floor Elevator)",
-    Description = "ใช้ลิฟต์วาร์ปไปยังชั้นสูงสุดที่เคยผ่านก่อนเริ่มดันหอคอย",
-    Default = false
-})
-
-LastTower:OnChanged(function(Value)
-    getgenv().autoTowerLastFloorEnabled = Value
-end)
-
--- 6. Delay Tower
-local DelayTower = Tabs.Tower:AddSlider("DelayTower", {
-    Title = "ดีเลย์เข้าหอคอย",
-    Description = "ระยะเวลารอระหว่างการลงดันหอคอยแต่ละรอบ (วินาที)",
-    Default = 5,
-    Min = 1,
-    Max = 60,
-    Rounding = 0,
-    Callback = function(Value)
-        getgenv().towerDelaySeconds = Value
-    end
-})
-
-DelayTower:OnChanged(function(Value)
-    getgenv().towerDelaySeconds = Value
-end)
-
------------------------------------------------------------------------------------------
--- 📌 TAB 3: ⚡ อัปเกรด & เกิดใหม่ (UPGRADE & REBIRTH)
------------------------------------------------------------------------------------------
-
--- 7. Auto Rebirth
-local AutoRebirth = Tabs.Upgrade:AddToggle("AutoRebirth", {
-    Title = "เกิดใหม่อัตโนมัติ (Auto Rebirth)",
-    Description = "ทำการ Rebirth ทันทีเมื่อเงื่อนไขและเลเวลพร้อม",
-    Default = false
-})
-
-AutoRebirth:OnChanged(function(Value)
-    getgenv().autoRebirthEnabled = Value
-
-    if Value and not getgenv().autoRebirthLoopActive and remotesModule and rebirthBonusModule and rebirthExperimentModule and dataControllerModule then
-        getgenv().autoRebirthLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoRebirthEnabled do
-                local readySuccess, isReady = pcall(isRebirthReady)
-
-                if readySuccess and isReady == true then
-                    if isTowerRunActive() then
-                        task.wait(1)
-                    else
-                        pcall(requestRebirth)
-                        task.wait(1)
-                    end
-                else
-                    task.wait(1)
-                end
-            end
-
-            getgenv().autoRebirthLoopActive = false
-        end)
-    end
-end)
-
--- 8. Auto Upgrade Feeder
-local AutoUpgradeFeeder = Tabs.Upgrade:AddToggle("AutoUpgradeFeeder", {
-    Title = "อัปเกรดเครื่องให้อาหาร (Upgrade Feeder)",
-    Description = "อัปเกรดระดับเลเวลของเครื่องให้อาหารไก่อัตโนมัติ",
-    Default = false
-})
-
-AutoUpgradeFeeder:OnChanged(function(Value)
-    getgenv().autoUpgradeFeederEnabled = Value
-
-    if Value and not getgenv().autoUpgradeFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
-        getgenv().autoUpgradeFeederLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoUpgradeFeederEnabled do
-                pcall(upgradeFeeders)
-
-                task.wait(1)
-            end
-
-            getgenv().autoUpgradeFeederLoopActive = false
-        end)
-    end
-end)
-
--- 9. Auto Buy Feeder
-local AutoBuyFeeder = Tabs.Upgrade:AddToggle("AutoBuyFeeder", {
-    Title = "ซื้อเครื่องให้อาหารเพิ่ม (Buy Feeder)",
-    Description = "ซื้อเครื่องให้อาหารไก่เพิ่มในช่องเล้าที่ยังว่างอยู่",
-    Default = false
-})
-
-AutoBuyFeeder:OnChanged(function(Value)
-    getgenv().autoBuyFeederEnabled = Value
-
-    if Value and not getgenv().autoBuyFeederLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
-        getgenv().autoBuyFeederLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoBuyFeederEnabled do
-                pcall(buyFeeder)
-
-                task.wait(1)
-            end
-
-            getgenv().autoBuyFeederLoopActive = false
-        end)
-    end
-end)
-
--- 10. Auto Upgrade Coop
-local AutoUpgradeCoop = Tabs.Upgrade:AddToggle("AutoUpgradeCoop", {
-    Title = "ขยายขนาดเล้าไก่ (Expand Coop)",
-    Description = "อัปเกรดขยายพื้นที่เล้าไก่อัตโนมัติเมื่อเงินพร้อม",
-    Default = false
-})
-
-AutoUpgradeCoop:OnChanged(function(Value)
-    getgenv().autoUpgradeCoopEnabled = Value
-
-    if Value and not getgenv().autoUpgradeCoopLoopActive and remotesModule and coopViewModule and dataServiceModule and dataControllerModule then
-        getgenv().autoUpgradeCoopLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoUpgradeCoopEnabled do
-                pcall(upgradeCoop)
-
-                task.wait(5)
-            end
-
-            getgenv().autoUpgradeCoopLoopActive = false
-        end)
-    end
-end)
-
--- 11. Auto Upgrade Recycler
-local AutoUpgradeRecycler = Tabs.Upgrade:AddToggle("AutoUpgradeRecycler", {
-    Title = "อัปเกรดเครื่องรีไซเคิล (Upgrade Recycler)",
-    Description = "ยิงคำสั่งอัปเกรดเครื่อง Recycler เมื่อเงินเพียงพอเพื่อคูณค่าน้ำหนักขยะ",
-    Default = false
-})
-
-AutoUpgradeRecycler:OnChanged(function(Value)
-    getgenv().autoUpgradeRecyclerEnabled = Value
-
-    if Value and not getgenv().autoUpgradeRecyclerLoopActive then
-        getgenv().autoUpgradeRecyclerLoopActive = true
-
-        task.spawn(function()
-            while getgenv().autoUpgradeRecyclerEnabled do
-                pcall(upgradeRecycler)
-
-                task.wait(3.5)
-            end
-
-            getgenv().autoUpgradeRecyclerLoopActive = false
-        end)
-    end
-end)
-
-ObsidianGlassEngine:Notify({
-    Title = "ตีไก่ไปกับพยอมบอย",
-    Content = "ติดตั้งระบบ Auto Chaos Event และ Auto Upgrade Recycler เรียบร้อย",
-    Duration = 4
-})
