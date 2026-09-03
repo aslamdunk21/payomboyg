@@ -1,7 +1,118 @@
 -- ======================================================================================
--- [[ PAYOMBOYZ HUB v5.0 - STEALTH OPTIMIZED EDITION ]]
--- Architecture: Passive UI Telemetry + Pure Logic from message (9).txt Baseline
+-- [[ PAYOMBOYZ HUB v5.0 - STEALTH OPTIMIZED EDITION + BYPASS ]]
+-- Architecture: Passive UI Telemetry + Pure Logic + Anti‑Detection Humanoid Swap & Hook
 -- ======================================================================================
+
+-- ==================== BYPASS CODE (INSERTED AT TOP) ====================
+local _LocalPlayer = game:GetService("Players").LocalPlayer
+
+local function doHumanoidBypass()
+    local char = _LocalPlayer.Character
+    if not char then
+        char = _LocalPlayer.CharacterAdded:Wait()
+    end
+
+    local origHum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 10)
+    if not origHum then return end
+
+    pcall(function()
+        local cloneHum = origHum:Clone()
+        cloneHum.WalkSpeed  = origHum.WalkSpeed
+        cloneHum.JumpPower  = origHum.JumpPower
+        cloneHum.MaxHealth  = origHum.MaxHealth
+        cloneHum.Health     = origHum.Health
+        cloneHum.AutoRotate = origHum.AutoRotate
+        cloneHum.Parent     = char
+
+        task.wait(0.05)
+
+        origHum:Destroy()
+
+        task.wait(0.05)
+
+        workspace.CurrentCamera.CameraSubject = cloneHum
+        print("[SAE] Humanoid bypass OK")
+    end)
+end
+
+doHumanoidBypass()
+
+_LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.3)
+    doHumanoidBypass()
+end)
+
+-- === Second‑stage anti‑detection hook (gc traversal) ===
+local function runAntiDetectionHook()
+    local nextFunction = next
+    local secondaryGetgc, alternateGetgc = getgc()
+    repeat
+        local flag = false
+        while true do
+            local getgcResult
+            alternateGetgc, getgcResult = nextFunction(secondaryGetgc, alternateGetgc)
+            if not alternateGetgc then
+                break
+            end
+            if type(getgcResult) == "function" and islclosure(getgcResult) then
+                local secondaryGetconstants = getconstants(getgcResult)
+                if type(secondaryGetconstants) == "table" then
+                    local nextFunction2 = next
+                    local result
+                    repeat
+                        local flagResult
+                        result, flagResult = nextFunction2(secondaryGetconstants, result)
+                        if not result then
+                            flag = true
+                        end
+                        if flag then
+                            break
+                        end
+                    until flagResult == "X-14"
+                    if not flag then
+                        local callback
+                        callback = hookfunction(getgcResult, function(...)
+                            local getstack = debug.getstack(1)
+                            local nextFunction3 = next
+                            local flag2
+                            while true do
+                                local flagResult2
+                                flag2, flagResult2 = nextFunction3(getstack, flag2)
+                                if not flag2 then
+                                    break
+                                end
+                                if flagResult2 == "X-14" then
+                                    debug.setstack(Level, flag2, nil)
+                                end
+                            end
+                            return callback(...)
+                        end)
+                    end
+                end
+            end
+            if flag then
+                break
+            end
+        end
+    until not flag
+
+    local detectionFunction = filtergc("function", { Constants = { "gmatch", "GetFullName" } }, true)
+    if detectionFunction then
+        for _, upvalueValue in debug.getupvalues(detectionFunction) do
+            if typeof(upvalueValue) == "table" then
+                setrawmetatable(upvalueValue, {
+                    __newindex = function(_, key, newValue)
+                        warn(("Blocked detection %* %*"):format(key, newValue))
+                    end
+                })
+            end
+        end
+    end
+    print("Bypassed")
+end
+
+pcall(runAntiDetectionHook)
+-- ==================== END BYPASS ====================
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
