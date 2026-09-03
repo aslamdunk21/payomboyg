@@ -342,6 +342,12 @@ local function PassToKeyChecker(userKey)
     if not userKey or userKey == "" then return end
     userKey = userKey:gsub("%s+", "")
 
+    pcall(function()
+        if isfile and writefile then
+            writefile("PayomboyZ_Attempt.txt", tostring(os.time()))
+        end
+    end)
+
     SaveKey(userKey)
     if getgenv then getgenv().PayomboyZ_InputKey = userKey end
 
@@ -2488,6 +2494,26 @@ end
 if getgenv and getgenv().PayomboyZ_ShowUI then
     CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
     getgenv().PayomboyZ_ShowUI = false
+    return
+end
+
+-- 🔍 ตรวจสอบประวัติการลองเข้าใช้งานรอบก่อนหน้า (หากมีไฟล์ Attempt ค้าง แสดงว่าโดน Kick เพราะคีย์หมดอายุ/คีย์ผิด)
+local hasFailedAttempt = false
+pcall(function()
+    if isfile and isfile("PayomboyZ_Attempt.txt") then
+        hasFailedAttempt = true
+        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
+        if del then
+            del("PayomboyZ_Attempt.txt")
+        elseif type(writefile) == "function" then
+            writefile("PayomboyZ_Attempt.txt", "")
+        end
+    end
+end)
+
+if hasFailedAttempt then
+    ClearSavedKeys()
+    CreateLoaderUI("❌ คีย์เดิมหมดอายุหรือใช้ไม่ได้! ระบบลบคีย์ให้อัตโนมัติเรียบร้อย กรุณากรอกคีย์ใหม่", "")
     return
 end
 
