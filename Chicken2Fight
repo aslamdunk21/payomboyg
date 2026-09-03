@@ -588,10 +588,7 @@ local function depositAtRecycler()
 end
 
 local function collectNearbyScrap()
-    if getScrapStackCount() >= 6 then
-        depositAtRecycler()
-        return
-    end
+    if getScrapStackCount() >= 6 then return end
 
     local pitScrapFolder = workspace:FindFirstChild("PitScrap")
 
@@ -629,7 +626,6 @@ local function collectNearbyScrap()
         end
 
         if getScrapStackCount() >= 6 then
-            depositAtRecycler()
             return
         end
 
@@ -1916,7 +1912,7 @@ AutoScrap:OnChanged(function(Value)
         task.spawn(function()
             while getgenv().autoScrapEnabled do
                 pcall(function()
-                    if getScrapStackCount() >= 6 then
+                    if getScrapStackCount() > 6 then
                         depositAtRecycler()
                     else
                         collectNearbyScrap()
