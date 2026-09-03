@@ -39,6 +39,18 @@ function ConnectionManager:Cleanup()
     self.Connections = {}
 end
 
+-- 🛡️ SAFE ANTI-AFK PROTECTION
+pcall(function()
+    ConnectionManager:Add(LocalPlayer.Idled:Connect(function()
+        pcall(function()
+            local virtualUser = game:GetService("VirtualUser")
+            virtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            task.wait(0.5)
+            virtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        end)
+    end), "AntiAFK_Protection")
+end)
+
 local function getParentGui()
     if typeof(gethui) == "function" then
         local ok, res = pcall(gethui)
@@ -334,15 +346,13 @@ local function isTowerRunActive()
 end
 
 local function retreatTower()
+    if not isTowerRunActive() then return end
     pcall(function()
         if remotesModule and remotesModule.defs and remotesModule.defs.TowerSurrender then
-            pcall(function() remotesModule.invoke(remotesModule.defs.TowerSurrender) end)
-        end
-    end)
-    pcall(function()
-        local remotesFolder = replicatedStorage:FindFirstChild("Remotes") or game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3)
-        if remotesFolder then
-            local towerSurrender = remotesFolder:FindFirstChild("TowerSurrender")
+            remotesModule.invoke(remotesModule.defs.TowerSurrender)
+        else
+            local remotesFolder = replicatedStorage:FindFirstChild("Remotes")
+            local towerSurrender = remotesFolder and remotesFolder:FindFirstChild("TowerSurrender")
             if towerSurrender then
                 if towerSurrender:IsA("RemoteFunction") then
                     towerSurrender:InvokeServer()
@@ -351,9 +361,6 @@ local function retreatTower()
                 end
             end
         end
-    end)
-    pcall(function()
-        game:GetService("ReplicatedStorage"):WaitForChild("Remotes", 3):WaitForChild("TowerSurrender", 3):InvokeServer()
     end)
 end
 
@@ -494,8 +501,8 @@ local function startScrapNoclip()
             return
         end
 
-        for _, characterPart in ipairs(playerCharacter:GetDescendants()) do
-            if characterPart:IsA("BasePart") and characterPart.CanCollide then
+        for _, characterPart in ipairs(playerCharacter:GetChildren()) do
+            if characterPart:IsA("BasePart") and characterPart.Name ~= "HumanoidRootPart" and characterPart.CanCollide then
                 characterPart.CanCollide = false
             end
         end
@@ -521,7 +528,7 @@ local function walkToPosition(playerHumanoid, targetPosition, breakCondition)
         local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
         local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 
-        if not currentHumanoid or not currentRootPart then
+        if not currentHumanoid or currentHumanoid.Health <= 0 or not currentRootPart then
             return
         end
 
@@ -553,7 +560,7 @@ local function depositAtRecycler()
     local playerCharacter = localPlayer.Character
     local playerHumanoid = playerCharacter and playerCharacter:FindFirstChildOfClass("Humanoid")
 
-    if not playerHumanoid then
+    if not playerHumanoid or playerHumanoid.Health <= 0 then
         return
     end
 
@@ -565,13 +572,14 @@ local function depositAtRecycler()
 
     while getgenv().autoScrapEnabled do
         local currentCharacter = localPlayer.Character
+        local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
         local currentRootPart = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
 
-        if not currentRootPart then
+        if not currentHumanoid or currentHumanoid.Health <= 0 or not currentRootPart then
             return
         end
 
-        if (currentRootPart.Position - recyclerPosition).Magnitude > 12 then
+        if (currentRootPart.Position - recyclerPosition).Magnitude > 15 then
             break
         end
 
@@ -1931,12 +1939,12 @@ function KaitunDashboard:Update()
         elseif getgenv().autoTowerEnabled and isTowerRunActive() then
             curTask = "TOWER_RUN"
             statusThai = "🏰 ตะลุยดันหอคอย (Auto Tower)"
+        elseif getgenv().autoScrapEnabled and scrapCount >= 6 then
+            curTask = "DEPOSIT_SCRAP"
+            statusThai = "🗑️ นำเศษเหล็กไปส่งเครื่อง Recycler"
         elseif getgenv().autoRebirthEnabled and isRebirthReady and isRebirthReady() then
             curTask = "REBIRTH_ROUTINE"
             statusThai = "⚡ เคลียร์เงื่อนไขเตรียม Rebirth"
-        elseif getgenv().autoScrapEnabled and scrapCount > 6 then
-            curTask = "DEPOSIT_SCRAP"
-            statusThai = "🗑️ นำเศษเหล็กไปส่งเครื่อง Recycler"
         elseif getgenv().autoCollectEggEnabled and eggCount > 0 then
             curTask = "COLLECT_EGGS"
             statusThai = "🥚 เดินเก็บไข่ไก่รอบเล้า"
@@ -2051,7 +2059,7 @@ AutoScrap:OnChanged(function(Value)
         task.spawn(function()
             while getgenv().autoScrapEnabled do
                 pcall(function()
-                    if getScrapStackCount() > 6 then
+                    if getScrapStackCount() >= 6 then
                         depositAtRecycler()
                     else
                         collectNearbyScrap()
@@ -2235,7 +2243,7 @@ AutoRebirth:OnChanged(function(Value)
                         task.wait(1)
                     else
                         pcall(requestRebirth)
-                        task.wait(1)
+                        task.wait(3)
                     end
                 else
                     task.wait(1)
