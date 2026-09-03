@@ -152,6 +152,48 @@ local function loadCustomAvatarImage()
     return customAvatarAsset
 end
 
+local customIntroLogoAsset = nil
+local isDownloadingIntroLogo = false
+
+local function loadIntroLogoImage()
+    if customIntroLogoAsset then return customIntroLogoAsset end
+    local logoUrl = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/nobg_Gemini_Generated_Image_mgkp6ymgkp6ymgkp.png"
+    local fileName = "payomboyz_intro_logo.png"
+    
+    pcall(function()
+        if typeof(isfile) == "function" and isfile(fileName) then
+            if typeof(getcustomasset) == "function" or typeof(getsynasset) == "function" then
+                local getAsset = getcustomasset or getsynasset
+                customIntroLogoAsset = getAsset(fileName)
+            end
+        end
+    end)
+
+    if not customIntroLogoAsset and not isDownloadingIntroLogo then
+        isDownloadingIntroLogo = true
+        task.spawn(function()
+            pcall(function()
+                if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
+                    local getAsset = getcustomasset or getsynasset
+                    local imageBytes = game:HttpGet(logoUrl)
+                    if imageBytes and #imageBytes > 0 then
+                        writefile(fileName, imageBytes)
+                        if typeof(isfile) == "function" and isfile(fileName) then
+                            customIntroLogoAsset = getAsset(fileName)
+                        end
+                    end
+                end
+            end)
+            isDownloadingIntroLogo = false
+        end)
+    end
+
+    if not customIntroLogoAsset then
+        customIntroLogoAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
+    end
+    return customIntroLogoAsset
+end
+
 -- ============================================================================
 -- 🔴 LOGOUT & CREDENTIAL CLEARING ENGINE
 -- ============================================================================
@@ -312,11 +354,11 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local shell = Instance.new("Frame")
     shell.Name = "MainShell"
-    shell.Size = UDim2.fromOffset(920, 600)
+    shell.Size = UDim2.fromOffset(520, 150)
     shell.AnchorPoint = Vector2.new(0.5, 0.5)
     shell.Position = UDim2.new(0.5, 0, 0.5, 0)
-    shell.BackgroundColor3 = COLORS.shell
-    shell.BackgroundTransparency = 0.20
+    shell.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    shell.BackgroundTransparency = 0.92
     shell.BorderSizePixel = 0
     shell.ClipsDescendants = true
     shell.Parent = gui
@@ -326,17 +368,75 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     shellCorner.Parent = shell
 
     local shellStroke = Instance.new("UIStroke")
-    shellStroke.Color = COLORS.cyan
+    shellStroke.Color = Color3.fromRGB(255, 255, 255)
     shellStroke.Thickness = 1.5
-    shellStroke.Transparency = 0.3
+    shellStroke.Transparency = 0.4
     shellStroke.Parent = shell
+
+    -- 🌟 INTRO OVERLAY CONTAINER ("PAYOMBØYZ HUB" WITH GOTHIC STYLING & BIG LOGO)
+    local introOverlay = Instance.new("Frame")
+    introOverlay.Name = "IntroOverlay"
+    introOverlay.Size = UDim2.fromScale(1, 1)
+    introOverlay.BackgroundTransparency = 1
+    introOverlay.ZIndex = 999
+    introOverlay.Parent = shell
+
+    local introLogo = Instance.new("ImageLabel")
+    introLogo.Name = "IntroLogo"
+    introLogo.Size = UDim2.fromOffset(115, 115)
+    introLogo.Position = UDim2.new(0, 24, 0.5, -57.5)
+    introLogo.BackgroundTransparency = 1
+    introLogo.Image = loadIntroLogoImage()
+    introLogo.ImageTransparency = 1
+    introLogo.ZIndex = 1000
+    introLogo.Parent = introOverlay
+
+    local introTitle = Instance.new("TextLabel")
+    introTitle.Size = UDim2.new(1, -160, 0, 36)
+    introTitle.Position = UDim2.new(0, 150, 0.5, -26)
+    introTitle.BackgroundTransparency = 1
+    introTitle.Text = "PAYOMBØYZ HUB"
+    introTitle.TextColor3 = Color3.fromRGB(255, 35, 60)
+    introTitle.Font = Enum.Font.Fondamento
+    introTitle.TextSize = 28
+    introTitle.TextXAlignment = Enum.TextXAlignment.Left
+    introTitle.TextTransparency = 1
+    introTitle.ZIndex = 1000
+    introTitle.Parent = introOverlay
+
+    local titleStroke = Instance.new("UIStroke")
+    titleStroke.Color = Color3.fromRGB(80, 0, 15)
+    titleStroke.Thickness = 1.8
+    titleStroke.Parent = introTitle
+
+    local introSub = Instance.new("TextLabel")
+    introSub.Size = UDim2.new(1, -160, 0, 18)
+    introSub.Position = UDim2.new(0, 150, 0.5, 14)
+    introSub.BackgroundTransparency = 1
+    introSub.Text = "LOADING OBSIDIAN V2 ENGINE..."
+    introSub.TextColor3 = Color3.fromRGB(240, 240, 245)
+    introSub.Font = Enum.Font.GothamBold
+    introSub.TextSize = 11
+    introSub.TextXAlignment = Enum.TextXAlignment.Left
+    introSub.TextTransparency = 1
+    introSub.ZIndex = 1000
+    introSub.Parent = introOverlay
+
+    -- 📦 MAIN CONTENT CONTAINER (CONTAINING USER PANEL & MAIN PANEL)
+    local mainContent = Instance.new("Frame")
+    mainContent.Name = "MainContentContainer"
+    mainContent.Size = UDim2.fromScale(1, 1)
+    mainContent.BackgroundTransparency = 1
+    mainContent.Visible = false
+    mainContent.ZIndex = 3
+    mainContent.Parent = shell
 
     local snowLayer = Instance.new("Frame")
     snowLayer.Name = "SnowLayer"
     snowLayer.Size = UDim2.fromScale(1, 1)
     snowLayer.BackgroundTransparency = 1
     snowLayer.ZIndex = 2
-    snowLayer.Parent = shell
+    snowLayer.Parent = mainContent
 
     task.spawn(function()
         local dots = {}
@@ -361,7 +461,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(0.08) do
             if not gui or not gui.Parent then break end
             for _, data in ipairs(dots) do
                 data.pos = data.pos + data.speed
@@ -426,7 +526,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(0.08) do
             if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
             for _, data in ipairs(dots) do
                 data.pos = data.pos + data.speed
@@ -583,7 +683,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     userPanel.BackgroundTransparency = 0.20
     userPanel.BorderSizePixel = 0
     userPanel.ZIndex = 5
-    userPanel.Parent = shell
+    userPanel.Parent = mainContent
 
     local userDiv = Instance.new("Frame")
     userDiv.Size = UDim2.new(0, 1, 1, 0)
@@ -807,7 +907,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     mainPanel.Position = UDim2.new(0, 240, 0, 0)
     mainPanel.BackgroundTransparency = 1
     mainPanel.ZIndex = 5
-    mainPanel.Parent = shell
+    mainPanel.Parent = mainContent
 
     local headerBar = Instance.new("Frame")
     headerBar.Size = UDim2.new(1, 0, 0, 48)
@@ -1838,6 +1938,45 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             userScaleMultiplier = (userScaleMultiplier == 1.0) and 0.85 or 1.0
             updateUIScale()
         end
+    end)
+
+    -- 🎬 RUN PAYOMBOYZ HUB INTRO ANIMATION SEQUENCE WITH LOGO & SMOOTH MORPH
+    task.spawn(function()
+        local TweenService = game:GetService("TweenService")
+        
+        -- Phase 1: Fade In Logo & Gothic Text
+        local fadeInInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        TweenService:Create(introLogo, fadeInInfo, { ImageTransparency = 0 }):Play()
+        TweenService:Create(introTitle, fadeInInfo, { TextTransparency = 0 }):Play()
+        TweenService:Create(introSub, fadeInInfo, { TextTransparency = 0.2 }):Play()
+        
+        task.wait(1.5)
+        
+        -- Phase 2: Fade Out Logo & Text
+        local fadeOutInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        TweenService:Create(introLogo, fadeOutInfo, { ImageTransparency = 1 }):Play()
+        TweenService:Create(introTitle, fadeOutInfo, { TextTransparency = 1 }):Play()
+        TweenService:Create(introSub, fadeOutInfo, { TextTransparency = 1 }):Play()
+        
+        task.wait(0.35)
+        introOverlay.Visible = false
+        
+        -- Phase 3: Expand MainShell & Morph Background Color (White 0.92 -> Dark 0.20)
+        local expandInfo = TweenInfo.new(0.65, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+        TweenService:Create(shell, expandInfo, {
+            Size = UDim2.fromOffset(920, 600),
+            BackgroundColor3 = COLORS.shell,
+            BackgroundTransparency = 0.20
+        }):Play()
+        TweenService:Create(shellStroke, expandInfo, {
+            Color = COLORS.cyan,
+            Transparency = 0.3
+        }):Play()
+        
+        task.wait(0.65)
+        
+        -- Phase 4: Reveal Main UI Content
+        mainContent.Visible = true
     end)
 
     return WindowObj
