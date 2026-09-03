@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/refs/heads/main/loader
+-- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/StartAI
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- Optimized for PayomboyZ AI Generate & Multi-Tier Authentication Engine
 -- ==============================================================================
@@ -28,9 +28,9 @@ local LuarmorConfig = {
     VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/refs/heads/main/loader",
+    StartURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/StartAI",
     LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/0d9bc7b387597d579a4c9fea25658468.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/AIsrc.lua",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/AIPro",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
