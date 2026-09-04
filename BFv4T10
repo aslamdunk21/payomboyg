@@ -1,1 +1,661 @@
-dsdsadsadsad
+-- ============================================================
+-- 🧠 PAYOMBOYZ V1 → V2 → V3 → V4 T10 UNIFIED UTILITY SCHEDULER ENGINE
+-- GitHub: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10
+-- ============================================================
+
+local LP = game:GetService("Players").LocalPlayer
+local scriptRunning = true
+
+if getgenv().PayomboyZ_V4T10_Cleanup then
+    pcall(getgenv().PayomboyZ_V4T10_Cleanup)
+end
+
+getgenv().PayomboyZ_V4T10_Cleanup = function()
+    scriptRunning = false
+end
+
+-- ⚡ Token Bucket Rate Limiter & Safe Remote Wrapper
+local Limiter = { buckets = {} }
+
+function Limiter:Allow(key, perSec)
+    local b = self.buckets[key] or { tokens = perSec, last = os.clock() }
+    local now = os.clock()
+    b.tokens = math.min(perSec, b.tokens + (now - b.last) * perSec)
+    b.last = now
+    if b.tokens < 1 then return false end
+    b.tokens = b.tokens - 1
+    self.buckets[key] = b
+    return true
+end
+
+local SafeRemote = { lastQuestState = nil }
+
+function SafeRemote:InvokeQuest(questName, questLevel)
+    local stateKey = tostring(questName) .. "_" .. tostring(questLevel)
+    if self.lastQuestState == stateKey then
+        if not Limiter:Allow("QuestRemote_Repeat", 0.2) then
+            return false
+        end
+    else
+        if not Limiter:Allow("QuestRemote_Change", 2.0) then
+            return false
+        end
+        self.lastQuestState = stateKey
+    end
+
+    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+    if remote then
+        local success, result = pcall(function()
+            return remote:InvokeServer("StartQuest", questName, questLevel)
+        end)
+        return success, result
+    end
+    return false
+end
+
+-- 🎨 1. UI Pooling Engine & Auto-Degrade Performance Manager
+local NotifPool = { free = {}, MAX = 8 }
+
+function NotifPool:Get()
+    local item = table.remove(self.free)
+    if not item then
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 240, 0, 40)
+        frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+        local text = Instance.new("TextLabel", frame)
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+        text.BackgroundTransparency = 1
+        item = frame
+    end
+    item.Visible = true
+    return item
+end
+
+function NotifPool:Return(item)
+    if not item then return end
+    item.Visible = false
+    item.Parent = nil
+    if #self.free < self.MAX then
+        table.insert(self.free, item)
+    else
+        item:Destroy()
+    end
+end
+
+local UI_Performance = { particlesEnabled = true, startTime = os.clock() }
+
+function UI_Performance:CheckFpsAndUptime(currentFps)
+    local uptimeHours = (os.clock() - self.startTime) / 3600
+    if (currentFps and currentFps < 25) or uptimeHours > 2.0 then
+        if self.particlesEnabled then
+            self.particlesEnabled = false
+            if getgenv().Configs then getgenv().Configs.DisableUIEffects = true end
+        end
+    end
+end
+
+-- 🛡️ 2. Comprehensive RecoveryService & Verify-After-Act Engine
+local RecoveryService = { failureCounts = {} }
+
+function RecoveryService:Escalate(actionName)
+    local count = (self.failureCounts[actionName] or 0) + 1
+    self.failureCounts[actionName] = count
+
+    if count >= 3 then
+        self.failureCounts[actionName] = 0
+        local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = CFrame.new(1250, 50, -5100) end
+    end
+    if count >= 5 then
+        local ts = game:GetService("TeleportService")
+        pcall(function() ts:Teleport(game.PlaceId) end)
+    end
+end
+
+local function Act(fn, verify, actionName, retries)
+    retries = retries or 3
+    for i = 1, retries do
+        fn()
+        task.wait(0.8)
+        if verify() then
+            RecoveryService.failureCounts[actionName] = 0
+            return true
+        end
+    end
+    RecoveryService:Escalate(actionName)
+    return false
+end
+
+-- 🌊 3. Failure Detectors (Void Fall & Quest Desync)
+task.spawn(function()
+    local lastQuestCheck = os.clock()
+    while scriptRunning do
+        task.wait(1)
+        pcall(function()
+            local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and hrp.Position.Y < -400 then
+                hrp.CFrame = CFrame.new(1250, 50, -5100)
+            end
+
+            if os.clock() - lastQuestCheck >= 30 then
+                lastQuestCheck = os.clock()
+                local playerGui = LP and LP:FindFirstChild("PlayerGui")
+                local mainGui = playerGui and playerGui:FindFirstChild("Main")
+                local questUI = mainGui and mainGui:FindFirstChild("Quest")
+                
+                if not (questUI and questUI.Visible) then
+                    SafeRemote.lastQuestState = nil
+                end
+            end
+        end)
+    end
+end)
+
+-- 💰 4. Cross-Stage Pre-Provisioning Evaluator
+local TOTAL_NEED = {
+    beli = 500000 + 2000000 + 1000000,
+    frag = 3000 + 26750
+}
+
+local function ShouldPrioritizeBeli(s, currentBeliPerHour)
+    local gap = TOTAL_NEED.beli - s.beli
+    if gap <= 0 then return false end
+    local etaLevelSec = (1000 - math.min(1000, s.level)) * 120
+    local etaBeliSec = (gap / math.max(1, currentBeliPerHour or 500000)) * 3600
+    return etaBeliSec > etaLevelSec
+end
+
+-- 📊 5. Polish: Adaptive Switch Margin & EMA Death Rate Tracker
+local function GetAdaptiveSwitchMargin(stage, lockOwner)
+    if lockOwner == "V2_FLOWER" or stage == "STAGE_V2" then
+        return 5.0
+    end
+    return 1.35
+end
+
+local SWITCH_MARGIN = 1.35
+local MIN_DWELL_TIME = 45
+local AGE_RATE = 0.01
+
+local Controller = {
+    Owner = nil,
+    Priority = 0,
+    LastSwitchTime = os.clock(),
+    Modules = {},
+    LockOwner = nil,
+    hardLock = nil,
+    Status = "Initialized"
+}
+
+function Controller:Current()
+    return self.Owner
+end
+
+function Controller:Acquire(name, priority)
+    if self.hardLock and self.hardLock ~= name and priority < 999 then
+        return false, "hard-locked by " .. tostring(self.hardLock)
+    end
+    if self.LockOwner and self.LockOwner ~= name then
+        return false
+    end
+    if self.Owner == nil or priority > self.Priority or self.Owner == name then
+        if self.Owner and self.Owner ~= name and self.Modules[self.Owner] and self.Modules[self.Owner].Suspend then
+            pcall(function() self.Modules[self.Owner]:Suspend() end)
+        end
+        if self.Owner ~= name then
+            self.LastSwitchTime = os.clock()
+        end
+        self.Owner = name
+        self.Priority = priority
+        return true
+    end
+    return false
+end
+
+function Controller:Release(name)
+    if self.Owner == name then
+        self.Owner = nil
+        self.Priority = 0
+        if self.LockOwner == name then self.LockOwner = nil end
+        return true
+    end
+    return false
+end
+
+function Controller:CanServerHop()
+    if self.LockOwner == "V2_FLOWER" then return false end
+    if self.Owner == "BLUE_GEAR" or self.Owner == "TRIAL_EXECUTION" then return false end
+    return true
+end
+
+function Controller:CanSpendBeli(amount, stage)
+    local stateBeli = 0
+    pcall(function()
+        local data = LP and LP:FindFirstChild("Data")
+        stateBeli = data and data:FindFirstChild("Beli") and data.Beli.Value or 0
+    end)
+    if stage == "STAGE_V2" and (stateBeli - amount) < 500000 then return false end
+    if stage == "STAGE_V3" and (stateBeli - amount) < 2000000 then return false end
+    return true
+end
+
+-- 📌 1. State Reader & Global Router
+local StateReader = {}
+
+function StateReader:ReadState()
+    local data = LP and LP:FindFirstChild("Data")
+    local leaderstats = LP and LP:FindFirstChild("leaderstats")
+
+    local race = (data and data:FindFirstChild("Race")) and data.Race.Value or "Human"
+    local level = (data and data:FindFirstChild("Level")) and data.Level.Value or (leaderstats and leaderstats:FindFirstChild("Level") and leaderstats.Level.Value or 1)
+    local beli = (data and data:FindFirstChild("Beli")) and data.Beli.Value or (leaderstats and leaderstats:FindFirstChild("Beli") and leaderstats.Beli.Value or 0)
+    local frag = (data and data:FindFirstChild("Fragments")) and data.Fragments.Value or (leaderstats and leaderstats:FindFirstChild("Fragments") and leaderstats.Fragments.Value or 0)
+    
+    local placeId = game.PlaceId
+    local sea = (placeId == 7449423635 or placeId == 2753915549) and 1 or (placeId == 4442272183 and 2 or 3)
+    
+    local bp = LP and LP:FindFirstChild("Backpack")
+    local char = LP and LP.Character
+
+    local hasBlueGear = (bp and bp:FindFirstChild("Blue Gear")) or (char and char:FindFirstChild("Blue Gear")) ~= nil
+    local ver = 1
+    if char and char:FindFirstChild("RaceTransformed") then ver = 4
+    elseif hasBlueGear or (data and data:FindFirstChild("RaceVersion") and data.RaceVersion.Value >= 3) then ver = 3
+    elseif data and data:FindFirstChild("RaceVersion") and data.RaceVersion.Value >= 2 then ver = 2 end
+
+    return {
+        race = race,
+        ver = ver,
+        tier = 0,
+        level = level,
+        beli = beli,
+        frag = frag,
+        sea = sea,
+        bartilo = (level >= 850),
+        donSwan = (level >= 1000),
+        hasBlueGear = hasBlueGear,
+        hasSealedKing = (sea >= 3 and level >= 1500)
+    }
+end
+
+-- 🎯 Live Game State Predicate Progression Marks (M01 - M16)
+local MARK_ORDER = {
+    "M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08",
+    "M09", "M10", "M11", "M12", "M13", "M14", "M15", "M16"
+}
+
+local MARKS = {
+    M01 = { name = "Fresh Account Init",          verify = function(s) return s.level > 1 or s.sea > 1 end,                           gate = function(s) return true end,                                            stage = "STAGE_LEVEL" },
+    M02 = { name = "Farm Lv. 1-700",              verify = function(s) return s.level >= 700 or s.sea >= 2 end,                        gate = function(s) return true end,                                            stage = "STAGE_LEVEL" },
+    M03 = { name = "Sea 1 -> Sea 2 Pass",         verify = function(s) return s.sea >= 2 end,                                          gate = function(s) return s.level >= 700 end,                                  stage = "STAGE_LEVEL" },
+    M04 = { name = "Farm Lv. 700-850",            verify = function(s) return s.level >= 850 end,                                      gate = function(s) return s.sea >= 2 end,                                      stage = "STAGE_LEVEL" },
+    M05 = { name = "Bartilo Quest",               verify = function(s) return s.bartilo end,                                           gate = function(s) return s.level >= 850 end,                                  stage = "STAGE_BARTILO" },
+    M06 = { name = "Pre-Provision $500k Beli",    verify = function(s) return s.ver >= 2 or s.beli >= 500000 end,                      gate = function(s) return s.level >= 850 and s.bartilo end,                    stage = "STAGE_LEVEL" },
+    M07 = { name = "Flower Quest V2",             verify = function(s) return s.ver >= 2 end,                                          gate = function(s) return s.level >= 850 and s.bartilo and s.beli >= 500000 end, stage = "STAGE_V2" },
+    M08 = { name = "Farm Lv. 850-1000",           verify = function(s) return s.level >= 1000 end,                                     gate = function(s) return s.ver >= 2 end,                                      stage = "STAGE_LEVEL" },
+    M09 = { name = "Don Swan Defeat",             verify = function(s) return s.donSwan end,                                           gate = function(s) return s.level >= 1000 and s.ver >= 2 end,                  stage = "STAGE_V3" },
+    M10 = { name = "Arowe Quest V3 / Reroll",     verify = function(s) return s.ver >= 3 end,                                          gate = function(s) return s.level >= 1000 and s.ver >= 2 and s.donSwan and s.beli >= 2000000 end, stage = "STAGE_V3" },
+    M11 = { name = "Sea 2 -> Sea 3 Transition",   verify = function(s) return s.sea >= 3 end,                                          gate = function(s) return s.level >= 1500 and s.ver >= 3 end,                  stage = "STAGE_V4" },
+    M12 = { name = "Sealed King / Great Tree",    verify = function(s) return s.hasSealedKing end,                                     gate = function(s) return s.sea >= 3 end,                                      stage = "STAGE_V4" },
+    M13 = { name = "Mirage & Blue Gear",          verify = function(s) return s.hasBlueGear end,                                       gate = function(s) return s.sea >= 3 end,                                      stage = "STAGE_V4" },
+    M14 = { name = "Trial V4 Base Unlock",        verify = function(s) return s.ver >= 4 end,                                          gate = function(s) return s.hasBlueGear end,                                   stage = "STAGE_V4" },
+    M15 = { name = "Fragment & Awaken Training",  verify = function(s) return s.tier >= 1 end,                                         gate = function(s) return s.ver >= 4 end,                                      stage = "STAGE_TIER" },
+    M16 = { name = "Ancient Clock Tier 10 Grind", verify = function(s) return s.tier >= 10 end,                                         gate = function(s) return s.ver >= 4 end,                                      stage = "STAGE_TIER" }
+}
+
+function StateReader:ResolveMark(s)
+    for _, id in ipairs(MARK_ORDER) do
+        local m = MARKS[id]
+        if not m.verify(s) then
+            local isGateReady = m.gate(s)
+            return id, isGateReady, m.stage, m.name
+        end
+    end
+    return "M16_DONE", true, "DONE", "All Progression Completed"
+end
+
+function StateReader:RouteStage(s)
+    local markId, isGateReady, stage, markName = self:ResolveMark(s)
+    return stage, markId, isGateReady, markName
+end
+
+-- 🎲 1. V1 Race Acquisition & Early Reroll Scorer
+local RACE_BOT_SCORE = {
+    Cyborg = 95, Human = 90, Rabbit = 75, Shark = 60, Angel = 20, Ghoul = 15
+}
+local MAX_REROLL_ATTEMPTS = 5
+local rerollAttemptsCount = 0
+
+local function ShouldRerollRace(s)
+    local score = RACE_BOT_SCORE[s.race] or 50
+    if score < 50 and not (getgenv().Configs and getgenv().Configs.HasAltAccount) then
+        return (s.frag >= 3000)
+    end
+    return false
+end
+
+-- 🌸 2. Fragile Mode Manager & Dynamic Workspace Flower Scanner
+local FragileMode = { Active = false }
+
+function FragileMode:Enter()
+    self.Active = true
+    Controller.LockOwner = "V2_FLOWER"
+    Controller.hardLock = "V2_FLOWER"
+end
+
+function FragileMode:Exit()
+    self.Active = false
+    Controller.LockOwner = nil
+    Controller.hardLock = nil
+end
+
+local RED_FLOWER_POSITIONS = {
+    Vector3.new(-935, 19, 1370), Vector3.new(-855, 19, 1150),
+    Vector3.new(990, 19, -430), Vector3.new(1250, 19, -800)
+}
+local BLUE_FLOWER_POSITIONS = {
+    Vector3.new(2800, 70, -7300), Vector3.new(2950, 70, -7100),
+    Vector3.new(-1800, 19, -1500), Vector3.new(-1950, 19, -1350)
+}
+
+local function FindFlower(color)
+    local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    local hrpPos = hrp and hrp.Position or Vector3.zero
+
+    local targetNames = {
+        Red = { "Flower1", "Red Flower", "RedFlower" },
+        Blue = { "Flower2", "Blue Flower", "BlueFlower" },
+        Yellow = { "Flower3", "Yellow Flower", "YellowFlower" }
+    }
+    
+    local searchList = targetNames[color] or { color .. "Flower" }
+    local foundPos = nil
+    local shortestDist = math.huge
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        for _, name in ipairs(searchList) do
+            if obj.Name == name and (obj:IsA("BasePart") or obj:IsA("Model")) then
+                local p = obj:IsA("BasePart") and obj.Position or (obj:FindFirstChild("Handle") and obj.Handle.Position or (obj.PrimaryPart and obj.PrimaryPart.Position))
+                if p then
+                    local d = (hrpPos - p).Magnitude
+                    if d < shortestDist then
+                        shortestDist = d
+                        foundPos = p
+                    end
+                end
+            end
+        end
+    end
+
+    if foundPos then return foundPos, true end
+
+    local spawnSets = { Red = RED_FLOWER_POSITIONS, Blue = BLUE_FLOWER_POSITIONS }
+    local list = spawnSets[color] or {}
+    local bestPoint = nil
+    local minDist = math.huge
+
+    for _, spawnPos in ipairs(list) do
+        local d = (hrpPos - spawnPos).Magnitude
+        if d < minDist then
+            minDist = d
+            bestPoint = spawnPos
+        end
+    end
+
+    return bestPoint or Vector3.new(1250, 40, -5100), false
+end
+
+local function FlowerPlan(state, bp, char)
+    local hasYellow = (bp and bp:FindFirstChild("Flower 3")) or (char and char:FindFirstChild("Flower 3"))
+    local hasRed = (bp and bp:FindFirstChild("Flower 1")) or (char and char:FindFirstChild("Flower 1"))
+    local hasBlue = (bp and bp:FindFirstChild("Flower 2")) or (char and char:FindFirstChild("Flower 2"))
+
+    if not hasYellow then
+        return { task = "FARM_YELLOW", mob = "Swan Pirates", timeout = 1800 }
+    end
+    
+    local lighting = game:GetService("Lighting")
+    local clock = lighting and lighting.ClockTime or 12
+    local isDay = clock >= 6 and clock <= 18
+    local isNight = clock >= 18 or clock <= 5
+
+    if isDay and not hasRed then
+        local targetPos, isLive = FindFlower("Red")
+        return { task = "COLLECT_RED", pos = targetPos, isLive = isLive }
+    end
+    if isNight and not hasBlue then
+        local targetPos, isLive = FindFlower("Blue")
+        return { task = "COLLECT_BLUE", pos = targetPos, isLive = isLive }
+    end
+    
+    return { task = "SAFE_IDLE", pos = Vector3.new(1250, 40, -5100) }
+end
+
+local function TierBottleneck(tier, fragCount, awakenAccumSec)
+    local tierCosts = { 1000, 1500, 2250, 3000, 3750, 4500, 5250, 5500 }
+    local tierTimes = { 300, 600, 900, 1200, 1500, 1800, 2100, 2400 }
+
+    local targetCost = tierCosts[tier] or 3000
+    local targetTime = tierTimes[tier] or 1200
+
+    local needTime = math.max(0, targetTime - awakenAccumSec)
+    local needFrag = math.max(0, targetCost - fragCount)
+
+    local etaTime = needTime / 0.4
+    local etaFrag = (needFrag / 5000) * 3600
+
+    if etaTime > etaFrag then
+        return "TIME", "⚡ Focus Energy Mobs (Accelerate Awakening)"
+    else
+        return "FRAG", "💰 Focus Raids / Chips (Maximize Frag/hr)"
+    end
+end
+
+-- 📊 4. Utility Scorer & Task Pool Engine
+local function StageRelevance(tStage, currentStage)
+    if tStage == currentStage then return 3.0 end
+    if tStage == "PRE_PROVISION" then return 0.6 end
+    return 0.0
+end
+
+local function CalculateGlobalUtilityScore(task, currentStage)
+    local execCost = task.execTime or 60
+    local travelCost = 5
+    local switchCost = (Controller:Current() == task.id) and 0 or 15
+    local riskCost = (task.risk or 0) * 2
+
+    local denominator = execCost + travelCost + switchCost + riskCost
+    local numerator = (task.value or 100) * (task.urgency or 5) * (task.pSuccess or 0.9) * (task.window or 1.0)
+    
+    local st = StageRelevance(task.stage, currentStage)
+    numerator = numerator * st
+
+    local ageBonus = (task.age or 0) * AGE_RATE
+    return (numerator / math.max(1, denominator)) + ageBonus
+end
+
+local TaskPoolEngine = {}
+
+function TaskPoolEngine:BuildPool(state, stage)
+    local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    local pos = hrp and hrp.Position or Vector3.zero
+
+    local pool = {
+        {
+            id = "STAGE_LEVEL_FARM", stage = "STAGE_LEVEL",
+            prio = 1, value = 50, urgency = 5, pSuccess = 0.95, window = 1.0, execTime = 300, risk = 2,
+            pos = pos, age = 0,
+            feasible = function() return stage == "STAGE_LEVEL" end,
+            run = function() Controller.Status = "🌾 Level Farming Active (Progression Stage)" end
+        },
+        {
+            id = "BARTILO_QUEST", stage = "STAGE_BARTILO",
+            prio = 5, value = 120, urgency = 8, pSuccess = 0.9, window = 1.0, execTime = 180, risk = 5,
+            pos = Vector3.new(-450, 70, 300), age = 0,
+            feasible = function() return stage == "STAGE_BARTILO" end,
+            run = function()
+                Controller.Status = "📜 Executing Bartilo / Colosseum Quest Line"
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                if remote then pcall(function() remote:InvokeServer("BartiloQuestProgress") end) end
+            end
+        },
+        {
+            id = "V2_FLOWER_QUEST", stage = "STAGE_V2",
+            prio = 6, value = 130, urgency = 9, pSuccess = 0.85, window = 1.0, execTime = 240, risk = 15,
+            pos = Vector3.new(1250, 40, -5100), age = 0,
+            feasible = function() return stage == "STAGE_V2" end,
+            run = function()
+                FragileMode:Enter()
+                local bp = LP and LP:FindFirstChild("Backpack")
+                local char = LP and LP.Character
+                local plan = FlowerPlan(state, bp, char)
+                Controller.Status = "🌸 V2 Flower Quest [" .. tostring(plan.task) .. "]"
+                
+                if plan.pos and char and char:FindFirstChild("HumanoidRootPart") then
+                    char.HumanoidRootPart.CFrame = CFrame.new(plan.pos + Vector3.new(0, 3, 0))
+                end
+
+                local hasYellow = (bp and bp:FindFirstChild("Flower 3")) or (char and char:FindFirstChild("Flower 3"))
+                local hasRed = (bp and bp:FindFirstChild("Flower 1")) or (char and char:FindFirstChild("Flower 1"))
+                local hasBlue = (bp and bp:FindFirstChild("Flower 2")) or (char and char:FindFirstChild("Flower 2"))
+
+                if hasYellow and hasRed and hasBlue then
+                    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                    if remote then
+                        pcall(function() remote:InvokeServer("Alchemist", "3") end)
+                    end
+                end
+            end
+        },
+        {
+            id = "DON_SWAN_QUEST", stage = "STAGE_V3",
+            prio = 7, value = 110, urgency = 8, pSuccess = 0.9, window = 1.0, execTime = 90, risk = 10,
+            pos = Vector3.new(2300, 450, 750), age = 0,
+            feasible = function() return stage == "STAGE_V3" and not state.donSwan end,
+            run = function()
+                Controller.Status = "🦢 Defeating Don Swan (Trevor Fruit Gate)"
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                if remote then pcall(function() remote:InvokeServer("TalkTrevor", "1") end) end
+            end
+        },
+        {
+            id = "V3_AROWE_QUEST", stage = "STAGE_V3",
+            prio = 8, value = 140, urgency = 9, pSuccess = 0.95, window = 1.0, execTime = 120, risk = 5,
+            pos = Vector3.new(-1600, 100, -100), age = 0,
+            feasible = function() return stage == "STAGE_V3" and state.donSwan and state.beli >= 2000000 and not ShouldRerollRace(state) end,
+            run = function()
+                Controller.Status = "📜 Executing V3 Quest for Race: " .. tostring(state.race)
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                if remote then pcall(function() remote:InvokeServer("GetRaceV3", "2") end) end
+            end
+        },
+        {
+            id = "V3_RACE_REROLL", stage = "STAGE_V3",
+            prio = 8, value = 150, urgency = 10, pSuccess = 1.0, window = 1.0, execTime = 10, risk = 0,
+            pos = pos, age = 0,
+            feasible = function() return stage == "STAGE_V3" and ShouldRerollRace(state) end,
+            run = function()
+                Controller.Status = "🎲 Rerolling Race (Bypassing PvP Gate for " .. tostring(state.race) .. ")"
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                if remote then pcall(function() remote:InvokeServer("Blackbeard", "Reroll") end) end
+            end
+        },
+        {
+            id = "BLUE_GEAR", stage = "STAGE_V4",
+            prio = 9, value = 150, urgency = 10, pSuccess = 0.9, window = 2.0, execTime = 120, risk = 10,
+            pos = Vector3.new(0, 500, 0), age = 0,
+            feasible = function()
+                local lighting = game:GetService("Lighting")
+                local isMoon = lighting and (lighting.ClockTime >= 18 or lighting.ClockTime <= 5)
+                local map = workspace:FindFirstChild("Map") or workspace
+                local isMirage = map:FindFirstChild("Mirage Island") ~= nil or map:FindFirstChild("Mystic Island") ~= nil
+                return stage == "STAGE_V4" and isMoon and isMirage
+            end,
+            run = function() Controller.Status = "🌕 Mirage & Moon Active -> Collecting Blue Gear" end
+        },
+        {
+            id = "TRIAL_EXECUTION", stage = "STAGE_V4",
+            prio = 9, value = 180, urgency = 10, pSuccess = 0.8, window = 2.5, execTime = 180, risk = 20,
+            pos = Vector3.new(28000, 1500, 50), age = 0,
+            feasible = function()
+                local lighting = game:GetService("Lighting")
+                local isMoon = lighting and (lighting.ClockTime >= 18 or lighting.ClockTime <= 5)
+                return (stage == "STAGE_V4" or stage == "STAGE_TIER") and state.hasBlueGear and isMoon
+            end,
+            run = function() Controller.Status = "⚡ Executing Race V4 Trial Phase" end
+        },
+        {
+            id = "TIER_10_UPGRADE", stage = "STAGE_TIER",
+            prio = 10, value = 200, urgency = 10, pSuccess = 1.0, window = 1.0, execTime = 60, risk = 0,
+            pos = Vector3.new(28000, 1500, 50), age = 0,
+            feasible = function() return stage == "STAGE_TIER" and state.tier < 10 and state.frag >= 1500 end,
+            run = function()
+                Controller.Status = "🏛️ Upgrading Tier at Ancient Clock (Tier " .. tostring(state.tier) .. " -> " .. tostring(state.tier + 1) .. ")"
+                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+                if remote then pcall(function() remote:InvokeServer("UpgradeRaceV4") end) end
+            end
+        }
+    }
+    return pool
+end
+
+-- 🔁 Main Global Scheduler Loop
+task.spawn(function()
+    while scriptRunning do
+        pcall(function()
+            local state = StateReader:ReadState()
+            local stage, markId, isGateReady, markName = StateReader:RouteStage(state)
+            Controller.CurrentMark = markId .. " (" .. tostring(markName) .. ")"
+            local pool = TaskPoolEngine:BuildPool(state, stage)
+
+            for _, t in ipairs(pool) do
+                t.score = CalculateGlobalUtilityScore(t, stage)
+            end
+
+            table.sort(pool, function(a, b) return a.score > b.score end)
+
+            local bestTask = pool[1]
+            local currentTaskOwner = Controller:Current()
+
+            if bestTask and bestTask.feasible() then
+                local currentScore = 0
+                if currentTaskOwner then
+                    for _, t in ipairs(pool) do
+                        if t.id == currentTaskOwner then currentScore = t.score break end
+                    end
+                end
+
+                local activeMargin = GetAdaptiveSwitchMargin(stage, Controller.LockOwner)
+                local dwellOK = (os.clock() - Controller.LastSwitchTime) >= MIN_DWELL_TIME
+                local safeToInterrupt = true
+                local hum = LP and LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+                if hum and (hum.Health / math.max(1, hum.MaxHealth)) < 0.3 then safeToInterrupt = false end
+
+                if not currentTaskOwner or (bestTask.score > currentScore * activeMargin and dwellOK and safeToInterrupt) then
+                    if Controller:Acquire(bestTask.id, bestTask.prio) then
+                        if currentTaskOwner and currentTaskOwner ~= bestTask.id then
+                            print(string.format("[V4T10 ENGINE] %s (score=%.1f) beat %s (score=%.1f)", 
+                                tostring(bestTask.id), bestTask.score, tostring(currentTaskOwner), currentScore))
+                        end
+                        bestTask.run()
+                    end
+                end
+            end
+
+            pcall(function()
+                local fps = workspace:GetRealPhysicsFPS()
+                UI_Performance:CheckFpsAndUptime(fps)
+            end)
+        end)
+        task.wait(0.5)
+    end
+end)
+
+getgenv().PayomboyZ_BloxFruits_V4T10_Module = {
+    Controller = Controller,
+    StateReader = StateReader,
+    TaskPoolEngine = TaskPoolEngine
+}
+
+print("[BFv4T10] Modular V1-V4 T10 Unified Engine Loaded Successfully!")
