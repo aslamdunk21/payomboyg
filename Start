@@ -16,8 +16,7 @@ local LuarmorConfig = {
     VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
-    LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
+    StartURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start",
     LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/LoaderPBG",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
@@ -29,28 +28,12 @@ local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
 
--- Safe HttpGet wrapper to bypass game engine __namecall and __index anti-cheat hooks
+-- Safe HttpGet wrapper without suspicious global indexing or metamethod hooks
 local function safeFetch(url)
     if not url or url == "" then return "" end
     local content = ""
     pcall(function()
-        if type(httpget) == "function" then
-            content = httpget(url)
-        elseif type(request) == "function" then
-            local res = request({Url = url, Method = "GET"})
-            if res and res.Body then content = res.Body end
-        elseif type(http_request) == "function" then
-            local res = http_request({Url = url, Method = "GET"})
-            if res and res.Body then content = res.Body end
-        elseif type(syn) == "table" and type(syn.request) == "function" then
-            local res = syn.request({Url = url, Method = "GET"})
-            if res and res.Body then content = res.Body end
-        else
-            local get = game.HttpGet
-            if type(get) == "function" then
-                content = get(game, url)
-            end
-        end
+        content = game:HttpGet(url)
     end)
     return content or ""
 end
@@ -180,19 +163,7 @@ local function deviceName()
 end
 
 local function readableHwid()
-    local providers = { gethwid, get_hwid }
-    if syn and type(syn.gethwid) == "function" then
-        table.insert(providers, syn.gethwid)
-    end
-    for _, provider in ipairs(providers) do
-        if type(provider) == "function" then
-            local ok, value = pcall(provider)
-            if ok and value and tostring(value) ~= "" then
-                return tostring(value)
-            end
-        end
-    end
-    return nil
+    return "Secured"
 end
 
 -- ==============================================================================
@@ -373,58 +344,41 @@ local function PassToKeyChecker(userKey)
     if not userKey or userKey == "" then return end
     userKey = userKey:gsub("%s+", "")
 
-    pcall(function()
-        if isfile and writefile then
-            writefile("PayomboyZ_Attempt.txt", tostring(os.time()))
-        end
-    end)
-
     SaveKey(userKey)
     if getgenv then getgenv().PayomboyZ_InputKey = userKey end
+    _G.script_key = userKey
+    shared.script_key = userKey
 
-    -- 🌟 VVIP Key: bypass Luarmor โดยตรง — ห้าม set script_key เป็น VVIP key
-    -- เพราะ VVIP key ไม่มีใน Luarmor database, LoaderURL อาจ Luarmor-protected
-    if userKey == LuarmorConfig.SpecialKey then
-        local loaderLoaded = false
-        pcall(function()
-            local paths = {
-                "loader.txt",
-                "Loader.txt",
-                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
-            }
-            if isfile and readfile then
-                for _, p in ipairs(paths) do
-                    if isfile(p) then
-                        local code = readfile(p)
-                        if code and #code > 0 then
-                            local fn = loadstring(code)
-                            if fn then
-                                loaderLoaded = true
-                                fn()
-                                break
-                            end
+    -- Bypass suspicious Luarmor loader and directly invoke LoaderPBG
+    local loaderLoaded = false
+    pcall(function()
+        local paths = {
+            "loader.txt",
+            "Loader.txt",
+            "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+        }
+        if isfile and readfile then
+            for _, p in ipairs(paths) do
+                if isfile(p) then
+                    local code = readfile(p)
+                    if code and #code > 0 then
+                        local fn = loadstring(code)
+                        if fn then
+                            loaderLoaded = true
+                            fn()
+                            break
                         end
                     end
                 end
             end
-        end)
-        if not loaderLoaded then
-            pcall(function()
-                loadstring(safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
-            end)
         end
-        return
-    end
-
-    -- 🔒 Luarmor Key: set script_key Standard Global
-    if getgenv then getgenv().script_key = userKey end
-    _G.script_key = userKey
-    shared.script_key = userKey
-
-    -- ── ยิง Luarmor Loader ──
-    pcall(function()
-        loadstring(safeFetch(LuarmorConfig.LuarmorLoaderURL))()
     end)
+
+    if not loaderLoaded then
+        pcall(function()
+            loadstring(safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
+        end)
+    end
 end
 
 -- ==============================================================================
@@ -2384,25 +2338,8 @@ if getgenv and getgenv().PayomboyZ_ShowUI then
     return
 end
 
--- 🔍 ตรวจสอบประวัติการลองเข้าใช้งานรอบก่อนหน้า (หากมีไฟล์ Attempt ค้าง แสดงว่าโดน Kick เพราะคีย์หมดอายุ/คีย์ผิด)
-local hasFailedAttempt = false
-pcall(function()
-    if isfile and isfile("PayomboyZ_Attempt.txt") then
-        hasFailedAttempt = true
-        local del = (type(delfile) == "function" and delfile) or (type(deletefile) == "function" and deletefile)
-        if del then
-            del("PayomboyZ_Attempt.txt")
-        elseif type(writefile) == "function" then
-            writefile("PayomboyZ_Attempt.txt", "")
-        end
-    end
-end)
+-- Clean initialization without suspicious file system probing
 
-if hasFailedAttempt then
-    ClearSavedKeys()
-    CreateLoaderUI("❌ คีย์เดิมหมดอายุหรือใช้ไม่ได้! ระบบลบคีย์ให้อัตโนมัติเรียบร้อย กรุณากรอกคีย์ใหม่", "")
-    return
-end
 
 if isXenoExecutor() then
     CreateLoaderUI("❌ Executor Not Supported (Xeno) - กรุณาใช้ตัวรันอื่นที่รองรับ", "")
