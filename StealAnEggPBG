@@ -1,9 +1,15 @@
 local _LocalPlayer = game:GetService("Players").LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local isMobileDevice = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 ----------------------------------------------------------------
 -- 1. Humanoid Clone Bypass (Bypass Humanoid State / Anti-Death)
 ----------------------------------------------------------------
 local function doHumanoidBypass()
+    if isMobileDevice then
+        print("[SAE] Mobile detected: Skipping Humanoid clone bypass to preserve TouchControls & Physics")
+        return
+    end
     local char = _LocalPlayer.Character or _LocalPlayer.CharacterAdded:Wait()
     if not char then return end
 
@@ -2115,13 +2121,6 @@ local function triggerPrompt(prompt)
         pcall(firePP, prompt, 0)
         pcall(firePP, prompt)
     end
-    pcall(function()
-        if prompt.InputHoldBegan then
-            prompt:InputHoldBegan()
-            task.wait(0.01)
-            prompt:InputHoldEnded()
-        end
-    end)
     return true
 end
 
@@ -2405,7 +2404,7 @@ local function instantSteal(rec)
     if not eggPos then return false, "ไม่มีตำแหน่งไข่" end
 
     local hum = humanoid()
-    if not hrp() or (hum and hum:GetState() == Enum.HumanoidStateType.None) then
+    if not hrp() or not hum or hum.Health <= 0 then
         task.wait(0.3)
         return false, "ตัวละครยังไม่พร้อม"
     end
@@ -2490,7 +2489,7 @@ end
 local function stealOnce(rec)
     unequipCharacterTools()
     local hum = humanoid()
-    if not hrp() or (hum and hum:GetState() == Enum.HumanoidStateType.None) then
+    if not hrp() or not hum or hum.Health <= 0 then
         task.wait(0.3)
         return false, "ตัวละครยังไม่พร้อม"
     end
