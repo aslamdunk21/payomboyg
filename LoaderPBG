@@ -262,7 +262,7 @@ local function LoadWaitingHub()
     pcall(function()
         local paths = {
             "Waiting.txt",
-            "c:/Users/Dream/Desktop/Roblox Script/Login/Waiting.txt"
+            "waiting.txt"
         }
         if isfile and readfile then
             for _, p in ipairs(paths) do
