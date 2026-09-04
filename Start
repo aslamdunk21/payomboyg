@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start
+-- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
@@ -1421,8 +1421,15 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
     }, userInfoContainer)
+    local execDisplayName = executorName()
+    local execColor = COLORS.textMuted
+    if isXenoExecutor() then
+        execDisplayName = "Xeno (Not supported)"
+        execColor = COLORS.danger
+    end
+
     local stats = {
-        { "Executor", executorName(), "monitor", COLORS.textMuted },
+        { "Executor", execDisplayName, "monitor", execColor },
         { "Device", deviceName(), deviceName() == "Mobile" and "smartphone" or "monitor", COLORS.textMuted },
         { "HWID", readableHwid() and "Available" or "Security By Luarmor", "shield", COLORS.textMuted },
         { "Game", detectedGame, "gamepad", COLORS.success },
@@ -2594,7 +2601,7 @@ if hasFailedAttempt then
 end
 
 if isXenoExecutor() then
-    CreateLoaderUI("❌ ตัวรัน Xeno ไม่รองรับ (Not Supported)", "")
+    CreateLoaderUI("❌ Executor Not Supported (Xeno) - กรุณาใช้ตัวรันอื่นที่รองรับ", "")
     return
 end
 
