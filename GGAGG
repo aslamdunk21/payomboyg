@@ -1,12 +1,12 @@
 --[[
     ======================================================================================
-    🎄 เก็บผักไปกับยอมบอย (GAG Multiverse Master Engine - GAG1 & GAG2) 🎄
+    🌸 🎀 เก็บผักไปกับยอมบอย (GAG Multiverse Master Engine - GAG1 & GAG2) 🎀 🌸
     --------------------------------------------------------------------------------------
     @author      cook45 & clack (Senior Low-Level Systems Devs)
-    @version     2.0.0 (Phase-by-Phase Deep Logic Implementation)
-    @description Multi-Map Auto-Farm, Event Shops, Real-Time Auto-Buy, Steal, Direct Trade & Trade Mail Engine
+    @version     2.1.0 (Pastel Pink Cute Theme & Advanced Shovel Engine)
+    @description Multi-Map Auto-Farm, Event Shops, Dynamic Tree Removal, Steal, Direct Trade & Trade Mail Engine
     @supported   GAG1 (PlaceId: 126884695634066) | GAG2 (PlaceId: 97598239454123)
-    @ui_theme    Christmas Obsidian Glassmorphic 2 Engine (Red, Green, White & Snow Particles)
+    @ui_theme    Cute Pastel Pink Glassmorphic Engine (Rose Pink, Marshmallow White & Falling Pink Snow)
     ======================================================================================
 --]]
 
@@ -26,7 +26,7 @@ local SoundService = game:GetService("SoundService")
 local Stats = game:GetService("Stats")
 
 --======================================================================================
--- 📌 PHASE 1: CORE FRAMEWORK, ENVIRONMENT DETECTOR & CHRISTMAS UI ENGINE
+-- 📌 PHASE 1: CORE FRAMEWORK, ENVIRONMENT DETECTOR & PASTEL PINK UI ENGINE
 --======================================================================================
 
 local PLACE_IDS = {
@@ -37,35 +37,36 @@ local PLACE_IDS = {
 local CurrentPlaceId = game.PlaceId
 local IsGAG1 = (CurrentPlaceId == PLACE_IDS.GAG1) or (workspace:FindFirstChild("Farm") ~= nil)
 local IsGAG2 = (CurrentPlaceId == PLACE_IDS.GAG2) or (workspace:FindFirstChild("Gardens") ~= nil)
-local MapName = IsGAG1 and "GAG 1 (Grow a Garden)" or (IsGAG2 and "GAG 2 (Grow a Garden 2)" or "GAG Multiverse (Fallback)")
+local MapName = IsGAG1 and "GAG 1 (Grow a Garden) [126884695634066]" or (IsGAG2 and "GAG 2 (Grow a Garden 2) [97598239454123]" or "GAG Multiverse (Fallback)")
 
--- 🎨 Christmas Color Palette Spec (Santa Red Primary with Pine Dark Backdrop)
+-- 🎨 Cute Pastel Pink Color Palette Spec (Soft Pastel Pink, Rose & Marshmallow Glassmorphic)
 local COLORS = {
-    backdrop = Color3.fromRGB(10, 20, 14),        -- Dark Pine Green Ground
-    shell = Color3.fromRGB(14, 28, 20),           -- Glass Window Background
-    glass = Color3.fromRGB(20, 42, 28),           -- Panel Card Surface
-    glassDeep = Color3.fromRGB(16, 32, 22),       -- Deep Card Surface
-    glassRaised = Color3.fromRGB(28, 56, 38),     -- Raised Surface
-    userPanel = Color3.fromRGB(18, 36, 24),       -- Profile Card Panel
-    surface = Color3.fromRGB(24, 48, 32),         -- Widget Inactive
-    surfaceRaised = Color3.fromRGB(220, 38, 38),  -- Widget Active Santa Red
-    surfaceHover = Color3.fromRGB(239, 68, 68),   -- Widget Hover Red
-    surfacePressed = Color3.fromRGB(185, 28, 28), -- Widget Pressed Dark Red
-    input = Color3.fromRGB(12, 24, 16),           -- Input Box BG
-    inputFocus = Color3.fromRGB(220, 38, 38),    -- Input Focused (Santa Red)
-    divider = Color3.fromRGB(220, 38, 38),        -- Christmas Red Accent Line
-    primary = Color3.fromRGB(220, 38, 38),        -- Primary Santa Red (#DC2626)
-    primaryHover = Color3.fromRGB(239, 68, 68),   -- Santa Red Hover (#EF4444)
-    primaryPressed = Color3.fromRGB(185, 28, 28), -- Santa Red Pressed (#B91C1C)
-    secondary = Color3.fromRGB(220, 38, 38),     -- Christmas Red Highlight Accent
-    text = Color3.fromRGB(255, 255, 255),        -- Pure Snow White
-    textMuted = Color3.fromRGB(230, 245, 235),   -- Soft Snow White
-    textFaint = Color3.fromRGB(180, 215, 190),   -- Soft Pine White
-    cyan = Color3.fromRGB(248, 113, 113),         -- Neon Light Red Accent Text
-    success = Color3.fromRGB(220, 38, 38),      -- Santa Red
-    warning = Color3.fromRGB(255, 200, 50),      -- Gold Candle
-    danger = Color3.fromRGB(230, 35, 45),        -- Santa Red
-    disabled = Color3.fromRGB(35, 45, 38),
+    backdrop = Color3.fromRGB(38, 22, 32),        -- Soft Velvet Pastel Dark Backdrop
+    shell = Color3.fromRGB(48, 28, 40),           -- Pastel Pink Glass Window
+    glass = Color3.fromRGB(64, 38, 54),           -- Panel Card Surface
+    glassDeep = Color3.fromRGB(44, 26, 38),       -- Deep Card Surface
+    glassRaised = Color3.fromRGB(80, 48, 68),     -- Raised Card Surface
+    userPanel = Color3.fromRGB(56, 32, 46),       -- Profile Card Panel
+    surface = Color3.fromRGB(72, 42, 60),         -- Widget Inactive
+    surfaceRaised = Color3.fromRGB(255, 143, 177),  -- Widget Active Cute Pastel Pink (#FF8FB1)
+    surfaceHover = Color3.fromRGB(255, 175, 200),   -- Widget Hover Pastel Pink (#FFAFC8)
+    surfacePressed = Color3.fromRGB(235, 120, 155), -- Widget Pressed Deep Pink (#EB789B)
+    input = Color3.fromRGB(36, 20, 30),           -- Input Box BG
+    inputFocus = Color3.fromRGB(255, 143, 177),    -- Input Focused (Pastel Pink)
+    divider = Color3.fromRGB(255, 175, 200),        -- Pastel Pink Accent Line
+    primary = Color3.fromRGB(255, 143, 177),        -- Primary Pastel Pink (#FF8FB1)
+    primaryHover = Color3.fromRGB(255, 175, 200),   -- Pastel Pink Hover (#FFAFC8)
+    primaryPressed = Color3.fromRGB(235, 120, 155), -- Pastel Pink Pressed (#EB789B)
+    secondary = Color3.fromRGB(255, 194, 218),     -- Cute Marshmallow Pink Accent (#FFC2DA)
+    text = Color3.fromRGB(255, 255, 255),        -- Pure Marshmallow White
+    textMuted = Color3.fromRGB(255, 225, 235),   -- Soft Pastel Pink Text
+    textFaint = Color3.fromRGB(230, 185, 205),   -- Soft Lavender Pink Text
+    cyan = Color3.fromRGB(255, 180, 210),         -- Neon Cute Pink Accent Text (#FFB4D2)
+    gold = Color3.fromRGB(255, 220, 150),         -- Warm Pastel Yellow Accent
+    success = Color3.fromRGB(255, 143, 177),      -- Pastel Pink Success
+    warning = Color3.fromRGB(255, 205, 140),      -- Warm Pastel Gold
+    danger = Color3.fromRGB(255, 110, 145),        -- Cute Dark Pink Danger
+    disabled = Color3.fromRGB(54, 34, 46),
 }
 
 -- Global Engine State
@@ -173,6 +174,117 @@ function Engine:CleanItemName(name)
     return clean
 end
 
+function Engine:GetMasterPresetOptions(category)
+    local cat = tostring(category or "Seeds"):lower()
+    if cat:find("seed") or cat:find("เมล็ด") then
+        return { "Carrot Seed", "Tomato Seed", "Apple Seed", "Mushroom Seed", "Pea Seed", "Blueberry Seed", "Strawberry Seed", "Sunflower Seed", "Corn Seed", "Pineapple Seed", "Watermelon Seed", "Pumpkin Seed", "Bamboo Seed", "Moon Flower Seed", "Golden Apple Seed", "Briar Rose Seed" }
+    elseif cat:find("egg") or cat:find("ไข่") then
+        return { "Common Egg", "Uncommon Egg", "Rare Egg", "Legendary Egg", "Mythic Egg", "Bee Egg", "Bug Egg", "Paradise Egg", "Oasis Egg", "Anti-Bee Egg", "Dino Egg", "Brown Egg", "Golden Egg", "Night Egg", "Campfire Egg", "Cyber Egg" }
+    elseif cat:find("gear") or cat:find("เกียร์") then
+        return { "Basic Shovel", "Advanced Shovel", "Watering Can", "Golden Shovel", "Super Trowel", "Sprinkler", "Speed Boots", "Harvest Scythe", "Master Shovel" }
+    elseif cat:find("crate") or cat:find("กล่อง") then
+        return { "Wooden Crate", "Silver Crate", "Gold Crate", "Diamond Crate", "Pet Crate" }
+    elseif cat:find("event") or cat:find("กิจกรรม") then
+        return { "Honey Bucket", "Event Voucher", "Bee Hive Kit", "Festival Basket", "Golden Nectar" }
+    elseif cat:find("pet") or cat:find("สัตว์") then
+        return { "Dog", "Cat", "Rabbit", "Golden Bee", "Dragon", "Panda", "Fox", "Bear", "Penguin" }
+    elseif cat:find("fruit") or cat:find("crop") or cat:find("ผลไม้") then
+        return { "แครอท", "มะเขือเทศ", "แอปเปิ้ล", "เห็ด", "ถั่วเขียว", "บลูเบอร์รี่", "สตรอเบอร์รี่", "ดอกทานตะวัน", "ข้าวโพด", "สับปะรด", "แตงโม", "ฟักทอง", "ไผ่", "ดอกพระจันทร์บาน" }
+    end
+    return { "Item 1", "Item 2" }
+end
+
+function Engine:GetInventoryDropdownOptions(category)
+    local items = {}
+    local itemCounts = {}
+    local catKey = tostring(category or "Fruits"):lower()
+
+    pcall(function()
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        local char = LocalPlayer.Character
+
+        local function scanContainer(container)
+            if not container then return end
+            for _, item in ipairs(container:GetChildren()) do
+                if item:IsA("Tool") or item:IsA("Folder") or item:IsA("Model") then
+                    local rawName = item.Name
+                    local cleanName = Engine:CleanItemName(rawName)
+                    local lowerName = rawName:lower()
+                    local isMatch = false
+
+                    if catKey:find("egg") or catKey:find("ไข่") then
+                        if lowerName:find("egg") or lowerName:find("ไข่") or item:GetAttribute("IsEgg") then
+                            isMatch = true
+                        end
+                    elseif catKey:find("pet") or catKey:find("สัตว์") then
+                        if lowerName:find("pet") or lowerName:find("สัตว์") or (not lowerName:find("egg") and item:GetAttribute("IsPet")) then
+                            isMatch = true
+                        end
+                    elseif catKey:find("seed") or catKey:find("เมล็ด") then
+                        if lowerName:find("seed") or lowerName:find("เมล็ด") then
+                            isMatch = true
+                        end
+                    elseif catKey:find("gear") or catKey:find("เกียร์") then
+                        if lowerName:find("shovel") or lowerName:find("can") or lowerName:find("trowel") or lowerName:find("scythe") or lowerName:find("gear") then
+                            isMatch = true
+                        end
+                    elseif catKey:find("crate") or catKey:find("กล่อง") then
+                        if lowerName:find("crate") or lowerName:find("กล่อง") then
+                            isMatch = true
+                        end
+                    elseif catKey:find("event") or catKey:find("กิจกรรม") then
+                        if lowerName:find("event") or lowerName:find("honey") or lowerName:find("voucher") then
+                            isMatch = true
+                        end
+                    else -- Fruits / Crops (Default)
+                        if item:FindFirstChild("Item_String") or lowerName:find("crop") or lowerName:find("fruit") or (not lowerName:find("seed") and not lowerName:find("egg") and not lowerName:find("shovel") and not lowerName:find("can") and not lowerName:find("trowel")) then
+                            isMatch = true
+                        end
+                    end
+
+                    if isMatch then
+                        itemCounts[cleanName] = (itemCounts[cleanName] or 0) + 1
+                    end
+                end
+            end
+        end
+
+        scanContainer(backpack)
+        scanContainer(char)
+
+        local playerData = ReplicatedStorage:FindFirstChild("PlayerData") or ReplicatedStorage:FindFirstChild("Data")
+        if playerData and playerData:FindFirstChild(LocalPlayer.Name) then
+            local pFolder = playerData[LocalPlayer.Name]
+            local inv = pFolder:FindFirstChild("Inventory") or pFolder:FindFirstChild("Backpack")
+            if inv then scanContainer(inv) end
+        end
+
+        for categoryName, stockTable in pairs(Engine.Stocks) do
+            if categoryName:lower():find(catKey) or (catKey:find("egg") and categoryName == "Eggs") or (catKey:find("seed") and categoryName == "Seeds") then
+                for itemName, info in pairs(stockTable) do
+                    local qty = (type(info) == "table" and (info.Count or info.Amount or info.Stock)) or (type(info) == "number" and info) or 0
+                    if qty > 0 then
+                        local clean = Engine:CleanItemName(itemName)
+                        itemCounts[clean] = (itemCounts[clean] or 0) + qty
+                    end
+                end
+            end
+        end
+    end)
+
+    for name, count in pairs(itemCounts) do
+        table.insert(items, string.format("%s (x%d)", name, count))
+    end
+
+    table.sort(items)
+
+    if #items == 0 then
+        table.insert(items, "⚠️ ไม่มีไอเทมใน Inventory (Empty)")
+    end
+
+    return items
+end
+
 -- Sound Effect Helper
 local function playClickSound()
     pcall(function()
@@ -252,7 +364,7 @@ function Engine:Notify(cfg)
         tTitle.Size = UDim2.new(1, -20, 0, 22)
         tTitle.Position = UDim2.new(0, 12, 0, 6)
         tTitle.BackgroundTransparency = 1
-        tTitle.Text = "🎄 " .. title
+        tTitle.Text = "🌸 " .. title
         tTitle.TextColor3 = COLORS.cyan
         tTitle.Font = Enum.Font.FredokaOne
         tTitle.TextSize = 14
@@ -265,7 +377,7 @@ function Engine:Notify(cfg)
         tDesc.BackgroundTransparency = 1
         tDesc.Text = content
         tDesc.TextColor3 = COLORS.text
-        tDesc.Font = Enum.Font.Gotham
+        tDesc.Font = Enum.Font.FredokaOne
         tDesc.TextSize = 11
         tDesc.TextWrapped = true
         tDesc.TextXAlignment = Enum.TextXAlignment.Left
@@ -339,12 +451,12 @@ function Engine:CreateUI()
     shellStroke.Transparency = 0.25
     shellStroke.Parent = shell
 
-    -- 📌 Solid Opaque White Top Bar Header (Snow Cap Roof & Draggable Bar)
+    -- 📌 Solid Opaque Pastel Pink Top Bar Header (Cute Pink Roof & Draggable Bar)
     local topBar = Instance.new("Frame")
     topBar.Name = "SnowCapTopBar"
     topBar.Size = UDim2.new(1, 0, 0, 42)
     topBar.Position = UDim2.new(0, 0, 0, 0)
-    topBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- 100% Solid Opaque Snow White
+    topBar.BackgroundColor3 = Color3.fromRGB(255, 235, 244) -- 100% Solid Pastel Pink Roof
     topBar.BackgroundTransparency = 0
     topBar.BorderSizePixel = 0
     topBar.ZIndex = 50
@@ -357,7 +469,7 @@ function Engine:CreateUI()
     local tbBottomFill = Instance.new("Frame")
     tbBottomFill.Size = UDim2.new(1, 0, 0, 12)
     tbBottomFill.Position = UDim2.new(0, 0, 1, -12)
-    tbBottomFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    tbBottomFill.BackgroundColor3 = Color3.fromRGB(255, 235, 244)
     tbBottomFill.BorderSizePixel = 0
     tbBottomFill.ZIndex = 50
     tbBottomFill.Parent = topBar
@@ -366,8 +478,8 @@ function Engine:CreateUI()
     topTitle.Size = UDim2.new(1, -110, 1, 0)
     topTitle.Position = UDim2.new(0, 16, 0, 0)
     topTitle.BackgroundTransparency = 1
-    topTitle.Text = "❄️ 🎄 GAG MULTIVERSE AUTOMATION ENGINE (PAYOMBOYZ) 🎄 ❄️"
-    topTitle.TextColor3 = Color3.fromRGB(215, 25, 35) -- Bold Christmas Red
+    topTitle.Text = "🌸 🎀 GAG MULTIVERSE AUTOMATION ENGINE (PAYOMBOYZ) 🎀 🌸"
+    topTitle.TextColor3 = Color3.fromRGB(240, 98, 146) -- Cute Pastel Pink Title Text
     topTitle.Font = Enum.Font.FredokaOne
     topTitle.TextSize = 13
     topTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -491,12 +603,12 @@ function Engine:CreateUI()
 
     task.spawn(function()
         local dots = {}
-        for i = 1, 45 do
+        for i = 1, 60 do
             local dot = Instance.new("Frame")
-            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
+            dot.Size = UDim2.fromOffset(math.random(2, 5), math.random(2, 5))
             dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
-            dot.BackgroundColor3 = Color3.fromRGB(235, 245, 255)
-            dot.BackgroundTransparency = math.random(25, 65) / 100
+            dot.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(255, 240, 248) or Color3.fromRGB(255, 210, 230)
+            dot.BackgroundTransparency = math.random(15, 55) / 100
             dot.BorderSizePixel = 0
             dot.Parent = snowLayer
 
@@ -590,7 +702,7 @@ function Engine:CreateUI()
     titleLabel.Size = UDim2.new(1, -68, 0, 22)
     titleLabel.Position = UDim2.new(0, 64, 0, 12)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "เก็บผักไปกับยอมบอย"
+    titleLabel.Text = "🌸 เก็บผักไปกับยอมบอย"
     titleLabel.TextColor3 = COLORS.text
     titleLabel.Font = Enum.Font.FredokaOne
     titleLabel.TextSize = 14
@@ -609,8 +721,8 @@ function Engine:CreateUI()
     subLabel.Position = UDim2.new(0, 64, 0, 34)
     subLabel.BackgroundTransparency = 1
     subLabel.Text = MapName
-    subLabel.TextColor3 = Color3.fromRGB(255, 110, 110)
-    subLabel.Font = Enum.Font.GothamBold
+    subLabel.TextColor3 = COLORS.cyan
+    subLabel.Font = Enum.Font.FredokaOne
     subLabel.TextSize = 10
     subLabel.TextXAlignment = Enum.TextXAlignment.Left
     subLabel.Parent = profileCard
@@ -628,10 +740,9 @@ function Engine:CreateUI()
     tabContainer.Size = UDim2.new(1, -24, 1, -100)
     tabContainer.Position = UDim2.new(0, 12, 0, 95)
     tabContainer.BackgroundTransparency = 1
-    tabContainer.ScrollBarThickness = 2
+    tabContainer.BorderSizePixel = 0
+    tabContainer.ScrollBarThickness = 3
     tabContainer.ScrollBarImageColor3 = COLORS.primary
-    tabContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    tabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
     tabContainer.Parent = sidebar
 
     local tabLayout = Instance.new("UIListLayout")
@@ -639,52 +750,43 @@ function Engine:CreateUI()
     tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
     tabLayout.Parent = tabContainer
 
-    tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabContainer.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 20)
-    end)
+    -- Page Container
+    local pageContainer = Instance.new("Frame")
+    pageContainer.Name = "PageContainer"
+    pageContainer.Size = UDim2.new(1, -255, 1, -54)
+    pageContainer.Position = UDim2.new(0, 250, 0, 48)
+    pageContainer.BackgroundTransparency = 1
+    pageContainer.Parent = shell
 
-    -- Main Content Area
-    local mainContent = Instance.new("Frame")
-    mainContent.Name = "MainContent"
-    mainContent.Size = UDim2.new(1, -245, 1, -42)
-    mainContent.Position = UDim2.new(0, 245, 0, 42)
-    mainContent.BackgroundTransparency = 1
-    mainContent.ZIndex = 3
-    mainContent.Parent = shell
-    self.UI.MainContent = mainContent
-
-    -- Draggable Toggle Capsule
+    -- Floating Logo Capsule Button (Mobile & Desktop Quick Toggle)
     local toggleCapsule = Instance.new("Frame")
     toggleCapsule.Name = "PayomboyzToggleCapsule"
-    toggleCapsule.Size = UDim2.fromOffset(240, 58)
-    toggleCapsule.Position = UDim2.new(0, 15, 0.5, -29)
+    toggleCapsule.Size = UDim2.new(0, 180, 0, 48)
+    toggleCapsule.Position = UDim2.new(0, 20, 0.15, 0)
     toggleCapsule.BackgroundColor3 = COLORS.shell
-    toggleCapsule.BackgroundTransparency = 0.18
     toggleCapsule.BorderSizePixel = 0
-    toggleCapsule.ClipsDescendants = true
-    toggleCapsule.ZIndex = 99999
+    toggleCapsule.ZIndex = 999999
     toggleCapsule.Parent = gui
 
-    local tcCorner = Instance.new("UICorner")
-    tcCorner.CornerRadius = UDim.new(0, 16)
-    tcCorner.Parent = toggleCapsule
+    local capCorner = Instance.new("UICorner")
+    capCorner.CornerRadius = UDim.new(0, 24)
+    capCorner.Parent = toggleCapsule
 
-    local tcStroke = Instance.new("UIStroke")
-    tcStroke.Color = COLORS.primary
-    tcStroke.Thickness = 1.5
-    tcStroke.Transparency = 0.2
-    tcStroke.Parent = toggleCapsule
+    local capStroke = Instance.new("UIStroke")
+    capStroke.Color = COLORS.primary
+    capStroke.Thickness = 1.5
+    capStroke.Parent = toggleCapsule
 
     local capAvatarFrame = Instance.new("Frame")
-    capAvatarFrame.Size = UDim2.fromOffset(42, 42)
-    capAvatarFrame.Position = UDim2.new(0, 8, 0.5, -21)
-    capAvatarFrame.BackgroundColor3 = COLORS.glassDeep
+    capAvatarFrame.Size = UDim2.fromOffset(36, 36)
+    capAvatarFrame.Position = UDim2.new(0, 6, 0.5, -18)
+    capAvatarFrame.BackgroundColor3 = COLORS.glass
     capAvatarFrame.BorderSizePixel = 0
     capAvatarFrame.Parent = toggleCapsule
 
-    local caCorner = Instance.new("UICorner")
-    caCorner.CornerRadius = UDim.new(1, 0)
-    caCorner.Parent = capAvatarFrame
+    local cafCorner = Instance.new("UICorner")
+    cafCorner.CornerRadius = UDim.new(1, 0)
+    cafCorner.Parent = capAvatarFrame
 
     local capAvatarImg = Instance.new("ImageLabel")
     capAvatarImg.Size = UDim2.fromScale(1, 1)
@@ -692,15 +794,11 @@ function Engine:CreateUI()
     capAvatarImg.Image = loadCustomAvatarImage()
     capAvatarImg.Parent = capAvatarFrame
 
-    local caiCorner = Instance.new("UICorner")
-    caiCorner.CornerRadius = UDim.new(1, 0)
-    caiCorner.Parent = capAvatarImg
-
     local capUserLabel = Instance.new("TextLabel")
     capUserLabel.Size = UDim2.new(1, -60, 0, 18)
     capUserLabel.Position = UDim2.new(0, 56, 0, 10)
     capUserLabel.BackgroundTransparency = 1
-    capUserLabel.Text = "🎄 เก็บผักกับยอมบอย"
+    capUserLabel.Text = "🌸 เก็บผักกับยอมบอย"
     capUserLabel.TextColor3 = COLORS.text
     capUserLabel.Font = Enum.Font.FredokaOne
     capUserLabel.TextSize = 12
@@ -713,7 +811,7 @@ function Engine:CreateUI()
     capMetricsLabel.BackgroundTransparency = 1
     capMetricsLabel.Text = "⚡ 60 FPS  •  📡 0 ms"
     capMetricsLabel.TextColor3 = COLORS.cyan
-    capMetricsLabel.Font = Enum.Font.GothamBold
+    capMetricsLabel.Font = Enum.Font.FredokaOne
     capMetricsLabel.TextSize = 10
     capMetricsLabel.TextXAlignment = Enum.TextXAlignment.Left
     capMetricsLabel.Parent = toggleCapsule
@@ -1756,6 +1854,38 @@ function GAG1TradeEngine:SendTradeRequest(targetName)
         if tradeRemote then
             tradeRemote:FireServer(targetPlayer)
             Engine:Notify({ Title = "ส่งคำขอเทรดแล้ว 🤝", Content = "ส่งคำขอเทรดไปยัง: " .. targetName })
+        end
+    end)
+end
+
+function GAG1TradeEngine:SendEggGiftOrOffer(targetName, rawEggItem)
+    if not targetName or targetName == "" or targetName == "ไม่มีผู้เล่นอื่นในเซิร์ฟเวอร์" then
+        Engine:Notify({ Title = "ส่งไข่ล้มเหลว ❌", Content = "กรุณาเลือกผู้เล่นเป้าหมายในเซิร์ฟเวอร์ก่อน!" })
+        return
+    end
+    local cleanEgg = Engine:CleanItemName(rawEggItem)
+    if not cleanEgg or cleanEgg == "" or cleanEgg:find("ไม่มีไอเทม") then
+        Engine:Notify({ Title = "ส่งไข่ล้มเหลว ❌", Content = "กรุณาเลือกไข่ในสัมภาระก่อนกดส่ง!" })
+        return
+    end
+
+    pcall(function()
+        local targetPlayer = Players:FindFirstChild(targetName)
+        if not targetPlayer then
+            Engine:Notify({ Title = "ส่งไข่ล้มเหลว ❌", Content = "ไม่พบผู้เล่น: " .. tostring(targetName) })
+            return
+        end
+
+        local giftRemote = ReplicatedStorage.GameEvents:FindFirstChild("GiftEgg") or ReplicatedStorage.GameEvents:FindFirstChild("SendGift") or ReplicatedStorage.GameEvents:FindFirstChild("GiveEgg")
+        if giftRemote then
+            giftRemote:FireServer(targetPlayer, cleanEgg)
+            Engine:Notify({ Title = "ส่งไข่สำเร็จ! 🥚", Content = string.format("ส่งไข่ '%s' ให้ %s เรียบร้อย!", cleanEgg, targetName) })
+        else
+            local tradeRemote = ReplicatedStorage.GameEvents:FindFirstChild("SendTradeRequest") or ReplicatedStorage.GameEvents:FindFirstChild("Trade")
+            if tradeRemote then
+                tradeRemote:FireServer(targetPlayer, cleanEgg)
+                Engine:Notify({ Title = "ส่งข้อเสนอเทรดไข่ 🥚", Content = string.format("เสนอเทรดไข่ '%s' ให้ %s", cleanEgg, targetName) })
+            end
         end
     end)
 end
@@ -2974,6 +3104,60 @@ function GAG2Engine:InitShovelAndTrowelLoops()
     end)
 end
 
+function GAG2Engine:ShovelAllPlantsNow(onlySelected)
+    pcall(function()
+        local ownerPlot = self:GetOwnerPlot()
+        if not ownerPlot then return end
+
+        local plantsHolder = ownerPlot:FindFirstChild("Plants") or ownerPlot:FindFirstChild("Crops") or ownerPlot
+        local selectedToDelete = Engine.Config.SelectedPlantsToDelete or {}
+        local count = 0
+
+        for _, plant in ipairs(plantsHolder:GetChildren()) do
+            if plant:IsA("Model") or plant:IsA("BasePart") then
+                local pName = Engine:CleanItemName(plant.Name)
+                local matches = (not onlySelected) or Engine.Config.AutoShovelAllPlants or Engine:IsItemSelected(selectedToDelete, pName)
+
+                if matches then
+                    count = count + 1
+                    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+                    if sharedModules and sharedModules:FindFirstChild("Networking") then
+                        local Networking = safeRequire(sharedModules.Networking)
+                        if Networking then
+                            local shovelNet = Networking.Shovel or Networking.Plants or Networking.Garden
+                            if shovelNet then
+                                local removeRemote = shovelNet.RemovePlant or shovelNet.ShovelPlant or shovelNet.DeletePlant
+                                if removeRemote then
+                                    removeRemote:Fire(plant:GetAttribute("PlantId") or plant)
+                                end
+                            end
+                        end
+                    end
+
+                    local bp = LocalPlayer:FindFirstChild("Backpack")
+                    local char = LocalPlayer.Character
+                    if bp and char then
+                        local shovelTool = bp:FindFirstChild("Shovel") or char:FindFirstChild("Shovel") or bp:FindFirstChild("Master Shovel") or char:FindFirstChild("Master Shovel")
+                        if shovelTool then
+                            shovelTool.Parent = char
+                            task.wait(0.02)
+                            if shovelTool:FindFirstChild("Click") or shovelTool:FindFirstChild("Activate") then
+                                shovelTool:Activate()
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        Engine:Notify({
+            Title = "ถอนต้นไม้เรียบร้อย 🧹",
+            Content = string.format("ส่งคำขอถอนต้นไม้จำนวน %d ต้นในสวนเรียบร้อยแล้ว!", count)
+        })
+    end)
+end
+Engine.ShovelAllPlantsNow = GAG2Engine.ShovelAllPlantsNow
+
 function GAG2Engine:NightStealLoop()
     if not Engine.Config.AutoNightSteal then return end
     pcall(function()
@@ -3387,7 +3571,7 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
     titleIcon.Size = UDim2.new(0, 30, 1, 0)
     titleIcon.Position = UDim2.new(0, 12, 0, 0)
     titleIcon.BackgroundTransparency = 1
-    titleIcon.Text = "🎄"
+    titleIcon.Text = "🌸"
     titleIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
     titleIcon.TextSize = 16
     titleIcon.Parent = topBar
@@ -3396,9 +3580,9 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
     titleText.Size = UDim2.new(0, 200, 1, 0)
     titleText.Position = UDim2.new(0, 42, 0, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "PBG Smart Trading"
+    titleText.Text = "🌸 PBG Smart Trading"
     titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleText.Font = Enum.Font.GothamBold
+    titleText.Font = Enum.Font.FredokaOne
     titleText.TextSize = 15
     titleText.TextXAlignment = Enum.TextXAlignment.Left
     titleText.Parent = topBar
@@ -3409,8 +3593,8 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
     headerStats.Position = UDim2.new(1, -470, 0, 0)
     headerStats.BackgroundTransparency = 1
     headerStats.Text = "Value: $0  •  Today: 0/50"
-    headerStats.TextColor3 = Color3.fromRGB(255, 215, 0) -- Warm Gold Accent
-    headerStats.Font = Enum.Font.Gotham
+    headerStats.TextColor3 = Color3.fromRGB(255, 220, 150) -- Warm Gold Accent
+    headerStats.Font = Enum.Font.FredokaOne
     headerStats.TextSize = 11
     headerStats.TextXAlignment = Enum.TextXAlignment.Right
     headerStats.Parent = topBar
@@ -3419,10 +3603,10 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
     local historyBtn = Instance.new("TextButton")
     historyBtn.Size = UDim2.new(0, 115, 0, 26)
     historyBtn.Position = UDim2.new(1, -140, 0, 7)
-    historyBtn.BackgroundColor3 = Color3.fromRGB(220, 38, 38) -- Bright Santa Red
+    historyBtn.BackgroundColor3 = Color3.fromRGB(255, 143, 177) -- Cute Pastel Pink
     historyBtn.Text = string.format("History Log (%d)", #Engine.TradeLogs)
     historyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    historyBtn.Font = Enum.Font.GothamBold
+    historyBtn.Font = Enum.Font.FredokaOne
     historyBtn.TextSize = 11
     historyBtn.Parent = topBar
 
@@ -3872,12 +4056,14 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
 
         -- Render Confirmation Modal Pop-up (Top level modal parented to ScreenGui)
         local confirmModal = Instance.new("Frame")
-        confirmModal.Size = UDim2.new(0, 440, 0, 250)
+        confirmModal.Name = "PBGTradeConfirmModal"
+        confirmModal.Size = UDim2.new(0, 450, 0, 260)
         confirmModal.AnchorPoint = Vector2.new(0.5, 0.5)
         confirmModal.Position = UDim2.new(0.5, 0, 0.5, 0)
-        confirmModal.BackgroundColor3 = Color3.fromRGB(24, 16, 18)
+        confirmModal.BackgroundColor3 = Color3.fromRGB(22, 14, 16)
         confirmModal.BorderSizePixel = 0
-        confirmModal.ZIndex = 100000
+        confirmModal.ZIndex = 500000
+        confirmModal.ClipsDescendants = false
         confirmModal.Parent = gui
 
         local cmCorner = Instance.new("UICorner")
@@ -3886,28 +4072,28 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
 
         local cmStroke = Instance.new("UIStroke")
         cmStroke.Color = Color3.fromRGB(220, 38, 38)
-        cmStroke.Thickness = 1.5
+        cmStroke.Thickness = 2
         cmStroke.Parent = confirmModal
 
         -- Top Title
         local cmTitle = Instance.new("TextLabel")
         cmTitle.Size = UDim2.new(1, -32, 0, 24)
-        cmTitle.Position = UDim2.new(0, 16, 0, 12)
+        cmTitle.Position = UDim2.new(0, 16, 0, 10)
         cmTitle.BackgroundTransparency = 1
-        cmTitle.Text = "🎄 Confirm Send Trade Mail"
+        cmTitle.Text = "🎄 ยืนยันการส่ง Trade Mail (Confirm Dispatch)"
         cmTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
         cmTitle.Font = Enum.Font.GothamBold
-        cmTitle.TextSize = 14
+        cmTitle.TextSize = 13
         cmTitle.TextXAlignment = Enum.TextXAlignment.Left
-        cmTitle.ZIndex = 100001
+        cmTitle.ZIndex = 500001
         cmTitle.Parent = confirmModal
 
         -- Profile Card Container (Avatar + User info)
         local profileCard = Instance.new("Frame")
-        profileCard.Size = UDim2.new(1, -32, 0, 90)
-        profileCard.Position = UDim2.new(0, 16, 0, 42)
-        profileCard.BackgroundColor3 = Color3.fromRGB(34, 22, 26)
-        profileCard.ZIndex = 100001
+        profileCard.Size = UDim2.new(1, -32, 0, 85)
+        profileCard.Position = UDim2.new(0, 16, 0, 38)
+        profileCard.BackgroundColor3 = Color3.fromRGB(32, 20, 24)
+        profileCard.ZIndex = 500001
         profileCard.Parent = confirmModal
 
         local pcCorn = Instance.new("UICorner")
@@ -3915,21 +4101,21 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         pcCorn.Parent = profileCard
 
         local pcStroke = Instance.new("UIStroke")
-        pcStroke.Color = Color3.fromRGB(70, 40, 48)
+        pcStroke.Color = Color3.fromRGB(80, 45, 52)
         pcStroke.Thickness = 1
         pcStroke.Parent = profileCard
 
         -- Avatar Headshot Image
         local avatarImg = Instance.new("ImageLabel")
-        avatarImg.Size = UDim2.new(0, 68, 0, 68)
-        avatarImg.Position = UDim2.new(0, 11, 0, 11)
-        avatarImg.BackgroundColor3 = Color3.fromRGB(20, 12, 14)
+        avatarImg.Size = UDim2.new(0, 64, 0, 64)
+        avatarImg.Position = UDim2.new(0, 10, 0, 10)
+        avatarImg.BackgroundColor3 = Color3.fromRGB(18, 10, 12)
         avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(targetUserId) .. "&w=150&h=150"
-        avatarImg.ZIndex = 100002
+        avatarImg.ZIndex = 500002
         avatarImg.Parent = profileCard
 
         local avCorn = Instance.new("UICorner")
-        avCorn.CornerRadius = UDim.new(0, 34)
+        avCorn.CornerRadius = UDim.new(0, 32)
         avCorn.Parent = avatarImg
 
         local avStroke = Instance.new("UIStroke")
@@ -3939,39 +4125,39 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
 
         -- User Details Text
         local lblDisplayName = Instance.new("TextLabel")
-        lblDisplayName.Size = UDim2.new(1, -95, 0, 20)
-        lblDisplayName.Position = UDim2.new(0, 90, 0, 12)
+        lblDisplayName.Size = UDim2.new(1, -90, 0, 20)
+        lblDisplayName.Position = UDim2.new(0, 85, 0, 10)
         lblDisplayName.BackgroundTransparency = 1
         lblDisplayName.Text = targetDisplayName
         lblDisplayName.TextColor3 = Color3.fromRGB(255, 255, 255)
         lblDisplayName.Font = Enum.Font.GothamBold
         lblDisplayName.TextSize = 13
         lblDisplayName.TextXAlignment = Enum.TextXAlignment.Left
-        lblDisplayName.ZIndex = 100002
+        lblDisplayName.ZIndex = 500002
         lblDisplayName.Parent = profileCard
 
         local lblUsername = Instance.new("TextLabel")
-        lblUsername.Size = UDim2.new(1, -95, 0, 16)
-        lblUsername.Position = UDim2.new(0, 90, 0, 34)
+        lblUsername.Size = UDim2.new(1, -90, 0, 16)
+        lblUsername.Position = UDim2.new(0, 85, 0, 30)
         lblUsername.BackgroundTransparency = 1
         lblUsername.Text = "@" .. recipient
         lblUsername.TextColor3 = Color3.fromRGB(200, 170, 175)
         lblUsername.Font = Enum.Font.Gotham
         lblUsername.TextSize = 11
         lblUsername.TextXAlignment = Enum.TextXAlignment.Left
-        lblUsername.ZIndex = 100002
+        lblUsername.ZIndex = 500002
         lblUsername.Parent = profileCard
 
         local lblUid = Instance.new("TextLabel")
-        lblUid.Size = UDim2.new(1, -95, 0, 16)
-        lblUid.Position = UDim2.new(0, 90, 0, 54)
+        lblUid.Size = UDim2.new(1, -90, 0, 16)
+        lblUid.Position = UDim2.new(0, 85, 0, 48)
         lblUid.BackgroundTransparency = 1
         lblUid.Text = "🆔 User ID: " .. tostring(targetUserId)
         lblUid.TextColor3 = Color3.fromRGB(255, 215, 0)
         lblUid.Font = Enum.Font.GothamBold
         lblUid.TextSize = 10
         lblUid.TextXAlignment = Enum.TextXAlignment.Left
-        lblUid.ZIndex = 100002
+        lblUid.ZIndex = 500002
         lblUid.Parent = profileCard
 
         -- Items Summary Info
@@ -3981,47 +4167,54 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         end
 
         local cmSub = Instance.new("TextLabel")
-        cmSub.Size = UDim2.new(1, -32, 0, 36)
-        cmSub.Position = UDim2.new(0, 16, 0, 140)
+        cmSub.Size = UDim2.new(1, -32, 0, 32)
+        cmSub.Position = UDim2.new(0, 16, 0, 132)
         cmSub.BackgroundTransparency = 1
         cmSub.Text = string.format("📦 เลือกไอเทม: %d รายการ  •  💰 รวมมูลค่า: %s Sheckles", #selectedList, Engine:FormatMoney(totalValSum))
         cmSub.TextColor3 = Color3.fromRGB(240, 220, 225)
         cmSub.Font = Enum.Font.GothamMedium
         cmSub.TextSize = 11
         cmSub.TextXAlignment = Enum.TextXAlignment.Left
-        cmSub.ZIndex = 100001
+        cmSub.ZIndex = 500001
         cmSub.Parent = confirmModal
 
-        -- Action Buttons
-        local btnConfirmSend = Instance.new("TextButton")
-        btnConfirmSend.Size = UDim2.new(0, 180, 0, 36)
-        btnConfirmSend.Position = UDim2.new(1, -196, 1, -48)
-        btnConfirmSend.BackgroundColor3 = Color3.fromRGB(220, 38, 38) -- Santa Red Confirm
-        btnConfirmSend.Text = "Confirm Send 🚀"
-        btnConfirmSend.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btnConfirmSend.Font = Enum.Font.GothamBold
-        btnConfirmSend.TextSize = 12
-        btnConfirmSend.ZIndex = 100001
-        btnConfirmSend.Parent = confirmModal
-
-        local csCorn = Instance.new("UICorner")
-        csCorn.CornerRadius = UDim.new(0, 8)
-        csCorn.Parent = btnConfirmSend
+        -- Action Buttons Area Container
+        local btnContainer = Instance.new("Frame")
+        btnContainer.Size = UDim2.new(1, -32, 0, 44)
+        btnContainer.Position = UDim2.new(0, 16, 0, 198)
+        btnContainer.BackgroundTransparency = 1
+        btnContainer.ZIndex = 500003
+        btnContainer.Parent = confirmModal
 
         local btnCancelSend = Instance.new("TextButton")
-        btnCancelSend.Size = UDim2.new(0, 170, 0, 36)
-        btnCancelSend.Position = UDim2.new(0, 16, 1, -48)
-        btnCancelSend.BackgroundColor3 = Color3.fromRGB(45, 30, 35)
-        btnCancelSend.Text = "Cancel"
-        btnCancelSend.TextColor3 = Color3.fromRGB(220, 200, 205)
+        btnCancelSend.Size = UDim2.new(0.47, 0, 1, 0)
+        btnCancelSend.Position = UDim2.new(0, 0, 0, 0)
+        btnCancelSend.BackgroundColor3 = Color3.fromRGB(50, 32, 38)
+        btnCancelSend.Text = "❌  ยกเลิก (Cancel)"
+        btnCancelSend.TextColor3 = Color3.fromRGB(240, 210, 215)
         btnCancelSend.Font = Enum.Font.GothamBold
         btnCancelSend.TextSize = 12
-        btnCancelSend.ZIndex = 100001
-        btnCancelSend.Parent = confirmModal
+        btnCancelSend.ZIndex = 500004
+        btnCancelSend.Parent = btnContainer
 
         local cancelCorn = Instance.new("UICorner")
         cancelCorn.CornerRadius = UDim.new(0, 8)
         cancelCorn.Parent = btnCancelSend
+
+        local btnConfirmSend = Instance.new("TextButton")
+        btnConfirmSend.Size = UDim2.new(0.5, 0, 1, 0)
+        btnConfirmSend.Position = UDim2.new(0.5, 0, 0, 0)
+        btnConfirmSend.BackgroundColor3 = Color3.fromRGB(220, 38, 38) -- Santa Red Confirm
+        btnConfirmSend.Text = "🚀  ยืนยันส่ง (Confirm)"
+        btnConfirmSend.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btnConfirmSend.Font = Enum.Font.GothamBold
+        btnConfirmSend.TextSize = 12
+        btnConfirmSend.ZIndex = 500004
+        btnConfirmSend.Parent = btnContainer
+
+        local csCorn = Instance.new("UICorner")
+        csCorn.CornerRadius = UDim.new(0, 8)
+        csCorn.Parent = btnConfirmSend
 
         btnCancelSend.MouseButton1Click:Connect(function()
             confirmModal:Destroy()
@@ -5424,6 +5617,59 @@ function Engine:Init()
                 GAG1TradeEngine:SendTradeRequest(self.Config.TradeTargetPlayer)
             end
         })
+
+        tabTrade:CreateSection("🥚 ระบบเทรด & ส่งมอบไข่สัตว์เลี้ยง (GAG1 Egg Trade & Gift)")
+        
+        local selectedEggCat = "Eggs"
+        local selectedEggItem = ""
+
+        tabTrade:CreateDropdown({
+            Title = "🏷️ หมวดหมู่ไอเทมเทรด (Select Category)",
+            Options = { "Eggs (ไข่สัตว์เลี้ยง)", "Fruits (ผลไม้)", "Seeds (เมล็ดพันธุ์)", "Pets (สัตว์เลี้ยง)", "Gears (อุปกรณ์)" },
+            Default = "Eggs (ไข่สัตว์เลี้ยง)",
+            Multi = false,
+            Callback = function(val)
+                if val:find("Eggs") or val:find("ไข่") then selectedEggCat = "Eggs"
+                elseif val:find("Fruits") or val:find("ผลไม้") then selectedEggCat = "Fruits"
+                elseif val:find("Seeds") or val:find("เมล็ด") then selectedEggCat = "Seeds"
+                elseif val:find("Pets") or val:find("สัตว์") then selectedEggCat = "Pets"
+                elseif val:find("Gears") or val:find("อุปกรณ์") then selectedEggCat = "Gears"
+                end
+                
+                if self.UI.GAG1TradeItemDropdown then
+                    self.UI.GAG1TradeItemDropdown:SetOptions(self:GetInventoryDropdownOptions(selectedEggCat))
+                end
+            end
+        })
+
+        self.UI.GAG1TradeItemDropdown = tabTrade:CreateDropdown({
+            Title = "📦 เลือกไข่/ไอเทมใน Inventory (Inventory Items Only)",
+            Options = self:GetInventoryDropdownOptions("Eggs"),
+            Default = "--",
+            Multi = false,
+            Callback = function(val)
+                selectedEggItem = val
+            end
+        })
+
+        tabTrade:CreateButton({
+            Title = "🔄 รีเฟรชรายการไข่ในเป้สัมภาระ (Scan Inventory Eggs)",
+            Callback = function()
+                if self.UI.GAG1TradeItemDropdown then
+                    self.UI.GAG1TradeItemDropdown:SetOptions(self:GetInventoryDropdownOptions(selectedEggCat))
+                end
+                Engine:Notify({ Title = "สแกนสัมภาระเรียบร้อย 🎒", Content = "อัปเดตรายการไข่/ไอเทมที่มีในเป้ล่าสุดแล้ว" })
+            end
+        })
+
+        tabTrade:CreateButton({
+            Title = "🥚 ส่งไข่สัตว์เลี้ยง/ไอเทมที่เลือก ให้กับผู้เล่นเป้าหมาย (Send/Gift Egg)",
+            BgColor = Color3.fromRGB(244, 114, 182),
+            Callback = function()
+                GAG1TradeEngine:SendEggGiftOrOffer(self.Config.TradeTargetPlayer, selectedEggItem)
+            end
+        })
+
         tabTrade:CreateToggle({
             Title = "⚡ ตอบรับคำขอเทรดอัตโนมัติ (Auto Accept In-Server Trade)",
             Default = false,
@@ -5662,40 +5908,109 @@ function Engine:Init()
         -- 🧹 GAG2 Tab 2.5: ถอนต้นไม้ (Auto Shovel & Auto Trowel Engine)
         local tabShovel = self:CreateTab("ถอนต้นไม้", "🧹")
 
-        tabShovel:CreateSection("Auto Shovel")
+        local function getPlantDeleteOptions()
+            local opts = { "ทุกชนิด (All Plants)" }
+            pcall(function()
+                local masterFruits = self:GetMasterPresetOptions("Fruits")
+                for _, item in ipairs(masterFruits) do
+                    if not table.find(opts, item) then
+                        table.insert(opts, item)
+                    end
+                end
+            end)
+            local defaultThaiPlants = { "แครอท", "มะเขือเทศ", "แอปเปิ้ล", "เห็ด", "ถั่วเขียว", "บลูเบอร์รี่", "สตรอเบอร์รี่", "ดอกทานตะวัน", "ข้าวโพด", "สับปะรด", "แตงโม", "ฟักทอง", "ไผ่", "ดอกพระจันทร์บาน" }
+            for _, tp in ipairs(defaultThaiPlants) do
+                if not table.find(opts, tp) then
+                    table.insert(opts, tp)
+                end
+            end
+            return opts
+        end
+
+        local plantOptionsList = getPlantDeleteOptions()
+
+        tabShovel:CreateSection("Auto Shovel (ระบบออโต้ถอนต้นไม้)")
         tabShovel:CreateDropdown({
-            Title = "Select Plants to Delete",
-            Options = { "แครอท", "มะเขือเทศ", "แอปเปิ้ล", "เห็ด", "ถั่วเขียว", "บลูเบอร์รี่", "สตรอเบอร์รี่", "ดอกทานตะวัน", "ข้าวโพด", "สับปะรด", "ทุกชนิด (All Plants)" },
+            Title = "เลือกชนิดต้นไม้/พืชที่ต้องการถอน (Select Plants to Delete)",
+            Options = plantOptionsList,
             Multi = true,
             SelectedMap = self.Config.SelectedPlantsToDelete or {},
             Callback = function(selectedItems)
                 self.Config.SelectedPlantsToDelete = selectedItems
             end
         })
+        tabShovel:CreateInput({
+            Title = "พิมพ์ชื่อพืชที่ต้องการถอนล่วงหน้า (Pre-Select Plant to Shovel)",
+            Placeholder = "เช่น Briar Rose, Golden Apple...",
+            Callback = function(val) self.Config.InputPreSelectPlantDelete = val end
+        })
+        tabShovel:CreateButton({
+            Title = "➕ เพิ่มเข้าลิสต์ออโต้ถอนต้นไม้ (Add Custom Shovel Target)",
+            Callback = function()
+                local name = self.Config.InputPreSelectPlantDelete
+                if name and name ~= "" then
+                    local clean = self:CleanItemName(name)
+                    self.Config.SelectedPlantsToDelete[clean] = true
+                    self:Notify({ Title = "ตั้งค่าสำเร็จ! 🌸", Content = "เพิ่ม '" .. clean .. "' เข้าลิสต์ถอนต้นไม้แล้ว!" })
+                else
+                    self:Notify({ Title = "ข้อผิดพลาด ❌", Content = "กรุณาพิมพ์ชื่อไอเทมก่อนกดปุ่มเพิ่ม" })
+                end
+            end
+        })
         tabShovel:CreateToggle({
-            Title = "Auto Shovel All Plants",
-            Default = false,
+            Title = "🧹 เปิดใช้งาน ถอนพืชทุกชนิดในสวนทั้งหมด (Auto Shovel All Plants)",
+            Default = self.Config.AutoShovelAllPlants,
             Callback = function(val) self.Config.AutoShovelAllPlants = val end
         })
         tabShovel:CreateToggle({
-            Title = "Auto Shovel Selected Plants",
-            Default = false,
+            Title = "🧹 เปิดใช้งาน ถอนเฉพาะพืชที่เลือกในลิสต์ (Auto Shovel Selected Plants)",
+            Default = self.Config.AutoShovelSelectedPlants,
             Callback = function(val) self.Config.AutoShovelSelectedPlants = val end
         })
+        tabShovel:CreateButton({
+            Title = "⚡ สั่งถอนต้นไม้ตามลิสต์ที่เลือกในสวนทันที (Shovel Selected Plants Now)",
+            Callback = function()
+                GAG2Engine:ShovelAllPlantsNow(true)
+            end
+        })
+        tabShovel:CreateButton({
+            Title = "💥 สั่งถอนต้นไม้ทุกชนิดในสวนออกทั้งหมดทันที (Clear All Garden Plants Now)",
+            Callback = function()
+                GAG2Engine:ShovelAllPlantsNow(false)
+            end
+        })
 
-        tabShovel:CreateSection("Auto Trowel")
+        tabShovel:CreateSection("Auto Trowel (ระบบออโต้ย้าย/ปลูกซ้อนพืช)")
         tabShovel:CreateDropdown({
-            Title = "Select Plants to Stack",
-            Options = { "แครอท", "มะเขือเทศ", "แอปเปิ้ล", "เห็ด", "ถั่วเขียว", "บลูเบอร์รี่", "สตรอเบอร์รี่", "ดอกทานตะวัน", "ข้าวโพด", "สับปะรด", "ทุกชนิด (All Plants)" },
+            Title = "เลือกชนิดต้นไม้/พืชที่ต้องการย้ายซ้อน (Select Plants to Stack)",
+            Options = plantOptionsList,
             Multi = true,
             SelectedMap = self.Config.SelectedPlantsToStack or {},
             Callback = function(selectedItems)
                 self.Config.SelectedPlantsToStack = selectedItems
             end
         })
+        tabShovel:CreateInput({
+            Title = "พิมพ์ชื่อพืชที่ต้องการย้ายซ้อนล่วงหน้า (Pre-Select Plant to Stack)",
+            Placeholder = "เช่น Briar Rose, Golden Apple...",
+            Callback = function(val) self.Config.InputPreSelectPlantStack = val end
+        })
+        tabShovel:CreateButton({
+            Title = "➕ เพิ่มเข้าลิสต์ออโต้ย้ายซ้อน (Add Custom Stack Target)",
+            Callback = function()
+                local name = self.Config.InputPreSelectPlantStack
+                if name and name ~= "" then
+                    local clean = self:CleanItemName(name)
+                    self.Config.SelectedPlantsToStack[clean] = true
+                    self:Notify({ Title = "ตั้งค่าสำเร็จ! 🌸", Content = "เพิ่ม '" .. clean .. "' เข้าลิสต์ย้ายซ้อนแล้ว!" })
+                else
+                    self:Notify({ Title = "ข้อผิดพลาด ❌", Content = "กรุณาพิมพ์ชื่อไอเทมก่อนกดปุ่มเพิ่ม" })
+                end
+            end
+        })
         tabShovel:CreateToggle({
-            Title = "Auto Stack Selected Plants",
-            Default = false,
+            Title = "🪴 เปิดใช้งาน ออโต้ย้ายซ้อนพืชที่เลือก (Auto Stack Selected Plants)",
+            Default = self.Config.AutoStackSelectedPlants,
             Callback = function(val) self.Config.AutoStackSelectedPlants = val end
         })
 
@@ -5902,12 +6217,13 @@ function Engine:Init()
 
         self.UI.MailCategoryDropdown = tabTrade:CreateDropdown({
             Title = "🏷️ เลือกหมวดหมู่ไอเทม (Select Category)",
-            Options = { "Fruits (ผลไม้)", "Seeds (เมล็ดพันธุ์)", "Pets (สัตว์เลี้ยง)", "Gears (เกียร์/อุปกรณ์)", "Crates (กล่อง)", "Events (กิจกรรม)" },
+            Options = { "Fruits (ผลไม้)", "Seeds (เมล็ดพันธุ์)", "Eggs (ไข่สัตว์เลี้ยง)", "Pets (สัตว์เลี้ยง)", "Gears (เกียร์/อุปกรณ์)", "Crates (กล่อง)", "Events (กิจกรรม)" },
             Default = "Fruits (ผลไม้)",
             Multi = false,
             Callback = function(val)
                 local catKey = "Fruits"
                 if val:find("Seeds") or val:find("เมล็ด") then catKey = "Seeds"
+                elseif val:find("Eggs") or val:find("ไข่") then catKey = "Eggs"
                 elseif val:find("Pets") or val:find("สัตว์") then catKey = "Pets"
                 elseif val:find("Gears") or val:find("เกียร์") then catKey = "Gears"
                 elseif val:find("Crates") or val:find("กล่อง") then catKey = "Crates"
@@ -5923,13 +6239,24 @@ function Engine:Init()
         })
 
         self.UI.MailItemDropdown = tabTrade:CreateDropdown({
-            Title = "📦 เลือกไอเทมที่จะแนบส่ง (Select Item)",
+            Title = "📦 เลือกไอเทมที่จะแนบส่ง (Select Item - Inventory Only)",
             Options = self:GetInventoryDropdownOptions("Fruits"),
             Default = "--",
             Multi = false,
             Callback = function(val)
                 local clean = self:CleanItemName(val)
                 self.Config.MailItemName = clean
+            end
+        })
+
+        tabTrade:CreateButton({
+            Title = "🔄 รีเฟรชรายการไอเทมใน Inventory (Rescan Items)",
+            Callback = function()
+                local catKey = self.Config.MailItemCategory or "Fruits"
+                if self.UI.MailItemDropdown then
+                    self.UI.MailItemDropdown:SetOptions(self:GetInventoryDropdownOptions(catKey))
+                end
+                Engine:Notify({ Title = "สแกนสัมภาระเรียบร้อย 🎒", Content = "อัปเดตรายการไอเทมในเป้สำหรับหมวดหมู่ " .. catKey .. " แล้ว!" })
             end
         })
 
