@@ -238,8 +238,12 @@ local NormalRouter = {
     [117539213094671] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/raGnome", Keywords = {"Roll a Gnome"} },
 
     -- 9. Grow a Chicken Fighter(Grow2Fight)
-    [94640181989498] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
-    [94939256104840] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
+    [94640181989498] = { Name = "Chicken Fighter", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
+    [94939256104840] = { Name = "Chicken Fighter", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
+
+    -- 9. Grow a Garden 1/2(GAG)
+    [126884695634066] = { Name = "Grow a Garden 1", URL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/GGAGG", Keywords = {"Grow a Garden 1"} },
+    [97598239454123] = { Name = "Grow a Garden 2", URL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/GGAGG", Keywords = {"Grow a Garden 2"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
