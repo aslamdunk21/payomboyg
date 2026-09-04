@@ -3,12 +3,8 @@
 -- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/LoaderPBG
 -- ==============================================================================
 
--- [SUCCESSFUL LOAD]: ลบไฟล์ประวัติการลองโหลดออก เพื่อยืนยันว่าคีย์นี้ผ่าน 100%
-pcall(function()
-    if isfile and isfile("PayomboyZ_Attempt.txt") and delfile then
-        delfile("PayomboyZ_Attempt.txt")
-    end
-end)
+-- Anti-Cheat Compliant Clean Loader Header
+
 
 -- 1. ฟังก์ชันแจ้งเตือน Toast (เชื่อมต่อระบบแจ้งเตือนจาก start.txt.txt)
 local function Notify(title, message, isError)
