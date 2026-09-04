@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
+-- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
@@ -27,6 +27,20 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
+
+local function getParentGui()
+    if typeof(gethui) == "function" then
+        local ok, res = pcall(gethui)
+        if ok and res and typeof(res) == "Instance" then return res end
+    end
+    if typeof(cloneref) == "function" then
+        local ok, cg = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+        if ok and cg then return cg end
+    end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then return cg end
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+end
 
 -- Safe HttpGet wrapper without suspicious global indexing or metamethod hooks
 local function safeFetch(url)
@@ -265,12 +279,22 @@ end
 -- ==============================================================================
 local function ShowToast(title, message, isError)
     pcall(function()
-        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-        local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
+        local parentGui = getParentGui()
         local ToastGui = Instance.new("ScreenGui")
-        ToastGui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
+        ToastGui.Name = "PayomboyZ_ToastUI"
         ToastGui.ResetOnSpawn = false
-        ToastGui.Parent = parentGui
+        ToastGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+            pcall(syn.protect_gui, ToastGui)
+        elseif typeof(protectgui) == "function" then
+            pcall(protectgui, ToastGui)
+        end
+
+        local pOk = pcall(function() ToastGui.Parent = parentGui end)
+        if not pOk then
+            ToastGui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+        end
 
         local Frame = Instance.new("Frame")
         Frame.Size = UDim2.new(0, 330, 0, 60)
@@ -332,7 +356,7 @@ local function PassToKeyChecker(userKey)
         pcall(function() _G.script_key = userKey end)
     end
 
-    -- Bypass suspicious Luarmor loader and directly invoke LoaderPBG
+    -- Bypass Luarmor loadstring failure and directly invoke LoaderPBG
     local loaderLoaded = false
     pcall(function()
         local paths = {
@@ -358,7 +382,13 @@ local function PassToKeyChecker(userKey)
 
     if not loaderLoaded then
         pcall(function()
-            loadstring(safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
+            local code = safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
+            if code and #code > 0 then
+                local fn = loadstring(code)
+                if fn then
+                    fn()
+                end
+            end
         end)
     end
 end
@@ -384,18 +414,12 @@ end
 -- 🎨 SNOWY HUB STYLE MODERN LOADER UI GENERATOR FOR PAYOMBOYZ HUB
 -- ==============================================================================
 local function CreateLoaderUI(initialStatus, defaultKeyText)
-    local parent = nil
-    pcall(function()
-        if type(gethui) == "function" then parent = gethui() end
-    end)
-    if not parent then
-        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
-    end
+    local parentGui = getParentGui()
 
     pcall(function()
-        if parent then
-            for _, child in ipairs(parent:GetChildren()) do
-                if child:IsA("ScreenGui") and (child:GetAttribute("PBG_UI") == true or child.Name:find("PBG_Loader") or child.Name == "RobloxLoaderGui") then
+        if parentGui then
+            for _, child in ipairs(parentGui:GetChildren()) do
+                if child:IsA("ScreenGui") and (child.Name == "PayomboyZ_LoaderUI" or child.Name == "RobloxLoaderGui") then
                     child:Destroy()
                 end
             end
@@ -403,12 +427,24 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
-    gui:SetAttribute("PBG_UI", true)
+    gui.Name = "PayomboyZ_LoaderUI"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Parent = parent
+    gui.DisplayOrder = 99999
+
+    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+        pcall(syn.protect_gui, gui)
+    elseif typeof(protectgui) == "function" then
+        pcall(protectgui, gui)
+    end
+
+    local parentOk = pcall(function()
+        gui.Parent = parentGui
+    end)
+    if not parentOk then
+        gui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
 
     local COLORS = {
         backdrop = Color3.fromRGB(12, 5, 8),
@@ -2341,12 +2377,14 @@ end
 if getgenv and getgenv().PayomboyZ_LoggedOut then
     getgenv().PayomboyZ_LoggedOut = nil
     ClearSavedKeys()
-    CreateLoaderUI("✅ ออกจากระบบเรียบร้อยแล้ว กรุณากรอกคีย์ใหม่", "")
+    local passedKey = GetPassedScriptKey()
+    CreateLoaderUI("✅ ออกจากระบบเรียบร้อยแล้ว กรุณากรอกคีย์ใหม่", passedKey)
     return
 end
 
 if getgenv and getgenv().PayomboyZ_ShowUI then
-    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", "")
+    local passedKey = GetPassedScriptKey()
+    CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", passedKey)
     getgenv().PayomboyZ_ShowUI = false
     return
 end
@@ -2361,25 +2399,32 @@ end
 
 local passedKey = GetPassedScriptKey()
 local savedKey = LoadSavedKey()
-local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
 
 if passedKey ~= "" then
-    -- บันทึก Key ที่ผู้ใช้ใส่ในตัวรันสคริปต์ทันที และทำการเข้าใช้งานระบบโดยอัตโนมัติ
-    SaveKey(passedKey)
-    ShowToast("🔑 PayomboyZ Hub", "พบ Key จากตัวรันสคริปต์! กำลังเข้าสู่ระบบ...", false)
-    PassToKeyChecker(passedKey)
+    -- นำ Key จาก script_key ที่ผู้ใช้ใส่ในตัวรัน มาวางไว้ในช่องใส่คีย์ทันที แต่ปล่อยให้ผู้ใช้กดปุ่มตกลงเข้าสู่ระบบเอง
+    CreateLoaderUI("🔑 พบ Key จากตัวรันสคริปต์! กรุณากดปุ่ม Verify Key เพื่อเข้าสู่ระบบ", passedKey)
 elseif savedKey ~= "" then
     -- ==============================================================================
     -- 🚀 INSTANT AUTO-LOGIN & ESCAPE HATCH
     -- ==============================================================================
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-    local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
+    local parentGui = getParentGui()
     local EscapeGui = Instance.new("ScreenGui")
-    EscapeGui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
-    EscapeGui:SetAttribute("PBG_UI", true)
+    EscapeGui.Name = "PayomboyZ_ResetUI"
     EscapeGui.ResetOnSpawn = false
     EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    EscapeGui.Parent = parentGui
+
+    if typeof(syn) == "table" and typeof(syn.protect_gui) == "function" then
+        pcall(syn.protect_gui, EscapeGui)
+    elseif typeof(protectgui) == "function" then
+        pcall(protectgui, EscapeGui)
+    end
+
+    local parentOk = pcall(function()
+        EscapeGui.Parent = parentGui
+    end)
+    if not parentOk then
+        EscapeGui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    end
 
     local EscBtn = Instance.new("TextButton")
     EscBtn.Size = UDim2.new(0, 170, 0, 32)
