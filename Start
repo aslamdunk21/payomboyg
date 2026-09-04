@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start
+-- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
@@ -284,7 +284,7 @@ local function ShowToast(title, message, isError)
         local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
         local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
         local ToastGui = Instance.new("ScreenGui")
-        ToastGui.Name = "RobloxToastGui"
+        ToastGui.Name = "PBG_Toast_" .. tostring(math.random(100000, 999999))
         ToastGui.ResetOnSpawn = false
         ToastGui.Parent = parentGui
 
@@ -345,9 +345,12 @@ local function PassToKeyChecker(userKey)
     userKey = userKey:gsub("%s+", "")
 
     SaveKey(userKey)
-    if getgenv then getgenv().PayomboyZ_InputKey = userKey end
-    _G.script_key = userKey
-    shared.script_key = userKey
+    if getgenv then
+        getgenv().PayomboyZ_InputKey = userKey
+        getgenv().script_key = userKey
+    else
+        pcall(function() _G.script_key = userKey end)
+    end
 
     -- Bypass suspicious Luarmor loader and directly invoke LoaderPBG
     local loaderLoaded = false
@@ -412,13 +415,16 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
     pcall(function()
         if parent then
-            local previous = parent:FindFirstChild("RobloxLoaderGui") or parent:FindFirstChild("PayomboyZ_SnowyLoader")
-            if previous then previous:Destroy() end
+            for _, child in ipairs(parent:GetChildren()) do
+                if child:IsA("ScreenGui") and (child.Name:find("PBG_Loader") or child.Name == "RobloxLoaderGui" or child.Name == "PayomboyZ_SnowyLoader") then
+                    child:Destroy()
+                end
+            end
         end
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "RobloxLoaderGui"
+    gui.Name = "PBG_Loader_" .. tostring(math.random(100000, 999999))
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -497,18 +503,23 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local COMPACT_SNOWFLAKES = 10
     local activeTweens = setmetatable({}, { __mode = "k" })
 
-    local clickSound = Instance.new("Sound")
-    clickSound.Name = "PayomboyZClick"
-    clickSound.SoundId = "rbxassetid://6895079853"
-    clickSound.Volume = 0.42
-    clickSound.PlaybackSpeed = 1
-    clickSound.Looped = false
-    clickSound.Parent = gui
+    local clickSound = nil
+    pcall(function()
+        clickSound = Instance.new("Sound")
+        clickSound.Name = "PayomboyZClick"
+        clickSound.SoundId = "rbxassetid://6895079853"
+        clickSound.Volume = 0.42
+        clickSound.PlaybackSpeed = 1
+        clickSound.Looped = false
+        clickSound.Parent = gui
+    end)
 
     local function playClickSound()
         pcall(function()
-            clickSound.TimePosition = 0
-            clickSound:Play()
+            if clickSound then
+                clickSound.TimePosition = 0
+                clickSound:Play()
+            end
         end)
     end
 
@@ -781,8 +792,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, shellChrome)
 
     task.spawn(function()
+        local isMobileDevice = deviceName() == "Mobile"
+        local maxDots = isMobileDevice and 8 or 35
+        local sleepInterval = isMobileDevice and 0.06 or 0.03
         local dots = {}
-        for i = 1, 35 do
+        for i = 1, maxDots do
             local dot = create("Frame", {
                 Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4)),
                 Position = UDim2.new(math.random(), 0, math.random(), 0),
@@ -802,13 +816,17 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(sleepInterval) do
             if not gui or not gui.Parent then break end
-            for _, data in ipairs(dots) do
-                data.pos = data.pos + data.speed
-                if data.pos > 1.05 then data.pos = -0.05 end
-                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
-                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            if shell and shell.Visible then
+                for _, data in ipairs(dots) do
+                    data.pos = data.pos + data.speed
+                    if data.pos > 1.05 then data.pos = -0.05 end
+                    local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                    data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+                end
+            else
+                task.wait(0.5)
             end
         end
     end)
@@ -841,8 +859,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, toggleCapsule)
 
     task.spawn(function()
+        local isMobileDevice = deviceName() == "Mobile"
+        local maxDots = isMobileDevice and 4 or 12
+        local sleepInterval = isMobileDevice and 0.06 or 0.03
         local dots = {}
-        for i = 1, 12 do
+        for i = 1, maxDots do
             local dot = create("Frame", {
                 Size = UDim2.fromOffset(math.random(2, 3), math.random(2, 3)),
                 Position = UDim2.new(math.random(), 0, math.random(), 0),
@@ -862,13 +883,17 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             }
         end
 
-        while task.wait(0.03) do
+        while task.wait(sleepInterval) do
             if not gui or not gui.Parent or not toggleCapsule or not toggleCapsule.Parent then break end
-            for _, data in ipairs(dots) do
-                data.pos = data.pos + data.speed
-                if data.pos > 1.05 then data.pos = -0.05 end
-                local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
-                data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+            if toggleCapsule and toggleCapsule.Visible then
+                for _, data in ipairs(dots) do
+                    data.pos = data.pos + data.speed
+                    if data.pos > 1.05 then data.pos = -0.05 end
+                    local newX = (data.frame.Position.X.Scale + data.drift) % 1.0
+                    data.frame.Position = UDim2.new(newX, 0, data.pos, 0)
+                end
+            else
+                task.wait(0.5)
             end
         end
     end)
@@ -954,11 +979,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             hasDragged = false
             tDragStart = input.Position
             tStartPos = toggleCapsule.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    tDragging = false
-                end
-            end)
         end
     end)
 
@@ -968,7 +988,13 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         end
     end)
 
-    UserInputService.InputChanged:Connect(function(input)
+    local tDragEndedConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            tDragging = false
+        end
+    end)
+
+    local tDragConn = UserInputService.InputChanged:Connect(function(input)
         if input == tDragInput and tDragging then
             local delta = input.Position - tDragStart
             if math.abs(delta.X) > 3 or math.abs(delta.Y) > 3 then
@@ -986,11 +1012,19 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     end)
 
     -- ⌨️ KEYBIND TOGGLE (KEY [K] / [RightControl])
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    local keybindConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         if input.KeyCode == Enum.KeyCode.K or input.KeyCode == Enum.KeyCode.RightControl then
             shell.Visible = not shell.Visible
         end
+    end)
+
+    gui.Destroying:Connect(function()
+        pcall(function()
+            if tDragEndedConn then tDragEndedConn:Disconnect() end
+            if tDragConn then tDragConn:Disconnect() end
+            if keybindConn then keybindConn:Disconnect() end
+        end)
     end)
 
     -- Left Column (User Panel)
@@ -1804,6 +1838,8 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local plansMotionStartedAt = os.clock()
     local plansMotionConnection = RunService.RenderStepped:Connect(function()
         if not gui.Parent or not premiumButton.Parent then return end
+        if shell and not shell.Visible then return end
+        if deviceName() == "Mobile" then return end
         local phase = os.clock() - plansMotionStartedAt
         premiumButton.Position = UDim2.fromOffset(
             math.cos(phase * 0.90) * 2.0,
@@ -2237,12 +2273,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             shellStart = shell.Position
         end
     end)
-    UserInputService.InputEnded:Connect(function(inputObject)
+    local dragEndedConn = UserInputService.InputEnded:Connect(function(inputObject)
         if inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
-    UserInputService.InputChanged:Connect(function(inputObject)
+    local dragChangedConn = UserInputService.InputChanged:Connect(function(inputObject)
         if dragging and (inputObject.UserInputType == Enum.UserInputType.MouseMovement or inputObject.UserInputType == Enum.UserInputType.Touch) then
             local delta = inputObject.Position - dragStart
             shell.Position = UDim2.new(
@@ -2259,6 +2295,9 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     updateResponsiveScale = function()
         local camera = workspace.CurrentCamera
         local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        if not viewport or viewport.X < 100 or viewport.Y < 100 then
+            viewport = Vector2.new(800, 450)
+        end
         local baseWidth = detailsVisible and DESKTOP_WIDTH or COMPACT_WIDTH
         responsiveScale = math.min(
             1,
@@ -2281,8 +2320,17 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     end
 
     applyResponsiveLayout()
+    local viewportConn = nil
     pcall(function()
-        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+        viewportConn = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+    end)
+
+    gui.Destroying:Connect(function()
+        pcall(function()
+            if dragEndedConn then dragEndedConn:Disconnect() end
+            if dragChangedConn then dragChangedConn:Disconnect() end
+            if viewportConn then viewportConn:Disconnect() end
+        end)
     end)
 
     -- Intro Animation Blueprint from Intro.md
@@ -2362,7 +2410,7 @@ elseif savedKey ~= "" then
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
     local EscapeGui = Instance.new("ScreenGui")
-    EscapeGui.Name = "RobloxResetGui"
+    EscapeGui.Name = "PBG_Reset_" .. tostring(math.random(100000, 999999))
     EscapeGui.ResetOnSpawn = false
     EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     EscapeGui.Parent = parentGui
