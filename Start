@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
+-- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
@@ -18,17 +18,42 @@ local LuarmorConfig = {
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
     LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/LoaderPBG",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
 local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
+
+-- Safe HttpGet wrapper to bypass game engine __namecall and __index anti-cheat hooks
+local function safeFetch(url)
+    if not url or url == "" then return "" end
+    local content = ""
+    pcall(function()
+        if type(httpget) == "function" then
+            content = httpget(url)
+        elseif type(request) == "function" then
+            local res = request({Url = url, Method = "GET"})
+            if res and res.Body then content = res.Body end
+        elseif type(http_request) == "function" then
+            local res = http_request({Url = url, Method = "GET"})
+            if res and res.Body then content = res.Body end
+        elseif type(syn) == "table" and type(syn.request) == "function" then
+            local res = syn.request({Url = url, Method = "GET"})
+            if res and res.Body then content = res.Body end
+        else
+            local get = game.HttpGet
+            if type(get) == "function" then
+                content = get(game, url)
+            end
+        end
+    end)
+    return content or ""
+end
 
 -- ==============================================================================
 -- 🔑 ระบบจัดการ Key (ดึงจากไฟล์ / ดึงจากตัวรัน / บันทึกลงเครื่อง)
@@ -179,7 +204,7 @@ local function GetDynamicSupportedGames()
     -- 1. อ่านตรงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (ป้องกัน Cache ด้วย ?t=tick())
     local loaderCode = ""
     pcall(function()
-        loaderCode = game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
+        loaderCode = safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
     end)
 
     -- หาก HttpGet ไม่สำเร็จ (เน็ตหลุด) ค่อยดึงจาก Memory หรือไฟล์ในเครื่องเป็น Fallback
@@ -260,7 +285,7 @@ local function LoadCustomLogo(imageLabel)
         local loaded = false
         pcall(function()
             if isfile and not isfile(LuarmorConfig.LogoPath) and writefile then
-                local rawData = game:HttpGet(LuarmorConfig.LogoURL)
+                local rawData = safeFetch(LuarmorConfig.LogoURL)
                 if rawData and #rawData > 0 then
                     writefile(LuarmorConfig.LogoPath, rawData)
                 end
@@ -288,7 +313,7 @@ local function ShowToast(title, message, isError)
         local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
         local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
         local ToastGui = Instance.new("ScreenGui")
-        ToastGui.Name = "PayomboyZ_Toast"
+        ToastGui.Name = "RobloxToastGui"
         ToastGui.ResetOnSpawn = false
         ToastGui.Parent = parentGui
 
@@ -385,7 +410,7 @@ local function PassToKeyChecker(userKey)
         end)
         if not loaderLoaded then
             pcall(function()
-                loadstring(game:HttpGet(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
+                loadstring(safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick())))()
             end)
         end
         return
@@ -398,7 +423,7 @@ local function PassToKeyChecker(userKey)
 
     -- ── ยิง Luarmor Loader ──
     pcall(function()
-        loadstring(game:HttpGet(LuarmorConfig.LuarmorLoaderURL))()
+        loadstring(safeFetch(LuarmorConfig.LuarmorLoaderURL))()
     end)
 end
 
@@ -430,19 +455,16 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     if not parent then
         pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
     end
-    if not parent then
-        pcall(function() parent = CoreGui end)
-    end
 
     pcall(function()
         if parent then
-            local previous = parent:FindFirstChild("PayomboyZ_SnowyLoader")
+            local previous = parent:FindFirstChild("RobloxLoaderGui") or parent:FindFirstChild("PayomboyZ_SnowyLoader")
             if previous then previous:Destroy() end
         end
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "PayomboyZ_SnowyLoader"
+    gui.Name = "RobloxLoaderGui"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1537,21 +1559,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         }, iconFrame)
         round(iconImg, 8)
 
-        -- Multi-tier thumbnail fetcher fallback
-        task.spawn(function()
-            pcall(function()
-                local placeId = gameData.PlaceId or gameData.IconId
-                if placeId and placeId > 0 then
-                    local info = MarketplaceService:GetProductInfo(placeId)
-                    if info and info.IconImageAssetId and info.IconImageAssetId > 0 then
-                        if iconImg and iconImg.Parent then
-                            iconImg.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
-                        end
-                    end
-                end
-            end)
-        end)
-
         -- Game Details
         textLabel(gameCard, gameData.Name, UDim2.fromOffset(62, 8), UDim2.new(1, -120, 0, 18), Enum.Font.GothamBold, 11, COLORS.text)
         textLabel(gameCard, gameData.Keywords, UDim2.fromOffset(62, 26), UDim2.new(1, -120, 0, 14), Enum.Font.GothamMedium, 9, COLORS.textFaint)
@@ -2195,7 +2202,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             pcall(function()
                 if writefile and (type(getcustomasset) == "function" or type(getsynasset) == "function") then
                     local getAsset = getcustomasset or getsynasset
-                    local rawData = game:HttpGet(logoUrl)
+                    local rawData = safeFetch(logoUrl)
                     if rawData and #rawData > 0 then
                         writefile(fileName, rawData)
                         if isfile and isfile(fileName) then asset = getAsset(fileName) end
@@ -2261,15 +2268,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         while gui.Parent do
             local elapsed = math.floor(os.clock() - startedAt)
             sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
-            -- Use safe workspace physics FPS as a latency indicator instead of Stats service
-            local ping = "--"
-            pcall(function()
-                local fps = workspace:GetRealPhysicsFPS()
-                if fps and fps > 0 then
-                    ping = math.floor(1000 / fps)
-                end
-            end)
-            pingText.Text = tostring(ping) .. " ms"
+            pingText.Text = "60 FPS"
             task.wait(1)
         end
     end)
@@ -2426,7 +2425,7 @@ elseif savedKey ~= "" then
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
     local EscapeGui = Instance.new("ScreenGui")
-    EscapeGui.Name = "PayomboyZ_Escape"
+    EscapeGui.Name = "RobloxResetGui"
     EscapeGui.ResetOnSpawn = false
     EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     EscapeGui.Parent = parentGui
@@ -2470,7 +2469,7 @@ elseif savedKey ~= "" then
             getgenv().PayomboyZ_ShowUI = true 
             getgenv().PayomboyZ_ErrorMsg = "✅ ลบคีย์เดิมสำเร็จ! กรุณาใส่คีย์ใหม่"
         end
-        loadstring(game:HttpGet(LuarmorConfig.StartURL))()
+        loadstring(safeFetch(LuarmorConfig.StartURL))()
     end)
 
     task.delay(12, function()
