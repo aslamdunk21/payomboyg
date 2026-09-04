@@ -242,14 +242,7 @@ local function resolveGameName()
     if supportedGames[placeId] then
         return supportedGames[placeId]
     end
-    local gameName = nil
-    pcall(function()
-        local info = MarketplaceService:GetProductInfo(placeId)
-        if info and info.Name then
-            gameName = info.Name
-        end
-    end)
-    return gameName or ("Place: " .. tostring(placeId))
+    return "Place: " .. tostring(placeId)
 end
 
 -- ==============================================================================
@@ -257,26 +250,13 @@ end
 -- ==============================================================================
 local function LoadCustomLogo(imageLabel)
     task.spawn(function()
-        local loaded = false
         pcall(function()
-            if isfile and not isfile(LuarmorConfig.LogoPath) and writefile then
-                local rawData = safeFetch(LuarmorConfig.LogoURL)
-                if rawData and #rawData > 0 then
-                    writefile(LuarmorConfig.LogoPath, rawData)
-                end
-            end
-            
             if getcustomasset and isfile and isfile(LuarmorConfig.LogoPath) then
                 imageLabel.Image = getcustomasset(LuarmorConfig.LogoPath)
-                loaded = true
-            elseif getsynasset and isfile and isfile(LuarmorConfig.LogoPath) then
-                imageLabel.Image = getsynasset(LuarmorConfig.LogoPath)
-                loaded = true
+            else
+                imageLabel.Image = "rbxassetid://10723346959"
             end
         end)
-        if not loaded then
-            imageLabel.Image = LuarmorConfig.LogoURL
-        end
     end)
 end
 
@@ -288,7 +268,7 @@ local function ShowToast(title, message, isError)
         local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
         local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
         local ToastGui = Instance.new("ScreenGui")
-        ToastGui.Name = "PBG_Toast_" .. tostring(math.random(100000, 999999))
+        ToastGui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
         ToastGui.ResetOnSpawn = false
         ToastGui.Parent = parentGui
 
@@ -335,10 +315,6 @@ local function ShowToast(title, message, isError)
             if ToastGui then ToastGui:Destroy() end
         end)
     end)
-end
-
-if getgenv then
-    getgenv().PayomboyZ_ShowToast = ShowToast
 end
 
 -- ==============================================================================
@@ -419,7 +395,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     pcall(function()
         if parent then
             for _, child in ipairs(parent:GetChildren()) do
-                if child:IsA("ScreenGui") and (child.Name:find("PBG_Loader") or child.Name == "RobloxLoaderGui" or child.Name == "PayomboyZ_SnowyLoader") then
+                if child:IsA("ScreenGui") and (child:GetAttribute("PBG_UI") == true or child.Name:find("PBG_Loader") or child.Name == "RobloxLoaderGui") then
                     child:Destroy()
                 end
             end
@@ -427,7 +403,8 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     end)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "PBG_Loader_" .. tostring(math.random(100000, 999999))
+    gui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
+    gui:SetAttribute("PBG_UI", true)
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -1545,14 +1522,18 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
         local fallbackGamepad = lucideIcon(iconFrame, "gamepad", UDim2.fromOffset(13, 13), UDim2.fromOffset(20, 20), COLORS.cyan, 1)
 
-        local iconImg = create("ImageLabel", {
-            Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 1,
-            Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId) .. "&w=150&h=150",
-            ScaleType = Enum.ScaleType.Crop,
-            ZIndex = 2,
-        }, iconFrame)
-        round(iconImg, 8)
+        if isCurrentGame then
+            pcall(function()
+                local iconImg = create("ImageLabel", {
+                    Size = UDim2.fromScale(1, 1),
+                    BackgroundTransparency = 1,
+                    Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId) .. "&w=150&h=150",
+                    ScaleType = Enum.ScaleType.Crop,
+                    ZIndex = 2,
+                }, iconFrame)
+                round(iconImg, 8)
+            end)
+        end
 
         -- Game Details
         textLabel(gameCard, gameData.Name, UDim2.fromOffset(62, 8), UDim2.new(1, -120, 0, 18), Enum.Font.GothamBold, 11, COLORS.text)
@@ -2186,37 +2167,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         ZIndex = 1000,
     }, introOverlay)
 
-    -- Load custom Intro logo asset asynchronously
     task.spawn(function()
-        local logoUrl = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/nobg_Gemini_Generated_Image_mgkp6ymgkp6ymgkp.png"
-        local fileName = "payomboyz_intro_logo.png"
-        local asset = nil
         pcall(function()
-            if isfile and isfile(fileName) then
-                local getAsset = (type(getcustomasset) == "function" and getcustomasset) or (type(getsynasset) == "function" and getsynasset)
-                if getAsset then asset = getAsset(fileName) end
+            if introLogo and introLogo.Parent then
+                introLogo.Image = "rbxassetid://10723346959"
             end
         end)
-        if not asset then
-            pcall(function()
-                if writefile and (type(getcustomasset) == "function" or type(getsynasset) == "function") then
-                    local getAsset = getcustomasset or getsynasset
-                    local rawData = safeFetch(logoUrl)
-                    if rawData and #rawData > 0 then
-                        writefile(fileName, rawData)
-                        if isfile and isfile(fileName) then asset = getAsset(fileName) end
-                    end
-                end
-            end)
-        end
-        if not asset then
-            pcall(function()
-                asset = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-            end)
-        end
-        if introLogo and introLogo.Parent then
-            introLogo.Image = asset or "rbxassetid://10723346959"
-        end
     end)
 
     local introTitle = create("TextLabel", {
@@ -2419,7 +2375,8 @@ elseif savedKey ~= "" then
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
     local EscapeGui = Instance.new("ScreenGui")
-    EscapeGui.Name = "PBG_Reset_" .. tostring(math.random(100000, 999999))
+    EscapeGui.Name = "Gui_" .. tostring(math.random(1000000, 9999999))
+    EscapeGui:SetAttribute("PBG_UI", true)
     EscapeGui.ResetOnSpawn = false
     EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     EscapeGui.Parent = parentGui
