@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 1: Modern Premium Key UI & Smart Auto-Login (Start.txt)
--- URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start
+-- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
 
@@ -18,7 +18,7 @@ local LuarmorConfig = {
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
     LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/LoaderPBG",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
@@ -2347,6 +2347,100 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         if enterPressed then redeemKey() end
     end)
 
+    -- Setup initial Intro Overlay state & Morph Expansion according to Intro.md
+    local introOverlay = create("Frame", {
+        Name = "IntroOverlay",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        ZIndex = 999,
+    }, shell)
+
+    local introLogo = create("ImageLabel", {
+        Name = "IntroLogo",
+        Size = UDim2.fromOffset(115, 115),
+        Position = UDim2.new(0, 24, 0.5, -57.5),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://0",
+        ImageTransparency = 1,
+        ZIndex = 1000,
+    }, introOverlay)
+
+    -- Load custom Intro logo asset asynchronously
+    task.spawn(function()
+        local logoUrl = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/nobg_Gemini_Generated_Image_mgkp6ymgkp6ymgkp.png"
+        local fileName = "payomboyz_intro_logo.png"
+        local asset = nil
+        pcall(function()
+            if isfile and isfile(fileName) then
+                local getAsset = (type(getcustomasset) == "function" and getcustomasset) or (type(getsynasset) == "function" and getsynasset)
+                if getAsset then asset = getAsset(fileName) end
+            end
+        end)
+        if not asset then
+            pcall(function()
+                if writefile and (type(getcustomasset) == "function" or type(getsynasset) == "function") then
+                    local getAsset = getcustomasset or getsynasset
+                    local rawData = game:HttpGet(logoUrl)
+                    if rawData and #rawData > 0 then
+                        writefile(fileName, rawData)
+                        if isfile and isfile(fileName) then asset = getAsset(fileName) end
+                    end
+                end
+            end)
+        end
+        if not asset then
+            pcall(function()
+                asset = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+            end)
+        end
+        if introLogo and introLogo.Parent then
+            introLogo.Image = asset or "rbxassetid://10723346959"
+        end
+    end)
+
+    local introTitle = create("TextLabel", {
+        Name = "IntroTitle",
+        Size = UDim2.new(1, -160, 0, 36),
+        Position = UDim2.new(0, 150, 0.5, -26),
+        BackgroundTransparency = 1,
+        Text = "PAYOMBØYZ HUB",
+        TextColor3 = Color3.fromRGB(255, 35, 60),
+        Font = Enum.Font.Fondamento,
+        TextSize = 28,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTransparency = 1,
+        ZIndex = 1000,
+    }, introOverlay)
+
+    create("UIStroke", {
+        Color = Color3.fromRGB(80, 0, 15),
+        Thickness = 1.8,
+    }, introTitle)
+
+    local introSub = create("TextLabel", {
+        Name = "IntroSub",
+        Size = UDim2.new(1, -160, 0, 18),
+        Position = UDim2.new(0, 150, 0.5, 14),
+        BackgroundTransparency = 1,
+        Text = "LOADING OBSIDIAN V2 ENGINE...",
+        TextColor3 = Color3.fromRGB(240, 240, 245),
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTransparency = 1,
+        ZIndex = 1000,
+    }, introOverlay)
+
+    -- Configure Shell initial intro state (520x150 White Transparent Glass)
+    shell.Size = UDim2.fromOffset(520, 150)
+    shellChrome.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    shellChrome.BackgroundTransparency = 0.92
+    shellStroke.Color = Color3.fromRGB(255, 255, 255)
+    shellStroke.Transparency = 0.4
+    userPanel.Visible = false
+    mainPanel.Visible = false
+    columnDivider.Visible = false
+
     local startedAt = os.clock()
     task.spawn(function()
         while gui.Parent do
@@ -2354,7 +2448,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
             local ping = "--"
             pcall(function()
-                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
+                local rawPing = workspace:GetRealPhysicsFPS() -- Safe fallback if ping stat read is intercepted
+                if Stats and Stats:FindFirstChild("PerformanceStats") then
+                    local pStat = Stats.PerformanceStats:FindFirstChild("Ping")
+                    if pStat then ping = math.floor(pStat:GetValue()) end
+                elseif Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
                     local item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
                     if item then ping = item:GetValueString():match("[%d%.]+") or "--" end
                 end
@@ -2422,12 +2520,40 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
     end)
 
-    task.defer(function()
+    -- Intro Animation Blueprint from Intro.md
+    task.spawn(function()
         if not gui.Parent then return end
         entered = true
         playTween(backdrop, MOTION.slow, { BackgroundTransparency = 0.78 })
         playTween(shell, MOTION.slow, { GroupTransparency = 0 }, nil, nil, "visibility")
         playTween(shellScale, MOTION.slow, { Scale = responsiveScale })
+
+        -- Phase 1: Fade-In Logo & Gothic Title (0.45s)
+        playTween(introLogo, 0.45, { ImageTransparency = 0 }, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        playTween(introTitle, 0.45, { TextTransparency = 0 }, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        playTween(introSub, 0.45, { TextTransparency = 0.2 }, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+        task.wait(1.5)
+
+        -- Phase 2: Fade-Out (0.30s)
+        playTween(introLogo, 0.30, { ImageTransparency = 1 }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        playTween(introTitle, 0.30, { TextTransparency = 1 }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        playTween(introSub, 0.30, { TextTransparency = 1 }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+
+        task.wait(0.35)
+        introOverlay.Visible = false
+
+        -- Phase 3: Window Morph & Expand (0.65s) to target full UI size
+        playTween(shell, 0.65, { Size = UDim2.fromOffset(DESKTOP_WIDTH, SHELL_HEIGHT) }, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+        playTween(shellChrome, 0.65, { BackgroundColor3 = COLORS.shell, BackgroundTransparency = 0.12 }, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+        playTween(shellStroke, 0.65, { Color = COLORS.cyan, Transparency = 0.3 }, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+
+        task.wait(0.65)
+
+        -- Phase 4: Reveal Content Panels
+        userPanel.Visible = detailsVisible
+        mainPanel.Visible = true
+        columnDivider.Visible = detailsVisible
     end)
 end
 
