@@ -3,7 +3,44 @@
 -- Github: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem
 -- ============================================================
 
+local WorldState = getgenv().WorldState or WorldState
+local World1 = (getgenv().World1 ~= nil) and getgenv().World1 or World1
+local World2 = (getgenv().World2 ~= nil) and getgenv().World2 or World2
+local World3 = (getgenv().World3 ~= nil) and getgenv().World3 or World3
+
+function GetMobByName(mobName)
+    if not mobName then return nil end
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies then
+        for _, v in ipairs(enemies:GetChildren()) do
+            if v.Name == mobName and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+                return v
+            end
+        end
+    end
+    local rep = game:GetService("ReplicatedStorage")
+    if rep then
+        for _, v in ipairs(rep:GetChildren()) do
+            if v.Name == mobName and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+TargetManager = TargetManager or {
+    GetBestTarget = function(self, mobName, maxDist)
+        return GetMobByName(mobName)
+    end
+}
+
 function CheckQuest()
+    local WorldState = getgenv().WorldState or WorldState
+    local World1 = (getgenv().World1 ~= nil) and getgenv().World1 or World1
+    local World2 = (getgenv().World2 ~= nil) and getgenv().World2 or World2
+    local World3 = (getgenv().World3 ~= nil) and getgenv().World3 or World3
+    
     local Level = (LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 1
     local curSea = World1 and 1 or (World2 and 2 or 3)
     local questList = (curSea == 1 and getgenv().Sea1_Quests) or (curSea == 2 and getgenv().Sea2_Quests) or getgenv().Sea3_Quests
@@ -116,7 +153,8 @@ function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, CustomName
 end
 
 function KaitunWorld1(Quest, QuestTitle, Level)
-    WorldState:Update()
+    local WS = getgenv().WorldState or WorldState
+    if WS and WS.Update then WS:Update() end
     CheckQuest()
     if Level >= 700 then
         title.Text = "Doing Second Sea Puzzle"
@@ -232,7 +270,8 @@ function KaitunWorld1(Quest, QuestTitle, Level)
 end
 
 function KaitunWorld2(Quest, QuestTitle, Level)
-    WorldState:Update()
+    local WS = getgenv().WorldState or WorldState
+    if WS and WS.Update then WS:Update() end
     CheckQuest()
     local bartiloProg = CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
     
@@ -242,7 +281,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
         if type(prog) == "number" and prog >= 3 then
             title.Text = "Travel To Third Sea (Mr. Captain)"
             MovementManager:MoveTo(CFrame.new(-460.01, 73.1, 300.08), 150, 3)
-            local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+            local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
             if hrp and (hrp.Position - Vector3.new(-460.01, 73.1, 300.08)).Magnitude <= 25 then
                 CommF_:InvokeServer("TravelThirdSea")
                 task.wait(2)
@@ -273,7 +312,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                         title.Text = "Waiting for Jeremy Spawn | Farming Level..."
                         if not Quest.Visible then
                             MovementManager:MoveTo(CFrameQ, 150, 2)
-                            local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                            local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
                             if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
                                 CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
                                 CommF_:InvokeServer("SetSpawnPoint")
@@ -322,7 +361,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                     if fruitTool then
                         title.Text = "Talking to Trevor (Equipping " .. fruitTool.Name .. ")"
                         MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
-                        local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                        local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
                         if hrp and (hrp.Position - Vector3.new(2284, 15, 905)).Magnitude <= 20 then
                             pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
                             task.wait(0.5)
@@ -361,7 +400,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                             title.Text = "Waiting for 1M+ Fruit | Farming Level..."
                             if not Quest.Visible then
                                 MovementManager:MoveTo(CFrameQ, 150, 2)
-                                local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                                local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
                                 if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
                                     CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
                                     CommF_:InvokeServer("SetSpawnPoint")
@@ -379,7 +418,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                 else
                     title.Text = "Travel To Third Sea (Mr. Captain)"
                     MovementManager:MoveTo(CFrame.new(-460.01, 73.1, 300.08), 150, 3)
-                    local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                    local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
                     if hrp and (hrp.Position - Vector3.new(-460.01, 73.1, 300.08)).Magnitude <= 25 then
                         CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
                         CommF_:InvokeServer("TravelThirdSea")
@@ -431,7 +470,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     elseif not Quest.Visible then
         title.Text = "Auto Farming Level | Get Quest"
         MovementManager:MoveTo(CFrameQ, 150, 2)
-        local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+        local hrp = (getgenv().WorldState and getgenv().WorldState.HRP) or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
         if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
             CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
             CommF_:InvokeServer("SetSpawnPoint")
@@ -448,7 +487,8 @@ function KaitunWorld2(Quest, QuestTitle, Level)
 end
 
 function KaitunWorld3(Quest, QuestTitle, Level)
-    WorldState:Update()
+    local WS = getgenv().WorldState or WorldState
+    if WS and WS.Update then WS:Update() end
     CheckQuest()
     if not Quest.Visible then
         title.Text = "Auto Farming Level (Sea 3) | Get Quest"
