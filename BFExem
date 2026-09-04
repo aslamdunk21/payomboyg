@@ -237,12 +237,16 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     local bartiloProg = CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
     
     if Level >= 1500 then
-        title.Text = "Doing Third Sea Puzzle / Transition"
         local prog = CommF_:InvokeServer("TravelThirdSea", "Progress")
         
         if type(prog) == "number" and prog >= 3 then
-            title.Text = "Travel To Third Sea"
-            CommF_:InvokeServer("TravelThirdSea")
+            title.Text = "Travel To Third Sea (Mr. Captain)"
+            MovementManager:MoveTo(CFrame.new(-460.01, 73.1, 300.08), 150, 3)
+            local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+            if hrp and (hrp.Position - Vector3.new(-460.01, 73.1, 300.08)).Magnitude <= 25 then
+                CommF_:InvokeServer("TravelThirdSea")
+                task.wait(2)
+            end
         else
             if bartiloProg ~= 3 then
                 if bartiloProg == 0 then
@@ -261,13 +265,27 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                     else
                         CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
                     end
-                elseif bartiloProg == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+                elseif bartiloProg == 1 then
                     local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
                     if jeremy then
                         SmartMoveAndAttack(jeremy, QuestTitle, Quest, false)
                     else
-                        MovementManager:MoveTo(CFrame.new(2099.88159, 448.931, 648.997375), 150, 3)
-                        CommF_:InvokeServer("SetSpawnPoint")
+                        title.Text = "Waiting for Jeremy Spawn | Farming Level..."
+                        if not Quest.Visible then
+                            MovementManager:MoveTo(CFrameQ, 150, 2)
+                            local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                            if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
+                                CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+                                CommF_:InvokeServer("SetSpawnPoint")
+                            end
+                        elseif Quest.Visible then
+                            local targetMob = TargetManager:GetBestTarget(Monster, 600)
+                            if targetMob then
+                                SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+                            else
+                                MovementManager:MoveTo(CFrameMon, 150, 2)
+                            end
+                        end
                     end
                 elseif bartiloProg == 2 then
                     title.Text = "Doing Bartilo Quest | Pressing Mansion Plates"
@@ -291,24 +309,27 @@ function KaitunWorld2(Quest, QuestTitle, Level)
             else
                 local talkedTrevor = CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
                 local donSwanBoss = TargetManager:GetBestTarget("Don Swan", 500)
-                local donSwanInRS = ReplicatedStorage:FindFirstChild("Don Swan")
+                local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
 
                 if donSwanBoss then
                     title.Text = "Defeating Don Swan Boss (Lv. 1000)"
                     SmartMoveAndAttack(donSwanBoss, QuestTitle, Quest, false)
-                elseif donSwanInRS then
-                    title.Text = "Waiting for Don Swan Boss to Spawn..."
-                    MovementManager:MoveTo(CFrame.new(2284.4, 15.2, 867.3), 150, 3)
+                elseif ripIndra then
+                    title.Text = "Defeating Rip Indra Boss"
+                    SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
                 elseif not talkedTrevor and (type(prog) ~= "number" or prog < 1) then
                     local fruitTool = Has1MFruitInInventoryOrBackpack()
                     if fruitTool then
                         title.Text = "Talking to Trevor (Equipping " .. fruitTool.Name .. ")"
                         MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
-                        pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
-                        task.wait(0.5)
-                        CommF_:InvokeServer("TalkTrevor", fruitTool.Name)
-                        CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
-                        task.wait(1)
+                        local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                        if hrp and (hrp.Position - Vector3.new(2284, 15, 905)).Magnitude <= 20 then
+                            pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
+                            task.wait(0.5)
+                            CommF_:InvokeServer("TalkTrevor", fruitTool.Name)
+                            CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                            task.wait(1)
+                        end
                     else
                         title.Text = "Attempting Gacha & Dealer for 1M+ Fruit..."
                         pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
@@ -337,10 +358,11 @@ function KaitunWorld2(Quest, QuestTitle, Level)
 
                         fruitTool = Has1MFruitInInventoryOrBackpack()
                         if not fruitTool then
-                            title.Text = "Waiting for 1M+ Fruit | Auto Farming Level & Melee..."
+                            title.Text = "Waiting for 1M+ Fruit | Farming Level..."
                             if not Quest.Visible then
                                 MovementManager:MoveTo(CFrameQ, 150, 2)
-                                if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+                                local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                                if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
                                     CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
                                     CommF_:InvokeServer("SetSpawnPoint")
                                 end
@@ -354,19 +376,20 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                             end
                         end
                     end
-                elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
-                    title.Text = "Defeating Rip Indra Boss"
-                    local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
-                    if ripIndra then
-                        SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
-                    else
-                        MovementManager:MoveTo(CFrame.new(-460, 73, 300), 150, 3)
-                    end
                 else
-                    title.Text = "Travel To Third Sea (King Red Head / Captain)"
-                    CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
-                    CommF_:InvokeServer("TravelThirdSea")
-                    task.wait(2)
+                    title.Text = "Travel To Third Sea (Mr. Captain)"
+                    MovementManager:MoveTo(CFrame.new(-460.01, 73.1, 300.08), 150, 3)
+                    local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                    if hrp and (hrp.Position - Vector3.new(-460.01, 73.1, 300.08)).Magnitude <= 25 then
+                        CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                        CommF_:InvokeServer("TravelThirdSea")
+                        task.wait(2)
+                    else
+                        local targetMob = TargetManager:GetBestTarget(Monster, 300)
+                        if targetMob then
+                            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+                        end
+                    end
                 end
             end
         end
@@ -393,7 +416,6 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                 end
             else
                 CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
-                KaitunCache:Invalidate("BartiloProgress")
             end
         elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
             local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
@@ -409,7 +431,8 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     elseif not Quest.Visible then
         title.Text = "Auto Farming Level | Get Quest"
         MovementManager:MoveTo(CFrameQ, 150, 2)
-        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+        local hrp = WorldState.HRP or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+        if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
             CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
             CommF_:InvokeServer("SetSpawnPoint")
         end
