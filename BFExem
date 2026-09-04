@@ -29,11 +29,55 @@ function GetMobByName(mobName)
     return nil
 end
 
-TargetManager = TargetManager or {
+TargetManager = getgenv().TargetManager or TargetManager or {
     GetBestTarget = function(self, mobName, maxDist)
         return GetMobByName(mobName)
     end
 }
+
+local titleProxy = { Text = "" }
+title = setmetatable(titleProxy, {
+    __newindex = function(t, k, v)
+        if k == "Text" then
+            rawset(t, "Text", v)
+            local realTitle = getgenv().title or _G.title
+            if realTitle and typeof(realTitle) == "Instance" then
+                pcall(function() realTitle.Text = tostring(v) end)
+            end
+        else
+            rawset(t, k, v)
+        end
+    end,
+    __index = function(t, k)
+        local realTitle = getgenv().title or _G.title
+        if k == "Text" and realTitle and typeof(realTitle) == "Instance" then
+            return realTitle.Text
+        end
+        return rawget(t, k)
+    end
+})
+
+local subtitleProxy = { Text = "" }
+subtitle = setmetatable(subtitleProxy, {
+    __newindex = function(t, k, v)
+        if k == "Text" then
+            rawset(t, "Text", v)
+            local realSub = getgenv().subtitle or _G.subtitle
+            if realSub and typeof(realSub) == "Instance" then
+                pcall(function() realSub.Text = tostring(v) end)
+            end
+        else
+            rawset(t, k, v)
+        end
+    end,
+    __index = function(t, k)
+        local realSub = getgenv().subtitle or _G.subtitle
+        if k == "Text" and realSub and typeof(realSub) == "Instance" then
+            return realSub.Text
+        end
+        return rawget(t, k)
+    end
+})
 
 function CheckQuest()
     local WorldState = getgenv().WorldState or WorldState
