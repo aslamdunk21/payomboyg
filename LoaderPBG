@@ -151,10 +151,58 @@ local VVIP_Keys = {
     ["qnHGrAIbSyBQsLnxcOZIEiVXRzNhrwAK"] = true,
 }
 
--- เช็คว่าคีย์นี้เป็น VVIP หรือไม่
+-- เช็คว่าคีย์นี้เป็น VVIP หรือไม่ (เช็คจากตารางภายใน + ยิงตรวจผ่าน Luarmor API Endpoint)
 local isVVIP = false
-if userKey ~= "" and VVIP_Keys[userKey] then
-    isVVIP = true
+
+local function VerifyKeyWithLuarmorAPI(key)
+    if not key or key == "" then return false end
+    local scriptId = "3cc1aa16097529376b188a6f063732a4"
+    local apiKey = "d0b05958677b218bbdcf23d89e65eae62272601824401966b1e4"
+    local isValid = false
+
+    -- 1. Try Executor Request with API Key Authorization Header
+    pcall(function()
+        local httpReq = (typeof(request) == "function" and request) 
+                     or (typeof(http_request) == "function" and http_request) 
+                     or (typeof(syn) == "table" and typeof(syn.request) == "function" and syn.request)
+        if httpReq then
+            local res = httpReq({
+                Url = string.format("https://api.luarmor.net/v1/projects/%s/users?key=%s", scriptId, key),
+                Method = "GET",
+                Headers = {
+                    ["Authorization"] = apiKey,
+                    ["Content-Type"] = "application/json"
+                }
+            })
+            if res and res.Body then
+                local body = res.Body:lower()
+                if body:find('"success":true') or body:find('"status":"active"') or body:find('"valid":true') or body:find('"user"') then
+                    isValid = true
+                end
+            end
+        end
+    end)
+
+    -- 2. Fallback to direct public check via game:HttpGet
+    if not isValid then
+        pcall(function()
+            local publicUrl = string.format("https://api.luarmor.net/files/v4/check?script_id=%s&key=%s", scriptId, key)
+            local response = game:HttpGet(publicUrl)
+            if response and (response:find('"success":true') or response:find('"valid":true') or response:find('"status":"success"')) then
+                isValid = true
+            end
+        end)
+    end
+
+    return isValid
+end
+
+if userKey ~= "" then
+    if VVIP_Keys[userKey] then
+        isVVIP = true
+    else
+        isVVIP = VerifyKeyWithLuarmorAPI(userKey)
+    end
 end
 
 -- 4. แมพทั่วไป (General Maps) - ทุกคนเล่นได้ (รวม VVIP ด้วย)
