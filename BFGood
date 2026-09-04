@@ -2621,10 +2621,11 @@ end
 -- 🎯 TARGET MANAGER SERVICE (STEP 6)
 -- ══════════════════════════════════════════════════════════════════
 
-local TargetManager = {
+TargetManager = {
     CurrentTarget = nil,
     TargetScore = 0
 }
+getgenv().TargetManager = TargetManager
 
 function TargetManager:GetBestTarget(mobName, searchRadius)
     searchRadius = searchRadius or 600
