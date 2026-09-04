@@ -279,8 +279,7 @@ local function GetDynamicGameDatabase()
         pcall(function()
             local paths = {
                 "loader.txt",
-                "Loader.txt",
-                "c:/Users/Dream/Desktop/Roblox Script/Login/loader.txt"
+                "Loader.txt"
             }
             for _, p in ipairs(paths) do
                 if isfile(p) then
