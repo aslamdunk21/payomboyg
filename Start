@@ -18,7 +18,7 @@ local LuarmorConfig = {
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
     LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/54dc54601645ac0bc7238ec1a6868759.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/7f2f1272f1bfbe1d10f8b1e33fc4c7d62e59da76/LoaderPBG",
+    LoaderURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
@@ -27,9 +27,7 @@ local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Stats = game:GetService("Stats")
 local MarketplaceService = game:GetService("MarketplaceService")
-local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
 
 -- ==============================================================================
@@ -405,204 +403,20 @@ local function PassToKeyChecker(userKey)
 end
 
 -- ==============================================================================
--- 🚀 HOP SERVER CONFIRM POPUP (Obsidian Glass + Snow + Roll Back Animation)
+-- 🎮 GAME INFO POPUP (Safe — no TeleportService)
 -- ==============================================================================
 local function ShowHopConfirmPopup(gameData)
-    local parentGui = (typeof(gethui) == "function" and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
-    local existing = parentGui:FindFirstChild("PayomboyZ_HopPopup")
-    if existing then existing:Destroy() end
-
-    local CH = {
-        shell = Color3.fromRGB(20, 10, 14), glassDeep = Color3.fromRGB(25, 11, 16),
-        glassRaised = Color3.fromRGB(48, 18, 28), surfaceRaised = Color3.fromRGB(58, 24, 34),
-        surfaceHover = Color3.fromRGB(78, 30, 44), primary = Color3.fromRGB(255, 45, 85),
-        primaryHover = Color3.fromRGB(255, 75, 110), primaryPressed = Color3.fromRGB(210, 30, 65),
-        danger = Color3.fromRGB(255, 60, 60), success = Color3.fromRGB(46, 224, 140),
-        vvipGold = Color3.fromRGB(255, 200, 60), cyan = Color3.fromRGB(255, 55, 85),
-    }
-
-    local popGui = Instance.new("ScreenGui")
-    popGui.Name = "PayomboyZ_HopPopup"
-    popGui.ResetOnSpawn = false; popGui.IgnoreGuiInset = true
-    popGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    popGui.DisplayOrder = 999999; popGui.Parent = parentGui
-
-    local overlay = Instance.new("Frame")
-    overlay.Size = UDim2.fromScale(1, 1)
-    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    overlay.BackgroundTransparency = 1; overlay.BorderSizePixel = 0
-    overlay.ZIndex = 1; overlay.Parent = popGui
-
-    local card = Instance.new("Frame")
-    card.Name = "HopCard"; card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.Position = UDim2.new(0.5, 0, 0.38, 0)
-    card.Size = UDim2.fromOffset(380, 230); card.Rotation = -10
-    card.BackgroundColor3 = CH.shell; card.BackgroundTransparency = 0.08
-    card.BorderSizePixel = 0; card.ClipsDescendants = true
-    card.ZIndex = 2; card.Parent = popGui
-    local cardCorner = Instance.new("UICorner")
-    cardCorner.CornerRadius = UDim.new(0, 18); cardCorner.Parent = card
-    local cardStroke = Instance.new("UIStroke")
-    cardStroke.Color = CH.cyan; cardStroke.Thickness = 1.5
-    cardStroke.Transparency = 0.2; cardStroke.Parent = card
-
-    -- ❄️ Snow
-    local snowLayer = Instance.new("Frame")
-    snowLayer.Size = UDim2.fromScale(1, 1); snowLayer.BackgroundTransparency = 1
-    snowLayer.ZIndex = 3; snowLayer.Parent = card
-    task.spawn(function()
-        local dots = {}
-        for i = 1, 22 do
-            local dot = Instance.new("Frame")
-            dot.Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4))
-            dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
-            dot.BackgroundColor3 = Color3.fromRGB(210, 235, 255)
-            dot.BackgroundTransparency = math.random(25, 65) / 100
-            dot.BorderSizePixel = 0; dot.ZIndex = 3; dot.Parent = snowLayer
-            local dC = Instance.new("UICorner"); dC.CornerRadius = UDim.new(1, 0); dC.Parent = dot
-            dots[#dots + 1] = { frame = dot, speed = math.random(12, 32) / 10000, drift = math.random(-8, 8) / 10000, pos = dot.Position.Y.Scale }
-        end
-        while task.wait(0.03) do
-            if not popGui or not popGui.Parent then break end
-            for _, d in ipairs(dots) do
-                d.pos = d.pos + d.speed
-                if d.pos > 1.05 then d.pos = -0.05 end
-                d.frame.Position = UDim2.new((d.frame.Position.X.Scale + d.drift) % 1.0, 0, d.pos, 0)
-            end
-        end
+    -- Copy PlaceId to clipboard as a safe alternative to teleporting
+    local placeIdStr = tostring(gameData.PlaceId)
+    pcall(function()
+        local copier = setclipboard or toclipboard
+        if type(copier) == "function" then copier(placeIdStr) end
     end)
-
-    -- Icon
-    local iconFrame = Instance.new("Frame")
-    iconFrame.Size = UDim2.fromOffset(64, 64); iconFrame.Position = UDim2.new(0, 22, 0, 22)
-    iconFrame.BackgroundColor3 = CH.glassDeep; iconFrame.BorderSizePixel = 0
-    iconFrame.ZIndex = 5; iconFrame.Parent = card
-    local iconCorner = Instance.new("UICorner"); iconCorner.CornerRadius = UDim.new(0, 10); iconCorner.Parent = iconFrame
-    local iconStroke = Instance.new("UIStroke")
-    iconStroke.Color = (gameData.Type == "VVIP") and CH.vvipGold or CH.cyan
-    iconStroke.Thickness = 1.5; iconStroke.Parent = iconFrame
-    local iconImg = Instance.new("ImageLabel")
-    iconImg.Size = UDim2.fromScale(1, 1); iconImg.BackgroundTransparency = 1
-    iconImg.Image = "rbxthumb://type=GameIcon&id=" .. tostring(gameData.IconId or gameData.PlaceId) .. "&w=150&h=150"
-    iconImg.ScaleType = Enum.ScaleType.Crop; iconImg.ZIndex = 6; iconImg.Parent = iconFrame
-    local iC = Instance.new("UICorner"); iC.CornerRadius = UDim.new(0, 10); iC.Parent = iconImg
-    task.spawn(function()
-        pcall(function()
-            local info = MarketplaceService:GetProductInfo(gameData.PlaceId)
-            if info and info.IconImageAssetId and info.IconImageAssetId > 0 and iconImg.Parent then
-                iconImg.Image = "rbxassetid://" .. tostring(info.IconImageAssetId)
-            end
-        end)
-    end)
-
-    -- Badge
-    local catBadge = Instance.new("TextLabel")
-    catBadge.Size = UDim2.fromOffset(60, 18); catBadge.Position = UDim2.new(0, 22, 0, 92)
-    catBadge.BackgroundColor3 = (gameData.Type == "VVIP") and CH.vvipGold or CH.success
-    catBadge.BackgroundTransparency = 0.15
-    catBadge.Text = (gameData.Type == "VVIP") and "👑 VVIP" or "🟢 FREE"
-    catBadge.TextColor3 = Color3.fromRGB(15, 10, 12); catBadge.Font = Enum.Font.GothamBold
-    catBadge.TextSize = 10; catBadge.ZIndex = 5; catBadge.Parent = card
-    local cbC = Instance.new("UICorner"); cbC.CornerRadius = UDim.new(0, 5); cbC.Parent = catBadge
-
-    -- Texts
-    local function makeLabel(parent, text, pos, size, font, tsize, color, align)
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = size; lbl.Position = pos; lbl.BackgroundTransparency = 1
-        lbl.Text = text; lbl.TextColor3 = color or Color3.fromRGB(255,255,255)
-        lbl.Font = font or Enum.Font.GothamBold; lbl.TextSize = tsize or 12
-        lbl.TextXAlignment = align or Enum.TextXAlignment.Left
-        lbl.TextWrapped = true; lbl.TextTruncate = Enum.TextTruncate.AtEnd
-        lbl.ZIndex = 5; lbl.Parent = parent; return lbl
-    end
-
-    makeLabel(card, gameData.FullName or gameData.Name, UDim2.new(0,100,0,22), UDim2.new(1,-108,0,22), Enum.Font.GothamBold, 16, Color3.fromRGB(255,255,255))
-    makeLabel(card, "ต้องการเข้าเล่นแมพนี้หรือไม่?", UDim2.new(0,100,0,44), UDim2.new(1,-108,0,36), Enum.Font.Gotham, 11, Color3.fromRGB(255,255,255))
-
-    local divLine = Instance.new("Frame")
-    divLine.Size = UDim2.new(1,-40,0,1); divLine.Position = UDim2.new(0,20,0,122)
-    divLine.BackgroundColor3 = CH.glassRaised; divLine.BorderSizePixel = 0
-    divLine.ZIndex = 5; divLine.Parent = card
-
-    local descBox = Instance.new("Frame")
-    descBox.Size = UDim2.new(1,-40,0,48); descBox.Position = UDim2.new(0,20,0,132)
-    descBox.BackgroundColor3 = CH.glassDeep; descBox.BackgroundTransparency = 0.15
-    descBox.BorderSizePixel = 0; descBox.ZIndex = 5; descBox.Parent = card
-    local descBoxC = Instance.new("UICorner"); descBoxC.CornerRadius = UDim.new(0,8); descBoxC.Parent = descBox
-    makeLabel(descBox, "🎮 " .. (gameData.Keywords or ""), UDim2.new(0,10,0,0), UDim2.new(1,-20,1,0), Enum.Font.Gotham, 10, Color3.fromRGB(255,255,255))
-
-    makeLabel(card, "📌 PlaceId: " .. tostring(gameData.PlaceId), UDim2.new(0,20,0,184), UDim2.new(1,-40,0,14), Enum.Font.GothamBold, 9, Color3.fromRGB(200,200,200))
-
-    -- Cancel
-    local cancelBtn = Instance.new("TextButton")
-    cancelBtn.Size = UDim2.fromOffset(156, 38); cancelBtn.Position = UDim2.new(0,20,1,-54)
-    cancelBtn.BackgroundColor3 = CH.surfaceRaised; cancelBtn.BackgroundTransparency = 0.18
-    cancelBtn.Text = "❌  ยกเลิก"; cancelBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    cancelBtn.Font = Enum.Font.GothamBold; cancelBtn.TextSize = 12
-    cancelBtn.BorderSizePixel = 0; cancelBtn.ZIndex = 5; cancelBtn.Parent = card
-    local canC = Instance.new("UICorner"); canC.CornerRadius = UDim.new(0,10); canC.Parent = cancelBtn
-
-    -- Hop button
-    local hopBtn = Instance.new("TextButton")
-    hopBtn.Size = UDim2.fromOffset(218, 38); hopBtn.Position = UDim2.new(1,-238,1,-54)
-    hopBtn.BackgroundColor3 = Color3.fromRGB(255, 45, 85); hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"
-    hopBtn.TextColor3 = Color3.fromRGB(255,255,255)
-    hopBtn.Font = Enum.Font.GothamBold; hopBtn.TextSize = 12
-    hopBtn.BorderSizePixel = 0; hopBtn.ZIndex = 5; hopBtn.Parent = card
-    local hopC = Instance.new("UICorner"); hopC.CornerRadius = UDim.new(0,10); hopC.Parent = hopBtn
-
-    local function closePopup()
-        TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-            Position = UDim2.new(0.5,0,0.62,0), Size = UDim2.fromOffset(380,230), Rotation = 8
-        }):Play()
-        TweenService:Create(overlay, TweenInfo.new(0.22), { BackgroundTransparency = 1 }):Play()
-        task.delay(0.28, function() if popGui and popGui.Parent then popGui:Destroy() end end)
-    end
-
-    cancelBtn.MouseButton1Click:Connect(closePopup)
-    overlay.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            closePopup()
-        end
-    end)
-
-    hopBtn.MouseButton1Click:Connect(function()
-        hopBtn.Active = false
-        task.spawn(function()
-            local placeId = gameData.PlaceId
-            local ok = false
-            hopBtn.Text = "🔄 [1/3] Teleport..."
-            TweenService:Create(hopBtn, TweenInfo.new(0.15), { BackgroundColor3 = CH.primaryPressed }):Play()
-            pcall(function() TeleportService:Teleport(placeId); ok = true end)
-            if ok then return end; task.wait(0.35)
-            hopBtn.Text = "🔄 [2/3] TeleportAsync..."
-            pcall(function()
-                local opts = Instance.new("TeleportOptions"); opts.ShouldReserveServer = false
-                TeleportService:TeleportAsync(placeId, {LocalPlayer}, opts); ok = true
-            end)
-            if ok then return end; task.wait(0.35)
-            hopBtn.Text = "🔄 [3/3] Reserve & Join..."
-            pcall(function()
-                local code = TeleportService:ReserveServer(placeId)
-                if code and code ~= "" then TeleportService:TeleportToPrivateServer(placeId, code, {LocalPlayer}); ok = true end
-            end)
-            if ok then return end
-            hopBtn.Text = "❌ Teleport ล้มเหลว"
-            TweenService:Create(hopBtn, TweenInfo.new(0.2), { BackgroundColor3 = CH.danger }):Play()
-            task.delay(3, function()
-                if hopBtn and hopBtn.Parent then
-                    hopBtn.Text = "🎮  เข้าเล่นแมพนี้เลย!"; hopBtn.Active = true
-                    TweenService:Create(hopBtn, TweenInfo.new(0.25), { BackgroundColor3 = CH.primary }):Play()
-                end
-            end)
-        end)
-    end)
-
-    -- Roll-back entrance animation
-    TweenService:Create(overlay, TweenInfo.new(0.25), { BackgroundTransparency = 0.55 }):Play()
-    TweenService:Create(card, TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0.5,0,0.5,0), Size = UDim2.fromOffset(420,260), Rotation = 0
-    }):Play()
+    ShowToast(
+        "📋 " .. (gameData.Name or "Game"),
+        "คัดลอก PlaceId: " .. placeIdStr .. " เรียบร้อยแล้ว!",
+        false
+    )
 end
 
 -- ==============================================================================
@@ -1121,7 +935,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local capMetricsLabel = textLabel(toggleCapsule, "⚡ 60 FPS  •  📡 0 ms", UDim2.new(0, 56, 0, 28), UDim2.new(1, -58, 0, 16), Enum.Font.GothamBold, 10, COLORS.cyan)
     capMetricsLabel.ZIndex = 3
 
-    -- 🔄 REALTIME FPS & PING UPDATE LOOP FOR TOGGLE CAPSULE
+    -- 🔄 REALTIME FPS UPDATE LOOP FOR TOGGLE CAPSULE (safe — no Stats service)
     task.spawn(function()
         local frameCount = 0
         local lastFpsTime = tick()
@@ -1143,14 +957,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
                 if renderConn then renderConn:Disconnect() end
                 break
             end
-            local pingVal = 0
-            pcall(function()
-                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
-                    local item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
-                    if item then pingVal = math.floor(item:GetValue()) end
-                end
-            end)
-            capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
+            capMetricsLabel.Text = string.format("⚡ %d FPS", fpsVal)
         end
     end)
 
@@ -1786,6 +1593,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             TweenService:Create(playBtn, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(255, 45, 85) }):Play()
         end)
         playBtn.MouseButton1Click:Connect(function()
+            -- Safe: copy PlaceId instead of teleporting
             ShowHopConfirmPopup(gameData)
         end)
     end
@@ -2453,15 +2261,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         while gui.Parent do
             local elapsed = math.floor(os.clock() - startedAt)
             sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
+            -- Use safe workspace physics FPS as a latency indicator instead of Stats service
             local ping = "--"
             pcall(function()
-                local rawPing = workspace:GetRealPhysicsFPS() -- Safe fallback if ping stat read is intercepted
-                if Stats and Stats:FindFirstChild("PerformanceStats") then
-                    local pStat = Stats.PerformanceStats:FindFirstChild("Ping")
-                    if pStat then ping = math.floor(pStat:GetValue()) end
-                elseif Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
-                    local item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
-                    if item then ping = item:GetValueString():match("[%d%.]+") or "--" end
+                local fps = workspace:GetRealPhysicsFPS()
+                if fps and fps > 0 then
+                    ping = math.floor(1000 / fps)
                 end
             end)
             pingText.Text = tostring(ping) .. " ms"
