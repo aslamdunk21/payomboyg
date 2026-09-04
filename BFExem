@@ -1,1 +1,465 @@
-sdafsfd
+-- ============================================================
+-- ⚙️ LogicSub: Blox Fruits External Engine & Logic Module
+-- Github: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem
+-- ============================================================
+
+function CheckQuest()
+    local Level = (LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 1
+    local curSea = World1 and 1 or (World2 and 2 or 3)
+    local questList = (curSea == 1 and getgenv().Sea1_Quests) or (curSea == 2 and getgenv().Sea2_Quests) or getgenv().Sea3_Quests
+    if not questList then return end
+    for _, item in ipairs(questList) do
+        if Level <= item[1] then
+            Monster = item[2]
+            NameQuest = item[3]
+            LevelQuest = item[4]
+            NameCheckQuest = item[5]
+            CFrameQ = CFrame.new(item[6], item[7], item[8])
+            CFrameMon = CFrame.new(item[9], item[10], item[11])
+            return
+        end
+    end
+end
+
+function GetNearestMob(originMob, maxDistance)
+    if not originMob or not originMob:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    local nearest
+    local nearestDistance = math.huge
+    for _, mob in ipairs(workspace.Enemies:GetChildren()) do
+        if mob ~= originMob
+        and mob.Name == originMob.Name
+        and mob.Parent
+        and mob:FindFirstChild("Humanoid")
+        and mob:FindFirstChild("HumanoidRootPart")
+        and mob.Humanoid.Health > 0 then
+            local dist = (mob.HumanoidRootPart.Position - originMob.HumanoidRootPart.Position).Magnitude
+            if dist <= maxDistance and dist < nearestDistance then
+                nearest = mob
+                nearestDistance = dist
+            end
+        end
+    end
+    return nearest
+end
+
+function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, CustomName)
+    if IsCheckQuest == nil then IsCheckQuest = true end
+    CustomName = CustomName or NameCheckQuest
+    pcall(sethiddenproperty, LocalPlayer, "SimulationRadius", math.huge)
+    
+    if not mainMob or not mainMob.Parent or not mainMob:FindFirstChild("Humanoid") or not mainMob:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
+
+    local humanoid = mainMob.Humanoid
+    local hrp = mainMob.HumanoidRootPart
+    humanoid.JumpPower = 0
+    humanoid.WalkSpeed = 0
+    hrp.CanCollide = false
+    
+    if getgenv().Configs.BringMob then
+        local bv = hrp:FindFirstChild("BringVelocity")
+        if not bv then
+            bv = Instance.new("BodyVelocity")
+            bv.Name = "BringVelocity"
+            bv.MaxForce = Vector3.new(100000, 100000, 100000)
+            bv.Parent = hrp
+        end
+        bv.Velocity = Vector3.zero
+    end
+
+    local secondMob = nil
+    local tween = nil
+
+    repeat
+        task.wait()
+        if not mainMob or not mainMob.Parent or not hrp or humanoid.Health <= 0 then break end
+        
+        if IsCheckQuest then CheckQuest() end
+
+        local dist = (hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+
+        if dist > 5 then
+            if MovementManager and MovementManager.MoveTo then
+                MovementManager:MoveTo(hrp.CFrame * CFrame.new(0, 30, 0), 300, 1)
+            end
+        end
+
+        secondMob = GetNearestMob(mainMob, 350)
+
+        if secondMob and secondMob:FindFirstChild("HumanoidRootPart") then
+            secondMob.HumanoidRootPart.CFrame = hrp.CFrame
+            secondMob.HumanoidRootPart.CanCollide = false
+        end
+
+        if dist <= 40 then
+            if secondMob then
+                Attack({mainMob, secondMob})
+            else
+                Attack(mainMob)
+            end
+        end
+    until not mainMob 
+        or not mainMob.Parent 
+        or not mainMob:FindFirstChild("Humanoid") 
+        or (mainMob.Humanoid.Health <= 0) 
+        or not getgenv().Configs.AutoFarmLevel
+
+    if tween then
+        tween:Cancel()
+        tween = nil
+    end
+
+    return humanoid.Health <= 0
+end
+
+function KaitunWorld1(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    if Level >= 700 then
+        title.Text = "Doing Second Sea Puzzle"
+        if not CommF_:InvokeServer("DressrosaQuestProgress", "Dressrosa") then
+            if CommF_:InvokeServer("DressrosaQuestProgress").TalkedDetective and CommF_:InvokeServer("DressrosaQuestProgress").UsedKey then
+                local admiral = TargetManager:GetBestTarget("Ice Admiral", 500)
+                if admiral then
+                    SmartMoveAndAttack(admiral, QuestTitle, Quest, false)
+                    title.Text = "Travel To Second Sea"
+                    CommF_:InvokeServer("TravelDressrosa")
+                else
+                    MovementManager:MoveTo(CFrame.new(1382.562255859375, 26.999441146850586, -1458.77783203125), 150, 2)
+                end
+            elseif IsOwn("Key") then
+                CommF_:InvokeServer("DressrosaQuestProgress", "UseKey")
+            elseif not IsOwn("Key") then
+                CommF_:InvokeServer("DressrosaQuestProgress", "Detective")
+            end
+        else
+            title.Text = "Travel To Second Sea"
+            CommF_:InvokeServer("TravelDressrosa")
+        end
+    elseif Level >= 200 and getgenv().Configs.Saber and workspace.Map:FindFirstChild("Jungle") and workspace.Map.Jungle:FindFirstChild("Final") and workspace.Map.Jungle.Final:FindFirstChild("Part") and workspace.Map.Jungle.Final.Part.CanCollide and not IsSaber then
+        title.Text = "Saber Quest | Solve Puzzle"
+        if not workspace.Map.Jungle.QuestPlates.Door.CanCollide then
+            if CommF_:InvokeServer("ProQuestProgress").UsedTorch then
+                if CommF_:InvokeServer("ProQuestProgress", "SickMan") == 0 then
+                    if CommF_:InvokeServer("ProQuestProgress", "RichSon") == 0 then
+                        local mobLeader = TargetManager:GetBestTarget("Mob Leader", 500)
+                        if mobLeader then
+                            SmartMoveAndAttack(mobLeader, QuestTitle, Quest, false)
+                        else
+                            MovementManager:MoveTo(CFrame.new(-2848, 8, 5342), 150, 2)
+                        end
+                    elseif CommF_:InvokeServer("ProQuestProgress", "RichSon") == 1 then
+                        CommF_:InvokeServer("ProQuestProgress", "PlaceRelic")
+                    else
+                        CommF_:InvokeServer("ProQuestProgress", "RichSon")
+                    end
+                else
+                    CommF_:InvokeServer("ProQuestProgress", "GetCup")
+                    task.wait(0.2)
+                    EquipName("Cup")
+                    task.wait(0.2)
+                    local cup = IsOwn("Cup")
+                    CommF_:InvokeServer("ProQuestProgress", "FillCup", cup)
+                    CommF_:InvokeServer("ProQuestProgress", "SickMan")
+                end
+            elseif IsOwn("Torch") then
+                CommF_:InvokeServer("ProQuestProgress", "DestroyTorch")
+            elseif not IsOwn("Torch") then
+                CommF_:InvokeServer("ProQuestProgress", "GetTorch")
+            end
+        else
+            for i, v in workspace.Map.Jungle.QuestPlates:GetChildren() do
+                if v:IsA("Model") and v.Button.BrickColor ~= BrickColor.new("Camo") then
+                    title.Text = "Doing Saber Quest | Touching Plates " .. i .. "/5"
+                    MovementManager:MoveTo(v.Button.CFrame, 150, 2)
+                    task.wait(0.5)
+                end
+            end
+        end
+    elseif Level >= 200 and getgenv().Configs.Saber and not IsSaber and (ReplicatedStorage:FindFirstChild("Saber Expert") or workspace.Enemies:FindFirstChild("Saber Expert")) then
+        title.Text = "Saber Quest | Kill Saber Expert"
+        local saberBoss = TargetManager:GetBestTarget("Saber Expert", 500)
+        if saberBoss then
+            SmartMoveAndAttack(saberBoss, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(-1458.89502, 29.8870335, -50.633564), 150, 2)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Level >= 200 and getgenv().Configs.Pole and not IsPoleV1 and (ReplicatedStorage:FindFirstChild("Thunder God") or workspace.Enemies:FindFirstChild("Thunder God")) then
+        title.Text = "Get Pole | Kill Thunder God"
+        local thunderGod = TargetManager:GetBestTarget("Thunder God", 500)
+        if thunderGod then
+            SmartMoveAndAttack(thunderGod, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 150, 2)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif getgenv().Configs.SkipFarmLevel and (Level >= 0 and Level <= 24) then
+        local darkMaster = TargetManager:GetBestTarget("Dark Master", 500)
+        if darkMaster then
+            SmartMoveAndAttack(darkMaster, QuestTitle, Quest, false)
+        else
+            title.Text = "Skip Farming Level | Waiting"
+            MovementManager:MoveTo(CFrame.new(-5250, 389, -2272), 150, 2)
+        end
+    elseif getgenv().Configs.SkipFarmLevel and (Level >= 25 and Level <= 59) then
+        local royalSquad = TargetManager:GetBestTarget("Royal Squad", 500)
+        if royalSquad then
+            SmartMoveAndAttack(royalSquad, QuestTitle, Quest, false)
+        else
+            title.Text = "Skip Farming Level | Waiting"
+            MovementManager:MoveTo(CFrame.new(-7670, 5607, -1460), 150, 2)
+        end
+    elseif not Quest.Visible then
+        title.Text = "Auto Farming Level | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
+function KaitunWorld2(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    local bartiloProg = CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
+    
+    if Level >= 1500 then
+        title.Text = "Doing Third Sea Puzzle / Transition"
+        local prog = CommF_:InvokeServer("TravelThirdSea", "Progress")
+        
+        if type(prog) == "number" and prog >= 3 then
+            title.Text = "Travel To Third Sea"
+            CommF_:InvokeServer("TravelThirdSea")
+        else
+            if bartiloProg ~= 3 then
+                if bartiloProg == 0 then
+                    if LocalPlayer.PlayerGui.Main.Quest.Visible then 
+                        if string.find(LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text, "50 Swan Pirates") then
+                            local swanPirate = TargetManager:GetBestTarget("Swan Pirate", 500)
+                            if swanPirate then
+                                SmartMoveAndAttack(swanPirate, QuestTitle, Quest, false, "Swan Pirate")
+                            else
+                                title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
+                                MovementManager:MoveTo(CFrame.new(878, 122, 1235), 150, 3)
+                            end
+                        else
+                            CommF_:InvokeServer("AbandonQuest")
+                        end
+                    else
+                        CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
+                    end
+                elseif bartiloProg == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+                    local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
+                    if jeremy then
+                        SmartMoveAndAttack(jeremy, QuestTitle, Quest, false)
+                    else
+                        MovementManager:MoveTo(CFrame.new(2099.88159, 448.931, 648.997375), 150, 3)
+                        CommF_:InvokeServer("SetSpawnPoint")
+                    end
+                elseif bartiloProg == 2 then
+                    title.Text = "Doing Bartilo Quest | Pressing Mansion Plates"
+                    local codePlates = {
+                        CFrame.new(-1837.46, 44.29, 1656.19),
+                        CFrame.new(-1836.0, 11, 1714),
+                        CFrame.new(-1850.49, 13.17, 1750.89),
+                        CFrame.new(-1858.87, 19.37, 1712.01),
+                        CFrame.new(-1803.94, 16.57, 1750.89),
+                        CFrame.new(-1858.55, 16.86, 1724.79),
+                        CFrame.new(-1869.54, 15.98, 1681.00),
+                        CFrame.new(-1800.09, 16.49, 1684.52),
+                        CFrame.new(-1819.26, 14.79, 1717.90),
+                        CFrame.new(-1813.51, 14.86, 1724.79)
+                    }
+                    for _, cf in ipairs(codePlates) do
+                        MovementManager:MoveTo(cf, 150, 2)
+                        task.wait(0.3)
+                    end
+                end
+            else
+                local talkedTrevor = CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                local donSwanBoss = TargetManager:GetBestTarget("Don Swan", 500)
+                local donSwanInRS = ReplicatedStorage:FindFirstChild("Don Swan")
+
+                if donSwanBoss then
+                    title.Text = "Defeating Don Swan Boss (Lv. 1000)"
+                    SmartMoveAndAttack(donSwanBoss, QuestTitle, Quest, false)
+                elseif donSwanInRS then
+                    title.Text = "Waiting for Don Swan Boss to Spawn..."
+                    MovementManager:MoveTo(CFrame.new(2284.4, 15.2, 867.3), 150, 3)
+                elseif not talkedTrevor and (type(prog) ~= "number" or prog < 1) then
+                    local fruitTool = Has1MFruitInInventoryOrBackpack()
+                    if fruitTool then
+                        title.Text = "Talking to Trevor (Equipping " .. fruitTool.Name .. ")"
+                        MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
+                        pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
+                        task.wait(0.5)
+                        CommF_:InvokeServer("TalkTrevor", fruitTool.Name)
+                        CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                        task.wait(1)
+                    else
+                        title.Text = "Attempting Gacha & Dealer for 1M+ Fruit..."
+                        pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
+                        task.wait(0.5)
+                        StoreAllFruits()
+
+                        pcall(function()
+                            local stock = CommF_:InvokeServer("GetFruits")
+                            if type(stock) == "table" then
+                                for _, f in pairs(stock) do
+                                    local price = tonumber(f.Price) or 0
+                                    local rawName = f.Name or f.Value or ""
+                                    local inStock = (f.OnSale == true) or (f.InStock == true)
+                                    if inStock and price >= 1000000 then
+                                        local beli = LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli") and LocalPlayer.Data.Beli.Value or 0
+                                        if beli >= price then
+                                            CommF_:InvokeServer("PurchaseRawFruit", rawName)
+                                            task.wait(1)
+                                            StoreAllFruits()
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+
+                        fruitTool = Has1MFruitInInventoryOrBackpack()
+                        if not fruitTool then
+                            title.Text = "Waiting for 1M+ Fruit | Auto Farming Level & Melee..."
+                            if not Quest.Visible then
+                                MovementManager:MoveTo(CFrameQ, 150, 2)
+                                if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+                                    CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+                                    CommF_:InvokeServer("SetSpawnPoint")
+                                end
+                            elseif Quest.Visible then
+                                local targetMob = TargetManager:GetBestTarget(Monster, 600)
+                                if targetMob then
+                                    SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+                                else
+                                    MovementManager:MoveTo(CFrameMon, 150, 2)
+                                end
+                            end
+                        end
+                    end
+                elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
+                    title.Text = "Defeating Rip Indra Boss"
+                    local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
+                    if ripIndra then
+                        SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
+                    else
+                        MovementManager:MoveTo(CFrame.new(-460, 73, 300), 150, 3)
+                    end
+                else
+                    title.Text = "Travel To Third Sea (King Red Head / Captain)"
+                    CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                    CommF_:InvokeServer("TravelThirdSea")
+                    task.wait(2)
+                end
+            end
+        end
+    elseif workspace.Enemies:FindFirstChild("Core") or ReplicatedStorage:FindFirstChild("Core") then
+        local coreMob = TargetManager:GetBestTarget("Core", 500)
+        if coreMob then
+            SmartMoveAndAttack(coreMob, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(448.46756, 199.356781, -441.389252), 150, 3)
+        end
+    elseif Level >= 850 and (bartiloProg == 0 or bartiloProg == 2 or (bartiloProg == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")))) then
+        if bartiloProg == 0 then
+            if LocalPlayer.PlayerGui.Main.Quest.Visible then 
+                if string.find(LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text, "50 Swan Pirates") then
+                    local swanPirate = TargetManager:GetBestTarget("Swan Pirate", 500)
+                    if swanPirate then
+                        SmartMoveAndAttack(swanPirate, QuestTitle, Quest, false, "Swan Pirate")
+                    else
+                        title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
+                        MovementManager:MoveTo(CFrame.new(878, 122, 1235), 150, 3)
+                    end
+                else
+                    CommF_:InvokeServer("AbandonQuest")
+                end
+            else
+                CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
+                KaitunCache:Invalidate("BartiloProgress")
+            end
+        elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+            local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
+            if jeremy then
+                SmartMoveAndAttack(jeremy, QuestTitle, Quest, false)
+            else
+                MovementManager:MoveTo(CFrame.new(2099.88159, 448.931, 648.997375), 150, 3)
+                CommF_:InvokeServer("SetSpawnPoint")
+            end
+        elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 2 then
+            MovementManager:MoveTo(CFrame.new(-1837.46155, 44.2921753, 1656.1987), 150, 3)
+        end
+    elseif not Quest.Visible then
+        title.Text = "Auto Farming Level | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
+function KaitunWorld3(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    if not Quest.Visible then
+        title.Text = "Auto Farming Level (Sea 3) | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level (Sea 3) | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
+function SetObjective(priorityLevel, objectiveName, reason)
+    if CurrentObjective ~= objectiveName then
+        PreviousObjective = CurrentObjective
+        CurrentObjective = objectiveName
+        ObjectiveStartTime = os.clock()
+        MovementManager:Stop()
+        KaitunMonitor:AddLog(priorityLevel, string.format("%s: %s", objectiveName, reason or ""), priorityLevel)
+    end
+    ObjectiveReason = reason or ""
+    title.Text = string.format("[%s] %s", priorityLevel, CurrentObjective)
+    subtitle.Text = ObjectiveReason
+
+    KaitunMonitor.State.PriorityTier = priorityLevel
+    KaitunMonitor.State.ActiveObjective = objectiveName
+    KaitunMonitor.State.ObjectiveReason = ObjectiveReason
+    KaitunMonitor.State.EngineStatus = "🟢 " .. objectiveName
+    KaitunMonitor:UpdateUI()
+end
