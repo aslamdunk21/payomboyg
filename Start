@@ -131,11 +131,22 @@ local function copyText(value)
 end
 
 local function executorName()
-    if type(identifyexecutor) == "function" then
-        local ok, name = pcall(identifyexecutor)
-        if ok and name then return tostring(name) end
-    end
-    return "Unknown"
+    local name = "Unknown"
+    pcall(function()
+        if type(identifyexecutor) == "function" then
+            local ok, execName = pcall(identifyexecutor)
+            if ok and execName then return tostring(execName) end
+        elseif type(getexecutorname) == "function" then
+            local ok, execName = pcall(getexecutorname)
+            if ok and execName then return tostring(execName) end
+        end
+    end)
+    return name
+end
+
+local function isXenoExecutor()
+    local name = executorName():lower()
+    return name:find("xeno") ~= nil
 end
 
 local function deviceName()
@@ -277,11 +288,11 @@ end
 local function ShowToast(title, message, isError)
     pcall(function()
         local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+        local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
         local ToastGui = Instance.new("ScreenGui")
         ToastGui.Name = "PayomboyZ_Toast"
         ToastGui.ResetOnSpawn = false
-        pcall(function() ToastGui.Parent = CoreGui end)
-        if not ToastGui.Parent then ToastGui.Parent = PlayerGui end
+        ToastGui.Parent = parentGui
 
         local Frame = Instance.new("Frame")
         Frame.Size = UDim2.new(0, 330, 0, 60)
@@ -397,7 +408,7 @@ end
 -- 🚀 HOP SERVER CONFIRM POPUP (Obsidian Glass + Snow + Roll Back Animation)
 -- ==============================================================================
 local function ShowHopConfirmPopup(gameData)
-    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    local parentGui = (typeof(gethui) == "function" and gethui()) or LocalPlayer:WaitForChild("PlayerGui")
     local existing = parentGui:FindFirstChild("PayomboyZ_HopPopup")
     if existing then existing:Destroy() end
 
@@ -603,10 +614,10 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         if type(gethui) == "function" then parent = gethui() end
     end)
     if not parent then
-        pcall(function() parent = CoreGui end)
+        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
     end
     if not parent then
-        pcall(function() parent = LocalPlayer:WaitForChild("PlayerGui") end)
+        pcall(function() parent = CoreGui end)
     end
 
     pcall(function()
@@ -1133,7 +1144,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
                 break
             end
             local pingVal = 0
-            pcall(function() pingVal = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            pcall(function()
+                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
+                    local item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
+                    if item then pingVal = math.floor(item:GetValue()) end
+                end
+            end)
             capMetricsLabel.Text = string.format("⚡ %d FPS  •  📡 %d ms", fpsVal, pingVal)
         end
     end)
@@ -2075,7 +2091,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         end
     end
 
-    if initialStatus then
+    local isXeno = isXenoExecutor()
+    if isXeno then
+        setStatus("❌ ตัวรัน Xeno ไม่รองรับ (Not Supported)", COLORS.danger)
+        setButtonEnabled(redeem, false)
+        setButtonText(redeem, "Not Supported (Xeno)")
+    elseif initialStatus then
         setStatus(initialStatus, COLORS.warning)
     else
         setStatus("Ready for " .. detectedGame .. ".", COLORS.cyan)
@@ -2084,6 +2105,10 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     local busy = false
     local function redeemKey()
         if busy then return end
+        if isXenoExecutor() then
+            setStatus("❌ ตัวรัน Xeno ไม่รองรับ (Not Supported)", COLORS.danger)
+            return
+        end
         local rawKey = input.Text or ""
         local key = rawKey:gsub("%s+", "")
         if key == "" then
@@ -2329,7 +2354,10 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             sessionText.Text = string.format("%02d:%02d", math.floor(elapsed / 60), elapsed % 60)
             local ping = "--"
             pcall(function()
-                ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValueString():match("[%d%.]+") or "--"
+                if Stats and Stats:FindFirstChild("Network") and Stats.Network:FindFirstChild("ServerStatsItem") then
+                    local item = Stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
+                    if item then ping = item:GetValueString():match("[%d%.]+") or "--" end
+                end
             end)
             pingText.Text = tostring(ping) .. " ms"
             task.wait(1)
@@ -2439,6 +2467,11 @@ if hasFailedAttempt then
     return
 end
 
+if isXenoExecutor() then
+    CreateLoaderUI("❌ ตัวรัน Xeno ไม่รองรับ (Not Supported)", "")
+    return
+end
+
 local passedKey = GetPassedScriptKey()
 local savedKey = LoadSavedKey()
 local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKey) or ""
@@ -2453,12 +2486,12 @@ elseif savedKey ~= "" then
     -- 🚀 INSTANT AUTO-LOGIN & ESCAPE HATCH
     -- ==============================================================================
     local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local parentGui = (typeof(gethui) == "function" and gethui()) or PlayerGui
     local EscapeGui = Instance.new("ScreenGui")
     EscapeGui.Name = "PayomboyZ_Escape"
     EscapeGui.ResetOnSpawn = false
     EscapeGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-    pcall(function() EscapeGui.Parent = CoreGui end)
-    if not EscapeGui.Parent then EscapeGui.Parent = PlayerGui end
+    EscapeGui.Parent = parentGui
 
     local EscBtn = Instance.new("TextButton")
     EscBtn.Size = UDim2.new(0, 170, 0, 32)
