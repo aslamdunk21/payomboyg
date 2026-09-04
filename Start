@@ -169,22 +169,30 @@ end
 -- ==============================================================================
 -- 🎮 ระบบดึงข้อมูลแมพแบบ Dynamic อ่านจาก loader.txt โดยตรงอัตโนมัติ
 -- ==============================================================================
+local cachedDynamicGames = nil
 local function GetDynamicSupportedGames()
+    if cachedDynamicGames then return cachedDynamicGames end
     local games = {}
 
-    -- 1. อ่านตรงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (ป้องกัน Cache ด้วย ?t=tick())
-    local loaderCode = ""
-    pcall(function()
-        loaderCode = safeFetch(LuarmorConfig.LoaderURL .. "?t=" .. tostring(tick()))
-    end)
+    -- 1. อ่านข้อมูลจาก Memory (_G / getgenv) ก่อนทันที (ไม่ต้องรอ Network)
+    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
+    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
+    if type(nRouter) == "table" then
+        for id, data in pairs(nRouter) do
+            if data and data.Name then games[id] = data.Name end
+        end
+    end
+    if type(vRouter) == "table" then
+        for id, data in pairs(vRouter) do
+            if data and data.Name then games[id] = data.Name .. " (VVIP)" end
+        end
+    end
 
-    -- หาก HttpGet ไม่สำเร็จ (เน็ตหลุด) ค่อยดึงจาก Memory หรือไฟล์ในเครื่องเป็น Fallback
-    if loaderCode == "" and isfile and readfile then
+    -- 2. หากยังไม่มีข้อมูล ให้อ่านจากไฟล์ในเครื่องก่อน
+    local loaderCode = ""
+    if isfile and readfile then
         pcall(function()
-            local paths = {
-                "loader.txt",
-                "Loader.txt"
-            }
+            local paths = { "loader.txt", "Loader.txt" }
             for _, p in ipairs(paths) do
                 if isfile(p) then
                     local code = readfile(p)
@@ -194,7 +202,14 @@ local function GetDynamicSupportedGames()
         end)
     end
 
-    -- 2. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    -- 3. หากยังไม่มีไฟล์ ค่อยดึงจาก GitHub
+    if loaderCode == "" then
+        pcall(function()
+            loaderCode = safeFetch(LuarmorConfig.LoaderURL)
+        end)
+    end
+
+    -- แกะตาราง NormalRouter และ VVIPRouter
     if loaderCode ~= "" then
         local normalStart = loaderCode:find("NormalRouter%s*=")
         local vvipStart = loaderCode:find("VVIPRouter%s*=")
@@ -214,18 +229,8 @@ local function GetDynamicSupportedGames()
         end
     end
 
-    -- 3. รวมข้อมูลจาก Memory (_G / getgenv) เผื่อมีแมพที่พึ่งโหลดเข้า Memory
-    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
-    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
-    if type(nRouter) == "table" then
-        for id, data in pairs(nRouter) do
-            if data and data.Name then games[id] = data.Name end
-        end
-    end
-    if type(vRouter) == "table" then
-        for id, data in pairs(vRouter) do
-            if data and data.Name then games[id] = data.Name .. " (VVIP)" end
-        end
+    if next(games) ~= nil then
+        cachedDynamicGames = games
     end
 
     return games
@@ -790,9 +795,9 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, shellChrome)
 
     task.spawn(function()
-        local isMobileDevice = deviceName() == "Mobile"
-        local maxDots = isMobileDevice and 8 or 35
-        local sleepInterval = isMobileDevice and 0.06 or 0.03
+        if deviceName() == "Mobile" then return end
+        local maxDots = 35
+        local sleepInterval = 0.03
         local dots = {}
         for i = 1, maxDots do
             local dot = create("Frame", {
@@ -857,9 +862,9 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, toggleCapsule)
 
     task.spawn(function()
-        local isMobileDevice = deviceName() == "Mobile"
-        local maxDots = isMobileDevice and 4 or 12
-        local sleepInterval = isMobileDevice and 0.06 or 0.03
+        if deviceName() == "Mobile" then return end
+        local maxDots = 12
+        local sleepInterval = 0.03
         local dots = {}
         for i = 1, maxDots do
             local dot = create("Frame", {
@@ -919,12 +924,14 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     }, capAvatarFrame)
     round(capAvatarImg, 21)
 
-    pcall(function()
-        capAvatarImg.Image = Players:GetUserThumbnailAsync(
-            LocalPlayer.UserId,
-            Enum.ThumbnailType.HeadShot,
-            Enum.ThumbnailSize.Size420x420
-        )
+    task.spawn(function()
+        pcall(function()
+            capAvatarImg.Image = Players:GetUserThumbnailAsync(
+                LocalPlayer.UserId,
+                Enum.ThumbnailType.HeadShot,
+                Enum.ThumbnailSize.Size420x420
+            )
+        end)
     end)
 
     -- 👤 USERNAME & ⚡ METRICS (FPS & PING)
@@ -1215,12 +1222,14 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     onlinePulseUp:Play()
     gui.Destroying:Connect(function() onlinePulseUp:Cancel() end)
 
-    pcall(function()
-        avatar.Image = Players:GetUserThumbnailAsync(
-            LocalPlayer.UserId,
-            Enum.ThumbnailType.HeadShot,
-            Enum.ThumbnailSize.Size420x420
-        )
+    task.spawn(function()
+        pcall(function()
+            avatar.Image = Players:GetUserThumbnailAsync(
+                LocalPlayer.UserId,
+                Enum.ThumbnailType.HeadShot,
+                Enum.ThumbnailSize.Size420x420
+            )
+        end)
     end)
 
     local displayName = LocalPlayer and (LocalPlayer.DisplayName or LocalPlayer.Name) or "PayomboyZ User"
@@ -1834,18 +1843,20 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     setButtonTextSize(premiumButton, 12)
     local plansScale = create("UIScale", { Scale = 1 }, plansSlot)
     local plansMotionStartedAt = os.clock()
-    local plansMotionConnection = RunService.RenderStepped:Connect(function()
-        if not gui.Parent or not premiumButton.Parent then return end
-        if shell and not shell.Visible then return end
-        if deviceName() == "Mobile" then return end
-        local phase = os.clock() - plansMotionStartedAt
-        premiumButton.Position = UDim2.fromOffset(
-            math.cos(phase * 0.90) * 2.0,
-            math.sin(phase * 1.10) * 3.0
-        )
-        premiumButton.Rotation = math.sin(phase * 0.74 + 0.55) * 0.65
-        plansScale.Scale = 1 + math.sin(phase * 0.62 + 1.20) * 0.012
-    end)
+    local plansMotionConnection
+    if deviceName() ~= "Mobile" then
+        plansMotionConnection = RunService.RenderStepped:Connect(function()
+            if not gui.Parent or not premiumButton.Parent then return end
+            if shell and not shell.Visible then return end
+            local phase = os.clock() - plansMotionStartedAt
+            premiumButton.Position = UDim2.fromOffset(
+                math.cos(phase * 0.90) * 2.0,
+                math.sin(phase * 1.10) * 3.0
+            )
+            premiumButton.Rotation = math.sin(phase * 0.74 + 0.55) * 0.65
+            plansScale.Scale = 1 + math.sin(phase * 0.62 + 1.20) * 0.012
+        end)
+    end
     gui.Destroying:Connect(function()
         if plansMotionConnection then plansMotionConnection:Disconnect() end
     end)
