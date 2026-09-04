@@ -38,6 +38,7 @@ end
 -- 3. รายชื่อคีย์ VVIP (ดึงมาจากไฟล์ VVIP.txt)
 local VVIP_Keys = {
     ["HqknYxtQZPczCtbVnrrUDtpNVMLDltGD"] = true,
+    ["SMOyQsSrLcEBlapnzJXWnAmFNhmJzhzr"] = true,
     ["iSYrBFIpuwzmimGRrFTqERIUUoNBQGZO"] = true,
     ["pqUIXaEuYNqFvizjevfRpfqccBYyberK"] = true,
     ["SaylyDMmXStFcYLQqhRFKsrXbHtHKnPj"] = true,
@@ -169,7 +170,7 @@ local NormalRouter = {
 
     -- 9. Grow a Chicken Fighter(Grow2Fight)
     [94640181989498] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
-
+    [94939256104840] = { Name = "Roll a Gnome", URL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Chicken2Fight", Keywords = {"Chicken Fighter"} },
 }
 
 -- 5. แมพ VVIP (Exclusive Maps) - เฉพาะคีย์ VVIP เท่านั้น
