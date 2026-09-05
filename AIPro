@@ -6,7 +6,7 @@
 -- 🔒 AUTHENTICATION & DIRECT EXECUTION GUARD
 -- บังคับเช็คคีย์จาก Loader (start.txt บน Github) ก่อนเท่านั้น ไม่สามารถเข้าใช้งานจาก AIsrc.lua โดยตรงได้
 -----------------------------------------------------------------------------------------
-local START_LOADER_URL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/StartAI"
+local START_LOADER_URL = "https://github.com/aslamdunk21/AIPayomboyG/tree/main/PayomboyZKnowledge-main/refs/heads/main/loader"
 local SAVED_KEY_FILE = "PayomboyZ_AI_Hub_Key.txt"
 local SPECIAL_KEY_VVIP = "PAYOMVVIP280342PBGZ19"
 
@@ -62,7 +62,7 @@ end
 
 -- 2. หากไม่มีคีย์ หรือไม่ได้ผ่าน Loader มา -> Redirect กลับ Loader (Start.txt) ทันที
 if not isAuthFlag and (not currentKey or currentKey == "") then
-    RedirectToStartLoader("❌ ตรวจพบการรัน AIsrc.lua โดยตรง! กรุณากรอกคีย์ผ่าน Loader บน Github")
+    RedirectToStartLoader("❌ ตรวจพบการรัน AIsrc.lua โดยตรง! กรุณากรอกคีย์ผ่าน Loader บน ")
     return
 end
 
@@ -207,7 +207,7 @@ local AIContextEngine = {
 -----------------------------------------------------------------------------------------
 local KnowledgeEngine = {
     Enabled = true,
-    RawRepoBaseUrl = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/",
+    RawRepoBaseUrl = "https://github.com/aslamdunk21/AIPayomboyG/tree/main/PayomboyZKnowledge-main",
     CacheFolder = "PayomboyZ_KnowledgeCache",
     ManifestEntries = {},
     DocCache = {},
@@ -5080,7 +5080,7 @@ SettingsTab:AddButton({
         if typeof(makefolder) == "function" then pcall(function() makefolder("ValenHub_Dumps") end) end
         if typeof(writefile) == "function" then
             pcall(function() writefile("ValenHub_Dumps/PayomboyZ_Config.json", json) end)
-            ObsidianGlassEngine:Notify({ Title = GetText("NOTIF_TITLE"), Content = "Saved profile config to ValenHub_Dumps/PayomboyZ_Config.json", Duration = 4 })
+            ObsidianGlassEngine:Notify({ Title = GetText("NOTIF_TITLE"), Content = "Saved profile config to PBG_Dumps/PayomboyZ_Config.json", Duration = 4 })
             DebugLog("INFO", "CONFIG", "Saved profile config successfully")
         end
     end
