@@ -1,6 +1,5 @@
 -- ============================================================
 -- ⚙️ LogicSub: Blox Fruits External Engine & Logic Module
--- Github: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -655,5 +654,3 @@ getgenv().KaitunWorld3 = KaitunWorld3
 getgenv().GetMobByName = GetMobByName
 getgenv().GetNearestMob = GetNearestMob
 getgenv().TargetManager = TargetManager
-
-print("[LogicSub] ✅ Fully Integrated Kaitun Logic Engine Loaded Successfully!")
