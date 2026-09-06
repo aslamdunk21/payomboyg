@@ -110,6 +110,24 @@ local Engine = {
         SelectSprinkler = "Basic",
         EnableFruitESP = false,
         AutoNightSteal = false,
+        StealMultiplier = 1,
+        PanicHarvest = false,
+
+        -- Auto Open / Hatch
+        AutoHatchEggs = false,
+        AutoOpenCrates = false,
+        AutoOpenSeedPacks = false,
+
+        -- Wild Pets & Equip
+        AutoTameWildPets = false,
+        AutoEquipPets = false,
+        EquipPetsList = { "Raccoon", "Dragonfly", "Dragonling", "Kitsune", "Red Fox", "Queen Bee", "Disco Bee" },
+
+        -- Player Movement & Utilities
+        WalkSpeed = 16,
+        JumpPower = 50,
+        InfiniteJump = false,
+        NoClip = false,
 
         -- Shovel & Trowel
         SelectedPlantDelete = {},
@@ -2289,6 +2307,219 @@ function GAG2Engine:InitAutoStealWatcher()
 end
 
 --======================================================================================
+-- 📌 ADVANCED FEATURES FROM EXEMPLAR: AUTO OPEN, WILD TAME, PET EQUIP & PANIC HARVEST
+--======================================================================================
+
+function GAG2Engine:AutoOpenLoop()
+    pcall(function()
+        local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+        if not sharedModules then return end
+        local networkingMod = sharedModules:FindFirstChild("Networking")
+        if not networkingMod then return end
+        local Networking = safeRequire(networkingMod)
+        if not Networking then return end
+
+        local pscMod = ReplicatedStorage:FindFirstChild("ClientModules") and ReplicatedStorage.ClientModules:FindFirstChild("PlayerStateClient")
+        local replica = nil
+        if pscMod then
+            local ok, clientObj = pcall(require, pscMod)
+            if ok and clientObj and clientObj.GetLocalReplica then
+                replica = clientObj:GetLocalReplica()
+            end
+        end
+
+        local inv = replica and replica.Data and replica.Data.Inventory
+
+        -- 1. Auto Hatch Eggs
+        if Engine.Config.AutoHatchEggs and Networking.Egg and Networking.Egg.OpenEgg then
+            local eggsTable = inv and (inv.Eggs or inv.BrownEggs)
+            if eggsTable then
+                for eggName, count in pairs(eggsTable) do
+                    local n = tonumber(count) or 0
+                    if n > 0 then
+                        task.spawn(function()
+                            Networking.Egg.OpenEgg:Fire(eggName)
+                        end)
+                        task.wait(0.15)
+                    end
+                end
+            else
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                if bp then
+                    for _, item in ipairs(bp:GetChildren()) do
+                        if item:IsA("Tool") and (item.Name:lower():find("egg") or item:GetAttribute("IsEgg")) then
+                            task.spawn(function()
+                                Networking.Egg.OpenEgg:Fire(item.Name)
+                            end)
+                            task.wait(0.15)
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 2. Auto Open Crates
+        if Engine.Config.AutoOpenCrates and Networking.Crate and Networking.Crate.OpenCrate then
+            local cratesTable = inv and inv.Crates
+            if cratesTable then
+                for crateName, count in pairs(cratesTable) do
+                    local n = tonumber(count) or 0
+                    if n > 0 then
+                        task.spawn(function()
+                            Networking.Crate.OpenCrate:Fire(crateName)
+                        end)
+                        task.wait(0.15)
+                    end
+                end
+            else
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                if bp then
+                    for _, item in ipairs(bp:GetChildren()) do
+                        if item:IsA("Tool") and (item.Name:lower():find("crate") or item.Name:lower():find("box")) then
+                            task.spawn(function()
+                                Networking.Crate.OpenCrate:Fire(item.Name)
+                            end)
+                            task.wait(0.15)
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 3. Auto Open Seed Packs
+        if Engine.Config.AutoOpenSeedPacks and Networking.SeedPack and Networking.SeedPack.OpenSeedPack then
+            local packsTable = inv and inv.SeedPacks
+            if packsTable then
+                for packName, count in pairs(packsTable) do
+                    local n = tonumber(count) or 0
+                    if n > 0 then
+                        task.spawn(function()
+                            Networking.SeedPack.OpenSeedPack:Fire(packName)
+                        end)
+                        task.wait(0.15)
+                    end
+                end
+            else
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                if bp then
+                    for _, item in ipairs(bp:GetChildren()) do
+                        if item:IsA("Tool") and (item.Name:lower():find("pack") or item.Name:lower():find("seed pack")) then
+                            task.spawn(function()
+                                Networking.SeedPack.OpenSeedPack:Fire(item.Name)
+                            end)
+                            task.wait(0.15)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function GAG2Engine:AutoTameWildPetsLoop()
+    if not Engine.Config.AutoTameWildPets then return end
+    pcall(function()
+        local map = workspace:FindFirstChild("Map")
+        local wildRef = map and map:FindFirstChild("WildPetRef")
+        if not wildRef then return end
+
+        local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+        local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
+        local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.Pets or not Networking.Pets.WildPetTame then return end
+
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        for _, pet in ipairs(wildRef:GetChildren()) do
+            if not Engine.Config.AutoTameWildPets then break end
+            local ownerId = tonumber(pet:GetAttribute("OwnerUserId")) or 0
+            if ownerId == 0 or ownerId == LocalPlayer.UserId then
+                if pet:IsA("BasePart") then
+                    local pPos = pet.Position
+                    hrp.CFrame = CFrame.new(pPos + Vector3.new(0, 3, 0))
+                    for i = 1, 5 do
+                        if not Engine.Config.AutoTameWildPets then break end
+                        Networking.Pets.WildPetTame:Fire(pet)
+                        task.wait(0.08)
+                    end
+                    task.wait(0.2)
+                end
+            end
+        end
+    end)
+end
+
+function GAG2Engine:AutoEquipPetsLoop()
+    if not Engine.Config.AutoEquipPets then return end
+    pcall(function()
+        local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+        local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
+        local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.Pets or not Networking.Pets.RequestEquipByName then return end
+
+        local list = Engine.Config.EquipPetsList or { "Raccoon", "Dragonfly", "Dragonling", "Kitsune", "Red Fox" }
+        for _, petName in ipairs(list) do
+            if not Engine.Config.AutoEquipPets then break end
+            Networking.Pets.RequestEquipByName:Fire(tostring(petName))
+            task.wait(0.15)
+        end
+    end)
+end
+
+function GAG2Engine:HarvestAllMatureCropsNow()
+    pcall(function()
+        local ownerPlot = self:GetOwnerPlot()
+        if not ownerPlot then return end
+        local plantsHolder = ownerPlot:FindFirstChild("Plants") or ownerPlot:FindFirstChild("Crops") or ownerPlot
+
+        local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+        local net = sharedModules and sharedModules:FindFirstChild("Networking")
+        local Networking = net and safeRequire(net)
+
+        for _, plant in ipairs(plantsHolder:GetChildren()) do
+            if plant:IsA("Model") or plant:IsA("BasePart") then
+                local isReady = plant:GetAttribute("IsReady") or plant:GetAttribute("Harvestable") or plant:FindFirstChild("Fruit") ~= nil
+                if isReady then
+                    local pId = plant:GetAttribute("PlantId") or plant.Name
+                    local fId = plant:GetAttribute("FruitId") or ""
+                    if Networking and Networking.Garden and Networking.Garden.CollectFruit then
+                        Networking.Garden.CollectFruit:Fire(pId, fId)
+                    elseif Networking and Networking.Harvest and Networking.Harvest.HarvestPlant then
+                        Networking.Harvest.HarvestPlant:Fire(pId)
+                    end
+                    task.wait(0.02)
+                end
+            end
+        end
+    end)
+end
+
+function GAG2Engine:PanicHarvestWatcher()
+    task.spawn(function()
+        local wasNight = false
+        while true do
+            task.wait(0.5)
+            if Engine.Config.PanicHarvest then
+                pcall(function()
+                    local night = ReplicatedStorage:FindFirstChild("Night")
+                    local isNight = night and (night.Value == true)
+                    if isNight and not wasNight then
+                        Engine:Notify({
+                            Title = "🚨 Panic Harvest ทำงาน!",
+                            Content = "ตรวจพบเข้าสู่เวลากลางคืน กำลังเก็บรวบผลไม้สุกทั้งหมดก่อนโดนขโมย!"
+                        })
+                        self:HarvestAllMatureCropsNow()
+                    end
+                    wasNight = isNight
+                end)
+            end
+        end
+    end)
+end
+
+--======================================================================================
 -- 📌 ADVANCED AUTO FARM ENGINE & GARDEN DASHBOARD STATS
 --======================================================================================
 
@@ -2736,7 +2967,13 @@ function GAG2Engine:NightStealLoop()
                 local Networking = safeRequire(networkingMod)
                 if Networking and Networking.Steal then
                     if Networking.Steal.BeginSteal then Networking.Steal.BeginSteal:Fire(ownerId, plantId, fruitId) end
-                    if Networking.Steal.CompleteSteal then Networking.Steal.CompleteSteal:Fire() end
+                    local mult = math.clamp(tonumber(Engine.Config.StealMultiplier) or 1, 1, 10)
+                    for step = 1, mult do
+                        if Networking.Steal.CompleteSteal then
+                            Networking.Steal.CompleteSteal:Fire()
+                        end
+                        if mult > 1 then task.wait(0.03) end
+                    end
                 end
             end
         end
@@ -3321,8 +3558,8 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         { id = "Gears", label = "⚙️ เกียร์/อุปกรณ์" },
         { id = "Fruits", label = "🍎 Fruits" },
         { id = "Seeds", label = "🌱 เมล็ดพันธุ์" },
-        { id = "Crates", label = "📦 กล่อง Crates" },
-        { id = "Events", label = "🎉 กิจกรรม" }
+        { id = "Eggs", label = "🥚 ไข่ (Eggs)" },
+        { id = "Crates", label = "📦 กล่อง Crates" }
     }
 
     local activeCategory = "Pets"
@@ -3447,7 +3684,7 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
         if #currentItemsToRender == 0 then
             local catLabels = {
                 Pets = "สัตว์เลี้ยง", Gears = "เกียร์/อุปกรณ์", Fruits = "ผัก/ผลไม้",
-                Seeds = "เมล็ดพันธุ์", Crates = "กล่อง Crates", Events = "ไอเทมกิจกรรม"
+                Seeds = "เมล็ดพันธุ์", Eggs = "ไข่สัตว์เลี้ยง (Eggs)", Crates = "กล่อง Crates"
             }
             local cName = catLabels[activeCategory] or activeCategory
             table.insert(currentItemsToRender, {
@@ -4086,7 +4323,13 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
                 end
             end
 
-            -- 5. Crates Folder Check
+            -- 5. Eggs Folder Check
+            local eggsFolder = assets:FindFirstChild("Eggs")
+            if eggsFolder and (eggsFolder:FindFirstChild(cleanName) or eggsFolder:FindFirstChild(rawName)) then
+                return "Eggs"
+            end
+
+            -- 6. Crates Folder Check
             local cratesFolder = assets:FindFirstChild("Crates") or assets:FindFirstChild("Boxes")
             if cratesFolder and (cratesFolder:FindFirstChild(cleanName) or cratesFolder:FindFirstChild(rawName)) then
                 return "Crates"
@@ -4097,12 +4340,16 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
         if itemInst:GetAttribute("Fruit") or itemInst:GetAttribute("SeedName") then return "Fruits" end
         if itemInst:GetAttribute("IsSeed") then return "Seeds" end
         if itemInst:GetAttribute("Pet") or itemInst:GetAttribute("PetId") then return "Pets" end
+        if itemInst:GetAttribute("IsEgg") or itemInst:GetAttribute("Egg") then return "Eggs" end
         if itemInst:GetAttribute("IsGear") then return "Gears" end
 
         -- Pattern matching fallback
         local lRaw = rawName:lower()
         local lClean = cleanName:lower()
 
+        if lRaw:find("egg") or lClean:find("egg") or lRaw:find("ไข่") then
+            return "Eggs"
+        end
         if lRaw:find("seed") or lClean:find("seed") or lRaw:find("พันธุ์") then
             return "Seeds"
         end
@@ -4114,9 +4361,6 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
         end
         if lRaw:find("crate") or lRaw:find("box") or lRaw:find("chest") or lRaw:find("กล่อง") then
             return "Crates"
-        end
-        if lRaw:find("event") or lRaw:find("holiday") or lRaw:find("spooky") or lRaw:find("santa") or lRaw:find("present") or lRaw:find("gift") then
-            return "Events"
         end
         if itemInst:GetAttribute("Weight") or itemInst:GetAttribute("Mutation") or itemInst:GetAttribute("Variant") or lRaw:find("fruit") or lRaw:find("apple") or lRaw:find("pumpkin") or lRaw:find("bamboo") or lRaw:find("bloom") or lRaw:find("starfruit") then
             return "Fruits"
@@ -4249,12 +4493,69 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
         end
     end
 
+    -- 🔍 Also scan GAG2 PlayerStateClient Replica inventory (Eggs, BrownEggs, Seeds, Crates, Sprinklers, etc.)
+    pcall(function()
+        local pscMod = ReplicatedStorage:FindFirstChild("ClientModules") and ReplicatedStorage.ClientModules:FindFirstChild("PlayerStateClient")
+        if pscMod then
+            local ok, clientObj = pcall(require, pscMod)
+            if ok and clientObj and clientObj.GetLocalReplica then
+                local replica = clientObj:GetLocalReplica()
+                if replica and replica.Data and replica.Data.Inventory then
+                    local inv = replica.Data.Inventory
+                    if categoryKey == "Eggs" then
+                        for _, eggKey in ipairs({"Eggs", "BrownEggs"}) do
+                            local eTbl = inv[eggKey]
+                            if type(eTbl) == "table" then
+                                for eName, count in pairs(eTbl) do
+                                    local cNum = tonumber(count) or 1
+                                    if cNum > 0 then
+                                        local clean = Engine:CleanItemName(tostring(eName))
+                                        if not itemCounts[clean] then
+                                            itemCounts[clean] = { Name = clean, Count = 0, Tool = nil, Details = nil }
+                                        end
+                                        itemCounts[clean].Count = itemCounts[clean].Count + cNum
+                                    end
+                                end
+                            end
+                        end
+                    elseif categoryKey == "Seeds" and inv.Seeds then
+                        for sName, count in pairs(inv.Seeds) do
+                            local cNum = tonumber(count) or 1
+                            if cNum > 0 then
+                                local clean = Engine:CleanItemName(tostring(sName))
+                                if not itemCounts[clean] then
+                                    itemCounts[clean] = { Name = clean, Count = 0, Tool = nil, Details = nil }
+                                end
+                                itemCounts[clean].Count = itemCounts[clean].Count + cNum
+                            end
+                        end
+                    elseif categoryKey == "Crates" and (inv.Crates or inv.SeedPacks) then
+                        for _, cKey in ipairs({"Crates", "SeedPacks"}) do
+                            if inv[cKey] then
+                                for cName, count in pairs(inv[cKey]) do
+                                    local cNum = tonumber(count) or 1
+                                    if cNum > 0 then
+                                        local clean = Engine:CleanItemName(tostring(cName))
+                                        if not itemCounts[clean] then
+                                            itemCounts[clean] = { Name = clean, Count = 0, Tool = nil, Details = nil }
+                                        end
+                                        itemCounts[clean].Count = itemCounts[clean].Count + cNum
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
     if categoryKey ~= "Fruits" then
         local icon = "🌱"
         if categoryKey == "Pets" then icon = "🐾"
+        elseif categoryKey == "Eggs" then icon = "🥚"
         elseif categoryKey == "Gears" then icon = "⚙️"
         elseif categoryKey == "Crates" then icon = "📦"
-        elseif categoryKey == "Events" then icon = "🎉"
         end
 
         for name, data in pairs(itemCounts) do
@@ -4282,7 +4583,7 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
     if #scanned == 0 then
         local catLabels = {
             Fruits = "ผัก/ผลไม้", Seeds = "เมล็ดพันธุ์", Pets = "สัตว์เลี้ยง",
-            Gears = "เกียร์/อุปกรณ์", Crates = "กล่อง Crates", Events = "ไอเทมกิจกรรม"
+            Eggs = "ไข่สัตว์เลี้ยง (Eggs)", Gears = "เกียร์/อุปกรณ์", Crates = "กล่อง Crates"
         }
         local cName = catLabels[categoryKey] or categoryKey
         table.insert(scanned, {
@@ -4803,6 +5104,94 @@ function Engine:Init()
         Callback = function() self:SaveConfig() end
     })
 
+    -- 🏃 ระบบควบคุมความเร็วและการเคลื่อนที่ (Player Movement & Utilities)
+    tabHome:CreateSection("🏃 การเคลื่อนที่ & วาร์ป (Movement & Utilities)")
+    tabHome:CreateSlider({
+        Title = "ความเร็วเดิน (WalkSpeed)",
+        Min = 16,
+        Max = 150,
+        Default = self.Config.WalkSpeed or 16,
+        Callback = function(val)
+            self.Config.WalkSpeed = val
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = val end
+        end
+    })
+    tabHome:CreateSlider({
+        Title = "แรงกระโดด (JumpPower)",
+        Min = 50,
+        Max = 300,
+        Default = self.Config.JumpPower or 50,
+        Callback = function(val)
+            self.Config.JumpPower = val
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.UseJumpPower = true
+                hum.JumpPower = val
+            end
+        end
+    })
+    tabHome:CreateToggle({
+        Title = "กระโดดกลางอากาศไม่จำกัด (Infinite Jump)",
+        Default = self.Config.InfiniteJump or false,
+        Callback = function(val) self.Config.InfiniteJump = val end
+    })
+    tabHome:CreateToggle({
+        Title = "เดินทะลุกำแพง (NoClip)",
+        Default = self.Config.NoClip or false,
+        Callback = function(val) self.Config.NoClip = val end
+    })
+    tabHome:CreateButton({
+        Title = "🏡 วาร์ปกลับแปลงสวนตนเอง (Teleport to My Garden)",
+        Callback = function()
+            local ownerPlot = GAG2Engine:GetOwnerPlot()
+            local spawnPt = ownerPlot and (ownerPlot:FindFirstChild("SpawnPoint") or ownerPlot:FindFirstChild("PlotSizeReference"))
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if spawnPt and hrp then
+                hrp.CFrame = spawnPt.CFrame + Vector3.new(0, 3, 0)
+                self:Notify({ Title = "วาร์ปสำเร็จ 🏡", Content = "กลับมายังแปลงสวนตนเองแล้ว!" })
+            else
+                self:Notify({ Title = "ข้อผิดพลาด ❌", Content = "ไม่พบจุดเกิดของแปลงสวนตนเอง" })
+            end
+        end
+    })
+    tabHome:CreateButton({
+        Title = "🏪 วาร์ปร้านขายเมล็ด (Teleport Seed Shop)",
+        Callback = function()
+            local tpPart = workspace:FindFirstChild("Teleports") and workspace.Teleports:FindFirstChild("Seeds")
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if tpPart and hrp then
+                hrp.CFrame = tpPart.CFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    })
+    tabHome:CreateButton({
+        Title = "⚙️ วาร์ปร้านอุปกรณ์ (Teleport Gear Shop)",
+        Callback = function()
+            local tpPart = workspace:FindFirstChild("Teleports") and workspace.Teleports:FindFirstChild("Gears")
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if tpPart and hrp then
+                hrp.CFrame = tpPart.CFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    })
+    tabHome:CreateButton({
+        Title = "💰 วาร์ปจุดขายผลไม้ (Teleport Sell NPC)",
+        Callback = function()
+            local tpPart = workspace:FindFirstChild("Teleports") and workspace.Teleports:FindFirstChild("Sell")
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if tpPart and hrp then
+                hrp.CFrame = tpPart.CFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    })
+
     -- 📊 Tab 2: แดชบอร์ดแสดงสถานะในเกม (Live Game Status Dashboard)
 
     local tabDash = self:CreateTab("📊 Dashboard", "📊")
@@ -5054,6 +5443,25 @@ function Engine:Init()
             Title = "🌙 ออโต้ขโมยผักมูลค่าสูงเวลากลางคืน (Night Steal)",
             Default = false,
             Callback = function(val) self.Config.AutoNightSteal = val end
+        })
+        tabFarm:CreateSlider({
+            Title = "จำนวนหยิบต่อต้น (Steal Multiplier x1 - x10)",
+            Min = 1,
+            Max = 10,
+            Default = self.Config.StealMultiplier or 1,
+            Callback = function(val) self.Config.StealMultiplier = val end
+        })
+        tabFarm:CreateToggle({
+            Title = "🚨 เก็บผลไม้ทันทีเมื่อเข้าสู่กลางคืน (Panic Harvest)",
+            Default = self.Config.PanicHarvest or false,
+            Callback = function(val) self.Config.PanicHarvest = val end
+        })
+        tabFarm:CreateButton({
+            Title = "🌾 เก็บรวบยอดผลผลิตทั้งหมดในสวนฉุกเฉิน (Harvest All Now)",
+            Callback = function()
+                GAG2Engine:HarvestAllMatureCropsNow()
+                self:Notify({ Title = "เก็บเกี่ยวฉุกเฉิน 🌾", Content = "สั่งเก็บผลไม้สุกทั้งหมดในสวนแล้ว!" })
+            end
         })
         tabFarm:CreateButton({
             Title = "⚡ ขโมยผักมูลค่าสูงสุดในห้องทันที (Steal Best Fruit Now)",
@@ -5376,7 +5784,7 @@ function Engine:Init()
 
         self.UI.MailCategoryDropdown = tabTrade:CreateDropdown({
             Title = "🏷️ เลือกหมวดหมู่ไอเทม (Select Category)",
-            Options = { "Fruits (ผลไม้)", "Seeds (เมล็ดพันธุ์)", "Eggs (ไข่สัตว์เลี้ยง)", "Pets (สัตว์เลี้ยง)", "Gears (เกียร์/อุปกรณ์)", "Crates (กล่อง)", "Events (กิจกรรม)" },
+            Options = { "Fruits (ผลไม้)", "Seeds (เมล็ดพันธุ์)", "Eggs (ไข่สัตว์เลี้ยง)", "Pets (สัตว์เลี้ยง)", "Gears (เกียร์/อุปกรณ์)", "Crates (กล่อง)" },
             Default = "Fruits (ผลไม้)",
             Multi = false,
             Callback = function(val)
@@ -5386,7 +5794,6 @@ function Engine:Init()
                 elseif val:find("Pets") or val:find("สัตว์") then catKey = "Pets"
                 elseif val:find("Gears") or val:find("เกียร์") then catKey = "Gears"
                 elseif val:find("Crates") or val:find("กล่อง") then catKey = "Crates"
-                elseif val:find("Events") or val:find("กิจกรรม") then catKey = "Events"
                 end
                 self.Config.MailItemCategory = catKey
 
@@ -5579,6 +5986,44 @@ function Engine:Init()
             end
         })
 
+        -- 🎁 ระบบออโต้ฟักไข่ & เปิดกล่อง (Auto Open / Hatch Suite)
+        tabPets:CreateSection("🎁 ฟักไข่ & เปิดกล่องอัตโนมัติ (Auto Open & Hatch)")
+        tabPets:CreateToggle({
+            Title = "🥚 ออโต้เปิดฟักไข่ (Auto Hatch Eggs)",
+            Default = self.Config.AutoHatchEggs or false,
+            Callback = function(val) self.Config.AutoHatchEggs = val end
+        })
+        tabPets:CreateToggle({
+            Title = "📦 ออโต้เปิดกล่องสินค้า (Auto Open Crates)",
+            Default = self.Config.AutoOpenCrates or false,
+            Callback = function(val) self.Config.AutoOpenCrates = val end
+        })
+        tabPets:CreateToggle({
+            Title = "🌱 ออโต้เปิดซองเมล็ดพันธุ์ (Auto Open Seed Packs)",
+            Default = self.Config.AutoOpenSeedPacks or false,
+            Callback = function(val) self.Config.AutoOpenSeedPacks = val end
+        })
+
+        -- 🐾 ระบบจับสัตว์ป่า & สวมใส่อัตโนมัติ (Wild Pet Tamer & Auto Equip)
+        tabPets:CreateSection("🐾 จับสัตว์ป่า & สวมใส่อัตโนมัติ (Wild Tame & Auto Equip)")
+        tabPets:CreateToggle({
+            Title = "🌲 เปิดใช้งาน จับสัตว์ป่าอัตโนมัติ (Auto Tame Wild Pets)",
+            Default = self.Config.AutoTameWildPets or false,
+            Callback = function(val) self.Config.AutoTameWildPets = val end
+        })
+        tabPets:CreateToggle({
+            Title = "🐕 เปิดใช้งาน สวมใส่สัตว์เลี้ยงอัตโนมัติ (Auto Equip Best Pets)",
+            Default = self.Config.AutoEquipPets or false,
+            Callback = function(val) self.Config.AutoEquipPets = val end
+        })
+        tabPets:CreateButton({
+            Title = "🐶 สวมใส่สัตว์เลี้ยงชุดหลักทันที (Equip Pets Now)",
+            Callback = function()
+                GAG2Engine:AutoEquipPetsLoop()
+                self:Notify({ Title = "สวมใส่สำเร็จ 🐾", Content = "ส่งคำขอติดตั้งสัตว์เลี้ยงเข้าสู่ระบบแล้ว!" })
+            end
+        })
+
 
     -- Initial dropdown options update
     pcall(function()
@@ -5605,6 +6050,35 @@ function Engine:Init()
         end
     end)
 
+    -- Setup Panic Harvest Watcher
+    GAG2Engine:PanicHarvestWatcher()
+
+    -- Infinite Jump Listener
+    UserInputService.JumpRequest:Connect(function()
+        if Engine.Config.InfiniteJump then
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end)
+
+    -- WalkSpeed & JumpPower Enforcement
+    RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if Engine.Config.WalkSpeed and Engine.Config.WalkSpeed ~= 16 then
+                hum.WalkSpeed = Engine.Config.WalkSpeed
+            end
+            if Engine.Config.JumpPower and Engine.Config.JumpPower ~= 50 then
+                hum.UseJumpPower = true
+                hum.JumpPower = Engine.Config.JumpPower
+            end
+        end
+    end)
+
     task.spawn(function()
         while task.wait(0.5) do
             pcall(function()
@@ -5612,6 +6086,9 @@ function Engine:Init()
                 GAG2Engine:AutoBuyLoop()
                 GAG2Engine:ProcessLots()
                 GAG2Engine:NightStealLoop()
+                GAG2Engine:AutoOpenLoop()
+                GAG2Engine:AutoTameWildPetsLoop()
+                GAG2Engine:AutoEquipPetsLoop()
                 if Engine.Config.EnableFruitESP then
                     GAG2Engine:UpdateFruitESP()
                 end
