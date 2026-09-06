@@ -312,6 +312,9 @@ function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, CustomName
 
         -- Attack Execution
         if dist <= 35 then
+            if EquipWeapon then
+                EquipWeapon(getgenv().Configs and getgenv().Configs.SelectWeapon or "Melee")
+            end
             if Attack then
                 if secondMob then
                     Attack({mainMob, secondMob})
@@ -549,35 +552,57 @@ function KaitunWorld2(Quest, QuestTitle, Level)
 
             -- Trevor / Don Swan Gate
             else
-                local donSwan = TargetManager:GetBestTarget("Don Swan", 500)
-                if donSwan then
-                    title.Text = "Defeating Don Swan (Lv. 1000 Boss)"
-                    SmartMoveAndAttack(donSwan, QuestTitle, Quest, false)
-                    return
-                end
-
                 local trevorStatus = nil
                 pcall(function() trevorStatus = CommF_:InvokeServer("TalkTrevor", "1") end)
                 
-                if trevorStatus == true then
-                    pcall(function() CommF_:InvokeServer("TalkTrevor", "2") end)
-                end
-
-                -- Check if holding or owning 1M+ fruit
-                local fruitTool = Has1MFruitInInventoryOrBackpack()
-                if fruitTool then
-                    title.Text = "Giving 1M+ Fruit (" .. fruitTool.Name .. ") to Trevor"
-                    MovementManager:MoveTo(CFrame.new(2284.0, 15.0, 905.0), 150, 2)
-                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if hrp and (hrp.Position - Vector3.new(2284.0, 15.0, 905.0)).Magnitude <= 20 then
-                        pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
-                        task.wait(0.5)
-                        pcall(function() CommF_:InvokeServer("TalkTrevor", "3") end)
+                -- If Trevor is NOT satisfied yet (needs 1M+ fruit)
+                if trevorStatus ~= 0 then
+                    if trevorStatus == true or trevorStatus == 1 then
+                        pcall(function() CommF_:InvokeServer("TalkTrevor", "2") end)
                     end
-                    return
+
+                    -- Check if holding or owning 1M+ fruit
+                    local fruitTool = Has1MFruitInInventoryOrBackpack and Has1MFruitInInventoryOrBackpack()
+                    if fruitTool then
+                        title.Text = "Giving 1M+ Fruit (" .. fruitTool.Name .. ") to Trevor"
+                        MovementManager:MoveTo(CFrame.new(2284.0, 15.0, 905.0), 150, 2)
+                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp and (hrp.Position - Vector3.new(2284.0, 15.0, 905.0)).Magnitude <= 20 then
+                            pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
+                            task.wait(0.5)
+                            pcall(function() CommF_:InvokeServer("TalkTrevor", "3") end)
+                        end
+                        return
+                    else
+                        -- Try rolling fruit with modern GachaClient
+                        pcall(function()
+                            local rs = game:GetService("ReplicatedStorage")
+                            if rs:FindFirstChild("Controllers") and rs.Controllers:FindFirstChild("GachaClient") then
+                                local GC = require(rs.Controllers.GachaClient)
+                                local chk = GC.CheckGachaAsync("ZiolesGacha", "Blox Fruit Gacha")
+                                if chk and chk.RequirementsMet then
+                                    GC.PurchaseGachaAsync("ZiolesGacha")
+                                end
+                            else
+                                CommF_:InvokeServer("Cousin", "Buy")
+                            end
+                        end)
+                        if StoreAllFruits then StoreAllFruits() end
+
+                        -- No 1M+ fruit yet: Server will block damage to Don Swan!
+                        -- Fall through to standard level farming instead of getting stuck hovering over boss
+                        title.Text = "Waiting for 1M+ Fruit | Auto Farming Level..."
+                    end
                 else
-                    pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
-                    StoreAllFruits()
+                    -- Trevor IS satisfied (Door is open & Don Swan is vulnerable)
+                    local donSwan = TargetManager:GetBestTarget("Don Swan", 500)
+                    if donSwan then
+                        title.Text = "Defeating Don Swan (Lv. 1000 Boss)"
+                        SmartMoveAndAttack(donSwan, QuestTitle, Quest, false)
+                        return
+                    else
+                        title.Text = "Waiting for Don Swan Boss Spawn | Farming Level..."
+                    end
                 end
             end
         end
