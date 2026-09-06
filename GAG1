@@ -93,6 +93,9 @@ local Engine = {
         AutoWalk = false,
         AutoWalkAllowRandom = true,
         NoClip = false,
+        WalkSpeed = 16,
+        JumpPower = 50,
+        InfiniteJump = false,
 
         -- Auto Buy Engine (Categorized Separation)
         AutoBuySeeds = false,
@@ -2008,6 +2011,72 @@ function Engine:Init()
         Callback = function() self:SaveConfig() end
     })
 
+    -- 🏃 ระบบควบคุมความเร็วและการเคลื่อนที่ (Player Movement & Utilities)
+    tabHome:CreateSection("🏃 การเคลื่อนที่ & วาร์ป (Movement & Utilities)")
+    tabHome:CreateSlider({
+        Title = "ความเร็วเดิน (WalkSpeed)",
+        Min = 16,
+        Max = 150,
+        Default = self.Config.WalkSpeed or 16,
+        Callback = function(val)
+            self.Config.WalkSpeed = val
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = val end
+        end
+    })
+    tabHome:CreateSlider({
+        Title = "แรงกระโดด (JumpPower)",
+        Min = 50,
+        Max = 300,
+        Default = self.Config.JumpPower or 50,
+        Callback = function(val)
+            self.Config.JumpPower = val
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.UseJumpPower = true
+                hum.JumpPower = val
+            end
+        end
+    })
+    tabHome:CreateToggle({
+        Title = "กระโดดกลางอากาศไม่จำกัด (Infinite Jump)",
+        Default = self.Config.InfiniteJump or false,
+        Callback = function(val) self.Config.InfiniteJump = val end
+    })
+    tabHome:CreateToggle({
+        Title = "เดินทะลุกำแพง (NoClip)",
+        Default = self.Config.NoClip or false,
+        Callback = function(val) self.Config.NoClip = val end
+    })
+    tabHome:CreateButton({
+        Title = "🏡 วาร์ปกลับแปลงฟาร์มตนเอง (Teleport to My Farm)",
+        Callback = function()
+            local farm = GAG1Engine:GetFarm(LocalPlayer.Name)
+            local dirt = farm and farm:FindFirstChild("Important") and farm.Important:FindFirstChild("Plant_Locations") and farm.Important.Plant_Locations:FindFirstChildOfClass("Part")
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if dirt and hrp then
+                hrp.CFrame = dirt.CFrame + Vector3.new(0, 4, 0)
+                self:Notify({ Title = "วาร์ปสำเร็จ 🏡", Content = "กลับมายังแปลงฟาร์ม GAG1 ตนเองแล้ว!" })
+            else
+                self:Notify({ Title = "ข้อผิดพลาด ❌", Content = "ไม่พบตำแหน่งแปลงฟาร์มตนเอง" })
+            end
+        end
+    })
+    tabHome:CreateButton({
+        Title = "💰 วาร์ปจุดขายผัก (Teleport Sell Spot)",
+        Callback = function()
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(62, 4, -26)
+                self:Notify({ Title = "วาร์ปสำเร็จ 💰", Content = "วาร์ปมายังจุดขายผักแล้ว!" })
+            end
+        end
+    })
+
     -- 📊 Tab 2: แดชบอร์ดแสดงสถานะในเกม (Live Game Status Dashboard)
 
     local tabDash = self:CreateTab("📊 Dashboard", "📊")
@@ -2438,6 +2507,32 @@ function Engine:Init()
                     end
                 end
             end)
+        end
+    end)
+
+    -- Infinite Jump Listener
+    UserInputService.JumpRequest:Connect(function()
+        if self.Config.InfiniteJump then
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end
+    end)
+
+    -- WalkSpeed & JumpPower Enforcement Loop
+    RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if self.Config.WalkSpeed and self.Config.WalkSpeed ~= 16 then
+                hum.WalkSpeed = self.Config.WalkSpeed
+            end
+            if self.Config.JumpPower and self.Config.JumpPower ~= 50 then
+                hum.UseJumpPower = true
+                hum.JumpPower = self.Config.JumpPower
+            end
         end
     end)
 
