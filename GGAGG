@@ -50,6 +50,12 @@ local TeleportService = game:GetService("TeleportService")
 local SoundService = game:GetService("SoundService")
 local Stats = game:GetService("Stats")
 
+local function safeRequire(mod)
+    if not mod then return nil end
+    local ok, res = pcall(require, mod)
+    return ok and res or nil
+end
+
 -- 🎨 Cute Pastel Pink Color Palette Spec (Soft Pastel Pink, Rose & Marshmallow Glassmorphic)
 local COLORS = {
     backdrop = Color3.fromRGB(38, 22, 32),        -- Soft Velvet Pastel Dark Backdrop
@@ -129,11 +135,13 @@ local Engine = {
         InfiniteJump = false,
         NoClip = false,
 
-        -- 🍕 Baker Event (กิจกรรมนักอบพิชซ่า / ขนมอบ)
+        -- 🍕 Baker Event (กิจกรรมนักอบพิชซ่า & เตาอบมัฟฟิน / ขนมอบ)
         AutoBakeOven = false,
         AutoClaimOven = false,
         AutoTradeMuffins = false,
         AutoBuyBakerSeeds = false,
+        SelectedBakeRecipe = "Auto Best Affordable",
+        SelectedRewardTradeMuffin = "All Muffins",
 
         -- Shovel & Trowel
         SelectedPlantDelete = {},
@@ -203,10 +211,215 @@ function Engine:CleanItemName(name)
     if not name then return "" end
     local clean = tostring(name)
     clean = clean:gsub("%[%w+%]%s*", "")
-    clean = clean:gsub("%(x%d+%)", "")
+    clean = clean:gsub("%(.-%)", "")
     clean = clean:gsub("%s*x%d+", "")
     clean = clean:gsub("^%s*(.-)%s*$", "%1")
     return clean
+end
+
+-- 🖼️ Master Item Thumbnail Image Resolver (100% Comprehensive Coverage)
+function Engine:GetItemImage(rawName, categoryKey)
+    if not rawName or rawName == "" then return "" end
+    local clean = self:CleanItemName(rawName)
+    local cleanLower = clean:lower()
+    local seedClean = clean:gsub("%s*[Ss]eed%s*$", ""):gsub("%s*เมล็ด%s*", "")
+    local crateClean = clean:gsub("%s*[Cc]rate%s*$", ""):gsub("%s*กล่อง%s*", "")
+
+    -- Special fallbacks for system items or common assets
+    if cleanLower == "build" then return "rbxassetid://135473195238373"
+    elseif cleanLower == "gold" then return "rbxassetid://80997083385476"
+    elseif cleanLower == "rainbow" then return "rbxassetid://120945553785140"
+    end
+
+    -- 1. Check active Tools in Backpack or Character
+    local char = LocalPlayer.Character
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local function checkTool(parent)
+        if not parent then return nil end
+        for _, t in ipairs(parent:GetChildren()) do
+            if t:IsA("Tool") then
+                local tClean = self:CleanItemName(t.Name)
+                if tClean:lower() == cleanLower or t.Name:lower() == cleanLower then
+                    if t.TextureId and t.TextureId ~= "" then
+                        return t.TextureId
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    local toolImg = checkTool(bp) or checkTool(char)
+    if toolImg then return toolImg end
+
+    local shared = ReplicatedStorage:FindFirstChild("SharedModules")
+    if shared then
+        -- 2. SeedData Folders (SeedImages, FruitImages, PlantImages)
+        local sd = shared:FindFirstChild("SeedData")
+        if sd then
+            local si = sd:FindFirstChild("SeedImages")
+            local fi = sd:FindFirstChild("FruitImages")
+            local pi = sd:FindFirstChild("PlantImages")
+            
+            for _, folder in ipairs({ si, fi, pi }) do
+                if folder then
+                    local v = folder:FindFirstChild(clean) or folder:FindFirstChild(seedClean)
+                    if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+                    for _, c in ipairs(folder:GetChildren()) do
+                        if c.Name:lower() == cleanLower or c.Name:lower() == seedClean:lower() then
+                            if c:IsA("StringValue") and c.Value ~= "" then return c.Value end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 3. GearImages (204 items: gears, sprinklers, shovels, tools, pets)
+        local gi = shared:FindFirstChild("GearImages")
+        if gi then
+            local v = gi:FindFirstChild(clean) or gi:FindFirstChild(seedClean)
+            if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+            for _, c in ipairs(gi:GetChildren()) do
+                if c.Name:lower() == cleanLower or cleanLower:find(c.Name:lower()) then
+                    if c:IsA("StringValue") and c.Value ~= "" then return c.Value end
+                end
+            end
+        end
+
+        -- 4. SeedPackData
+        local spData = shared:FindFirstChild("SeedPackData")
+        if spData then
+            local packImg = nil
+            pcall(function()
+                local spMod = safeRequire(spData)
+                if spMod and spMod.Data then
+                    for _, p in ipairs(spMod.Data) do
+                        if p.PackName and (p.PackName:lower() == cleanLower or cleanLower:find(p.PackName:lower()) or p.PackName:lower():find(cleanLower)) then
+                            if p.IMG and p.IMG ~= "" then
+                                packImg = p.IMG
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+            if packImg and packImg ~= "" then return packImg end
+        end
+
+        -- 5. EggData & BrownEggData
+        local eggData = shared:FindFirstChild("EggData")
+        if eggData then
+            local eggImg = nil
+            pcall(function()
+                local eMod = safeRequire(eggData)
+                if eMod and eMod.Data then
+                    for _, e in ipairs(eMod.Data) do
+                        if e.EggName and (e.EggName:lower() == cleanLower or cleanLower:find(e.EggName:lower()) or e.EggName:lower():find(cleanLower)) then
+                            if e.IMG and e.IMG ~= "" then
+                                eggImg = e.IMG
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+            if eggImg and eggImg ~= "" then return eggImg end
+        end
+        local brownEggData = shared:FindFirstChild("BrownEggData")
+        if brownEggData and (cleanLower:find("brown egg") or cleanLower:find("sugar egg")) then
+            local bImg = nil
+            pcall(function()
+                local bMod = safeRequire(brownEggData)
+                if bMod and typeof(bMod.Image) == "function" then
+                    bImg = bMod.Image()
+                end
+            end)
+            if bImg and bImg ~= "" then return bImg end
+        end
+
+        -- 6. MuffinData
+        local muffinData = shared:FindFirstChild("MuffinData")
+        if muffinData then
+            local mufImg = nil
+            pcall(function()
+                local mMod = safeRequire(muffinData)
+                if mMod and mMod.Data then
+                    for _, m in ipairs(mMod.Data) do
+                        if m.Name and (m.Name:lower() == cleanLower or cleanLower:find(m.Name:lower())) then
+                            if m.IMG and m.IMG ~= "" then
+                                mufImg = m.IMG
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+            if mufImg and mufImg ~= "" then return mufImg end
+        end
+
+        -- 7. ShovelData
+        local shData = shared:FindFirstChild("ShovelData")
+        if shData and (cleanLower:find("shovel") or cleanLower == "shovel") then
+            local shImg = nil
+            pcall(function()
+                local sMod = safeRequire(shData)
+                if sMod and sMod.Data and sMod.Data.IMG then
+                    shImg = sMod.Data.IMG
+                end
+            end)
+            if shImg and shImg ~= "" then return shImg end
+        end
+
+        -- 8. SprinklerData
+        local spkData = shared:FindFirstChild("SprinklerData")
+        if spkData then
+            local spkImg = nil
+            pcall(function()
+                local spkMod = safeRequire(spkData)
+                if type(spkMod) == "table" then
+                    for _, spk in ipairs(spkMod) do
+                        if spk.SprinklerName and (spk.SprinklerName:lower() == cleanLower or cleanLower:find(spk.SprinklerName:lower())) then
+                            if spk.Image and spk.Image ~= "" then
+                                spkImg = spk.Image
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+            if spkImg and spkImg ~= "" then return spkImg end
+        end
+
+        -- 9. CrateImages & GuildCrateImages
+        local ci = shared:FindFirstChild("CrateImages")
+        if ci then
+            local v = ci:FindFirstChild(clean) or ci:FindFirstChild(clean .. " Crate") or ci:FindFirstChild(crateClean)
+            if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+            for _, c in ipairs(ci:GetChildren()) do
+                if c.Name:lower() == cleanLower or cleanLower:find(c.Name:lower()) then
+                    if c:IsA("StringValue") and c.Value ~= "" then return c.Value end
+                end
+            end
+        end
+        local gci = shared:FindFirstChild("GuildCrateData") and shared.GuildCrateData:FindFirstChild("GuildCrateImages")
+        if gci then
+            local v = gci:FindFirstChild(clean)
+            if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+        end
+
+        -- 10. PropImages & FenceImages
+        local propImages = shared:FindFirstChild("PropImages")
+        if propImages then
+            local v = propImages:FindFirstChild(clean)
+            if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+        end
+        local fenceImages = shared:FindFirstChild("FenceImages")
+        if fenceImages then
+            local v = fenceImages:FindFirstChild(clean)
+            if v and v:IsA("StringValue") and v.Value ~= "" then return v.Value end
+        end
+    end
+
+    return ""
 end
 
 function Engine:GetMasterPresetOptions(category)
@@ -1324,11 +1537,39 @@ function Engine:CreateTab(name, icon)
                 oBtn.TextColor3 = isCurrentlySel and COLORS.gold or COLORS.text
                 oBtn.Font = Enum.Font.GothamBold
                 oBtn.TextSize = 11
+                oBtn.AutoButtonColor = true
                 oBtn.Parent = optHolder
 
                 local obCorner = Instance.new("UICorner")
                 obCorner.CornerRadius = UDim.new(0, 6)
                 obCorner.Parent = oBtn
+
+                -- 🖼️ Render genuine item thumbnail inside dropdown button
+                local itemImg = Engine:GetItemImage(cleanName)
+                if itemImg and itemImg ~= "" then
+                    local icon = Instance.new("ImageLabel")
+                    icon.Name = "DropdownItemThumb"
+                    icon.Size = UDim2.fromOffset(20, 20)
+                    icon.Position = UDim2.new(0, 8, 0.5, -10)
+                    icon.BackgroundTransparency = 1
+                    icon.Image = itemImg
+                    icon.ZIndex = oBtn.ZIndex + 2
+                    icon.Parent = oBtn
+
+                    local icCorn = Instance.new("UICorner")
+                    icCorn.CornerRadius = UDim.new(0, 4)
+                    icCorn.Parent = icon
+
+                    oBtn.TextXAlignment = Enum.TextXAlignment.Left
+                    local pad = Instance.new("UIPadding")
+                    pad.PaddingLeft = UDim.new(0, 36)
+                    pad.Parent = oBtn
+                else
+                    oBtn.TextXAlignment = Enum.TextXAlignment.Left
+                    local pad = Instance.new("UIPadding")
+                    pad.PaddingLeft = UDim.new(0, 12)
+                    pad.Parent = oBtn
+                end
 
                 oBtn.MouseButton1Click:Connect(function()
                     playClickSound()
@@ -2526,8 +2767,145 @@ function GAG2Engine:PanicHarvestWatcher()
 end
 
 --======================================================================================
--- 🍕 GAG2 BAKER EVENT ENGINE (ระบบกิจกรรมนักอบพิชซ่า & เตาอบมัฟฟินอัตโนมัติ)
+-- 🍕 GAG2 BAKER EVENT ENGINE (ระบบกิจกรรมนักอบพิชซ่า & เตาอบมัฟฟินสูตรละเอียด 100%)
 --======================================================================================
+
+local GAG2_BAKER_RECIPES = {
+    ["Rainbow Muffin"] = {
+        Key = "Rainbow Muffin",
+        DisplayName = "🌈 Rainbow Muffin (มัฟฟินสายรุ้ง - 30 นาที)",
+        Duration = 1800,
+        Ingredients = {
+            { Name = "Carrot", Mutation = "Rainbow", Count = 9, Display = "9x Rainbow Carrot" },
+            { Name = "Sugar Cane", Count = 8, Display = "8x Sugar Cane" },
+            { Name = "Small Brown Egg", Count = 2, Display = "2x Small Brown Egg" },
+            { Name = "Blueberry Muffin", Count = 4, Display = "4x Blueberry Muffin" }
+        }
+    },
+    ["Pumpkin Muffin"] = {
+        Key = "Pumpkin Muffin",
+        DisplayName = "🎃 Pumpkin Muffin (มัฟฟินฟักทอง - 5 นาที)",
+        Duration = 300,
+        Ingredients = {
+            { Name = "Atlantic Giant Pumpkin", Count = 1, Display = "1x Atlantic Giant Pumpkin" },
+            { Name = "Sugar Cane", Count = 4, Display = "4x Sugar Cane" },
+            { Name = "Bamboo", Count = 42, Display = "42x Bamboo" },
+            { Name = "Green Bean", Count = 3, Display = "3x Green Bean" }
+        }
+    },
+    ["Blueberry Muffin"] = {
+        Key = "Blueberry Muffin",
+        DisplayName = "🫐 Blueberry Muffin (มัฟฟินบลูเบอร์รี่ - 5 นาที)",
+        Duration = 300,
+        Ingredients = {
+            { Name = "Blueberry", Count = 16, Display = "16x Blueberry" },
+            { Name = "Sugar Cane", Count = 2, Display = "2x Sugar Cane" },
+            { Name = "Carrot", Count = 12, Display = "12x Carrot" },
+            { Name = "Bamboo", Count = 20, Display = "20x Bamboo" }
+        }
+    },
+    ["Carrot Muffin"] = {
+        Key = "Carrot Muffin",
+        DisplayName = "🥕 Carrot Muffin (มัฟฟินแครอท - 10 นาที)",
+        Duration = 600,
+        Ingredients = {
+            { Name = "Carrot", Count = 31, Display = "31x Carrot" },
+            { Name = "Sugar Cane", Count = 1, Display = "1x Sugar Cane" },
+            { Name = "Small Brown Egg", Count = 1, Display = "1x Small Brown Egg" },
+            { Name = "Blueberry", Count = 17, Display = "17x Blueberry" }
+        }
+    }
+}
+
+function GAG2Engine:GetBackpackIngredientCount(name, mutation)
+    local count = 0
+    pcall(function()
+        local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+        local clientModules = ReplicatedStorage:FindFirstChild("ClientModules")
+        local PlayerStateClient = clientModules and clientModules:FindFirstChild("PlayerStateClient")
+        local psc = PlayerStateClient and safeRequire(PlayerStateClient)
+        local replica = psc and psc:GetLocalReplica()
+        local inv = replica and replica.Data and replica.Data.Inventory
+
+        if inv then
+            for catKey, catItems in pairs(inv) do
+                if type(catItems) == "table" then
+                    for itemName, amount in pairs(catItems) do
+                        local clean = Engine:CleanItemName(tostring(itemName))
+                        if clean:lower() == name:lower() or tostring(itemName):lower() == name:lower() then
+                            count = count + (tonumber(amount) or 1)
+                        end
+                    end
+                end
+            end
+        end
+
+        local bp = LocalPlayer:FindFirstChild("Backpack")
+        if bp then
+            for _, item in ipairs(bp:GetChildren()) do
+                if item:IsA("Tool") then
+                    local clean = Engine:CleanItemName(item.Name)
+                    local matchName = (clean:lower() == name:lower()) or (item.Name:lower() == name:lower())
+                    if matchName then
+                        if mutation then
+                            local itemMut = item:GetAttribute("Mutation") or (item.Name:find("Rainbow") and "Rainbow")
+                            if itemMut and tostring(itemMut):lower() == mutation:lower() then
+                                count = count + 1
+                            end
+                        else
+                            count = count + 1
+                        end
+                    end
+                end
+            end
+        end
+
+        local char = LocalPlayer.Character
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") then
+                    local clean = Engine:CleanItemName(item.Name)
+                    local matchName = (clean:lower() == name:lower()) or (item.Name:lower() == name:lower())
+                    if matchName then
+                        if mutation then
+                            local itemMut = item:GetAttribute("Mutation") or (item.Name:find("Rainbow") and "Rainbow")
+                            if itemMut and tostring(itemMut):lower() == mutation:lower() then
+                                count = count + 1
+                            end
+                        else
+                            count = count + 1
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return count
+end
+
+function GAG2Engine:CanBakeRecipe(recipeKey)
+    local recipe = GAG2_BAKER_RECIPES[recipeKey]
+    if not recipe then return false, "ไม่พบสูตรขนมนี้" end
+
+    for _, ing in ipairs(recipe.Ingredients) do
+        local owned = self:GetBackpackIngredientCount(ing.Name, ing.Mutation)
+        if owned < ing.Count then
+            return false, string.format("ขาดวัตถุดิบ %s (มี %d/%d)", ing.Display, owned, ing.Count)
+        end
+    end
+    return true, "วัตถุดิบครบถ้วนพร้อมอบ!"
+end
+
+function GAG2Engine:GetBestAffordableRecipe()
+    local priority = { "Rainbow Muffin", "Pumpkin Muffin", "Blueberry Muffin", "Carrot Muffin" }
+    for _, rKey in ipairs(priority) do
+        local ok = self:CanBakeRecipe(rKey)
+        if ok then
+            return rKey
+        end
+    end
+    return nil
+end
 
 function GAG2Engine:AutoBakeOvenLoop()
     if not Engine.Config.AutoBakeOven then return end
@@ -2535,29 +2913,67 @@ function GAG2Engine:AutoBakeOvenLoop()
         local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
         local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
         local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.Oven then return end
 
-        -- 1. Try direct remote fire if available
-        if Networking and Networking.BakerOrder and Networking.BakerOrder.Fill then
-            for slot = 1, 3 do
-                if not Engine.Config.AutoBakeOven then break end
-                pcall(function() Networking.BakerOrder.Fill:Fire(slot) end)
+        local pScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        local controllers = pScripts and pScripts:FindFirstChild("Controllers")
+        local ovenCtrlMod = controllers and controllers:FindFirstChild("OvenController")
+        local ovenCtrl = ovenCtrlMod and safeRequire(ovenCtrlMod)
+
+        local ovenRef = "Baker1"
+        if ovenCtrl and typeof(ovenCtrl.GetActiveRef) == "function" then
+            ovenRef = ovenCtrl:GetActiveRef() or "Baker1"
+        end
+
+        if ovenCtrl and typeof(ovenCtrl.GetState) == "function" then
+            local state = ovenCtrl:GetState()
+            if state and type(state.Ovens) == "table" then
+                for _, o in pairs(state.Ovens) do
+                    if o.Ref == ovenRef and (tonumber(o.FinishesAt) or 0) > 0 and o.Recipe ~= "" then
+                        return
+                    end
+                end
             end
         end
 
-        -- 2. GUI fallback trigger (click BakeButton in BakersOven)
+        local targetRecipe = Engine.Config.SelectedBakeRecipe
+        if not targetRecipe or targetRecipe:find("Auto") or targetRecipe:find("อัตโนมัติ") then
+            targetRecipe = self:GetBestAffordableRecipe()
+        else
+            for k, _ in pairs(GAG2_BAKER_RECIPES) do
+                if targetRecipe:find(k) then
+                    targetRecipe = k
+                    break
+                end
+            end
+        end
+
+        if not targetRecipe then return end
+        local canBake = self:CanBakeRecipe(targetRecipe)
+        if not canBake then return end
+
+        if ovenCtrl and typeof(ovenCtrl.SetActiveRef) == "function" then
+            pcall(function() ovenCtrl:SetActiveRef(ovenRef) end)
+        end
+
+        if Networking.Oven.StartBake then
+            pcall(function()
+                Networking.Oven.StartBake:Fire(ovenRef, targetRecipe)
+            end)
+        end
+
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         local ovenGui = pg and pg:FindFirstChild("BakersOven")
         if ovenGui then
-            for _, btn in ipairs(ovenGui:GetDescendants()) do
-                if not Engine.Config.AutoBakeOven then break end
-                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name == "BakeButton" and btn.Visible then
-                    pcall(function()
-                        for _, con in ipairs(getconnections(btn.MouseButton1Click)) do
-                            con:Fire()
-                        end
-                    end)
-                    task.wait(0.1)
-                end
+            local recContainer = ovenGui:FindFirstChild("Recipes", true)
+            local rCard = recContainer and recContainer:FindFirstChild(targetRecipe)
+            local bakeBtn = rCard and rCard:FindFirstChild("BakeButton")
+            if bakeBtn and bakeBtn.Visible then
+                pcall(function()
+                    for _, con in ipairs(getconnections(bakeBtn.MouseButton1Click)) do
+                        con:Fire()
+                    end
+                end)
             end
         end
     end)
@@ -2569,18 +2985,28 @@ function GAG2Engine:AutoClaimOvenLoop()
         local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
         local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
         local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.Oven then return end
 
-        -- Claim completed baked goods
-        if Networking and Networking.BakerOrder and (Networking.BakerOrder.Claim or Networking.BakerOrder.Finish) then
-            local claimRemote = Networking.BakerOrder.Claim or Networking.BakerOrder.Finish
-            pcall(function() claimRemote:Fire() end)
+        local pScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+        local controllers = pScripts and pScripts:FindFirstChild("Controllers")
+        local ovenCtrlMod = controllers and controllers:FindFirstChild("OvenController")
+        local ovenCtrl = ovenCtrlMod and safeRequire(ovenCtrlMod)
+
+        local ovenRef = "Baker1"
+        if ovenCtrl and typeof(ovenCtrl.GetActiveRef) == "function" then
+            ovenRef = ovenCtrl:GetActiveRef() or "Baker1"
+        end
+
+        if Networking.Oven.Claim then
+            pcall(function()
+                Networking.Oven.Claim:Fire(ovenRef)
+            end)
         end
 
         local pg = LocalPlayer:FindFirstChild("PlayerGui")
         local ovenGui = pg and pg:FindFirstChild("BakersOven")
         if ovenGui then
             for _, btn in ipairs(ovenGui:GetDescendants()) do
-                if not Engine.Config.AutoClaimOven then break end
                 if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and (btn.Name == "ClaimButton" or btn.Name == "FinishButton") and btn.Visible then
                     pcall(function()
                         for _, con in ipairs(getconnections(btn.MouseButton1Click)) do
@@ -2600,12 +3026,29 @@ function GAG2Engine:AutoTradeMuffinsLoop()
         local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
         local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
         local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.BakerReward or not Networking.BakerReward.Trade then return end
 
-        if Networking and Networking.BakerReward and Networking.BakerReward.Trade then
-            for tier = 1, 6 do
-                if not Engine.Config.AutoTradeMuffins then break end
-                pcall(function() Networking.BakerReward.Trade:Fire(tier) end)
-                task.wait(0.05)
+        local muffinsToTrade = {}
+        local pref = Engine.Config.SelectedRewardTradeMuffin or "All Muffins"
+        if pref:find("All") or pref:find("ทุกชนิด") then
+            muffinsToTrade = { "Rainbow Muffin", "Pumpkin Muffin", "Blueberry Muffin", "Carrot Muffin" }
+        else
+            for k, _ in pairs(GAG2_BAKER_RECIPES) do
+                if pref:find(k) then
+                    table.insert(muffinsToTrade, k)
+                    break
+                end
+            end
+        end
+
+        for _, muffinName in ipairs(muffinsToTrade) do
+            if not Engine.Config.AutoTradeMuffins then break end
+            local owned = self:GetBackpackIngredientCount(muffinName)
+            if owned > 0 then
+                pcall(function()
+                    Networking.BakerReward.Trade:Fire(muffinName)
+                end)
+                task.wait(0.2)
             end
         end
 
@@ -2633,272 +3076,17 @@ function GAG2Engine:AutoBuyBakerSeedsLoop()
         local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
         local networkingMod = sharedModules and sharedModules:FindFirstChild("Networking")
         local Networking = networkingMod and safeRequire(networkingMod)
+        if not Networking or not Networking.BakerSeedShop or not Networking.BakerSeedShop.PurchaseSeed then return end
 
-        if Networking and Networking.BakerSeedShop and Networking.BakerSeedShop.PurchaseSeed then
-            for _, seedName in ipairs({"Wheat", "Corn", "Blueberry", "Pumpkin", "Carrot", "Golden Apple"}) do
-                if not Engine.Config.AutoBuyBakerSeeds then break end
-                pcall(function() Networking.BakerSeedShop.PurchaseSeed:Fire(seedName) end)
-                task.wait(0.1)
-            end
+        for _, seedName in ipairs({ "Wheat", "Sugar Cane" }) do
+            if not Engine.Config.AutoBuyBakerSeeds then break end
+            pcall(function()
+                Networking.BakerSeedShop.PurchaseSeed:Fire(seedName)
+            end)
+            task.wait(0.1)
         end
     end)
 end
-
---======================================================================================
--- 📌 ADVANCED AUTO FARM ENGINE & GARDEN DASHBOARD STATS
---======================================================================================
-
-function GAG2Engine:GetGardenDashboardStats()
-    local stats = {
-        TotalPlanted = 0,
-        ReadyToHarvest = 0,
-        GoldFruits = 0,
-        RainbowFruits = 0,
-        TotalValue = 0,
-        FormattedValue = "0"
-    }
-
-    pcall(function()
-        local ownerPlot = self:GetOwnerPlot()
-        if not ownerPlot then return end
-
-        local plantsHolder = ownerPlot:FindFirstChild("Plants") or ownerPlot:FindFirstChild("Crops") or ownerPlot
-        for _, plant in ipairs(plantsHolder:GetChildren()) do
-            if plant:IsA("Model") or plant:IsA("BasePart") then
-                stats.TotalPlanted = stats.TotalPlanted + 1
-
-                local isReady = plant:GetAttribute("IsReady") or plant:GetAttribute("Harvestable") or plant:FindFirstChild("Fruit") ~= nil
-                if isReady then
-                    stats.ReadyToHarvest = stats.ReadyToHarvest + 1
-                end
-
-                local variant = plant:GetAttribute("Variant") or plant:GetAttribute("Mutation") or plant.Name
-                if variant:find("Gold") then
-                    stats.GoldFruits = stats.GoldFruits + 1
-                elseif variant:find("Rainbow") then
-                    stats.RainbowFruits = stats.RainbowFruits + 1
-                end
-
-                local weight = plant:GetAttribute("Weight") or 1.0
-                local seedName = plant:GetAttribute("SeedName") or plant.Name
-                local fruitCalc = self:GetFruitCalc()
-                local val = 0
-                if fruitCalc then
-                    pcall(function()
-                        val = fruitCalc(seedName, weight, variant, LocalPlayer, 0)
-                    end)
-                end
-                stats.TotalValue = stats.TotalValue + (tonumber(val) or 0)
-            end
-        end
-
-        stats.FormattedValue = self:FormatMoney(stats.TotalValue)
-    end)
-
-    return stats
-end
-
-function GAG2Engine:InitAutoFarmLoops()
-    if self._FarmLoopsInitialized then return end
-    self._FarmLoopsInitialized = true
-
-    -- 🌾 1. Auto Plant Loop
-    task.spawn(function()
-        while task.wait(0.5) do
-            if Engine.Config.AutoPlant then
-                pcall(function()
-                    local bp = LocalPlayer:FindFirstChild("Backpack")
-                    local char = LocalPlayer.Character
-                    if not bp or not char then return end
-
-                    local selectedSeeds = Engine.Config.SelectedPlantSeeds or {}
-                    local seedTool = nil
-
-                    for _, tool in ipairs(bp:GetChildren()) do
-                        if tool:IsA("Tool") then
-                            local clean = Engine:CleanItemName(tool.Name)
-                            if Engine:IsItemSelected(selectedSeeds, clean) or selectedSeeds[clean] then
-                                seedTool = tool
-                                break
-                            end
-                        end
-                    end
-
-                    if seedTool then
-                        seedTool.Parent = char
-                        task.wait(0.1)
-
-                        local mode = Engine.Config.PlantMode or "ตาม Plot"
-                        local targetCF = nil
-
-                        if mode == "ล็อคจุด" and Engine.Config.LockPlantCFrame then
-                            targetCF = Engine.Config.LockPlantCFrame
-                        elseif mode == "Random" then
-                            local ownerPlot = GAG2Engine:GetOwnerPlot()
-                            if ownerPlot then
-                                local ref = ownerPlot:FindFirstChild("PlotSizeReference")
-                                if ref then
-                                    local rx = (math.random() - 0.5) * ref.Size.X * 0.8
-                                    local rz = (math.random() - 0.5) * ref.Size.Z * 0.8
-                                    targetCF = ref.CFrame * CFrame.new(rx, 2, rz)
-                                end
-                            end
-                        end
-
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        if targetCF and hrp then
-                            hrp.CFrame = targetCF
-                        end
-
-                        if seedTool:FindFirstChild("Click") or seedTool:FindFirstChild("Activate") then
-                            seedTool:Activate()
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    -- 🍇 2. Auto Collect / Harvest Loop
-    task.spawn(function()
-        while true do
-            local speedMode = Engine.Config.CollectSpeedMode or "Normal"
-            local waitSec = (speedMode == "Fast") and 0.08 or ((speedMode == "Instant / Bypass") and 0.02 or 0.3)
-            task.wait(waitSec)
-
-            if Engine.Config.AutoCollectAll or Engine.Config.AutoCollectSelected then
-                pcall(function()
-                    local ownerPlot = GAG2Engine:GetOwnerPlot()
-                    if not ownerPlot then return end
-
-                    local plantsHolder = ownerPlot:FindFirstChild("Plants") or ownerPlot:FindFirstChild("Crops") or ownerPlot
-                    local selectedFruits = Engine.Config.SelectedFruitsToCollect or {}
-                    local rarityFilter = Engine.Config.SelectRarityFilter or "--"
-                    local mutationFilter = Engine.Config.SelectMutationFilter or "--"
-                    local thresholdMode = Engine.Config.CollectThresholdMode or "Disabled"
-                    local minWeight = tonumber(Engine.Config.CollectWeightThreshold) or 0
-
-                    for _, plant in ipairs(plantsHolder:GetChildren()) do
-                        if plant:IsA("Model") or plant:IsA("BasePart") then
-                            local isReady = plant:GetAttribute("IsReady") or plant:GetAttribute("Harvestable") or plant:FindFirstChild("Fruit") ~= nil
-                            if isReady then
-                                local pName = Engine:CleanItemName(plant.Name)
-                                local variant = tostring(plant:GetAttribute("Variant") or plant:GetAttribute("Mutation") or "")
-                                local rarity = tostring(plant:GetAttribute("Rarity") or "")
-                                local weight = tonumber(plant:GetAttribute("Weight")) or 0
-
-                                local matchesFruit = Engine.Config.AutoCollectAll or Engine:IsItemSelected(selectedFruits, pName)
-                                local matchesRarity = (rarityFilter == "--" or rarityFilter == "All" or rarity:lower():find(rarityFilter:lower()))
-                                local matchesMutation = (mutationFilter == "--" or mutationFilter == "All" or variant:lower():find(mutationFilter:lower()))
-                                local matchesWeight = (thresholdMode == "Disabled" or thresholdMode == "Price" or weight >= minWeight)
-
-                                if matchesFruit and matchesRarity and matchesMutation and matchesWeight then
-                                    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-                                    if sharedModules then
-                                        local net = sharedModules:FindFirstChild("Networking")
-                                        if net then
-                                            local Networking = safeRequire(net)
-                                            if Networking and Networking.Harvest then
-                                                if Networking.Harvest.HarvestPlant then
-                                                    Networking.Harvest.HarvestPlant:Fire(plant:GetAttribute("PlantId") or plant.Name)
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    -- 💰 3. Auto Sell Loop
-    task.spawn(function()
-        while task.wait(1.5) do
-            if Engine.Config.AutoDailySell or Engine.Config.AutoSellAllFruits or Engine.Config.AutoSellSelectedFruits then
-                pcall(function()
-                    local bp = LocalPlayer:FindFirstChild("Backpack")
-                    if not bp then return end
-
-                    local selFruits = Engine.Config.SelectedFruitsToSell or {}
-
-                    for _, tool in ipairs(bp:GetChildren()) do
-                        if tool:IsA("Tool") then
-                            local tName = Engine:CleanItemName(tool.Name)
-                            local matchesSel = Engine.Config.AutoSellAllFruits or Engine.Config.AutoDailySell or Engine:IsItemSelected(selFruits, tName)
-
-                            if matchesSel then
-                                local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-                                if sharedModules and sharedModules:FindFirstChild("Networking") then
-                                    local Networking = safeRequire(sharedModules.Networking)
-                                    if Networking and Networking.Sell then
-                                        if Networking.Sell.SellItem then
-                                            Networking.Sell.SellItem:Fire(tool)
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    -- 💧 4. Auto Water Loop
-    task.spawn(function()
-        while true do
-            local delaySec = tonumber(Engine.Config.WaterDelay) or 1.0
-            task.wait(delaySec)
-
-            if Engine.Config.AutoWaterSelectedPlants then
-                pcall(function()
-                    local bp = LocalPlayer:FindFirstChild("Backpack")
-                    local char = LocalPlayer.Character
-                    if not bp or not char then return end
-
-                    local canName = Engine.Config.SelectWateringCan or "Basic Watering Can"
-                    local canTool = bp:FindFirstChild(canName) or char:FindFirstChild(canName)
-
-                    if canTool then
-                        canTool.Parent = char
-                        if canTool:FindFirstChild("Click") or canTool:FindFirstChild("Activate") then
-                            canTool:Activate()
-                        end
-                    end
-                end)
-            end
-        end
-    end)
-
-    -- 🚿 5. Auto Sprinkler Loop
-    task.spawn(function()
-        while task.wait(3.0) do
-            if Engine.Config.AutoPlaceSprinkler then
-                pcall(function()
-                    local bp = LocalPlayer:FindFirstChild("Backpack")
-                    local char = LocalPlayer.Character
-                    if not bp or not char then return end
-
-                    local spName = Engine.Config.SelectSprinkler or "Sprinkler"
-                    local spTool = bp:FindFirstChild(spName) or char:FindFirstChild(spName)
-
-                    if spTool then
-                        spTool.Parent = char
-                        task.wait(0.2)
-                        spTool:Activate()
-                    end
-                end)
-            end
-        end
-    end)
-end
-
---======================================================================================
--- 📌 ADVANCED AUTO SHOVEL & TROWEL (พล้วยก & AUTO STACK ENGINE)
---======================================================================================
 
 function GAG2Engine:InitShovelAndTrowelLoops()
     -- 🧹 1. Auto Shovel Loop (ขุดถอนพืชที่ไม่ต้องการออก)
@@ -3846,38 +4034,10 @@ function GAG2Engine:OpenPBGSmartTradingWindow()
 
             if not item.IsEmpty then
                 pcall(function()
-                    local clean = Engine:CleanItemName(item.Name or item.Id or "")
-                    local sm = ReplicatedStorage:FindFirstChild("SharedModules")
-                    local foundImg = nil
-
-                    -- 1. Check ImageAssetId
-                    if sm and sm:FindFirstChild("ImageAssetId") then
-                        local ok, ia = pcall(require, sm.ImageAssetId)
-                        if ok and ia and ia.ResolveForDisplay then
-                            local ok2, res = pcall(ia.ResolveForDisplay, clean)
-                            if ok2 and res and res ~= "" then foundImg = res end
-                        end
-                    end
-
-                    -- 2. Check GearImages & CrateImages & PropImages
-                    if (not foundImg or foundImg == "") and sm then
-                        for _, folderName in ipairs({"GearImages", "CrateImages", "PropImages", "FenceImages"}) do
-                            local f = sm:FindFirstChild(folderName)
-                            local val = f and f:FindFirstChild(clean)
-                            if val and (val:IsA("StringValue") or val:IsA("IntValue")) and tostring(val.Value) ~= "" then
-                                foundImg = tostring(val.Value)
-                                break
-                            end
-                        end
-                    end
-
-                    -- 3. Check tool TextureId
-                    if (not foundImg or foundImg == "") and item.Tool and item.Tool:IsA("Tool") and item.Tool.TextureId ~= "" then
-                        foundImg = item.Tool.TextureId
-                    end
-
+                    local foundImg = Engine:GetItemImage(item.Name or clean, activeCategory)
                     if foundImg and foundImg ~= "" then
                         itemIcon.Image = foundImg
+                        itemIcon.Visible = true
                     else
                         itemIcon.Visible = false
                     end
@@ -4574,7 +4734,7 @@ function GAG2Engine:ScanInventoryItems(categoryKey)
             if charPartNames[rawName:lower()] then return end
 
             local cleanName = Engine:CleanItemName(rawName)
-            if cleanName == "" then return end
+            if cleanName == "" or cleanName:lower() == "build" then return end
             
             local detectedCategory = getItemAssetCategory(itemInst, cleanName, rawName)
 
@@ -5403,7 +5563,6 @@ function Engine:Init()
     })
 
         local tabFarm = self:CreateTab("GAG2 Auto Farm", "🚜")
-        GAG2Engine:InitAutoFarmLoops()
 
         -- 📊 Dashboard Status Section
         tabFarm:CreateSection("📊 แดชบอร์ดสถานะในสวน (Garden Dashboard Status)")
@@ -6199,24 +6358,79 @@ function Engine:Init()
             end
         })
 
-        -- 🍕 GAG2 Tab 9: กิจกรรมนักอบพิชซ่า & เบเกอรี่ (Baker Event Station)
+        -- 🍕 GAG2 Tab 9: กิจกรรมนักอบพิชซ่า & เตาอบมัฟฟิน (Baker Event Station)
         local tabBaker = self:CreateTab("กิจกรรม", "🍕")
-        tabBaker:CreateSection("🍕 กิจกรรมนักอบพิชซ่า (The Baker & Pizza Oven)")
+        tabBaker:CreateSection("🍕 กิจกรรมนักอบพิชซ่า & เตาอบมัฟฟิน (The Baker & Oven Station)")
+
+        -- Dropdown 1: เลือกเมนูขนมที่ต้องการอบ
+        local recipeOptions = {
+            "🌟 อัตโนมัติ (เลือกเมนูที่วัตถุดิบครบ / Auto Best Affordable)",
+            "🌈 Rainbow Muffin (มัฟฟินสายรุ้ง - ใช้ 30 นาที)",
+            "🎃 Pumpkin Muffin (มัฟฟินฟักทอง - ใช้ 5 นาที)",
+            "🫐 Blueberry Muffin (มัฟฟินบลูเบอร์รี่ - ใช้ 5 นาที)",
+            "🥕 Carrot Muffin (มัฟฟินแครอท - ใช้ 10 นาที)"
+        }
+
+        tabBaker:CreateDropdown({
+            Title = "🥖 เลือกเมนูขนมที่ต้องการอบ (Select Recipe to Bake)",
+            Options = recipeOptions,
+            Default = recipeOptions[1],
+            Multi = false,
+            Callback = function(val)
+                if val:find("Rainbow") then self.Config.SelectedBakeRecipe = "Rainbow Muffin"
+                elseif val:find("Pumpkin") then self.Config.SelectedBakeRecipe = "Pumpkin Muffin"
+                elseif val:find("Blueberry") then self.Config.SelectedBakeRecipe = "Blueberry Muffin"
+                elseif val:find("Carrot") then self.Config.SelectedBakeRecipe = "Carrot Muffin"
+                else self.Config.SelectedBakeRecipe = "Auto Best Affordable" end
+
+                local msg = "ตั้งค่าเมนูอบ: " .. self.Config.SelectedBakeRecipe
+                if self.Config.SelectedBakeRecipe ~= "Auto Best Affordable" then
+                    local ok, reason = GAG2Engine:CanBakeRecipe(self.Config.SelectedBakeRecipe)
+                    msg = msg .. "\n" .. reason
+                end
+                self:Notify({ Title = "เลือกเมนูขนมอบ 🥖", Content = msg })
+            end
+        })
 
         tabBaker:CreateToggle({
-            Title = "🔥 เปิดใช้งาน ออโต้อบขนม/พิชซ่าในเตา (Auto Bake in Oven)",
+            Title = "🔥 เปิดใช้งาน ออโต้อบขนมตามเมนูที่เลือก (Auto Bake in Oven)",
             Default = self.Config.AutoBakeOven or false,
             Callback = function(val) self.Config.AutoBakeOven = val end
         })
 
         tabBaker:CreateToggle({
-            Title = "📥 เปิดใช้งาน ออโต้กดรับขนมที่อบเสร็จ (Auto Claim Baked Items)",
+            Title = "📥 เปิดใช้งาน ออโต้กดรับขนมที่อบเสร็จ (Auto Claim Baked Goods)",
             Default = self.Config.AutoClaimOven or false,
             Callback = function(val) self.Config.AutoClaimOven = val end
         })
 
+        tabBaker:CreateSection("🎁 แลกของรางวัลอีเวนต์ & ซื้อเมล็ดพันธุ์ (Baker Rewards & Shop)")
+
+        local tradeOptions = {
+            "🌟 แลกมัฟฟินทุกชนิดที่มี (Trade All Muffins)",
+            "🌈 แลกเฉพาะ Rainbow Muffin",
+            "🎃 แลกเฉพาะ Pumpkin Muffin",
+            "🫐 แลกเฉพาะ Blueberry Muffin",
+            "🥕 แลกเฉพาะ Carrot Muffin"
+        }
+
+        tabBaker:CreateDropdown({
+            Title = "🎁 เลือกมัฟฟินที่จะนำไปแลกของรางวัล (Select Muffins to Trade)",
+            Options = tradeOptions,
+            Default = tradeOptions[1],
+            Multi = false,
+            Callback = function(val)
+                if val:find("Rainbow") then self.Config.SelectedRewardTradeMuffin = "Rainbow Muffin"
+                elseif val:find("Pumpkin") then self.Config.SelectedRewardTradeMuffin = "Pumpkin Muffin"
+                elseif val:find("Blueberry") then self.Config.SelectedRewardTradeMuffin = "Blueberry Muffin"
+                elseif val:find("Carrot") then self.Config.SelectedRewardTradeMuffin = "Carrot Muffin"
+                else self.Config.SelectedRewardTradeMuffin = "All Muffins" end
+                self:Notify({ Title = "ตั้งค่าแลกของรางวัล 🎁", Content = "เลือกแลก: " .. self.Config.SelectedRewardTradeMuffin })
+            end
+        })
+
         tabBaker:CreateToggle({
-            Title = "🎁 เปิดใช้งาน ออโต้แลกของรางวัลมัฟฟิน (Auto Trade Muffins into Loot)",
+            Title = "🎁 เปิดใช้งาน ออโต้แลกของรางวัลมัฟฟิน (Auto Trade Muffins for Loot)",
             Default = self.Config.AutoTradeMuffins or false,
             Callback = function(val) self.Config.AutoTradeMuffins = val end
         })
@@ -6228,18 +6442,25 @@ function Engine:Init()
         })
 
         tabBaker:CreateButton({
-            Title = "⚡ สั่งอบขนมและเคลมทันที 1 รอบ (Bake & Claim Once Now)",
+            Title = "⚡ สั่งอบขนมทันทีตามเมนูที่เลือก (Bake Selected Recipe Now)",
             BgColor = Color3.fromRGB(245, 158, 11),
             Callback = function()
                 GAG2Engine:AutoBakeOvenLoop()
-                task.wait(0.3)
-                GAG2Engine:AutoClaimOvenLoop()
-                self:Notify({ Title = "เตาอบนักอบ 🍕", Content = "สั่งตรวจสอบและเริ่มอบ/เคลมในเตาเรียบร้อย!" })
+                self:Notify({ Title = "เตาอบนักอบ 🍕", Content = "สั่งตรวจสอบวัตถุดิบและเริ่มอบตามเมนูที่เลือกแล้ว!" })
             end
         })
 
         tabBaker:CreateButton({
-            Title = "🎁 แลกของรางวัลมัฟฟินทั้งหมดทันที (Trade All Muffins Now)",
+            Title = "📥 สั่งเคลมขนมจากเตาทันที (Claim Oven Now)",
+            BgColor = Color3.fromRGB(59, 130, 246),
+            Callback = function()
+                GAG2Engine:AutoClaimOvenLoop()
+                self:Notify({ Title = "เคลมขนม 📥", Content = "ส่งคำขอเคลมขนมสุกจากเตาแล้ว!" })
+            end
+        })
+
+        tabBaker:CreateButton({
+            Title = "🎁 สั่งแลกของรางวัลมัฟฟินทันที (Trade Muffins Now)",
             BgColor = Color3.fromRGB(16, 185, 129),
             Callback = function()
                 GAG2Engine:AutoTradeMuffinsLoop()
@@ -6258,15 +6479,10 @@ function Engine:Init()
                     hrp.CFrame = bakerPart:GetPivot() + Vector3.new(0, 3, 5)
                     self:Notify({ Title = "วาร์ปสำเร็จ 🍕", Content = "มาถึงหน้าร้านนักอบพิชซ่าแล้ว!" })
                 else
-                    -- Stand center offset
-                    if hrp then
-                        hrp.CFrame = CFrame.new(0, 4, 0)
-                        self:Notify({ Title = "วาร์ปสำเร็จ 🍕", Content = "วาร์ปมาลานกลางหน้านักอบแล้ว!" })
-                    end
+                    self:Notify({ Title = "ข้อผิดพลาด ❌", Content = "ไม่พบจุดยืนของ NPC นักอบ" })
                 end
             end
         })
-
 
     -- Initial dropdown options update
     pcall(function()
