@@ -32,6 +32,40 @@ pcall(function()
 end)
 
 -- ============================================================
+-- 🖥️ GLOBAL UI PROXY INITIALIZATION (NIL-SAFE UI BINDINGS)
+-- ============================================================
+local function CreateUIProxy(name)
+    local proxy = { Text = "" }
+    return setmetatable(proxy, {
+        __index = function(t, k)
+            local real = getgenv()[name .. "_Instance"] or _G[name .. "_Instance"]
+            if k == "Text" and real and typeof(real) == "Instance" then
+                return real.Text
+            end
+            return rawget(t, k)
+        end,
+        __newindex = function(t, k, v)
+            if k == "Text" then
+                rawset(t, "Text", tostring(v))
+                local real = getgenv()[name .. "_Instance"] or _G[name .. "_Instance"]
+                if real and typeof(real) == "Instance" then
+                    pcall(function() real.Text = tostring(v) end)
+                end
+            else
+                rawset(t, k, v)
+            end
+        end
+    })
+end
+
+if getgenv().title == nil then getgenv().title = CreateUIProxy("title") end
+if getgenv().subtitle == nil then getgenv().subtitle = CreateUIProxy("subtitle") end
+title = getgenv().title
+subtitle = getgenv().subtitle
+_G.title = getgenv().title
+_G.subtitle = getgenv().subtitle
+
+-- ============================================================
 -- ⚙️ GLOBAL CONFIGURATION INITIALIZATION & ENGINE DEFAULTS
 -- ============================================================
 getgenv().Configs = getgenv().Configs or {}
@@ -2989,6 +3023,25 @@ local function BringMob(a)
     return targets
 end
 
+-- ============================================================
+-- 🌐 CENTRAL ENGINE EXPORTS TO GETGENV (MULTI-MODULE BRIDGE)
+-- ============================================================
+getgenv().MovementManager = MovementManager
+getgenv().Attack = Attack
+getgenv().CommF_ = CommF_
+getgenv().IsOwn = IsOwn
+getgenv().EquipName = EquipName
+getgenv().IsSaber = IsSaber
+getgenv().IsPoleV1 = IsPoleV1
+getgenv().DieWait = DieWait
+getgenv().BringMob = BringMob
+getgenv().CheckInv = CheckInv
+getgenv().FailedObjectives = FailedObjectives
+getgenv().WorldState = WorldState
+getgenv().World1 = World1
+getgenv().World2 = World2
+getgenv().World3 = World3
+
 local function DestroyExistingUI(name)
     pcall(function()
         local containers = {
@@ -4810,20 +4863,223 @@ FruitSystem.UIUpdateCallback = function()
     end
 end
 
--- ============================================================
--- 🌐 LOAD EXTERNAL PROGRESSION & QUEST MODULES (GITHUB LOADSTRING)
--- ============================================================
-pcall(function()
-    if not getgenv().Sea1_Quests then
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFSub"))()
+-- 🥋 KAITUN & MELEE TAB CONTROLS
+KaitunTab:AddToggle({
+    NameTH = "⚔️ ออโต้ฟาร์มเลเวล (Auto Farm Level)",
+    NameEN = "⚔️ Auto Farm Level",
+    Default = getgenv().Configs.AutoFarmLevel,
+    Callback = function(val)
+        getgenv().Configs.AutoFarmLevel = val
     end
-end)
+})
 
-pcall(function()
-    if not CheckQuest then
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem"))()
+KaitunTab:AddToggle({
+    NameTH = "⚡ ตีเร็ว (Fast Attack)",
+    NameEN = "⚡ Fast Attack",
+    Default = getgenv().Configs.FastAttack,
+    Callback = function(val)
+        getgenv().Configs.FastAttack = val
     end
-end)
+})
+
+KaitunTab:AddToggle({
+    NameTH = "🧲 ดึงมอนสเตอร์ (Bring Mob)",
+    NameEN = "🧲 Bring Mob",
+    Default = getgenv().Configs.BringMob,
+    Callback = function(val)
+        getgenv().Configs.BringMob = val
+    end
+})
+
+KaitunTab:AddToggle({
+    NameTH = "🥋 ออโต้ซื้อหมัดทุกชนิด (Auto Buy Melee)",
+    NameEN = "🥋 Auto Buy Melee",
+    Default = getgenv().Configs.AutoBuyMelee,
+    Callback = function(val)
+        getgenv().Configs.AutoBuyMelee = val
+    end
+})
+
+-- 🧩 PUZZLES & WORLD QUEST TAB CONTROLS
+QuestTab:AddToggle({
+    NameTH = "🗡️ ปริศนาดาบเซเบอร์ (Saber Quest)",
+    NameEN = "🗡️ Saber Quest",
+    Default = getgenv().Configs.Saber,
+    Callback = function(val)
+        getgenv().Configs.Saber = val
+    end
+})
+
+QuestTab:AddToggle({
+    NameTH = "⚡ ปริศนากระบองสายฟ้า V1 (Pole V1 Quest)",
+    NameEN = "⚡ Pole V1 Quest",
+    Default = getgenv().Configs.Pole,
+    Callback = function(val)
+        getgenv().Configs.Pole = val
+    end
+})
+
+QuestTab:AddToggle({
+    NameTH = "⏩ ข้ามฟาร์มเลเวล (Skip Farm Level)",
+    NameEN = "⏩ Skip Farm Level",
+    Default = getgenv().Configs.SkipFarmLevel,
+    Callback = function(val)
+        getgenv().Configs.SkipFarmLevel = val
+    end
+})
+
+QuestTab:AddToggle({
+    NameTH = "🐉 ออโต้ทำเผ่า V4 T10 (Auto Race V4 T10)",
+    NameEN = "🐉 Auto Race V4 T10",
+    Default = getgenv().Configs.AutoV4_Full,
+    Callback = function(val)
+        getgenv().Configs.AutoV4_Full = val
+        if val and LoadV4Engine then LoadV4Engine() end
+    end
+})
+
+QuestTab:AddToggle({
+    NameTH = "🧬 ออโต้ปลดล็อค V2 & V3 (Auto Unlock V2 & V3)",
+    NameEN = "🧬 Auto Unlock V2 & V3",
+    Default = getgenv().Configs.AutoV2_V3,
+    Callback = function(val)
+        getgenv().Configs.AutoV2_V3 = val
+        if val and LoadV4Engine then LoadV4Engine() end
+    end
+})
+
+-- 🍎 FRUIT TAB ADDITIONAL CONTROLS
+FruitTab:AddToggle({
+    NameTH = "📥 ออโต้เก็บผลไม้อัตโนมัติ (Auto Store Fruit)",
+    NameEN = "📥 Auto Store Fruit",
+    Default = getgenv().Configs.AutoStoreFruit,
+    Callback = function(val)
+        getgenv().Configs.AutoStoreFruit = val
+    end
+})
+
+FruitTab:AddToggle({
+    NameTH = "🛒 ออโต้ซื้อผลไม้ตรงเป้าหมาย (Auto Buy Target Fruit)",
+    NameEN = "🛒 Auto Buy Target Fruit",
+    Default = getgenv().Configs.AutoBuyFruit,
+    Callback = function(val)
+        getgenv().Configs.AutoBuyFruit = val
+    end
+})
+
+FruitTab:AddToggle({
+    NameTH = "🎲 ออโต้สุ่มผลไม้ (Auto Random Fruit)",
+    NameEN = "🎲 Auto Random Fruit",
+    Default = getgenv().Configs.AutoRandomFruit,
+    Callback = function(val)
+        getgenv().Configs.AutoRandomFruit = val
+    end
+})
+
+-- 📊 AUTO STATS TAB CONTROLS
+StatsTab:AddToggle({
+    NameTH = "📊 ออโต้เพิ่มสเตตัสอัตโนมัติ (Auto Stats Allocation)",
+    NameEN = "📊 Auto Stats Allocation",
+    Default = getgenv().Configs.AutoStats,
+    Callback = function(val)
+        getgenv().Configs.AutoStats = val
+    end
+})
+
+-- ⚡ MISC & OPTIONS TAB CONTROLS
+MiscTab:AddToggle({
+    NameTH = "✨ ออโต้เปิดฮาคิสังเกต/เกราะ (Auto Haki)",
+    NameEN = "✨ Auto Haki",
+    Default = getgenv().Configs.AutoHaki,
+    Callback = function(val)
+        getgenv().Configs.AutoHaki = val
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🔄 เข้าเซิร์ฟเวอร์เดิมใหม่ (Rejoin Current Server)",
+    NameEN = "🔄 Rejoin Current Server",
+    Callback = function()
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🌐 ย้ายเซิร์ฟเวอร์ใหม่ (Server Hop)",
+    NameEN = "🌐 Server Hop",
+    Callback = function()
+        ObsidianGlassEngine:Notify({ Title = "Server Hop", Content = "กำลังค้นหาเซิร์ฟเวอร์ใหม่...", Duration = 3 })
+        task.spawn(function()
+            pcall(function()
+                local sfUrl = "https://games.roblox.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/0?sortOrder=Asc&limit=100"
+                local res = game:HttpGet(sfUrl)
+                local data = HttpService:JSONDecode(res)
+                if data and data.data then
+                    for _, s in ipairs(data.data) do
+                        if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                            break
+                        end
+                    end
+                end
+            end)
+        end)
+    end
+})
+
+-- ============================================================
+-- 🌐 SMART MULTI-SOURCE MODULE LOADER (LOCAL FILE + GITHUB FALLBACK)
+-- ============================================================
+local function LoadModuleSafely(name, localPath, url)
+    local loaded = false
+    -- 1. Try local executor filesystem first (immediate priority for offline & edited files)
+    pcall(function()
+        if type(readfile) == "function" and type(isfile) == "function" and isfile(localPath) then
+            local code = readfile(localPath)
+            if code and #code > 50 then
+                local fn, err = loadstring(code)
+                if fn then
+                    fn()
+                    loaded = true
+                    print(string.format("[LOADER] ✅ Loaded %s from local file: %s", name, localPath))
+                else
+                    warn(string.format("[LOADER] ❌ Error compiling local %s: %s", name, tostring(err)))
+                end
+            end
+        end
+    end)
+
+    -- 2. Fallback to GitHub raw URL if not available locally
+    if not loaded then
+        pcall(function()
+            local ok, code = pcall(function() return game:HttpGet(url) end)
+            if ok and code and #code > 50 and not code:find("404: Not Found") then
+                local fn, err = loadstring(code)
+                if fn then
+                    fn()
+                    loaded = true
+                    print(string.format("[LOADER] 🌐 Loaded %s from GitHub: %s", name, url))
+                else
+                    warn(string.format("[LOADER] ❌ Error compiling GitHub %s: %s", name, tostring(err)))
+                end
+            end
+        end)
+    end
+
+    if not loaded then
+        warn(string.format("[LOADER] ⚠️ FAILED to load module %s from both local and remote!", name))
+    end
+    return loaded
+end
+
+-- 1. Load Quest Data Database (BFSub)
+LoadModuleSafely("BFSub", "BFSub.txt", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFSub")
+
+-- 2. Load Kaitun Core Logic & World Handlers (LogicSub)
+LoadModuleSafely("LogicSub", "LogicSub.txt", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem")
+
+-- 3. Load Race V4 / Progression Engine (BFv4T10)
+LoadModuleSafely("BFv4t10", "BFv4t10.lua", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10")
 
 -- Promo Code Auto Redemption Thread
 task.spawn(function()
@@ -4866,8 +5122,10 @@ function SetObjective(priorityLevel, objectiveName, reason)
         KaitunMonitor:AddLog(priorityLevel, string.format("%s: %s", objectiveName, reason or ""), priorityLevel)
     end
     ObjectiveReason = reason or ""
-    title.Text = string.format("[%s] %s", priorityLevel, CurrentObjective)
-    subtitle.Text = ObjectiveReason
+    pcall(function()
+        if title then title.Text = string.format("[%s] %s", priorityLevel, CurrentObjective) end
+        if subtitle then subtitle.Text = ObjectiveReason end
+    end)
 
     KaitunMonitor.State.PriorityTier = priorityLevel
     KaitunMonitor.State.ActiveObjective = objectiveName
@@ -4875,6 +5133,8 @@ function SetObjective(priorityLevel, objectiveName, reason)
     KaitunMonitor.State.EngineStatus = "🟢 " .. objectiveName
     KaitunMonitor:UpdateUI()
 end
+getgenv().SetObjective = SetObjective
+getgenv().PriorityQueue = PriorityQueue
 
 -- ══════════════════════════════════════════════════════════════════
 -- P0: EMERGENCY RECOVERY SERVICE 🛑
