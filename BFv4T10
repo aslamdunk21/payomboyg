@@ -504,7 +504,7 @@ function TaskPoolEngine:BuildPool(state, stage)
             id = "V2_FLOWER_QUEST", stage = "STAGE_V2",
             prio = 6, value = 130, urgency = 9, pSuccess = 0.85, window = 1.0, execTime = 240, risk = 15,
             pos = Vector3.new(1250, 40, -5100), age = 0,
-            feasible = function() return stage == "STAGE_V2" end,
+            feasible = function() return stage == "STAGE_V2" and (getgenv().Configs == nil or getgenv().Configs.AutoV2_V3) end,
             run = function()
                 FragileMode:Enter()
                 local bp = LP and LP:FindFirstChild("Backpack")
@@ -512,8 +512,23 @@ function TaskPoolEngine:BuildPool(state, stage)
                 local plan = FlowerPlan(state, bp, char)
                 Controller.Status = "🌸 V2 Flower Quest [" .. tostring(plan.task) .. "]"
                 
-                if plan.pos and char and char:FindFirstChild("HumanoidRootPart") then
-                    char.HumanoidRootPart.CFrame = CFrame.new(plan.pos + Vector3.new(0, 3, 0))
+                local MM = getgenv().MovementManager
+                if plan.pos then
+                    if MM and MM.MoveTo then
+                        MM:MoveTo(CFrame.new(plan.pos + Vector3.new(0, 5, 0)), 200, 3)
+                    elseif char and char:FindFirstChild("HumanoidRootPart") then
+                        char.HumanoidRootPart.CFrame = CFrame.new(plan.pos + Vector3.new(0, 5, 0))
+                    end
+
+                    -- Touch flower if in range
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp and (hrp.Position - plan.pos).Magnitude <= 15 then
+                        for _, obj in ipairs(workspace:GetPartBoundsInBox(CFrame.new(plan.pos), Vector3.new(6, 6, 6))) do
+                            if obj:IsA("BasePart") then
+                                pcall(function() firetouchinterest(hrp, obj, 0); firetouchinterest(hrp, obj, 1) end)
+                            end
+                        end
+                    end
                 end
 
                 local hasYellow = (bp and bp:FindFirstChild("Flower 3")) or (char and char:FindFirstChild("Flower 3"))
@@ -523,6 +538,9 @@ function TaskPoolEngine:BuildPool(state, stage)
                 if hasYellow and hasRed and hasBlue then
                     local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
                     if remote then
+                        if MM and MM.MoveTo then
+                            MM:MoveTo(CFrame.new(480.0, 8.0, 480.0), 200, 3)
+                        end
                         pcall(function() remote:InvokeServer("Alchemist", "3") end)
                     end
                 end
@@ -536,7 +554,15 @@ function TaskPoolEngine:BuildPool(state, stage)
             run = function()
                 Controller.Status = "🦢 Defeating Don Swan (Trevor Fruit Gate)"
                 local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("TalkTrevor", "1") end) end
+                if remote then
+                    pcall(function() remote:InvokeServer("TalkTrevor", "2") end)
+                    -- Check if holding 1M fruit
+                    local char = LP and LP.Character
+                    local tool = char and char:FindFirstChildOfClass("Tool")
+                    if tool and string.find(tool.Name:lower(), "fruit") then
+                        pcall(function() remote:InvokeServer("TalkTrevor", "3") end)
+                    end
+                end
             end
         },
         {
@@ -547,7 +573,15 @@ function TaskPoolEngine:BuildPool(state, stage)
             run = function()
                 Controller.Status = "📜 Executing V3 Quest for Race: " .. tostring(state.race)
                 local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("GetRaceV3", "2") end) end
+                if remote then
+                    local st = nil
+                    pcall(function() st = remote:InvokeServer("Wenlocktoad", "1") end)
+                    if st == 0 then
+                        pcall(function() remote:InvokeServer("Wenlocktoad", "2") end)
+                    elseif st == 2 then
+                        pcall(function() remote:InvokeServer("Wenlocktoad", "3") end)
+                    end
+                end
             end
         },
         {
