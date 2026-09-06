@@ -1,6 +1,5 @@
 -- ============================================================
 -- 🧠 PAYOMBOYZ V1 → V2 → V3 → V4 T10 UNIFIED UTILITY SCHEDULER ENGINE
--- GitHub: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10
 -- ============================================================
 
 local LP = game:GetService("Players").LocalPlayer
@@ -691,5 +690,3 @@ getgenv().PayomboyZ_BloxFruits_V4T10_Module = {
     StateReader = StateReader,
     TaskPoolEngine = TaskPoolEngine
 }
-
-print("[BFv4T10] Modular V1-V4 T10 Unified Engine Loaded Successfully!")
