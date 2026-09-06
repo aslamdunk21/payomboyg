@@ -43,7 +43,6 @@ end
 -- 2. Complete Anti-Cheat & Detection Bypass Suite
 ----------------------------------------------------------------
 task.spawn(function()
-    if isMobileDevice then return end
     pcall(function()
         -- [A] Constant Scan & Hook Bypass ("X-14" & "X-16")
         if typeof(getgc) == "function" and typeof(hookfunction) == "function" then
@@ -168,7 +167,6 @@ end)
 -- [[ End Rscripts Risk Notice ]]
 -- [[ GC Protection & Hooks ]]
 task.spawn(function()
-    if isMobileDevice then return end
     pcall(function()
         if typeof(getgc) ~= "function" or typeof(hookfunction) ~= "function" then return end
         local getconstants = getconstants or (debug and debug.getconstants)
@@ -943,7 +941,7 @@ end
 do
     local bypassOk = false
 
-    if not isMobileDevice and typeof(getgc) == "function" and typeof(hookfunction) == "function"
+    if typeof(getgc) == "function" and typeof(hookfunction) == "function"
         and typeof(islclosure) == "function" then
 
         local function findAntiSpeedFunc(nups, linedef)
@@ -1205,8 +1203,9 @@ end
 ----------------------------------------------------------------
 -- Movement & Pinning Primitives
 ----------------------------------------------------------------
-local ANCHOR  = Vector3.new(536.4492797851562, 70.28306579589844, -365.0294189453125)
-local GATE_IN = Vector3.new(578, 70.3, -365.03)
+local ANCHOR   = Vector3.new(536.4492797851562, 70.28306579589844, -365.0294189453125)
+local GATE_IN  = Vector3.new(578, 70.3, -365.03)
+local GATE_MID = Vector3.new(550, 70.3, -365.03)
 local MIN_HOVER = 3
 
 local myPlotSlot = nil
@@ -1325,12 +1324,10 @@ local function pin(pos)
     end
 
     conns[#conns + 1] = RunService.Heartbeat:Connect(apply)
-    if not isMobileDevice then
-        pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
-        pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
-        if RunService:IsClient() then
-            pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
-        end
+    pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
+    pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
+    if RunService:IsClient() then
+        pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
     end
 
     apply()
@@ -1842,15 +1839,40 @@ local function detectCategoryFromModel(model)
     return nil
 end
 
+local function cframeFromValue(v)
+    if typeof(v) == "CFrame" then return v end
+    if type(v) == "string" then
+        local n = {}
+        for s in v:gmatch("[%-]?[%d%.eE]+") do n[#n+1] = tonumber(s) end
+        if #n >= 12 then return CFrame.new(n[1],n[2],n[3],n[4],n[5],n[6],n[7],n[8],n[9],n[10],n[11],n[12]) end
+        if #n >= 3 then return CFrame.new(n[1],n[2],n[3]) end
+    end
+    return nil
+end
+
 local function areaEggRecords()
     local list = {}
     local seenPositions = {}
 
-    -- 1. Try server remote snapshot FIRST (Most accurate data direct from game engine)
+    -- 1. Direct call to RF/EggWorld/AskFieldEggSnapshot (confirmed working, returns {ServerTime, Records={[n]={Uid=string,...}}})
     local snap
-    local ok, rSnap = invoke(NET.Eggs.REQUEST_AREA_SNAPSHOT, 4)
-    if ok and type(rSnap) == "table" then
-        snap = (type(rSnap.Records) == "table") and rSnap.Records or rSnap
+    do
+        local net = game:GetService("ReplicatedStorage"):FindFirstChild("Packages")
+        net = net and net:FindFirstChild("Networking")
+        local snapRF = net and net:FindFirstChild("RF/EggWorld/AskFieldEggSnapshot")
+        if snapRF then
+            local ok2, rSnap = pcall(function() return snapRF:InvokeServer() end)
+            if ok2 and type(rSnap) == "table" then
+                snap = (type(rSnap.Records) == "table") and rSnap.Records or rSnap
+            end
+        end
+    end
+    -- Fallback via invoke() wrapper
+    if not snap then
+        local ok2, rSnap = invoke(NET.Eggs.REQUEST_AREA_SNAPSHOT)
+        if ok2 and type(rSnap) == "table" then
+            snap = (type(rSnap.Records) == "table") and rSnap.Records or rSnap
+        end
     end
 
     -- 2. Try client modules (EggState.ReadFieldEggs is the primary live source in new update)
@@ -1882,16 +1904,22 @@ local function areaEggRecords()
     end
 
     if snap and type(snap) == "table" then
-        for uid, rec in pairs(snap) do
-            if type(rec) == "table" then
-                if rec.Uid == nil and type(uid) == "string" then rec.Uid = uid end
-                rec.BottomCFrame = rec.BottomCFrame or rec.BoundsCFrame or rec.CFrame or (rec.Position and CFrame.new(rec.Position))
-                if rec.BottomCFrame then
-                    local pos = rec.BottomCFrame.Position
+        for _, rec in pairs(snap) do
+            if type(rec) == "table" and rec.Uid then
+                -- Skip eggs already Claimed (owned by others) - only grab Slot state
+                if rec.State == "Claimed" then continue end
+                -- Resolve BottomCFrame (may be string from server serialization)
+                local cf = cframeFromValue(rec.BottomCFrame)
+                    or cframeFromValue(rec.BoundsCFrame)
+                    or cframeFromValue(rec.CFrame)
+                    or (rec.Position and typeof(rec.Position) == "Vector3" and CFrame.new(rec.Position))
+                if cf then
+                    rec.BottomCFrame = cf
+                    local pos = cf.Position
                     local key = ("%.1f_%.1f_%.1f"):format(pos.X, pos.Y, pos.Z)
                     if not seenPositions[key] then
                         seenPositions[key] = true
-                        if not rec.AreaId then rec.AreaId = detectAreaFromPos(pos) or 1 end
+                        if not rec.AreaId then rec.AreaId = detectAreaFromPos(pos) or "Unknown" end
                         list[#list + 1] = rec
                     end
                 end
@@ -2496,9 +2524,9 @@ Guardless.SlotIdentity = safeRequire((Shared and Shared:FindFirstChild("Util") a
 
 function Guardless.slotKey(rec)
     if not (Guardless.SlotIdentity and rec and rec.Uid) then return nil end
-    local ok, isFirst = pcall(Guardless.SlotIdentity.IsFirstAreaUid, rec.Uid)
+    local ok, isFirst = pcall(Guardless.SlotIdentity.LooksLikeFirstAreaUid, rec.Uid)
     if not (ok and isFirst) then return nil end
-    local okk, key = pcall(Guardless.SlotIdentity.BuildSlotKey, rec.AreaId, rec.NestId)
+    local okk, key = pcall(Guardless.SlotIdentity.SlotKey, rec.AreaId, rec.NestId)
     return okk and key or nil
 end
 
@@ -2700,10 +2728,34 @@ task.spawn(function()
     end)
 end)
 
+-- Helper: call RF/EggWorld/AskFieldEggSnapshot directly and return state of a given UID
+local function getSnapshotEggState(uid)
+    local net = game:GetService("ReplicatedStorage"):FindFirstChild("Packages")
+    net = net and net:FindFirstChild("Networking")
+    local snapRF = net and net:FindFirstChild("RF/EggWorld/AskFieldEggSnapshot")
+    if not snapRF then return nil end
+    local ok, res = pcall(function() return snapRF:InvokeServer() end)
+    if not ok or type(res) ~= "table" then return nil end
+    local records = (type(res.Records) == "table") and res.Records or res
+    for _, egg in pairs(records) do
+        if type(egg) == "table" and egg.Uid == uid then
+            return egg.State
+        end
+    end
+    return nil
+end
+
 local function isCarryingEgg(prompt, rec)
+    -- 0. localCarryState is always authoritative
     if localCarryState then return true end
-    if rec and (rec.State == "Carried" or rec.State == "Held") then return true end
-    -- 1. Check Character for held egg instance, tool, or attributes
+    -- 1. Check snapshot state for specific UID (most accurate)
+    if rec and rec.Uid then
+        local state = getSnapshotEggState(rec.Uid)
+        if state == "Carried" or state == "Held" then return true end
+        -- If state is Slot/Claimed and we explicitly have it, it's NOT being carried
+        if state == "Slot" then return false end
+    end
+    -- 2. Check Character for held egg (server puts egg model in character)
     local c = char()
     if c then
         if c:GetAttribute("CarryingEgg") or c:GetAttribute("HeldEgg") or c:GetAttribute("Carrying") or c:GetAttribute("HoldingEgg") then
@@ -2718,15 +2770,7 @@ local function isCarryingEgg(prompt, rec)
             end
         end
     end
-
-    -- 2. Check LocalPlayer Attributes
-    if LocalPlayer then
-        if LocalPlayer:GetAttribute("CarryingEgg") or LocalPlayer:GetAttribute("HeldEgg") or LocalPlayer:GetAttribute("Carrying") or LocalPlayer:GetAttribute("HoldingEgg") then
-            return true
-        end
-    end
-
-    -- 3. Check PlayerGui elements
+    -- 3. Check PlayerGui for drop UI
     local p = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
     if p then
         for _, gui in ipairs(p:GetChildren()) do
@@ -2738,21 +2782,6 @@ local function isCarryingEgg(prompt, rec)
             end
         end
     end
-
-    -- 4. Check Client Modules (EggState & GuardEggRetrieval)
-    local GuardEggRetrieval = safeRequire(findModule("GuardEggRetrieval"))
-    local modulesToCheck = { EggState, GuardEggRetrieval }
-    for _, mod in ipairs(modulesToCheck) do
-        if mod and type(mod) == "table" then
-            for _, fnName in ipairs({ "IsCarrying", "GetHeldEgg", "GetState", "IsHoldingEgg", "GetCarriedEgg", "IsCarryingEgg" }) do
-                if type(mod[fnName]) == "function" then
-                    local ok, res = pcall(mod[fnName])
-                    if ok and res then return true end
-                end
-            end
-        end
-    end
-
     return false
 end
 
@@ -2901,7 +2930,31 @@ end
 ----------------------------------------------------------------
 -- TP Steal — Instant CFrame snap to egg + ultra-fast safe return
 ----------------------------------------------------------------
-local TP_STEP_CARRYING = 24
+local function instantHop(targetPos)
+    local root = hrp()
+    if not root then return false end
+    local from = root.Position
+    local diff = targetPos - from
+    local flatDist = Vector3.new(diff.X, 0, diff.Z).Magnitude
+    if flatDist <= 260 then
+        root.CFrame = CFrame.new(targetPos)
+        root.AssemblyLinearVelocity = Vector3.zero
+        return true
+    end
+    local hopSize = 250
+    local steps = math.max(1, math.ceil(flatDist / hopSize))
+    for i = 1, steps do
+        local wp = from + diff * (i / steps)
+        local gy = stepGroundY and stepGroundY(wp)
+        local y = gy and math.max(gy + MIN_HOVER, 70.3) or 70.3
+        root.CFrame = CFrame.new(wp.X, y, wp.Z)
+        root.AssemblyLinearVelocity = Vector3.zero
+        RunService.Heartbeat:Wait()
+    end
+    root.CFrame = CFrame.new(targetPos)
+    root.AssemblyLinearVelocity = Vector3.zero
+    return true
+end
 
 local function tpSteal(rec)
     unequipCharacterTools()
@@ -2925,7 +2978,7 @@ local function tpSteal(rec)
         stepTo(GATE_IN, 6)
     end
 
-    -- [2] Rapid stepped movement to egg along open field (no walls on field)
+    -- [2] Rapid stepped movement to egg along open field
     local targetY = groundYAt(eggPos)
     local safeEggPos = targetY and
         Vector3.new(eggPos.X, targetY + MIN_HOVER, eggPos.Z) or
@@ -2937,30 +2990,30 @@ local function tpSteal(rec)
         return false, "ไม่มี HRP"
     end
 
-    -- Fast traverse down the field
     stepTo(safeEggPos, 10)
 
     -- [3] Grab egg: remote server carry + proximity prompt
     local carried = false
+    local carryRF = game:GetService("ReplicatedStorage"):FindFirstChild("Packages")
+    carryRF = carryRF and carryRF:FindFirstChild("Networking")
+    carryRF = carryRF and carryRF:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
+
+    local slotKey = Guardless.slotKey(rec)
+    local payload = slotKey and { Uid = rec.Uid, FirstAreaSlotKey = slotKey } or { Uid = rec.Uid }
+
     for attempt = 1, 12 do
         if carried then break end
 
-        -- Server Remote: RF/EggWorld/AskFieldEggCarry
-        if rec and rec.Uid then
-            local slotKey = Guardless.slotKey(rec)
-            local payload = slotKey and { Uid = rec.Uid, FirstAreaSlotKey = slotKey } or { Uid = rec.Uid }
-            pcall(invoke, NET.Eggs.REQUEST_CARRY_EGG, payload)
-        end
+        pcall(function()
+            if carryRF then carryRF:InvokeServer(payload) else invoke(NET.Eggs.REQUEST_CARRY_EGG, payload) end
+        end)
 
-        -- Proximity prompt
         local pp = (rec and rec.Prompt) or nearestCarryPrompt(safeEggPos)
-        if pp then
-            triggerPrompt(pp)
-        end
+        if pp then triggerPrompt(pp) end
 
         local t0 = os.clock()
         while os.clock() - t0 < 0.25 do
-            if isCarryingEgg() then carried = true break end
+            if isCarryingEgg(pp, rec) then carried = true break end
             RunService.Heartbeat:Wait()
         end
 
@@ -2981,16 +3034,23 @@ local function tpSteal(rec)
 
     Runtime.carryUid = rec.Uid
 
-    -- [4] Return along open field to GATE_IN, then cross through door to ANCHOR
+    -- [4] Return through GATE_IN -> GATE_MID -> deliverPos (plot spawn point)
     stepTo(GATE_IN, 8)
-    stepTo(ANCHOR, 8)
+    local deliverPos = getHomePos()
+    if not deliverPos or (deliverPos - ANCHOR).Magnitude < 10 then
+        local myPlot = getMyPlot()
+        local sp = myPlot and (myPlot:FindFirstChild("SpawnPoint") or myPlot:FindFirstChild("CenterPoint"))
+        deliverPos = sp and (sp.Position + Vector3.new(0, 3, 0)) or Vector3.new(491.75, 71, -364.41)
+    end
+    stepTo(GATE_MID, 4)
+    stepTo(deliverPos, 8)
 
-    -- [5] Wait for server claim inside safe base
+    -- [5] Wait for server claim inside safe base plot
     local claimed = false
     local claimT0 = os.clock()
     while not claimed and os.clock() - claimT0 < 3.5 do
         task.wait(0.04)
-        if not isCarryingEgg() then claimed = true break end
+        if not isCarryingEgg(nil, rec) then claimed = true break end
         for _, live in pairs(areaEggRecords()) do
             if live.Uid == rec.Uid and (live.State == "Claimed" or live.State == "Collected") then
                 claimed = true
@@ -3003,7 +3063,7 @@ local function tpSteal(rec)
     unequipCharacterTools()
     if not claimed then
         toAnchor()
-        return false, "ไข่หลุดระหว่างทาง"
+        return false, "ส่งไข่ไม่สำเร็จ (เซิร์ฟเวอร์ดึงกลับ)"
     end
 
     Runtime.stats.eggs += 1
@@ -3025,7 +3085,7 @@ local function instantSteal(rec)
     local hum = humanoid()
     local root = hrp()
     if not root or not hum or hum.Health <= 0 then
-        task.wait(0.3)
+        task.wait(0.2)
         return false, "ตัวละครยังไม่พร้อม"
     end
 
@@ -3037,21 +3097,17 @@ local function instantSteal(rec)
 
     local unpin = nil
     local function release()
-        if unpin then
-            local f = unpin
-            unpin = nil
-            pcall(f)
-        end
+        if unpin then local f = unpin unpin = nil pcall(f) end
     end
 
     local function finish(ok, err)
         release()
         Runtime.carryUid = nil
         if not ok and rec and rec.Uid then
-            Runtime.skip[rec.Uid] = os.clock() + 6
+            Runtime.skip[rec.Uid] = os.clock() + 5
         end
-        blinkHold(ANCHOR, 0.1)
         unequipCharacterTools()
+        toAnchor()
         return ok, err
     end
 
@@ -3063,35 +3119,18 @@ local function instantSteal(rec)
     Nav.leaveTreadmill()
     if not Nav.waitCurtain(90) then return false, "ม่านยังไม่เปิด" end
 
-    -- Keep speed boosted to 900
     enforceWalkSpeed()
 
-    -- [1] Exit gate boundary first if inside base (ensures server registers arena entry)
+    -- [1] Ensure server registers player in gameplay area first (prevents 'Enter gameplay area first' reject)
     root = hrp()
-    if root and (not insideGameplay() or (root.Position - ANCHOR).Magnitude < 30) then
+    if root and (not insideGameplay() or (root.Position - ANCHOR).Magnitude < 35) then
         blinkExact(GATE_IN)
         task.wait(0.04)
     end
 
-    -- [2] Multi-hop fast traverse to far zones for physics replication & zone streaming
-    root = hrp()
-    if root then
-        local dist = (eggPos - root.Position).Magnitude
-        if dist > 250 then
-            local hops = math.clamp(math.ceil(dist / 500), 2, 6)
-            local from = root.Position
-            for i = 1, hops - 1 do
-                local mid = from:Lerp(eggPos, i / hops)
-                local y = groundYAt(mid) or 70.3
-                blinkExact(Vector3.new(mid.X, y, mid.Z))
-                RunService.Heartbeat:Wait()
-            end
-        end
-    end
-
-    -- [3] Find prompt & snap directly onto egg
-    local prompt = rec.Prompt or nearestCarryPrompt(eggPos, 40)
+    -- [2] Pure Instant Snap / Micro-hop directly to the egg
     local targetPos = eggPos
+    local prompt = rec.Prompt or nearestCarryPrompt(eggPos, 35)
     if prompt and prompt.Parent then
         local p = prompt.Parent
         if p:IsA("Attachment") then
@@ -3103,156 +3142,118 @@ local function instantSteal(rec)
         end
     end
 
-    local stand = targetPos + Vector3.new(0, 2.5, 0)
+    local stand = targetPos + Vector3.new(0, 1.2, 0)
+    instantHop(stand)
     unpin = pin(stand)
-    waitPinned(stand, 6, 0.25)
-    task.wait(0.1)
+    waitPinned(stand, 8, 0.22)
 
-    -- Dynamic re-align if prompt is found right at the egg
-    local closePrompt = nearestCarryPrompt(stand, 40)
-    if closePrompt and closePrompt.Parent then
-        prompt = closePrompt
-        local pPos = closePrompt.Parent:IsA("BasePart") and closePrompt.Parent.Position or closePrompt.Parent:GetPivot().Position
-        if (pPos - stand).Magnitude > 2 then
-            stand = pPos + Vector3.new(0, 2.5, 0)
-            unpin()
-            unpin = pin(stand)
-            task.wait(0.1)
-        end
-    end
+    -- [3] Prepare authoritative remote and payload
+    local net = game:GetService("ReplicatedStorage"):FindFirstChild("Packages")
+    net = net and net:FindFirstChild("Networking")
+    local carryRF = net and net:FindFirstChild("RF/EggWorld/AskFieldEggCarry")
 
-    -- [4] Prepare clean payload (FirstAreaSlotKey ONLY for first area!)
     local slotKey = Guardless.slotKey(rec)
     local payload = slotKey and { Uid = rec.Uid, FirstAreaSlotKey = slotKey } or { Uid = rec.Uid }
 
-    -- [5] Grab attempts loop with live carry checking
+    -- [4] Grab attempt: prompt + carryRF directly
     local carried = false
-    local deadline = os.clock() + 2.5
-    local lastRefuseMsg = nil
+    local deadline = os.clock() + 1.8
+
+    if prompt then
+        pcall(function()
+            prompt.HoldDuration = 0
+            prompt.MaxActivationDistance = 9999
+            prompt.RequiresLineOfSight = false
+            prompt.Enabled = true
+        end)
+        pcall(fireproximityprompt, prompt, 0)
+        pcall(fireproximityprompt, prompt)
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(0.05)
+            prompt:InputHoldEnd()
+        end)
+    end
 
     while os.clock() < deadline do
-        -- A. ProximityPrompt interaction
-        if prompt then
-            pcall(function()
-                prompt.HoldDuration = 0
-                prompt.MaxActivationDistance = 99999
-                prompt.RequiresLineOfSight = false
-                prompt.Enabled = true
-            end)
-            pcall(fireproximityprompt, prompt, 0)
-            pcall(fireproximityprompt, prompt)
-            pcall(function()
-                prompt:InputHoldBegin()
-                task.wait(0.04)
-                prompt:InputHoldEnd()
-            end)
-        else
-            prompt = nearestCarryPrompt(stand, 40) or nearestCarryPrompt(eggPos, 40)
-        end
+        pcall(function()
+            if carryRF then
+                return carryRF:InvokeServer(payload)
+            else
+                return invoke(NET.Eggs.REQUEST_CARRY_EGG, payload)
+            end
+        end)
 
-        -- B. Client Controllers
-        if EggState and type(EggState.CarryFieldEgg) == "function" then
-            pcall(EggState.CarryFieldEgg, rec.Uid, slotKey)
-            pcall(EggState.CarryFieldEgg, rec.Uid)
-        end
-        if EggCmds and type(EggCmds.RequestCarryAreaEgg) == "function" then
-            pcall(EggCmds.RequestCarryAreaEgg, rec.Uid, slotKey)
-            pcall(EggCmds.RequestCarryAreaEgg, rec.Uid)
-        end
-        if AreaEggsController and type(AreaEggsController.CarryEgg) == "function" then
-            pcall(AreaEggsController.CarryEgg, rec)
-            pcall(AreaEggsController.CarryEgg, rec.Uid)
-        end
-
-        -- C. Server Remote Calls: Both RemoteFunction & RemoteEvent
-        local ok, res, why = pcall(invoke, NET.Eggs.REQUEST_CARRY_EGG, payload)
-        if not ok or not res then
-            pcall(invoke, NET.Eggs.REQUEST_CARRY_EGG, rec.Uid)
-            pcall(invoke, "RF/EggWorld/AskFieldEggCarry", payload)
-            pcall(invoke, "RF/EggWorld/AskFieldEggCarry", rec.Uid)
-            pcall(invoke, "Eggs: RequestAreaEggCarry", payload)
-            pcall(invoke, "Eggs: RequestAreaEggCarry", rec.Uid)
-            pcall(invoke, "EggCmds: RequestCarryAreaEgg", rec.Uid)
-            pcall(invoke, "RequestCarryAreaEgg", rec.Uid)
-
-            pcall(fire, "RE/EggWorld/FieldEggCarry", payload)
-            pcall(fire, "RE/EggWorld/FieldEggCarry", rec.Uid)
-            pcall(fire, "FieldEggCarry", payload)
-            pcall(fire, "FieldEggCarry", rec.Uid)
-            if why then lastRefuseMsg = tostring(why) end
-        end
-
-        -- D. Check if character is holding/carrying the egg
-        if isCarryingEgg(prompt, rec) or localCarryState then
+        if isCarryingEgg(prompt, rec) then
             carried = true
             break
         end
 
-        task.wait(0.06)
+        local state = getSnapshotEggState(rec.Uid)
+        if state == "Carried" or state == "Held" then
+            carried = true
+            break
+        end
+
+        if prompt then
+            pcall(fireproximityprompt, prompt, 0)
+            pcall(fireproximityprompt, prompt)
+        end
+
+        task.wait(0.08)
     end
 
     release()
 
-    -- [6] CRITICAL: If NOT carried, DO NOT WARP HOME! Abort immediately!
     if not carried then
-        local errDetail = lastRefuseMsg and (" (" .. lastRefuseMsg .. ")") or ""
-        logLine("steal", ("❌ เซิร์ฟเวอร์ยังไม่ยอมให้หยิบไข่%s: %s โซน %s"):format(errDetail, tostring(rec.AssetCategory), tostring(rec.AreaId)))
-        return finish(false, "เซิร์ฟเวอร์ยังไม่ยอมให้หยิบไข่" .. errDetail)
+        logLine("steal", ("❌ เซิร์ฟเวอร์ยังไม่ยอมให้หยิบไข่: %s โซน %s"):format(tostring(rec.AssetCategory), tostring(rec.AreaId)))
+        return finish(false, "เซิร์ฟเวอร์ยังไม่ยอมให้หยิบไข่")
     end
 
-    -- [7] Carried confirmed! Fast return to Safe Zone Base to bank
+    -- [5] Carried confirmed! Instant Return through gate checkpoint to Plot SpawnPoint (prevents Delivery failed)
     Runtime.carryUid = rec.Uid
-    local returnPos = Vector3.new(514, 70.3, -368)
-
-    root = hrp()
-    if root then
-        local distHome = (returnPos - root.Position).Magnitude
-        if distHome > 250 then
-            local hops = math.clamp(math.ceil(distHome / 500), 2, 6)
-            local from = root.Position
-            for i = 1, hops - 1 do
-                local mid = from:Lerp(returnPos, i / hops)
-                local y = groundYAt(mid) or 70.3
-                blinkExact(Vector3.new(mid.X, y, mid.Z))
-                RunService.Heartbeat:Wait()
-            end
-        end
+    local deliverPos = getHomePos()
+    if not deliverPos or (deliverPos - ANCHOR).Magnitude < 10 then
+        local myPlot = getMyPlot()
+        local sp = myPlot and (myPlot:FindFirstChild("SpawnPoint") or myPlot:FindFirstChild("CenterPoint"))
+        deliverPos = sp and (sp.Position + Vector3.new(0, 3, 0)) or Vector3.new(491.75, 71, -364.41)
     end
 
-    unpin = pin(returnPos)
+    instantHop(GATE_IN)
+    task.wait(0.03)
+    root = hrp()
+    if root then root.CFrame = CFrame.new(GATE_MID) end
+    task.wait(0.03)
+    if root then root.CFrame = CFrame.new(deliverPos) end
+    unpin = pin(deliverPos)
 
+    -- [6] Wait for claim verdict inside base plot
     local claimed = false
     local claimT0 = os.clock()
-    while not claimed and os.clock() - claimT0 < 3.5 do
-        task.wait(0.04)
-        if not isCarryingEgg() then
+    while not claimed and os.clock() - claimT0 < 2.5 do
+        task.wait(0.05)
+        local eggState = getSnapshotEggState(rec.Uid)
+        if eggState ~= "Carried" then
             claimed = true
             break
-        end
-        for _, live in pairs(areaEggRecords()) do
-            if live.Uid == rec.Uid and (live.State == "Claimed" or live.State == "Collected") then
-                claimed = true
-                break
-            end
         end
     end
 
     release()
     Runtime.carryUid = nil
     unequipCharacterTools()
-    blinkExact(ANCHOR)
+    toAnchor()
 
-    if not claimed and isCarryingEgg() then
-        return false, "ไข่หลุดระหว่างทาง"
+    if not claimed then
+        return finish(false, "ส่งไข่ไม่สำเร็จ (เซิร์ฟเวอร์ดึงกลับ)")
     end
 
     Runtime.stats.eggs += 1
     local cat = rec.AssetCategory or "Egg"
-    logLine("steal", ("⚡ [Instant 900] ขโมย %s สำเร็จ"):format(cat))
+    logLine("steal", ("⚡ [Instant TP] ขโมย %s สำเร็จ"):format(cat))
     if Cfg.WebhookSteal then
         webhook("⚡ Instant ขโมยไข่สำเร็จ", ("**%s** (%s) — โซน %s"):format(cat, RARITY_TH[rarityOf(cat)] or rarityOf(cat), tostring(rec.AreaId)))
     end
-    toAnchor()
     return true
 end
 
@@ -7495,6 +7496,10 @@ if LocalPlayer then
 end
 
 Runtime.instantReady = true
+pcall(function()
+    workspace:SetAttribute("ClientObbyAntiTp", false)
+    workspace:SetAttribute("FastEggPickupTime", true)
+end)
 hardenCharacter()
 Runtime.stats.startMoney = moneyNow()
 
