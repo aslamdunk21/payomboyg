@@ -48,20 +48,74 @@ if not World1 and not World2 and not World3 then
     getgenv().World3 = World3
 end
 
+function GetCurrentQuestInfo()
+    local lp = LocalPlayer or game:GetService("Players").LocalPlayer
+    local pg = lp and lp:FindFirstChild("PlayerGui")
+    if not pg then return false, "", "" end
+
+    -- 1. Modern Blox Fruits Quest UI (TrackedQuestFrame)
+    local tqf = pg:FindFirstChild("TrackedQuestFrame")
+    if tqf and tqf.Enabled then
+        local frame = tqf:FindFirstChild("Frame")
+        if frame and frame.Visible then
+            local header = frame:FindFirstChild("header")
+            local textLabel = header and header:FindFirstChild("textLabel")
+            local desc = frame:FindFirstChild("description")
+            local titleText = (textLabel and textLabel.Text) or ""
+            local descText = (desc and desc.Text) or ""
+            if #titleText > 0 or #descText > 0 then
+                return true, titleText, descText
+            end
+        end
+    end
+
+    -- 2. Legacy Blox Fruits Quest UI (Main.Quest)
+    local mq = pg:FindFirstChild("Main") and pg.Main:FindFirstChild("Quest")
+    if mq and mq.Visible then
+        local title = ""
+        pcall(function()
+            title = mq.Container.QuestTitle.Title.Text
+        end)
+        if #title > 0 and not string.find(title:lower(), "defeat 5 bandits") then
+            return true, title, title
+        end
+    end
+
+    return false, "", ""
+end
+getgenv().GetCurrentQuestInfo = GetCurrentQuestInfo
+
 function GetMobByName(mobName)
     if not mobName then return nil end
+    local mobLower = string.lower(mobName)
+    
     local enemies = workspace:FindFirstChild("Enemies")
     if enemies then
         for _, v in ipairs(enemies:GetChildren()) do
-            if v.Name == mobName and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+            local nameLower = string.lower(v.Name)
+            if (nameLower == mobLower or string.find(nameLower, mobLower, 1, true)) 
+                and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
                 return v
             end
         end
     end
+    
+    for _, v in ipairs(workspace:GetChildren()) do
+        if v:IsA("Model") and v ~= LocalPlayer.Character then
+            local nameLower = string.lower(v.Name)
+            if (nameLower == mobLower or string.find(nameLower, mobLower, 1, true)) 
+                and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+                return v
+            end
+        end
+    end
+    
     local rep = game:GetService("ReplicatedStorage")
     if rep then
         for _, v in ipairs(rep:GetChildren()) do
-            if v.Name == mobName and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
+            local nameLower = string.lower(v.Name)
+            if (nameLower == mobLower or string.find(nameLower, mobLower, 1, true)) 
+                and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
                 return v
             end
         end
@@ -227,10 +281,11 @@ function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, CustomName
         if not mainMob or not mainMob.Parent or not hrp or humanoid.Health <= 0 then break end
         
         -- Quest Desync Verification: If current quest is wrong, abandon to avoid getting stuck
-        if IsCheckQuest and Quest and Quest.Visible and QuestTitle and QuestTitle.Text and #QuestTitle.Text > 0 then
-            local currentText = QuestTitle.Text:lower()
+        local hasActiveQ, curQTitle, curQDesc = GetCurrentQuestInfo()
+        if IsCheckQuest and hasActiveQ then
+            local fullQText = (curQTitle .. " " .. curQDesc):lower()
             local expectedText = tostring(CustomName or Monster or ""):lower()
-            if #expectedText > 0 and not string.find(currentText, expectedText) and not string.find(currentText, "swan") then
+            if #expectedText > 0 and not string.find(fullQText, expectedText, 1, true) and not string.find(fullQText, "swan") and not string.find(fullQText, "bartilo") then
                 pcall(function() CommF_:InvokeServer("AbandonQuest") end)
                 task.wait(0.3)
                 break
@@ -419,13 +474,16 @@ function KaitunWorld1(Quest, QuestTitle, Level)
     end
 
     -- 4. Standard Level Farming (Sea 1)
-    if not Quest.Visible then
+    local hasQ, curQTitle, curQDesc = GetCurrentQuestInfo()
+    local isQuestActive = hasQ or (Quest and Quest.Visible)
+    if not isQuestActive then
         title.Text = "Auto Farming Level | Taking Quest"
         MovementManager:MoveTo(CFrameQ, 150, 2)
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
             CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
             CommF_:InvokeServer("SetSpawnPoint")
+            task.wait(0.5)
         end
     else
         local targetMob = TargetManager:GetBestTarget(Monster, 600)
@@ -446,6 +504,9 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     if WS and WS.Update then WS:Update() end
     CheckQuest()
     
+    local hasQ, curQTitle, curQDesc = GetCurrentQuestInfo()
+    local isQuestActive = hasQ or (Quest and Quest.Visible)
+
     local bartiloProg = 0
     pcall(function() bartiloProg = CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") end)
 
@@ -499,9 +560,7 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                 pcall(function() trevorStatus = CommF_:InvokeServer("TalkTrevor", "1") end)
                 
                 if trevorStatus == true then
-                    title.Text = "Accepting Trevor Quest"
                     pcall(function() CommF_:InvokeServer("TalkTrevor", "2") end)
-                    task.wait(0.5)
                 end
 
                 -- Check if holding or owning 1M+ fruit
@@ -517,7 +576,6 @@ function KaitunWorld2(Quest, QuestTitle, Level)
                     end
                     return
                 else
-                    title.Text = "Attempting Fruit Gacha for Trevor Gate..."
                     pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
                     StoreAllFruits()
                 end
@@ -527,8 +585,9 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     -- 2. Bartilo Quest (Lv >= 850)
     elseif Level >= 850 and bartiloProg ~= 3 then
         if bartiloProg == 0 then
-            if Quest.Visible then
-                if string.find(QuestTitle.Text, "Swan Pirates") then
+            if isQuestActive then
+                local fullQText = (curQTitle .. " " .. curQDesc):lower()
+                if string.find(fullQText, "swan") then
                     local swanPirate = TargetManager:GetBestTarget("Swan Pirate", 500)
                     if swanPirate then
                         SmartMoveAndAttack(swanPirate, QuestTitle, Quest, false, "Swan Pirate")
@@ -598,13 +657,14 @@ function KaitunWorld2(Quest, QuestTitle, Level)
     end
 
     -- 4. Standard Level Farming (Sea 2)
-    if not Quest.Visible then
+    if not isQuestActive then
         title.Text = "Auto Farming Level | Taking Quest"
         MovementManager:MoveTo(CFrameQ, 150, 2)
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
             CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
             CommF_:InvokeServer("SetSpawnPoint")
+            task.wait(0.5)
         end
     else
         local targetMob = TargetManager:GetBestTarget(Monster, 600)
@@ -625,14 +685,18 @@ function KaitunWorld3(Quest, QuestTitle, Level)
     if WS and WS.Update then WS:Update() end
     CheckQuest()
 
+    local hasQ, curQTitle, curQDesc = GetCurrentQuestInfo()
+    local isQuestActive = hasQ or (Quest and Quest.Visible)
+
     -- 1. Standard Level Farming (Sea 3)
-    if not Quest.Visible then
+    if not isQuestActive then
         title.Text = "Auto Farming Level (Sea 3) | Taking Quest"
         MovementManager:MoveTo(CFrameQ, 150, 2)
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp and (CFrameQ.Position - hrp.Position).Magnitude <= 15 then
             CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
             CommF_:InvokeServer("SetSpawnPoint")
+            task.wait(0.5)
         end
     else
         local targetMob = TargetManager:GetBestTarget(Monster, 600)
