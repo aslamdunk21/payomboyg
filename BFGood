@@ -11,131 +11,18 @@ local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 
-LocalPlayer = Players.LocalPlayer
-LP = LocalPlayer
-if not LocalPlayer then
+local LP = Players.LocalPlayer
+if not LP then
     local start = tick()
-    while not LocalPlayer and tick() - start < 5 do task.wait(0.1) end
-    LocalPlayer = Players.LocalPlayer
-    LP = LocalPlayer
+    while not LP and tick() - start < 5 do task.wait(0.1) end
+    LP = Players.LocalPlayer
 end
-if not LocalPlayer then return end
-
+if not LP then return end
 
 -- Load Bypass Payload
 pcall(function()
-    local ok, res = pcall(function() return game:HttpGet("https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BypassBF") end)
-    if ok and type(res) == "string" and #res > 0 and not res:find("404: Not Found") then
-        local fn = loadstring(res)
-        if fn then pcall(fn) end
-    end
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
 end)
-
--- ============================================================
--- 🖥️ GLOBAL UI PROXY INITIALIZATION (NIL-SAFE UI BINDINGS)
--- ============================================================
-local function CreateUIProxy(name)
-    local proxy = { Text = "" }
-    return setmetatable(proxy, {
-        __index = function(t, k)
-            local real = getgenv()[name .. "_Instance"] or _G[name .. "_Instance"]
-            if k == "Text" and real and typeof(real) == "Instance" then
-                return real.Text
-            end
-            return rawget(t, k)
-        end,
-        __newindex = function(t, k, v)
-            if k == "Text" then
-                rawset(t, "Text", tostring(v))
-                local real = getgenv()[name .. "_Instance"] or _G[name .. "_Instance"]
-                if real and typeof(real) == "Instance" then
-                    pcall(function() real.Text = tostring(v) end)
-                end
-            else
-                rawset(t, k, v)
-            end
-        end
-    })
-end
-
-if getgenv().title == nil then getgenv().title = CreateUIProxy("title") end
-if getgenv().subtitle == nil then getgenv().subtitle = CreateUIProxy("subtitle") end
-title = getgenv().title
-subtitle = getgenv().subtitle
-_G.title = getgenv().title
-_G.subtitle = getgenv().subtitle
-
--- ============================================================
--- ⚙️ GLOBAL CONFIGURATION INITIALIZATION & ENGINE DEFAULTS
--- ============================================================
-getgenv().Configs = getgenv().Configs or {}
-local function InitConfig(key, val)
-    if getgenv().Configs[key] == nil then
-        getgenv().Configs[key] = val
-    end
-end
-
-InitConfig("AutoFarmLevel", true)
-InitConfig("FastAttack", true)
-InitConfig("BringMob", true)
-InitConfig("AutoSkill", true)
-InitConfig("SelectWeapon", "Melee")
-InitConfig("AutoBuyMelee", true)
-InitConfig("AutoStats", true)
-InitConfig("AutoHaki", true)
-InitConfig("AutoStoreFruit", true)
-InitConfig("AutoBuyFruit", false)
-InitConfig("TargetFruit", "Top 5 (Top Tier)")
-InitConfig("MinBeliReserve", 0)
-InitConfig("AutoRandomFruit", false)
-InitConfig("SkipFarmLevel", false)
-InitConfig("Saber", true)
-InitConfig("Pole", true)
-InitConfig("AutoV4_Full", false)
-InitConfig("AutoV2_V3", false)
-InitConfig("AutoMirage", false)
-InitConfig("AutoTrial", false)
-InitConfig("AutoUpgradeV4_T10", false)
-
-local V4EngineLoaded = false
-local function LoadV4Engine()
-    if V4EngineLoaded then return end
-    V4EngineLoaded = true
-    task.spawn(function()
-        pcall(function()
-            local loaded = false
-            pcall(function()
-                if type(readfile) == "function" and type(isfile) == "function" and isfile("BFv4t10.lua") then
-                    local code = readfile("BFv4t10.lua")
-                    if code and #code > 100 then
-                        loadstring(code)()
-                        loaded = true
-                    end
-                end
-            end)
-            if not loaded then
-                pcall(function()
-                    local res = game:HttpGet("https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10")
-                    if res and #res > 100 and not res:find("404: Not Found") then
-                        loadstring(res)()
-                        loaded = true
-                    end
-                end)
-            end
-            if ObsidianGlassEngine and ObsidianGlassEngine.Notify then
-                ObsidianGlassEngine:Notify({
-                    Title = "V4 Engine",
-                    Content = loaded and (ObsidianGlassEngine.CurrentLanguage == "th" and "โหลดมอดูล Race V4 T10 เรียบร้อยแล้ว!" or "Loaded Race V4 T10 Module Successfully!") or "Failed to load V4 Module",
-                    Duration = 4
-                })
-            end
-        end)
-    end)
-end
-
-if getgenv().Configs.AutoV4_Full or getgenv().Configs.AutoV2_V3 or getgenv().Configs.AutoMirage or getgenv().Configs.AutoTrial or getgenv().Configs.AutoUpgradeV4_T10 then
-    LoadV4Engine()
-end
 
 -- ============================================================
 -- 🏴‍☠️ IMMEDIATE AUTO SELECT TEAM (PIRATES)
@@ -249,11 +136,7 @@ getgenv().Configs = getgenv().Configs or {
     StuckDetector = true,
     Saber = true,
     Bartilo = true,
-    AutoBuyMelee = true,
-    AutoV4_Full = false,
-    Auto_Prepare_V3 = true,
-    ServerHopMoon = false,
-    V4_External_Script = "https://raw.githubusercontent.com/DragonSCRIPTS/script_auto_V4/main/autov4"
+    AutoBuyMelee = true
 }
 
 local ConfigManager = {
@@ -1515,6 +1398,8 @@ RunService.Heartbeat:Connect(function()
     end)
 end)
 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/BypassBF"))()
+
 -- Re-entrancy Cleanup: terminate previous execution threads
 if getgenv().PayomboyZ_BloxFruits_Cleanup then
     pcall(getgenv().PayomboyZ_BloxFruits_Cleanup)
@@ -1524,714 +1409,59 @@ getgenv().PayomboyZ_BloxFruits_Cleanup = function()
     scriptRunning = false
 end
 
--- ============================================================
--- 🧠 FULL V1 → V2 → V3 → V4 T10 UNIFIED ENGINE (MODULAR LOAD)
--- GitHub: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10
--- ============================================================
+-- Teleport Persistence: Auto-execute script after place transitions
 pcall(function()
-    local loaded = false
-    local url = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10"
-    local success, code = pcall(function() return game:HttpGet(url) end)
-    if success and type(code) == "string" and #code > 0 and not code:find("404: Not Found") then
-        local fn = loadstring(code)
-        if fn then
-            fn()
-            loaded = true
-        end
-    end
-    if not loaded then
-        local path = "BFv4t10.lua"
-        if readfile and isfile and isfile(path) then
-            local localCode = readfile(path)
-            local fn = loadstring(localCode)
-            if fn then fn() end
-        end
+    local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+    if queueFunc then
+        queueFunc([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+        ]])
     end
 end)
 
+getgenv().Configs = {
+    Team = "Pirates",
+    AutoFarmLevel = true,
+    FastAttack = true,
+    BringMob = true,
+    AutoSkill = true,
+    SkipFarmLevel = true,
+    Saber = true,
+    Pole = true,
+    AutoHaki = true,
+    AutoBuyMelee = true,
+    AutoStats = true,
+    AutoStoreFruit = true,
+    AutoRandomFruit = true,
+    AutoBuyFruit = true,
+    TargetFruit = "Top 5 (Top Tier)",
+    MinBeliReserve = 0,
+    SelectWeapon = "Melee"
+}
 
-NotifPool = { free = {}, MAX = 10 }
-
-function NotifPool:Get()
-    local item = table.remove(self.free)
-    if not item then
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(0, 240, 0, 40)
-        frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-        local text = Instance.new("TextLabel", frame)
-        text.Size = UDim2.new(1, 0, 1, 0)
-        text.TextColor3 = Color3.fromRGB(255, 255, 255)
-        text.BackgroundTransparency = 1
-        item = frame
-    end
-    item.Visible = true
-    return item
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
 
-function NotifPool:Return(item)
-    if not item then return end
-    item.Visible = false
-    item.Parent = nil
-    if #self.free < self.MAX then
-        table.insert(self.free, item)
-    else
-        item:Destroy()
-    end
-end
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-local UI_Performance = { particlesEnabled = true, startTime = os.clock() }
-
-function UI_Performance:CheckFpsAndUptime(currentFps)
-    local uptimeHours = (os.clock() - self.startTime) / 3600
-    if (currentFps and currentFps < 25) or uptimeHours > 2.0 then
-        if self.particlesEnabled then
-            self.particlesEnabled = false
-            -- Disable heavy UI animations / particles
-            if getgenv().Configs then getgenv().Configs.DisableUIEffects = true end
-        end
-    end
-end
-
--- 🛡️ 2. Comprehensive RecoveryService & Verify-After-Act Engine
-local RecoveryService = { failureCounts = {} }
-
-function RecoveryService:Escalate(actionName)
-    local count = (self.failureCounts[actionName] or 0) + 1
-    self.failureCounts[actionName] = count
-
-    if count >= 3 then
-        self.failureCounts[actionName] = 0
-        -- Level 1 Escalation: Safe Teleport / Reset State
-        local LP = game:GetService("Players").LocalPlayer
-        local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then hrp.CFrame = CFrame.new(1250, 50, -5100) end
-    end
-    if count >= 5 then
-        -- Level 2 Escalation: Rejoin / Server Hop
-        local ts = game:GetService("TeleportService")
-        pcall(function() ts:Teleport(game.PlaceId) end)
-    end
-end
-
-local function Act(fn, verify, actionName, retries)
-    retries = retries or 3
-    for i = 1, retries do
-        fn()
-        task.wait(0.8)
-        if verify() then
-            RecoveryService.failureCounts[actionName] = 0
-            return true
-        end
-    end
-    RecoveryService:Escalate(actionName)
-    return false
-end
-
--- 🌊 3. Failure Detectors (Void Fall & Quest Desync)
+-- Automatic Team Assignment (Non-blocking background thread)
 task.spawn(function()
-    local lastQuestCheck = os.clock()
-    while scriptRunning do
-        task.wait(1)
-        pcall(function()
-            local LP = game:GetService("Players").LocalPlayer
-            local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-            
-            -- Void / Anti-Map Fall Detector
-            if hrp and hrp.Position.Y < -400 then
-                hrp.CFrame = CFrame.new(1250, 50, -5100) -- Teleport back to safe origin
-            end
-
-            -- Quest UI Desync Detector (Run every 30 seconds)
-            if os.clock() - lastQuestCheck >= 30 then
-                lastQuestCheck = os.clock()
-                local playerGui = LP and LP:FindFirstChild("PlayerGui")
-                local mainGui = playerGui and playerGui:FindFirstChild("Main")
-                local questUI = mainGui and mainGui:FindFirstChild("Quest")
-                
-                if not (questUI and questUI.Visible) then
-                    SafeRemote.lastQuestState = nil -- Reset cached state to force fresh quest sync
-                end
-            end
-        end)
-    end
-end)
-
--- 💰 4. Cross-Stage Pre-Provisioning Evaluator
-local TOTAL_NEED = {
-    beli = 500000 + 2000000 + 1000000, -- V2 (500k) + V3 (2M) + Fruit/Gacha (1M)
-    frag = 3000 + 26750                -- V1/V3 Rerolls (3k) + V4 T10 (26.75k)
-}
-
-local function ShouldPrioritizeBeli(s, currentBeliPerHour)
-    local gap = TOTAL_NEED.beli - s.beli
-    if gap <= 0 then return false end
-    local etaLevelSec = (1000 - math.min(1000, s.level)) * 120 -- ~2 min per level
-    local etaBeliSec = (gap / math.max(1, currentBeliPerHour or 500000)) * 3600
-    return etaBeliSec > etaLevelSec -- Beli will lag behind level progression!
-end
-
--- 📊 5. Polish: Adaptive Switch Margin & EMA Death Rate Tracker
-local DeathRateEMA = 0.0
-
-local function GetAdaptiveSwitchMargin(stage, lockOwner)
-    if lockOwner == "V2_FLOWER" or stage == "STAGE_V2" then
-        return 5.0 -- Super high margin during V2 Fragile Mode (prevents task swapping!)
-    end
-    return 1.35 -- Default smooth margin
-end
-
-local SWITCH_MARGIN = 1.35
-local MIN_DWELL_TIME = 45
-local AGE_RATE = 0.01
-
-local Controller = {
-    Owner = nil,
-    Priority = 0,
-    LastSwitchTime = os.clock(),
-    Modules = {},
-    LockOwner = nil,
-    hardLock = nil
-}
-
-function Controller:Current()
-    return self.Owner
-end
-
-function Controller:Acquire(name, priority)
-    if self.hardLock and self.hardLock ~= name and priority < 999 then
-        return false, "hard-locked by " .. tostring(self.hardLock)
-    end
-    if self.LockOwner and self.LockOwner ~= name then
-        return false -- Fragile Mode Lock
-    end
-    if self.Owner == nil or priority > self.Priority or self.Owner == name then
-        if self.Owner and self.Owner ~= name and self.Modules[self.Owner] and self.Modules[self.Owner].Suspend then
-            pcall(function() self.Modules[self.Owner]:Suspend() end)
-        end
-        if self.Owner ~= name then
-            self.LastSwitchTime = os.clock()
-        end
-        self.Owner = name
-        self.Priority = priority
-        return true
-    end
-    return false
-end
-
-function Controller:Release(name)
-    if self.Owner == name then
-        self.Owner = nil
-        self.Priority = 0
-        if self.LockOwner == name then self.LockOwner = nil end
-        return true
-    end
-    return false
-end
-
-function Controller:CanServerHop()
-    if self.LockOwner == "V2_FLOWER" then return false end
-    if self.Owner == "BLUE_GEAR" or self.Owner == "TRIAL_EXECUTION" then return false end
-    return true
-end
-
-function Controller:CanSpendBeli(amount, stage)
-    local stateBeli = 0
-    pcall(function()
-        local LP = game:GetService("Players").LocalPlayer
-        local data = LP and LP:FindFirstChild("Data")
-        stateBeli = data and data:FindFirstChild("Beli") and data.Beli.Value or 0
-    end)
-    if stage == "STAGE_V2" and (stateBeli - amount) < 500000 then return false end
-    if stage == "STAGE_V3" and (stateBeli - amount) < 2000000 then return false end
-    return true
-end
-
--- 📌 1. State Reader & Global Router
-local StateReader = {}
-
-function StateReader:ReadState()
-    local LP = game:GetService("Players").LocalPlayer
-    local data = LP and LP:FindFirstChild("Data")
-    local leaderstats = LP and LP:FindFirstChild("leaderstats")
-
-    local race = (data and data:FindFirstChild("Race")) and data.Race.Value or "Human"
-    local level = (data and data:FindFirstChild("Level")) and data.Level.Value or (leaderstats and leaderstats:FindFirstChild("Level") and leaderstats.Level.Value or 1)
-    local beli = (data and data:FindFirstChild("Beli")) and data.Beli.Value or (leaderstats and leaderstats:FindFirstChild("Beli") and leaderstats.Beli.Value or 0)
-    local frag = (data and data:FindFirstChild("Fragments")) and data.Fragments.Value or (leaderstats and leaderstats:FindFirstChild("Fragments") and leaderstats.Fragments.Value or 0)
-    
-    local placeId = game.PlaceId
-    local sea = (placeId == 7449423635 or placeId == 2753915549) and 1 or (placeId == 4442272183 and 2 or 3)
-    
-    local bp = LP and LP:FindFirstChild("Backpack")
-    local char = LP and LP.Character
-
-    local hasBlueGear = (bp and bp:FindFirstChild("Blue Gear")) or (char and char:FindFirstChild("Blue Gear")) ~= nil
-    local ver = 1
-    if char and char:FindFirstChild("RaceTransformed") then ver = 4
-    elseif hasBlueGear or (data and data:FindFirstChild("RaceVersion") and data.RaceVersion.Value >= 3) then ver = 3
-    elseif data and data:FindFirstChild("RaceVersion") and data.RaceVersion.Value >= 2 then ver = 2 end
-
-    return {
-        race = race,
-        ver = ver,
-        tier = 0,
-        level = level,
-        beli = beli,
-        frag = frag,
-        sea = sea,
-        bartilo = (level >= 850),
-        donSwan = (level >= 1000),
-        hasBlueGear = hasBlueGear,
-        hasSealedKing = (sea >= 3 and level >= 1500)
-    }
-end
-
--- 🎯 Live Game State Predicate Progression Marks (M01 - M16)
-local MARK_ORDER = {
-    "M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08",
-    "M09", "M10", "M11", "M12", "M13", "M14", "M15", "M16"
-}
-
-local MARKS = {
-    M01 = { name = "Fresh Account Init", verify = function(s) return s.level > 1 or s.sea > 1 end, gate = function(s) return true end, stage = "STAGE_LEVEL" },
-    M02 = { name = "Farm Lv. 1-700", verify = function(s) return s.level >= 700 or s.sea >= 2 end, gate = function(s) return true end, stage = "STAGE_LEVEL" },
-    M03 = { name = "Sea 1 -> Sea 2 Pass", verify = function(s) return s.sea >= 2 end, gate = function(s) return s.level >= 700 end, stage = "STAGE_LEVEL" },
-    M04 = { name = "Farm Lv. 700-850", verify = function(s) return s.level >= 850 end, gate = function(s) return s.sea >= 2 end, stage = "STAGE_LEVEL" },
-    M05 = { name = "Bartilo Quest", verify = function(s) return s.bartilo end, gate = function(s) return s.level >= 850 end, stage = "STAGE_BARTILO" },
-    M06 = { name = "Pre-Provision $500k Beli", verify = function(s) return s.ver >= 2 or s.beli >= 500000 end, gate = function(s) return s.level >= 850 and s.bartilo end, stage = "STAGE_LEVEL" },
-    M07 = { name = "Flower Quest V2", verify = function(s) return s.ver >= 2 end, gate = function(s) return s.level >= 850 and s.bartilo and s.beli >= 500000 end, stage = "STAGE_V2" },
-    M08 = { name = "Farm Lv. 850-1000", verify = function(s) return s.level >= 1000 end, gate = function(s) return s.ver >= 2 end, stage = "STAGE_LEVEL" },
-    M09 = { name = "Don Swan Defeat", verify = function(s) return s.donSwan end, gate = function(s) return s.level >= 1000 and s.ver >= 2 end, stage = "STAGE_V3" },
-    M10 = { name = "Arowe Quest V3 / Reroll", verify = function(s) return s.ver >= 3 end, gate = function(s) return s.level >= 1000 and s.ver >= 2 and s.donSwan and s.beli >= 2000000 end, stage = "STAGE_V3" },
-    M11 = { name = "Sea 2 -> Sea 3 Transition", verify = function(s) return s.sea >= 3 end, gate = function(s) return s.level >= 1500 and s.ver >= 3 end, stage = "STAGE_V4" },
-    M12 = { name = "Sealed King / Great Tree", verify = function(s) return s.hasSealedKing end, gate = function(s) return s.sea >= 3 end, stage = "STAGE_V4" },
-    M13 = { name = "Mirage & Blue Gear", verify = function(s) return s.hasBlueGear end, gate = function(s) return s.sea >= 3 end, stage = "STAGE_V4" },
-    M14 = { name = "Trial V4 Base Unlock", verify = function(s) return s.ver >= 4 end, gate = function(s) return s.hasBlueGear end, stage = "STAGE_V4" },
-    M15 = { name = "Fragment & Awaken Training", verify = function(s) return s.tier >= 1 end, gate = function(s) return s.ver >= 4 end, stage = "STAGE_TIER" },
-    M16 = { name = "Ancient Clock Tier 10 Grind", verify = function(s) return s.tier >= 10 end, gate = function(s) return s.ver >= 4 end, stage = "STAGE_TIER" }
-}
-
-function StateReader:ResolveMark(s)
-    for _, id in ipairs(MARK_ORDER) do
-        local m = MARKS[id]
-        if not m.verify(s) then
-            local isGateReady = m.gate(s)
-            return id, isGateReady, m.stage, m.name
-        end
-    end
-    return "M16_DONE", true, "DONE", "All Progression Completed"
-end
-
-function StateReader:RouteStage(s)
-    local markId, isGateReady, stage, markName = self:ResolveMark(s)
-    return stage, markId, isGateReady, markName
-end
-
--- 🎲 1. V1 Race Acquisition & Early Reroll Scorer
-local RACE_BOT_SCORE = {
-    Cyborg = 95, Human = 90, Rabbit = 75, Shark = 60, Angel = 20, Ghoul = 15
-}
-local MAX_REROLL_ATTEMPTS = 5
-local rerollAttemptsCount = 0
-
-local function V1_Decide(s)
-    local score = RACE_BOT_SCORE[s.race] or 50
-    if score >= 70 then return "KEEP" end
-    if getgenv().Configs and getgenv().Configs.HasAltAccount and score >= 15 then return "KEEP" end
-    if rerollAttemptsCount >= MAX_REROLL_ATTEMPTS then return "KEEP_ALT_FALLBACK" end
-    if s.frag >= 3000 then return "REROLL" end
-    return "KEEP_AND_FARM_FRAG"
-end
-
--- 🌸 2. Fragile Mode Manager & Dynamic Workspace Flower Scanner
-local FRAGILE_PROFILE = {
-    lockToken = true, allowServerHop = false, healThreshold = 0.65,
-    aggroLimit = 3, avoidPlayers = true, avoidSeaTravel = true,
-    useSafeTravel = true, disableRaid = true, disableBoss = true
-}
-
-local FragileMode = { Active = false }
-
-function FragileMode:Enter()
-    self.Active = true
-    Controller.LockOwner = "V2_FLOWER"
-    Controller.hardLock = "V2_FLOWER"
-end
-
-function FragileMode:Exit()
-    self.Active = false
-    Controller.LockOwner = nil
-    Controller.hardLock = nil
-end
-
-local function FindFlower(color)
-    local LP = game:GetService("Players").LocalPlayer
-    local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    local hrpPos = hrp and hrp.Position or Vector3.zero
-
-    -- 1) Live Workspace Scan (Search for spawned flower objects in workspace)
-    local targetNames = {
-        Red = { "Flower1", "Red Flower", "RedFlower" },
-        Blue = { "Flower2", "Blue Flower", "BlueFlower" },
-        Yellow = { "Flower3", "Yellow Flower", "YellowFlower" }
-    }
-    
-    local searchList = targetNames[color] or { color .. "Flower" }
-    local foundPos = nil
-    local shortestDist = math.huge
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        for _, name in ipairs(searchList) do
-            if obj.Name == name and (obj:IsA("BasePart") or obj:IsA("Model")) then
-                local p = obj:IsA("BasePart") and obj.Position or (obj:FindFirstChild("Handle") and obj.Handle.Position or (obj.PrimaryPart and obj.PrimaryPart.Position))
-                if p then
-                    local d = (hrpPos - p).Magnitude
-                    if d < shortestDist then
-                        shortestDist = d
-                        foundPos = p
-                    end
-                end
-            end
-        end
-    end
-
-    if foundPos then return foundPos, true end -- Live flower found!
-
-    -- 2) Fallback Route: Nearest Unvisited Known Spawn Point
-    local spawnSets = {
-        Red = RED_FLOWER_POSITIONS,
-        Blue = BLUE_FLOWER_POSITIONS
-    }
-
-    local list = spawnSets[color] or {}
-    local bestPoint = nil
-    local minDist = math.huge
-
-    for _, spawnPos in ipairs(list) do
-        local d = (hrpPos - spawnPos).Magnitude
-        if d < minDist then
-            minDist = d
-            bestPoint = spawnPos
-        end
-    end
-
-    return bestPoint or Vector3.new(1250, 40, -5100), false
-end
-
-local function FlowerPlan(state, bp, char)
-    local hasYellow = (bp and bp:FindFirstChild("Flower 3")) or (char and char:FindFirstChild("Flower 3"))
-    local hasRed = (bp and bp:FindFirstChild("Flower 1")) or (char and char:FindFirstChild("Flower 1"))
-    local hasBlue = (bp and bp:FindFirstChild("Flower 2")) or (char and char:FindFirstChild("Flower 2"))
-
-    if not hasYellow then
-        return { task = "FARM_YELLOW", mob = "Swan Pirates", timeout = 1800 }
-    end
-    
-    local lighting = game:GetService("Lighting")
-    local clock = lighting and lighting.ClockTime or 12
-    local isDay = clock >= 6 and clock <= 18
-    local isNight = clock >= 18 or clock <= 5
-
-    if isDay and not hasRed then
-        local targetPos, isLive = FindFlower("Red")
-        return { task = "COLLECT_RED", pos = targetPos, isLive = isLive }
-    end
-    if isNight and not hasBlue then
-        local targetPos, isLive = FindFlower("Blue")
-        return { task = "COLLECT_BLUE", pos = targetPos, isLive = isLive }
-    end
-    
-    return { task = "SAFE_IDLE", pos = Vector3.new(1250, 40, -5100) }
-end
-
--- ⏳ 3. Dual-Track Bottleneck Engine for T10 (Time vs Frag ETA)
-local function TierBottleneck(tier, fragCount, awakenAccumSec)
-    local tierCosts = { 1000, 1500, 2250, 3000, 3750, 4500, 5250, 5500 }
-    local tierTimes = { 300, 600, 900, 1200, 1500, 1800, 2100, 2400 }
-
-    local targetCost = tierCosts[tier] or 3000
-    local targetTime = tierTimes[tier] or 1200
-
-    local needTime = math.max(0, targetTime - awakenAccumSec)
-    local needFrag = math.max(0, targetCost - fragCount)
-
-    local etaTime = needTime / 0.4 -- 40% awakening uptime ratio
-    local etaFrag = (needFrag / 5000) * 3600 -- 5000 frags / hr rate
-
-    if etaTime > etaFrag then
-        return "TIME", "⚡ Focus Energy Mobs (Accelerate Awakening)"
-    else
-        return "FRAG", "💰 Focus Raids / Chips (Maximize Frag/hr)"
-    end
-end
-
--- 📊 4. Adaptive Stats Engine & Global Utility Scorer
-local AdaptiveStats = {
-    Data = { travelSpeed = 150, trialWinRate = 0.8 }
-}
-
-local function StageRelevance(tStage, currentStage)
-    if tStage == currentStage then return 3.0 end
-    if tStage == "PRE_PROVISION" then return 0.6 end
-    return 0.0
-end
-
-local function CalculateGlobalUtilityScore(t, currentStage)
-    if not t.feasible() then return -math.huge end
-
-    local LP = game:GetService("Players").LocalPlayer
-    local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    local dist = (hrp and t.pos) and (hrp.Position - t.pos).Magnitude or 0
-    local travelCost = dist / math.max(1, AdaptiveStats.Data.travelSpeed)
-    local switchCost = (t.id ~= Controller:Current()) and 25 or 0
-
-    local totalCost = math.max(t.execTime + travelCost + switchCost, 1)
-    local S_t = StageRelevance(t.stage, currentStage)
-    local oppBonus = dist < 500 and 3.0 or (dist < 2000 and 1.5 or 1.0)
-
-    local baseScore = (t.value * t.urgency * t.pSuccess * t.window * S_t) / totalCost
-    local ageBonus = t.age * AGE_RATE
-    local riskPenalty = t.risk or 0
-
-    return (baseScore + ageBonus - riskPenalty) * oppBonus
-end
-
--- ⚡ 5. Parallel Task Manager (Auto Awakening in Background)
-task.spawn(function()
-    while scriptRunning do
-        task.wait(3)
-        pcall(function()
-            local LP = game:GetService("Players").LocalPlayer
-            local char = LP and LP.Character
-            if char and char:FindFirstChild("RaceEnergy") and char.RaceEnergy.Value >= 100 then
-                local awakenRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if awakenRemote then pcall(function() awakenRemote:InvokeServer("ActivateAwakening") end) end
-            end
-        end)
-    end
-end)
-
--- 🎯 6. Complete Task Pool Constructor (V1 → V4 T10 Granular Handlers)
-local TaskPoolEngine = {}
-
-local RED_FLOWER_POSITIONS = {
-    Vector3.new(-1430, 80, -2980), Vector3.new(-1800, 90, -2550),
-    Vector3.new(-1100, 40, -1500), Vector3.new(-450, 70, 300), Vector3.new(-700, 60, -900)
-}
-
-local BLUE_FLOWER_POSITIONS = {
-    Vector3.new(2800, 70, -7300), Vector3.new(2930, 80, -7100),
-    Vector3.new(-2000, 50, -11000), Vector3.new(900, 60, 4000)
-}
-
-function TaskPoolEngine:BuildPool(state, stage)
-    local LP = game:GetService("Players").LocalPlayer
-    local hrp = LP and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    local pos = hrp and hrp.Position or Vector3.zero
-    local bp = LP and LP:FindFirstChild("Backpack")
-    local char = LP and LP.Character
-
-    local pool = {
-        {
-            id = "STAGE_LEVEL_FARM",
-            stage = "STAGE_LEVEL",
-            prio = 1, value = 20, urgency = 1, pSuccess = 1.0, window = 1.0, execTime = 60, risk = 0,
-            pos = pos, age = 10,
-            feasible = function() return getgenv().Configs and getgenv().Configs.AutoFarmLevel end,
-            run = function() Controller.Status = "🌾 Farming Level / Quests" end
-        },
-        {
-            id = "BARTILO_QUEST",
-            stage = "STAGE_BARTILO",
-            prio = 5, value = 80, urgency = 7, pSuccess = 0.95, window = 1.0, execTime = 180, risk = 5,
-            pos = Vector3.new(-450, 70, 300), age = 0,
-            feasible = function() return stage == "STAGE_BARTILO" and not state.bartilo end,
-            run = function()
-                Controller.Status = "🛡️ Executing Bartilo / Colosseum Quest Sequence"
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("BartiloQuestProgress") end) end
-            end
-        },
-        {
-            id = "V2_FLOWER_QUEST",
-            stage = "STAGE_V2",
-            prio = 6, value = 90, urgency = 8, pSuccess = 0.9, window = 1.5, execTime = 120, risk = 30,
-            pos = Vector3.new(1250, 40, -5100), age = 0,
-            feasible = function() return stage == "STAGE_V2" and state.beli >= 500000 end,
-            run = function()
-                FragileMode:Enter()
-                Controller.Status = "🌸 Collecting Flowers V2 (Fragile Mode Active)"
-                
-                local hasRed = (bp and bp:FindFirstChild("Flower 1")) or (char and char:FindFirstChild("Flower 1"))
-                local hasBlue = (bp and bp:FindFirstChild("Flower 2")) or (char and char:FindFirstChild("Flower 2"))
-                local hasYellow = (bp and bp:FindFirstChild("Flower 3")) or (char and char:FindFirstChild("Flower 3"))
-                
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if hasRed and hasBlue and hasYellow then
-                    Controller.Status = "🌸 Talking to Alchemist -> Purchasing V2"
-                    if remote then pcall(function() remote:InvokeServer("Alchemist", "3") end) FragileMode:Exit() end
-                else
-                    if not hasYellow then
-                        Controller.Status = "🌻 Farming Swan Pirates for Yellow Flower (~1% Drop)"
-                    elseif not hasRed then
-                        Controller.Status = "🌺 Checking Red Flower Daytime Spawn Locations"
-                    elseif not hasBlue then
-                        Controller.Status = "🪷 Checking Blue Flower Nighttime Spawn Locations"
-                    end
-                end
-            end
-        },
-        {
-            id = "DON_SWAN_QUEST",
-            stage = "STAGE_V3",
-            prio = 7, value = 110, urgency = 8, pSuccess = 0.9, window = 1.0, execTime = 90, risk = 10,
-            pos = Vector3.new(2300, 450, 750), age = 0,
-            feasible = function() return stage == "STAGE_V3" and not state.donSwan end,
-            run = function()
-                Controller.Status = "🦢 Defeating Don Swan (Trevor Fruit Gate)"
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("TalkTrevor", "1") end) end
-            end
-        },
-        {
-            id = "V3_AROWE_QUEST",
-            stage = "STAGE_V3",
-            prio = 8, value = 140, urgency = 9, pSuccess = 0.95, window = 1.0, execTime = 120, risk = 5,
-            pos = Vector3.new(-1600, 100, -100), age = 0,
-            feasible = function() return stage == "STAGE_V3" and state.donSwan and state.beli >= 2000000 and not ShouldRerollRace(state) end,
-            run = function()
-                Controller.Status = "📜 Executing V3 Quest for Race: " .. tostring(state.race)
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("GetRaceV3", "2") end) end
-            end
-        },
-        {
-            id = "V3_RACE_REROLL",
-            stage = "STAGE_V3",
-            prio = 8, value = 150, urgency = 10, pSuccess = 1.0, window = 1.0, execTime = 10, risk = 0,
-            pos = pos, age = 0,
-            feasible = function() return stage == "STAGE_V3" and ShouldRerollRace(state) end,
-            run = function()
-                Controller.Status = "🎲 Rerolling Race (Bypassing PvP Gate for " .. tostring(state.race) .. ")"
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("Blackbeard", "Reroll") end) end
-            end
-        },
-        {
-            id = "BLUE_GEAR",
-            stage = "STAGE_V4",
-            prio = 9, value = 150, urgency = 10, pSuccess = 0.9, window = 2.0, execTime = 120, risk = 10,
-            pos = Vector3.new(0, 500, 0), age = 0,
-            feasible = function()
-                local lighting = game:GetService("Lighting")
-                local isMoon = lighting and (lighting.ClockTime >= 18 or lighting.ClockTime <= 5)
-                local map = workspace:FindFirstChild("Map") or workspace
-                local isMirage = map:FindFirstChild("Mirage Island") ~= nil or map:FindFirstChild("Mystic Island") ~= nil
-                return stage == "STAGE_V4" and isMoon and isMirage
-            end,
-            run = function() Controller.Status = "🌕 Mirage & Moon Active -> Collecting Blue Gear" end
-        },
-        {
-            id = "TRIAL_EXECUTION",
-            stage = "STAGE_V4",
-            prio = 9, value = 180, urgency = 10, pSuccess = 0.8, window = 2.5, execTime = 180, risk = 20,
-            pos = Vector3.new(28000, 1500, 50), age = 0,
-            feasible = function()
-                local lighting = game:GetService("Lighting")
-                local isMoon = lighting and (lighting.ClockTime >= 18 or lighting.ClockTime <= 5)
-                return (stage == "STAGE_V4" or stage == "STAGE_TIER") and state.hasBlueGear and isMoon
-            end,
-            run = function()
-                Controller.Status = "⚡ Executing Race V4 Trial Phase"
-                if not getgenv().IsV4ScriptActive then
-                    getgenv().IsV4ScriptActive = true
-                    task.spawn(function()
-                        pcall(function()
-                            local scriptUrl = getgenv().Configs.V4_External_Script or "https://raw.githubusercontent.com/DragonSCRIPTS/script_auto_V4/main/autov4"
-                            loadstring(game:HttpGet(scriptUrl))()
-                        end)
-                    end)
-                end
-            end
-        },
-        {
-            id = "TIER_10_UPGRADE",
-            stage = "STAGE_TIER",
-            prio = 10, value = 200, urgency = 10, pSuccess = 1.0, window = 1.0, execTime = 60, risk = 0,
-            pos = Vector3.new(28000, 1500, 50), age = 0,
-            feasible = function() return stage == "STAGE_TIER" and state.tier < 10 and state.frag >= 1500 end,
-            run = function()
-                Controller.Status = "🏛️ Upgrading Tier at Ancient Clock (Tier " .. tostring(state.tier) .. " -> " .. tostring(state.tier + 1) .. ")"
-                local remote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("CommF_")
-                if remote then pcall(function() remote:InvokeServer("UpgradeRaceV4") end) end
-            end
-        },
-        {
-            id = "FRAGMENT_FARM_PREP",
-            stage = "PRE_PROVISION",
-            prio = 4, value = 50, urgency = 3, pSuccess = 0.95, window = 1.0, execTime = 300, risk = 5,
-            pos = pos, age = 5,
-            feasible = function() return state.frag < 15000 and (getgenv().Configs and getgenv().Configs.AutoRaid) end,
-            run = function() Controller.Status = "💰 Pre-Stockpiling Fragments for V4 T10 Upgrades" end
-        }
-    }
-
-    return pool
-end
-
--- 🔁 7. Main Global Scheduler Loop
-task.spawn(function()
-    while scriptRunning do
-        pcall(function()
-            local state = StateReader:ReadState()
-            local stage, markId, isGateReady, markName = StateReader:RouteStage(state)
-            Controller.CurrentMark = markId .. " (" .. tostring(markName) .. ")"
-            
-            local pool = TaskPoolEngine:BuildPool(state, stage)
-
-            for _, t in ipairs(pool) do
-                t.score = CalculateGlobalUtilityScore(t, stage)
-            end
-
-            table.sort(pool, function(a, b) return a.score > b.score end)
-
-            local bestTask = pool[1]
-            local currentTaskOwner = Controller:Current()
-
-            if bestTask and bestTask.feasible() then
-                local currentScore = 0
-                if currentTaskOwner then
-                    for _, t in ipairs(pool) do
-                        if t.id == currentTaskOwner then currentScore = t.score break end
-                    end
-                end
-
-                local activeMargin = GetAdaptiveSwitchMargin(stage, Controller.LockOwner)
-                local dwellOK = (os.clock() - Controller.LastSwitchTime) >= MIN_DWELL_TIME
-                local safeToInterrupt = true
-                local hum = LP and LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-                if hum and (hum.Health / math.max(1, hum.MaxHealth)) < 0.3 then safeToInterrupt = false end
-
-                if not currentTaskOwner or (bestTask.score > currentScore * activeMargin and dwellOK and safeToInterrupt) then
-                    if Controller:Acquire(bestTask.id, bestTask.prio) then
-                        if currentTaskOwner and currentTaskOwner ~= bestTask.id then
-                            print(string.format("[TASK LOGIC] %s (score=%.1f) beat %s (score=%.1f) [margin=%.2f OK]", 
-                                tostring(bestTask.id), bestTask.score, tostring(currentTaskOwner), currentScore, activeMargin))
-                        end
-                        bestTask.run()
-                    end
-                end
-            end
-
-            -- Monitor performance
+    if not LocalPlayer.Team then
+        repeat task.wait(0.5)
             pcall(function()
-                local fps = workspace:GetRealPhysicsFPS()
-                UI_Performance:CheckFpsAndUptime(fps)
+                if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+                    ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", getgenv().Configs.Team)
+                end
             end)
-        end)
-        task.wait(0.5)
+        until LocalPlayer.Team or not scriptRunning
     end
 end)
+
+local placeid = game.PlaceId
 
 -- Core Services
 local TweenService = game:GetService("TweenService")
@@ -2606,23 +1836,17 @@ local function GetWorld()
     return 1
 end
 
-CurrentWorld = GetWorld()
-World1 = (CurrentWorld == 1)
-World2 = (CurrentWorld == 2)
-World3 = (CurrentWorld == 3)
+local CurrentWorld = GetWorld()
+local World1 = (CurrentWorld == 1)
+local World2 = (CurrentWorld == 2)
+local World3 = (CurrentWorld == 3)
 
-getgenv().CurrentWorld = CurrentWorld
-getgenv().World1 = World1
-getgenv().World2 = World2
-getgenv().World3 = World3
-
-WorldState = {
+local WorldState = {
     Level = 1, Beli = 0, Fragments = 0, Sea = 1,
     Character = nil, HRP = nil, Humanoid = nil, Health = 0, MaxHealth = 100,
     QuestVisible = false, QuestTitle = "",
     LastUpdate = 0
 }
-getgenv().WorldState = WorldState
 
 function WorldState:Update()
     local now = os.clock()
@@ -2655,11 +1879,10 @@ end
 -- 🎯 TARGET MANAGER SERVICE (STEP 6)
 -- ══════════════════════════════════════════════════════════════════
 
-TargetManager = {
+local TargetManager = {
     CurrentTarget = nil,
     TargetScore = 0
 }
-getgenv().TargetManager = TargetManager
 
 function TargetManager:GetBestTarget(mobName, searchRadius)
     searchRadius = searchRadius or 600
@@ -3022,25 +2245,6 @@ local function BringMob(a)
     end
     return targets
 end
-
--- ============================================================
--- 🌐 CENTRAL ENGINE EXPORTS TO GETGENV (MULTI-MODULE BRIDGE)
--- ============================================================
-getgenv().MovementManager = MovementManager
-getgenv().Attack = Attack
-getgenv().CommF_ = CommF_
-getgenv().IsOwn = IsOwn
-getgenv().EquipName = EquipName
-getgenv().IsSaber = IsSaber
-getgenv().IsPoleV1 = IsPoleV1
-getgenv().DieWait = DieWait
-getgenv().BringMob = BringMob
-getgenv().CheckInv = CheckInv
-getgenv().FailedObjectives = FailedObjectives
-getgenv().WorldState = WorldState
-getgenv().World1 = World1
-getgenv().World2 = World2
-getgenv().World3 = World3
 
 local function DestroyExistingUI(name)
     pcall(function()
@@ -4863,223 +4067,668 @@ FruitSystem.UIUpdateCallback = function()
     end
 end
 
--- 🥋 KAITUN & MELEE TAB CONTROLS
-KaitunTab:AddToggle({
-    NameTH = "⚔️ ออโต้ฟาร์มเลเวล (Auto Farm Level)",
-    NameEN = "⚔️ Auto Farm Level",
+FruitTab:AddButton({
+    NameTH = "🗑️ ล้างประวัติ (Clear Logs)",
+    NameEN = "🗑️ Clear Logs",
+    Callback = function()
+        FruitLogManager:ClearLogs()
+        ObsidianGlassEngine:Notify({
+            Title = "Fruit System",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and "ล้างประวัติเรียบร้อยแล้ว" or "Logs cleared successfully",
+            Duration = 3
+        })
+    end
+})
+
+FruitTab:AddButton({
+    NameTH = "📋 คัดลอกประวัติ (Copy Logs)",
+    NameEN = "📋 Copy Logs",
+    Callback = function()
+        local textStr = ""
+        for i = #FruitLogManager.Logs, 1, -1 do
+            textStr = textStr .. FruitLogManager.Logs[i].fullText .. "\n"
+        end
+        if setclipboard then
+            setclipboard(textStr)
+            ObsidianGlassEngine:Notify({
+                Title = "Fruit System",
+                Content = ObsidianGlassEngine.CurrentLanguage == "th" and "คัดลอกประวัติลง Clipboard แล้ว" or "Copied logs to clipboard",
+                Duration = 3
+            })
+        end
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "⚙️ โปรไฟล์การทำงาน (Config Preset Profile)",
+    NameEN = "⚙️ Config Preset Profile",
+    Options = {"Default Kaitun", "Fast Progression", "Safe Mode", "Fruit Hunter", "Mastery Farm"},
+    Default = ConfigManager.CurrentProfile or "Default Kaitun",
+    Callback = function(v)
+        ConfigManager:LoadProfile(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Config Manager",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("โหลดโปรไฟล์: " .. v .. " เรียบร้อยแล้ว!") or ("Loaded Profile: " .. v .. " successfully!")),
+            Duration = 4
+        })
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "🎯 เป้าหมายบัญชี (WHAT DO YOU WANT?)",
+    NameEN = "🎯 Account Goal (WHAT DO YOU WANT?)",
+    Options = {"MAX LEVEL", "FASTEST PROGRESSION", "GET GODHUMAN", "GET MAX BOUNTY", "COMPLETE ACCOUNT"},
+    Default = GoalBasedKaitunEngine.CurrentGoal or "FASTEST PROGRESSION",
+    Callback = function(v)
+        GoalBasedKaitunEngine:SetGoal(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Goal-Based Kaitun",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("ตั้งเป้าหมายหลักเป็น: 🎯 " .. v) or ("Set Account Goal to: 🎯 " .. v)),
+            Duration = 5
+        })
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "🩸 โหมดล่าค่าหัว (PayomboyZ Hunter Intelligence)",
+    NameEN = "🩸 PayomboyZ Hunter Intelligence",
+    Options = {"OFF", "Passive Hunter", "Active Hunter", "Ruthless Hunter", "Smart Hunter", "VIP Hunter"},
+    Default = BountyHunterEngine.CurrentMode or "OFF",
+    Callback = function(v)
+        BountyHunterEngine:SetMode(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Hunter Intelligence",
+            Content = (ObsidianGlassEngine.CurrentLanguage == "th" and ("ปรับโหมดล่าค่าหัวเป็น: 🩸 " .. v) or ("Set Bounty Hunter Mode to: 🩸 " .. v)),
+            Duration = 4
+        })
+    end
+})
+
+MainTab:AddButton({
+    NameTH = "🧠 สแกนวิเคราะห์บัญชี (Run Account Brain & Goal Tree)",
+    NameEN = "🧠 Run Account Brain & Goal Tree",
+    Callback = function()
+        local state = AccountScanner:Scan()
+        local deps = GoalDependencyEngine:ResolveDependencies("Godhuman")
+        local isTH = (ObsidianGlassEngine.CurrentLanguage == "th")
+        local missingStr = #deps.Missing > 0 and table.concat(deps.Missing, ", ") or "None (Ready!)"
+        
+        ObsidianGlassEngine:Notify({
+            Title = "Account Progression Brain",
+            Content = isTH and string.format("Level: %d | Sea: %d | แนะนำ: %s\nสิ่งที่ยังขาด: %s", state.Level, state.Sea, state.RecommendedGoal, missingStr)
+                or string.format("Level: %d | Sea: %d | Goal: %s\nMissing: %s", state.Level, state.Sea, state.RecommendedGoal, missingStr),
+            Duration = 6
+        })
+    end
+})
+
+MainTab:AddButton({
+    NameTH = "🏥 ตรวจสุขภาพระบบ (Run System Health Check)",
+    NameEN = "🏥 Run System Health Check",
+    Callback = function()
+        local diag = HealthChecker:RunDiagnostic()
+        local passCount = 0
+        local totalCount = 0
+        for k, v in pairs(diag) do
+            totalCount = totalCount + 1
+            if v then passCount = passCount + 1 end
+        end
+        ObsidianGlassEngine:Notify({
+            Title = "System Health Check",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and string.format("ผ่านการตรวจสอบ: %d/%d โมดูล (100%% Operational)", passCount, totalCount) or string.format("Passed Diagnostic: %d/%d Modules (100%% Operational)", passCount, totalCount),
+            Duration = 5
+        })
+    end
+})
+
+MainTab:AddDropdown({
+    NameTH = "เลือกสายอาวุธฟาร์ม (Select Weapon Build)",
+    NameEN = "Select Weapon Build",
+    Options = {"Melee", "Blox Fruit", "Sword", "Gun"},
+    Default = getgenv().Configs.SelectWeapon or "Melee",
+    Callback = function(v)
+        getgenv().Configs.SelectWeapon = v
+        ObsidianGlassEngine:Notify({
+            Title = "Weapon Build",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เปลี่ยนสายฟาร์มเป็น: " .. v .. " (ระบบอัปสเตตัสจะปรับตามสายนี้)") or ("Switched weapon build to: " .. v),
+            Duration = 4
+        })
+    end
+})
+
+MainTab:AddToggle({
+    NameTH = "ออโต้ฟาร์มเลเวล (Auto Farm Level)",
+    NameEN = "Auto Farm Level",
     Default = getgenv().Configs.AutoFarmLevel,
-    Callback = function(val)
-        getgenv().Configs.AutoFarmLevel = val
-    end
+    Callback = function(v) getgenv().Configs.AutoFarmLevel = v end
 })
 
-KaitunTab:AddToggle({
-    NameTH = "⚡ ตีเร็ว (Fast Attack)",
-    NameEN = "⚡ Fast Attack",
+MainTab:AddToggle({
+    NameTH = "โจมตีเร็ว (Fast Attack)",
+    NameEN = "Fast Attack",
     Default = getgenv().Configs.FastAttack,
-    Callback = function(val)
-        getgenv().Configs.FastAttack = val
-    end
+    Callback = function(v) getgenv().Configs.FastAttack = v end
 })
 
-KaitunTab:AddToggle({
-    NameTH = "🧲 ดึงมอนสเตอร์ (Bring Mob)",
-    NameEN = "🧲 Bring Mob",
+MainTab:AddToggle({
+    NameTH = "ดึงมอนสเตอร์มารวมกัน (Bring Mob)",
+    NameEN = "Bring Mob",
     Default = getgenv().Configs.BringMob,
-    Callback = function(val)
-        getgenv().Configs.BringMob = val
-    end
+    Callback = function(v) getgenv().Configs.BringMob = v end
+})
+
+MainTab:AddToggle({
+    NameTH = "ใช้สกิลอัตโนมัติ (Auto Skill Z, X, C, V)",
+    NameEN = "Auto Skill (Z, X, C, V)",
+    Default = getgenv().Configs.AutoSkill,
+    Callback = function(v) getgenv().Configs.AutoSkill = v end
+})
+
+MainTab:AddToggle({
+    NameTH = "ข้ามเลเวลฟาร์ม (Skip Level Farm)",
+    NameEN = "Skip Level Farming (Dark Master/Royal Squad)",
+    Default = getgenv().Configs.SkipFarmLevel,
+    Callback = function(v) getgenv().Configs.SkipFarmLevel = v end
 })
 
 KaitunTab:AddToggle({
-    NameTH = "🥋 ออโต้ซื้อหมัดทุกชนิด (Auto Buy Melee)",
-    NameEN = "🥋 Auto Buy Melee",
+    NameTH = "ซื้อ & อัปเกรดหมัดอัตโนมัติ (Godhuman Chain)",
+    NameEN = "Auto Buy & Upgrade Melee (Godhuman Chain)",
     Default = getgenv().Configs.AutoBuyMelee,
-    Callback = function(val)
-        getgenv().Configs.AutoBuyMelee = val
-    end
+    Callback = function(v) getgenv().Configs.AutoBuyMelee = v end
 })
 
--- 🧩 PUZZLES & WORLD QUEST TAB CONTROLS
-QuestTab:AddToggle({
-    NameTH = "🗡️ ปริศนาดาบเซเบอร์ (Saber Quest)",
-    NameEN = "🗡️ Saber Quest",
-    Default = getgenv().Configs.Saber,
-    Callback = function(val)
-        getgenv().Configs.Saber = val
-    end
-})
-
-QuestTab:AddToggle({
-    NameTH = "⚡ ปริศนากระบองสายฟ้า V1 (Pole V1 Quest)",
-    NameEN = "⚡ Pole V1 Quest",
-    Default = getgenv().Configs.Pole,
-    Callback = function(val)
-        getgenv().Configs.Pole = val
-    end
-})
-
-QuestTab:AddToggle({
-    NameTH = "⏩ ข้ามฟาร์มเลเวล (Skip Farm Level)",
-    NameEN = "⏩ Skip Farm Level",
-    Default = getgenv().Configs.SkipFarmLevel,
-    Callback = function(val)
-        getgenv().Configs.SkipFarmLevel = val
-    end
-})
-
-QuestTab:AddToggle({
-    NameTH = "🐉 ออโต้ทำเผ่า V4 T10 (Auto Race V4 T10)",
-    NameEN = "🐉 Auto Race V4 T10",
-    Default = getgenv().Configs.AutoV4_Full,
-    Callback = function(val)
-        getgenv().Configs.AutoV4_Full = val
-        if val and LoadV4Engine then LoadV4Engine() end
-    end
-})
-
-QuestTab:AddToggle({
-    NameTH = "🧬 ออโต้ปลดล็อค V2 & V3 (Auto Unlock V2 & V3)",
-    NameEN = "🧬 Auto Unlock V2 & V3",
-    Default = getgenv().Configs.AutoV2_V3,
-    Callback = function(val)
-        getgenv().Configs.AutoV2_V3 = val
-        if val and LoadV4Engine then LoadV4Engine() end
-    end
-})
-
--- 🍎 FRUIT TAB ADDITIONAL CONTROLS
-FruitTab:AddToggle({
-    NameTH = "📥 ออโต้เก็บผลไม้อัตโนมัติ (Auto Store Fruit)",
-    NameEN = "📥 Auto Store Fruit",
-    Default = getgenv().Configs.AutoStoreFruit,
-    Callback = function(val)
-        getgenv().Configs.AutoStoreFruit = val
-    end
-})
-
-FruitTab:AddToggle({
-    NameTH = "🛒 ออโต้ซื้อผลไม้ตรงเป้าหมาย (Auto Buy Target Fruit)",
-    NameEN = "🛒 Auto Buy Target Fruit",
-    Default = getgenv().Configs.AutoBuyFruit,
-    Callback = function(val)
-        getgenv().Configs.AutoBuyFruit = val
-    end
-})
-
-FruitTab:AddToggle({
-    NameTH = "🎲 ออโต้สุ่มผลไม้ (Auto Random Fruit)",
-    NameEN = "🎲 Auto Random Fruit",
-    Default = getgenv().Configs.AutoRandomFruit,
-    Callback = function(val)
-        getgenv().Configs.AutoRandomFruit = val
-    end
-})
-
--- 📊 AUTO STATS TAB CONTROLS
-StatsTab:AddToggle({
-    NameTH = "📊 ออโต้เพิ่มสเตตัสอัตโนมัติ (Auto Stats Allocation)",
-    NameEN = "📊 Auto Stats Allocation",
-    Default = getgenv().Configs.AutoStats,
-    Callback = function(val)
-        getgenv().Configs.AutoStats = val
-    end
-})
-
--- ⚡ MISC & OPTIONS TAB CONTROLS
-MiscTab:AddToggle({
-    NameTH = "✨ ออโต้เปิดฮาคิสังเกต/เกราะ (Auto Haki)",
-    NameEN = "✨ Auto Haki",
+KaitunTab:AddToggle({
+    NameTH = "ซื้อฮาคิอัตโนมัติ (Buso, Geppo, Soru, Ken)",
+    NameEN = "Auto Buy Haki (Buso, Geppo, Soru, Ken)",
     Default = getgenv().Configs.AutoHaki,
-    Callback = function(val)
-        getgenv().Configs.AutoHaki = val
-    end
+    Callback = function(v) getgenv().Configs.AutoHaki = v end
 })
 
-MiscTab:AddButton({
-    NameTH = "🔄 เข้าเซิร์ฟเวอร์เดิมใหม่ (Rejoin Current Server)",
-    NameEN = "🔄 Rejoin Current Server",
-    Callback = function()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    end
+QuestTab:AddToggle({
+    NameTH = "ทำเควสต์ดาบเซเบอร์ (Auto Saber Quest)",
+    NameEN = "Auto Saber Quest (Sea 1)",
+    Default = getgenv().Configs.Saber,
+    Callback = function(v) getgenv().Configs.Saber = v end
 })
 
-MiscTab:AddButton({
-    NameTH = "🌐 ย้ายเซิร์ฟเวอร์ใหม่ (Server Hop)",
-    NameEN = "🌐 Server Hop",
-    Callback = function()
-        ObsidianGlassEngine:Notify({ Title = "Server Hop", Content = "กำลังค้นหาเซิร์ฟเวอร์ใหม่...", Duration = 3 })
-        task.spawn(function()
-            pcall(function()
-                local sfUrl = "https://games.roblox.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/0?sortOrder=Asc&limit=100"
-                local res = game:HttpGet(sfUrl)
-                local data = HttpService:JSONDecode(res)
-                if data and data.data then
-                    for _, s in ipairs(data.data) do
-                        if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
-                            break
-                        end
-                    end
-                end
-            end)
-        end)
-    end
+QuestTab:AddToggle({
+    NameTH = "ทำเควสต์กระบองเอเนล (Auto Pole V1)",
+    NameEN = "Auto Pole V1 (Thunder God)",
+    Default = getgenv().Configs.Pole,
+    Callback = function(v) getgenv().Configs.Pole = v end
 })
 
--- ============================================================
--- 🌐 SMART MULTI-SOURCE MODULE LOADER (LOCAL FILE + GITHUB FALLBACK)
--- ============================================================
-local function LoadModuleSafely(name, localPath, url)
-    local loaded = false
-    -- 1. Try local executor filesystem first (immediate priority for offline & edited files)
+FruitTab:AddToggle({
+    NameTH = "เก็บผลปีศาจลงกระเป๋าอัตโนมัติ",
+    NameEN = "Auto Store Fruit to Inventory",
+    Default = getgenv().Configs.AutoStoreFruit,
+    Callback = function(v) getgenv().Configs.AutoStoreFruit = v end
+})
+
+FruitTab:AddToggle({
+    NameTH = "ซื้อผลปีศาจอัตโนมัติจากร้าน (Auto Buy Fruit)",
+    NameEN = "Auto Buy Fruit (Dealer Stock)",
+    Default = getgenv().Configs.AutoBuyFruit,
+    Callback = function(v) getgenv().Configs.AutoBuyFruit = v end
+})
+
+local function GetFruitDropdownOptions()
+    local defaultOptions = {
+        "Top 5 (Top Tier)",
+        "Kitsune",
+        "Dragon",
+        "Leopard",
+        "Dough",
+        "T-Rex",
+        "Mammoth",
+        "Spirit",
+        "Venom",
+        "Control",
+        "Shadow",
+        "Portal",
+        "Blizzard",
+        "Rumble",
+        "Sound",
+        "Pain",
+        "Gravity",
+        "Buddha",
+        "Love",
+        "Spider",
+        "Phoenix",
+        "Magma",
+        "Ghost",
+        "Quake",
+        "Light",
+        "Rubber",
+        "Barrier",
+        "Dark",
+        "Sand",
+        "Ice",
+        "Falcon",
+        "Flame",
+        "Diamond",
+        "Spike",
+        "Smoke",
+        "Bomb",
+        "Spring",
+        "Chop",
+        "Spin",
+        "Rocket"
+    }
+
     pcall(function()
-        if type(readfile) == "function" and type(isfile) == "function" and isfile(localPath) then
-            local code = readfile(localPath)
-            if code and #code > 50 then
-                local fn, err = loadstring(code)
-                if fn then
-                    fn()
-                    loaded = true
-                    print(string.format("[LOADER] ✅ Loaded %s from local file: %s", name, localPath))
-                else
-                    warn(string.format("[LOADER] ❌ Error compiling local %s: %s", name, tostring(err)))
+        if ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_") then
+            local fruits = ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
+            if type(fruits) == "table" then
+                local existsMap = {}
+                for _, opt in ipairs(defaultOptions) do
+                    existsMap[opt:lower()] = true
+                end
+                for _, f in pairs(fruits) do
+                    local rawFName = f.Name or f.Value or ""
+                    local fName = string.split(rawFName, "-")[1] or rawFName
+                    if fName ~= "" and not existsMap[fName:lower()] then
+                        table.insert(defaultOptions, fName)
+                        existsMap[fName:lower()] = true
+                    end
                 end
             end
         end
     end)
 
-    -- 2. Fallback to GitHub raw URL if not available locally
-    if not loaded then
-        pcall(function()
-            local ok, code = pcall(function() return game:HttpGet(url) end)
-            if ok and code and #code > 50 and not code:find("404: Not Found") then
-                local fn, err = loadstring(code)
-                if fn then
-                    fn()
-                    loaded = true
-                    print(string.format("[LOADER] 🌐 Loaded %s from GitHub: %s", name, url))
-                else
-                    warn(string.format("[LOADER] ❌ Error compiling GitHub %s: %s", name, tostring(err)))
-                end
-            end
-        end)
-    end
-
-    if not loaded then
-        warn(string.format("[LOADER] ⚠️ FAILED to load module %s from both local and remote!", name))
-    end
-    return loaded
+    return defaultOptions
 end
 
--- 1. Load Quest Data Database (BFSub)
-LoadModuleSafely("BFSub", "BFSub.txt", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFSub")
+FruitTab:AddDropdown({
+    NameTH = "เลือกผลปีศาจที่ต้องการซื้อ (Target Fruit)",
+    NameEN = "Select Target Fruit",
+    Multi = true,
+    Options = GetFruitDropdownOptions(),
+    Default = getgenv().Configs.TargetFruit or {"Top 5 (Top Tier)"},
+    Callback = function(v)
+        getgenv().Configs.TargetFruit = v
+        local str = type(v) == "table" and table.concat(v, ", ") or tostring(v)
+        ObsidianGlassEngine:Notify({
+            Title = "Auto Buy Fruit",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("เลือกผลเป้าหมาย: " .. str) or ("Selected Target Fruit: " .. str),
+            Duration = 3
+        })
+    end
+})
 
--- 2. Load Kaitun Core Logic & World Handlers (LogicSub)
-LoadModuleSafely("LogicSub", "LogicSub.txt", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFExem")
+FruitTab:AddTextBox({
+    NameTH = "เงิน Beli ขั้นต่ำที่ต้องเหลือไว้ (Min Reserve)",
+    NameEN = "Min Beli Reserve Threshold",
+    Default = tostring(getgenv().Configs.MinBeliReserve or 0),
+    Placeholder = "เช่น 3000000",
+    Callback = function(v)
+        local num = tonumber(v) or 0
+        getgenv().Configs.MinBeliReserve = num
+        ObsidianGlassEngine:Notify({
+            Title = "Beli Reserve",
+            Content = ObsidianGlassEngine.CurrentLanguage == "th" and ("ตั้งค่าเงินขั้นต่ำเหลือในตัว: $" .. string.format("%d", num)) or ("Set minimum Beli reserve to: $" .. string.format("%d", num)),
+            Duration = 3
+        })
+    end
+})
 
--- 3. Load Race V4 / Progression Engine (BFv4T10)
-LoadModuleSafely("BFv4t10", "BFv4t10.lua", "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/BFv4T10")
+StatsTab:AddDropdown({
+    NameTH = "เลือกสายที่จะให้อัปสเตตัส (Stat Build)",
+    NameEN = "Stat Build Allocation",
+    Options = {"Melee", "Blox Fruit", "Sword", "Gun"},
+    Default = getgenv().Configs.SelectWeapon or "Melee",
+    Callback = function(v) getgenv().Configs.SelectWeapon = v end
+})
+
+StatsTab:AddToggle({
+    NameTH = "อัปสเตตัสอัตโนมัติ (Auto Stats Points)",
+    NameEN = "Auto Allocate Stats Points",
+    Default = getgenv().Configs.AutoStats,
+    Callback = function(v) getgenv().Configs.AutoStats = v end
+})
+
+MiscTab:AddButton({
+    NameTH = "💾 บันทึก Config (Save Config)",
+    NameEN = "💾 Save Config",
+    Callback = function()
+        if ConfigManager:SaveToFile() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Saved config successfully!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📂 โหลด Config (Load Config)",
+    NameEN = "📂 Load Config",
+    Callback = function()
+        if ConfigManager:LoadFromFile() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Loaded config successfully!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🔄 รีเซ็ตค่าเริ่มต้น (Reset Default)",
+    NameEN = "🔄 Reset Default",
+    Callback = function()
+        ConfigManager:ResetDefault()
+        ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Reset config to defaults!" })
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📋 คัดลอก Config (Export Clipboard)",
+    NameEN = "📋 Export Config",
+    Callback = function()
+        ConfigManager:ExportToClipboard()
+        ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Copied config to clipboard!" })
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "📥 วาง Config (Import Clipboard)",
+    NameEN = "📥 Import Config",
+    Callback = function()
+        if ConfigManager:ImportFromClipboard() then
+            ObsidianGlassEngine:Notify({ Title = "Config Manager", Content = "Imported config from clipboard!" })
+        end
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🟢 ตรวจสอบสถานะระบบ (System Health Check)",
+    NameEN = "🟢 System Health Check",
+    Callback = function()
+        local summary = ErrorMonitor:GetSummary()
+        ObsidianGlassEngine:Notify({
+            Title = "🟢 SYSTEM HEALTH",
+            Content = summary,
+            Duration = 6
+        })
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🎁 รับโค้ดของขวัญทั้งหมด (Redeem Codes)",
+    NameEN = "🎁 Redeem All Promo Codes",
+    Callback = function()
+        task.spawn(function()
+            local codes = {"BANEXPLOIT", "NOMOREHACKS", "WildDares", "BossBuild", "GetPranked", "EARN_FRUITS", "Sub2UncleKizaru", "FIGHT4FRUIT", "kittgaming", "TRIPLEABUSE", "Sub2CaptainMaui", "Sub2Fer999", "Enyu_is_Pro", "Magicbus", "JCWK", "Starcodeheo", "Bluxxy", "SUB2GAMERROBOT_EXP1", "Sub2NoobMaster123", "Sub2Daigrock", "Axiore", "TantaiGaming", "StrawHatMaine", "Sub2OfficialNoobie", "TheGreatAce", "SEATROLLIN", "24NOADMIN", "ADMIN_TROLL", "NEWTROLL", "SECRET_ADMIN", "staffbattle", "NOEXPLOIT", "NOOB2ADMIN", "CODESLIDE", "fruitconcepts"}
+            for _, code in ipairs(codes) do
+                pcall(function() CommF_:InvokeServer("Redeem", code) end)
+                task.wait(0.05)
+            end
+            ObsidianGlassEngine:Notify({
+                Title = "PayomboyZ HUB",
+                Content = ObsidianGlassEngine.CurrentLanguage == "th" and "รับโค้ดของขวัญสำเร็จทั้งหมดแล้ว!" or "Successfully redeemed all promo codes!"
+            })
+        end)
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🌐 ย้ายเซิร์ฟเวอร์ (Server Hop)",
+    NameEN = "🌐 Server Hop",
+    Callback = function()
+        pcall(function() TeleportServer() end)
+    end
+})
+
+MiscTab:AddButton({
+    NameTH = "🔄 เข้าเกมใหม่อีกครั้ง (Rejoin Game)",
+    NameEN = "🔄 Rejoin Game",
+    Callback = function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+})
+
+-- ======================================================================================
+-- 🧠 FULL BLOX FRUITS LEVEL QUEST DATA & WORLD DETECTION
+-- ======================================================================================
+
+local LevelQuest, Monster, NameQuest, NameCheckQuest, CFrameQ, CFrameMon
+local placeid = game.PlaceId
+local World1, World2, World3 = false, false, false
+
+if placeid == 2753915549 then
+    World1 = true
+    Entrance = {
+        Vector3.new(61163.8515625, 11.6796875, 1819.7841796875),
+        Vector3.new(3864.8515625, 6.6796875, -1926.7841796875),
+        Vector3.new(-4607.8227539063, 872.54248046875, -1667.5568847656),
+        Vector3.new(-7894.6176757813, 5547.1416015625, -380.29119873047),
+    }
+elseif placeid == 4442272183 or placeid == 79091703265657 then
+    World2 = true
+    Entrance = {
+        Vector3.new(923.21252441406, 126.9760055542, 32852.83203125),
+        Vector3.new(-6508.5581054688, 89.034996032715, -132.83953857422),
+        Vector3.new(2284, 15, 905),
+        Vector3.new(-286.98907470703125, 306.1379089355469, 597.8827514648438),
+    }
+elseif placeid == 7449423635 then
+    World3 = true
+end
+
+local function GetWorld()
+    if World1 then return 1
+    elseif World2 then return 2
+    elseif World3 then return 3
+    end
+    
+    -- Fail-safe Level Fallback for Private Servers / Reserved Places
+    local data = LocalPlayer:FindFirstChild("Data")
+    local lvl = data and data:FindFirstChild("Level") and data.Level.Value or 1
+    if lvl >= 1500 then
+        World3 = true
+        return 3
+    elseif lvl >= 700 then
+        World2 = true
+        return 2
+    else
+        World1 = true
+        return 1
+    end
+end
+
+local WorldState = {
+    Level = 1,
+    Sea = 1,
+    HRP = nil,
+    Char = nil,
+    LastUpdate = 0
+}
+
+function WorldState:Update()
+    local char = LocalPlayer.Character
+    self.Char = char
+    self.HRP = char and char:FindFirstChild("HumanoidRootPart")
+    local data = LocalPlayer:FindFirstChild("Data")
+    self.Level = data and data:FindFirstChild("Level") and data.Level.Value or 1
+    self.Sea = GetWorld()
+    self.LastUpdate = os.clock()
+    return self
+end
+
+local function CheckQuest()
+    local Level = (LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level")) and LocalPlayer.Data.Level.Value or 1
+    if World1 then
+        if Level == 1 or Level <= 9 then
+            Monster = "Bandit" NameQuest = "BanditQuest1" LevelQuest = 1 NameCheckQuest = "Bandit" CFrameQ = CFrame.new(1060, 17, 1547) CFrameMon = CFrame.new(1145, 17, 1634)
+        elseif Level == 10 or Level <= 14 then
+            Monster = "Monkey" NameQuest = "JungleQuest" LevelQuest = 1 NameCheckQuest = "Monkey" CFrameQ = CFrame.new(-1602, 37, 152) CFrameMon = CFrame.new(-1496, 39, 35)
+        elseif Level == 15 or Level <= 29 then
+            Monster = "Gorilla" NameQuest = "JungleQuest" LevelQuest = 2 NameCheckQuest = "Gorilla" CFrameQ = CFrame.new(-1602, 37, 152) CFrameMon = CFrame.new(-1237, 6, -486)
+        elseif Level == 30 or Level <= 39 then
+            Monster = "Pirate" NameQuest = "BuggyQuest1" LevelQuest = 1 NameCheckQuest = "Pirate" CFrameQ = CFrame.new(-1140, 5, 3828) CFrameMon = CFrame.new(-1115, 14, 3938)
+        elseif Level == 40 or Level <= 59 then
+            Monster = "Brute" NameQuest = "BuggyQuest1" LevelQuest = 2 NameCheckQuest = "Brute" CFrameQ = CFrame.new(-1140, 5, 3828) CFrameMon = CFrame.new(-1145, 15, 4350)
+        elseif Level == 60 or Level <= 74 then
+            Monster = "Desert Bandit" NameQuest = "DesertQuest" LevelQuest = 1 NameCheckQuest = "Desert Bandit" CFrameQ = CFrame.new(897, 7, 4388) CFrameMon = CFrame.new(932, 7, 4484)
+        elseif Level == 75 or Level <= 89 then
+            Monster = "Desert Officer" NameQuest = "DesertQuest" LevelQuest = 2 NameCheckQuest = "Desert Officers" CFrameQ = CFrame.new(897, 7, 4388) CFrameMon = CFrame.new(1572, 10, 4373)
+        elseif Level == 90 or Level <= 99 then
+            Monster = "Snow Bandit" NameQuest = "SnowQuest" LevelQuest = 1 NameCheckQuest = "Snow Bandits" CFrameQ = CFrame.new(1386, 87, -1297) CFrameMon = CFrame.new(1289, 150, -1442)
+        elseif Level == 100 or Level <= 119 then
+            Monster = "Snowman" NameQuest = "SnowQuest" LevelQuest = 2 NameCheckQuest = "Snowman" CFrameQ = CFrame.new(1386, 87, -1297) CFrameMon = CFrame.new(1289, 150, -1442)
+        elseif Level == 120 or Level <= 149 then
+            Monster = "Chief Petty Officer" NameQuest = "MarineQuest2" LevelQuest = 1 NameCheckQuest = "Chief Petty Officer" CFrameQ = CFrame.new(-5036, 29, 4325) CFrameMon = CFrame.new(-4855, 23, 4308)
+        elseif Level == 150 or Level <= 174 then
+            Monster = "Sky Bandit" NameQuest = "SkyQuest" LevelQuest = 1 NameCheckQuest = "Sky Bandit" CFrameQ = CFrame.new(-4842, 718, -2623) CFrameMon = CFrame.new(-4981, 278, -2830)
+        elseif Level == 175 or Level <= 189 then
+            Monster = "Dark Master" NameQuest = "SkyQuest" LevelQuest = 2 NameCheckQuest = "Dark Master" CFrameQ = CFrame.new(-4842, 718, -2623) CFrameMon = CFrame.new(-5250, 389, -2272)
+        elseif Level == 190 or Level <= 209 then
+            Monster = "Prisoner" NameQuest = "PrisonerQuest" LevelQuest = 1 NameCheckQuest = "Prisoners" CFrameQ = CFrame.new(5308, 2, 474) CFrameMon = CFrame.new(5411, 96, 690)
+        elseif Level == 210 or Level <= 249 then
+            Monster = "Dangerous Prisoner" NameQuest = "PrisonerQuest" LevelQuest = 2 NameCheckQuest = "Dangerous Prisoner" CFrameQ = CFrame.new(5308, 2, 474) CFrameMon = CFrame.new(5411, 96, 690)
+        elseif Level == 250 or Level <= 299 then
+            Monster = "Toga Warrior" NameQuest = "ColosseumQuest" LevelQuest = 1 NameCheckQuest = "Toga Warrior" CFrameQ = CFrame.new(-1576, 8, -2985) CFrameMon = CFrame.new(-1641.4344482421875, 7.415142059326172, -2864.462646484375)
+        elseif Level == 300 or Level <= 329 then
+            Monster = "Military Soldier" NameQuest = "MagmaQuest" LevelQuest = 1 NameCheckQuest = "Military Soldier" CFrameQ = CFrame.new(-5316, 12, 8517) CFrameMon = CFrame.new(-5408, 11, 8447)
+        elseif Level == 330 or Level <= 374 then
+            Monster = "Military Spy" NameQuest = "MagmaQuest" LevelQuest = 2 NameCheckQuest = "Military Spy" CFrameQ = CFrame.new(-5316, 12, 8517) CFrameMon = CFrame.new(-5815, 84, 8820)
+        elseif Level == 375 or Level <= 399 then
+            Monster = "Fishman Warrior" NameQuest = "FishmanQuest" LevelQuest = 1 NameCheckQuest = "Fishman Warrior" CFrameQ = CFrame.new(61123, 19, 1569) CFrameMon = CFrame.new(60859, 19, 1501)
+        elseif Level == 400 or Level <= 449 then
+            Monster = "Fishman Commando" NameQuest = "FishmanQuest" LevelQuest = 2 NameCheckQuest = "Fishman Commando" CFrameQ = CFrame.new(61123, 19, 1569) CFrameMon = CFrame.new(61891, 19, 1470)
+        elseif Level == 450 or Level <= 474 then
+            Monster = "God's Guard" NameQuest = "SkyExp1Quest" LevelQuest = 1 NameCheckQuest = "God's Guards" CFrameQ = CFrame.new(-4722, 845, -1954) CFrameMon = CFrame.new(-4698, 845, -1912)
+        elseif Level == 475 or Level <= 524 then
+            Monster = "Shanda" NameQuest = "SkyExp1Quest" LevelQuest = 2 NameCheckQuest = "Shandas" CFrameQ = CFrame.new(-7862, 5546, -380) CFrameMon = CFrame.new(-7685, 5567, -502)
+        elseif Level == 525 or Level <= 549 then
+            Monster = "Royal Squad" NameQuest = "SkyExp2Quest" LevelQuest = 1 NameCheckQuest = "Royal Squad" CFrameQ = CFrame.new(-7904, 5636, -1412) CFrameMon = CFrame.new(-7670, 5607, -1460)
+        elseif Level == 550 or Level <= 624 then
+            Monster = "Royal Soldier" NameQuest = "SkyExp2Quest" LevelQuest = 2 NameCheckQuest = "Royal Soldier" CFrameQ = CFrame.new(-7904, 5636, -1412) CFrameMon = CFrame.new(-7828, 5607, -1744)
+        elseif Level == 625 or Level <= 649 then
+            Monster = "Galley Pirate" NameQuest = "FountainQuest" LevelQuest = 1 NameCheckQuest = "Galley Pirate" CFrameQ = CFrame.new(5256, 39, 4050) CFrameMon = CFrame.new(5589, 45, 3996)
+        elseif Level >= 650 then
+            Monster = "Galley Captain" NameQuest = "FountainQuest" LevelQuest = 2 NameCheckQuest = "Galley Captain" CFrameQ = CFrame.new(5256, 39, 4050) CFrameMon = CFrame.new(5649, 39, 4936)
+        end
+    end
+    if World2 then
+        if Level == 700 or Level <= 724 then
+            Monster = "Raider" NameQuest = "Area1Quest" LevelQuest = 1 NameCheckQuest = "Raider" CFrameQ = CFrame.new(-425, 73, 1837) CFrameMon = CFrame.new(-746, 39, 2390)
+        elseif Level == 725 or Level <= 774 then
+            Monster = "Mercenary" NameQuest = "Area1Quest" LevelQuest = 2 NameCheckQuest = "Mercenary" CFrameQ = CFrame.new(-425, 73, 1837) CFrameMon = CFrame.new(-874, 141, 1312)
+        elseif Level == 775 or Level <= 799 then
+            Monster = "Swan Pirate" NameQuest = "Area2Quest" LevelQuest = 1 NameCheckQuest = "Swan Pirate" CFrameQ = CFrame.new(634, 73, 918) CFrameMon = CFrame.new(878, 122, 1235)
+        elseif Level == 800 or Level <= 874 then
+            Monster = "Factory Staff" NameQuest = "Area2Quest" LevelQuest = 2 NameCheckQuest = "Factory Staff" CFrameQ = CFrame.new(634, 73, 918) CFrameMon = CFrame.new(295, 73, -56)
+        elseif Level == 875 or Level <= 899 then
+            Monster = "Marine Lieutenant" NameQuest = "MarineQuest3" LevelQuest = 1 NameCheckQuest = "Marine Lieutenant" CFrameQ = CFrame.new(-2443, 73, -3219) CFrameMon = CFrame.new(-2806, 73, -3038)
+        elseif Level == 900 or Level <= 949 then
+            Monster = "Marine Captain" NameQuest = "MarineQuest3" LevelQuest = 2 NameCheckQuest = "Marine Captain" CFrameQ = CFrame.new(-2443, 73, -3219) CFrameMon = CFrame.new(-1869, 73, -3320)
+        elseif Level == 950 or Level <= 974 then
+            Monster = "Zombie" NameQuest = "ZombieQuest" LevelQuest = 1 NameCheckQuest = "Zombie" CFrameQ = CFrame.new(-5494, 49, -795) CFrameMon = CFrame.new(-5736, 126, -728)
+        elseif Level == 975 or Level <= 999 then
+            Monster = "Vampire" NameQuest = "ZombieQuest" LevelQuest = 2 NameCheckQuest = "Vampire" CFrameQ = CFrame.new(-5494, 49, -795) CFrameMon = CFrame.new(-6033, 7, -1317)
+        elseif Level == 1000 or Level <= 1049 then
+            Monster = "Snow Trooper" NameQuest = "SnowMountainQuest" LevelQuest = 1 NameCheckQuest = "Snow Trooper" CFrameQ = CFrame.new(605, 402, -5371) CFrameMon = CFrame.new(478, 402, -5362)
+        elseif Level == 1050 or Level <= 1099 then
+            Monster = "Winter Warrior" NameQuest = "SnowMountainQuest" LevelQuest = 2 NameCheckQuest = "Winter Warrior" CFrameQ = CFrame.new(605, 402, -5371) CFrameMon = CFrame.new(1157, 430, -5188)
+        elseif Level == 1100 or Level <= 1124 then
+            Monster = "Lab Subordinate" NameQuest = "IceSideQuest" LevelQuest = 1 NameCheckQuest = "Lab Subordinate" CFrameQ = CFrame.new(-6060, 16, -4905) CFrameMon = CFrame.new(-5782, 42, -4484)
+        elseif Level == 1125 or Level <= 1174 then
+            Monster = "Horned Warrior" NameQuest = "IceSideQuest" LevelQuest = 2 NameCheckQuest = "Horned Warrior" CFrameQ = CFrame.new(-6060, 16, -4905) CFrameMon = CFrame.new(-6406, 24, -5805)
+        elseif Level == 1175 or Level <= 1199 then
+            Monster = "Magma Ninja" NameQuest = "FireSideQuest" LevelQuest = 1 NameCheckQuest = "Magma Ninja" CFrameQ = CFrame.new(-5430, 16, -5295) CFrameMon = CFrame.new(-5428, 78, -5959)
+        elseif Level == 1200 or Level <= 1249 then
+            Monster = "Lava Pirate" NameQuest = "FireSideQuest" LevelQuest = 2 NameCheckQuest = "Lava Pirate" CFrameQ = CFrame.new(-5430, 16, -5295) CFrameMon = CFrame.new(-5270, 42, -4800)
+        elseif Level == 1250 or Level <= 1274 then
+            Monster = "Ship Deckhand" NameQuest = "ShipQuest1" LevelQuest = 1 NameCheckQuest = "Ship Deckhand" CFrameQ = CFrame.new(1038, 125, 32913) CFrameMon = CFrame.new(1198, 126, 33031)
+        elseif Level == 1275 or Level <= 1299 then
+            Monster = "Ship Engineer" NameQuest = "ShipQuest1" LevelQuest = 2 NameCheckQuest = "Ship Engineer" CFrameQ = CFrame.new(1038, 125, 32913) CFrameMon = CFrame.new(918, 44, 32787)
+        elseif Level == 1300 or Level <= 1324 then
+            Monster = "Ship Steward" NameQuest = "ShipQuest2" LevelQuest = 1 NameCheckQuest = "Ship Steward" CFrameQ = CFrame.new(969, 125, 33245) CFrameMon = CFrame.new(915, 130, 33419)
+        elseif Level == 1325 or Level <= 1349 then
+            Monster = "Ship Officer" NameQuest = "ShipQuest2" LevelQuest = 2 NameCheckQuest = "Ship Officer" CFrameQ = CFrame.new(969, 125, 33245) CFrameMon = CFrame.new(916, 181, 33335)
+        elseif Level == 1350 or Level <= 1374 then
+            Monster = "Arctic Warrior" NameQuest = "FrostQuest" LevelQuest = 1 NameCheckQuest = "Arctic Warrior" CFrameQ = CFrame.new(5669, 28, -6482) CFrameMon = CFrame.new(6038, 29, -6231)
+        elseif Level == 1375 or Level <= 1424 then
+            Monster = "Snow Lurker" NameQuest = "FrostQuest" LevelQuest = 2 NameCheckQuest = "Snow Lurker" CFrameQ = CFrame.new(5669, 28, -6482) CFrameMon = CFrame.new(5560, 42, -6826)
+        elseif Level == 1425 or Level <= 1449 then
+            Monster = "Sea Soldier" NameQuest = "ForgottenQuest" LevelQuest = 1 NameCheckQuest = "Sea Soldier" CFrameQ = CFrame.new(-3054, 237, -10148) CFrameMon = CFrame.new(-3022, 16, -9722)
+        elseif Level >= 1450 then
+            Monster = "Water Fighter" NameQuest = "ForgottenQuest" LevelQuest = 2 NameCheckQuest = "Water Fighter" CFrameQ = CFrame.new(-3054, 237, -10148) CFrameMon = CFrame.new(-3385, 239, -10542)
+        end
+    end
+    if World3 then
+        if Level == 1500 or Level <= 1524 then
+            Monster = "Pirate Millionaire" NameQuest = "PiratePortQuest" LevelQuest = 1 NameCheckQuest = "Pirate Millionaire" CFrameQ = CFrame.new(-290, 44, 5580) CFrameMon = CFrame.new(-373, 75, 5552)
+        elseif Level == 1525 or Level <= 1574 then
+            Monster = "Pistol Billionaire" NameQuest = "PiratePortQuest" LevelQuest = 2 NameCheckQuest = "Pistol Billionaire" CFrameQ = CFrame.new(-290, 44, 5580) CFrameMon = CFrame.new(-469, 74, 5952)
+        elseif Level == 1575 or Level <= 1599 then
+            Monster = "Dragon Crew Warrior" NameQuest = "AmazonQuest" LevelQuest = 1 NameCheckQuest = "Dragon Crew Warrior" CFrameQ = CFrame.new(5832, 52, -1105) CFrameMon = CFrame.new(6157, 52, -1112)
+        elseif Level == 1600 or Level <= 1624 then
+            Monster = "Dragon Crew Archer" NameQuest = "AmazonQuest" LevelQuest = 2 NameCheckQuest = "Dragon Crew Archer" CFrameQ = CFrame.new(5832, 52, -1105) CFrameMon = CFrame.new(6633, 47, -197)
+        elseif Level == 1625 or Level <= 1649 then
+            Monster = "Female Islander" NameQuest = "AmazonQuest2" LevelQuest = 1 NameCheckQuest = "Female Islander" CFrameQ = CFrame.new(5446, 602, 749) CFrameMon = CFrame.new(4714, 602, 232)
+        elseif Level == 1650 or Level <= 1699 then
+            Monster = "Giant Islander" NameQuest = "AmazonQuest2" LevelQuest = 2 NameCheckQuest = "Giant Islander" CFrameQ = CFrame.new(5446, 602, 749) CFrameMon = CFrame.new(5207, 583, -29)
+        elseif Level == 1700 or Level <= 1724 then
+            Monster = "Marine Commodore" NameQuest = "MarineTreeIsland" LevelQuest = 1 NameCheckQuest = "Marine Commodore" CFrameQ = CFrame.new(2180, 29, -6740) CFrameMon = CFrame.new(2462, 73, -6789)
+        elseif Level == 1725 or Level <= 1749 then
+            Monster = "Marine Rear Admiral" NameQuest = "MarineTreeIsland" LevelQuest = 2 NameCheckQuest = "Marine Rear Admiral" CFrameQ = CFrame.new(2180, 29, -6740) CFrameMon = CFrame.new(2887, 73, -7198)
+        elseif Level == 1750 or Level <= 1774 then
+            Monster = "Fishman Raider" NameQuest = "DeepForestIsland1" LevelQuest = 1 NameCheckQuest = "Fishman Raider" CFrameQ = CFrame.new(-10584, 332, -8758) CFrameMon = CFrame.new(-10357, 332, -8973)
+        elseif Level == 1775 or Level <= 1799 then
+            Monster = "Fishman Captain" NameQuest = "DeepForestIsland1" LevelQuest = 2 NameCheckQuest = "Fishman Captain" CFrameQ = CFrame.new(-10584, 332, -8758) CFrameMon = CFrame.new(-10994, 332, -8936)
+        elseif Level == 1800 or Level <= 1824 then
+            Monster = "Forest Pirate" NameQuest = "DeepForestIsland2" LevelQuest = 1 NameCheckQuest = "Forest Pirate" CFrameQ = CFrame.new(-13233, 332, -7626) CFrameMon = CFrame.new(-13437, 332, -7916)
+        elseif Level == 1825 or Level <= 1849 then
+            Monster = "Mythological Pirate" NameQuest = "DeepForestIsland2" LevelQuest = 2 NameCheckQuest = "Mythological Pirate" CFrameQ = CFrame.new(-13233, 332, -7626) CFrameMon = CFrame.new(-13535, 471, -6907)
+        elseif Level == 1850 or Level <= 1899 then
+            Monster = "Jungle Pirate" NameQuest = "DeepForestIsland3" LevelQuest = 1 NameCheckQuest = "Jungle Pirate" CFrameQ = CFrame.new(-12684, 391, -9902) CFrameMon = CFrame.new(-12117, 332, -10477)
+        elseif Level == 1900 or Level <= 1924 then
+            Monster = "Musketeer Pirate" NameQuest = "DeepForestIsland3" LevelQuest = 2 NameCheckQuest = "Musketeer Pirate" CFrameQ = CFrame.new(-12684, 391, -9902) CFrameMon = CFrame.new(-13342, 332, -9879)
+        elseif Level == 1925 or Level <= 1974 then
+            Monster = "Reborn Skeleton" NameQuest = "HauntedQuest1" LevelQuest = 1 NameCheckQuest = "Reborn Skeleton" CFrameQ = CFrame.new(-9482, 142, 5565) CFrameMon = CFrame.new(-8786, 142, 6023)
+        elseif Level == 1975 or Level <= 1999 then
+            Monster = "Living Zombie" NameQuest = "HauntedQuest1" LevelQuest = 2 NameCheckQuest = "Living Zombie" CFrameQ = CFrame.new(-9482, 142, 5565) CFrameMon = CFrame.new(-10137, 140, 5932)
+        elseif Level == 2000 or Level <= 2024 then
+            Monster = "Demonic Soul" NameQuest = "HauntedQuest2" LevelQuest = 1 NameCheckQuest = "Demonic Soul" CFrameQ = CFrame.new(-9513, 172, 6079) CFrameMon = CFrame.new(-9507, 172, 6158)
+        elseif Level == 2025 or Level <= 2074 then
+            Monster = "Posessed Mummy" NameQuest = "HauntedQuest2" LevelQuest = 2 NameCheckQuest = "Posessed Mummy" CFrameQ = CFrame.new(-9513, 172, 6079) CFrameMon = CFrame.new(-9582, 6, 6205)
+        elseif Level == 2075 or Level <= 2099 then
+            Monster = "Peanut Scout" NameQuest = "NutsIslandQuest" LevelQuest = 1 NameCheckQuest = "Peanut Scout" CFrameQ = CFrame.new(-2104, 38, -10192) CFrameMon = CFrame.new(-2143, 38, -10355)
+        elseif Level == 2100 or Level <= 2124 then
+            Monster = "Peanut President" NameQuest = "NutsIslandQuest" LevelQuest = 2 NameCheckQuest = "Peanut President" CFrameQ = CFrame.new(-2104, 38, -10192) CFrameMon = CFrame.new(-2143, 38, -10355)
+        elseif Level == 2125 or Level <= 2149 then
+            Monster = "Ice Cream Chef" NameQuest = "IceCreamIslandQuest" LevelQuest = 1 NameCheckQuest = "Ice Cream Chef" CFrameQ = CFrame.new(-824, 66, -10965) CFrameMon = CFrame.new(-641, 66, -11258)
+        elseif Level == 2150 or Level <= 2199 then
+            Monster = "Ice Cream Commander" NameQuest = "IceCreamIslandQuest" LevelQuest = 2 NameCheckQuest = "Ice Cream Commander" CFrameQ = CFrame.new(-824, 66, -10965) CFrameMon = CFrame.new(-641, 66, -11258)
+        elseif Level == 2200 or Level <= 2224 then
+            Monster = "Cookie Crafter" NameQuest = "CakeQuest1" LevelQuest = 1 NameCheckQuest = "Cookie Crafter" CFrameQ = CFrame.new(-2020, 38, -12025) CFrameMon = CFrame.new(-2374, 38, -12119)
+        elseif Level == 2225 or Level <= 2249 then
+            Monster = "Cake Guard" NameQuest = "CakeQuest1" LevelQuest = 2 NameCheckQuest = "Cake Guard" CFrameQ = CFrame.new(-2020, 38, -12025) CFrameMon = CFrame.new(-1595, 38, -12285)
+        elseif Level == 2250 or Level <= 2299 then
+            Monster = "Baking Staff" NameQuest = "CakeQuest2" LevelQuest = 1 NameCheckQuest = "Baking Staff" CFrameQ = CFrame.new(-1926, 38, -12850) CFrameMon = CFrame.new(-1832, 38, -13010)
+        elseif Level == 2300 or Level <= 2324 then
+            Monster = "Head Baker" NameQuest = "CakeQuest2" LevelQuest = 2 NameCheckQuest = "Head Baker" CFrameQ = CFrame.new(-1926, 38, -12850) CFrameMon = CFrame.new(-2125, 38, -12940)
+        elseif Level == 2325 or Level <= 2349 then
+            Monster = "Cocoa Warrior" NameQuest = "ChocQuest1" LevelQuest = 1 NameCheckQuest = "Cocoa Warrior" CFrameQ = CFrame.new(231, 24, -12195) CFrameMon = CFrame.new(231, 24, -12195)
+        elseif Level == 2350 or Level <= 2399 then
+            Monster = "Chocolate Bar Battler" NameQuest = "ChocQuest1" LevelQuest = 2 NameCheckQuest = "Chocolate Bar Battler" CFrameQ = CFrame.new(231, 24, -12195) CFrameMon = CFrame.new(231, 24, -12195)
+        elseif Level == 2400 or Level <= 2424 then
+            Monster = "Sweet Thief" NameQuest = "ChocQuest2" LevelQuest = 1 NameCheckQuest = "Sweet Thief" CFrameQ = CFrame.new(151, 24, -12775) CFrameMon = CFrame.new(151, 24, -12775)
+        elseif Level == 2425 or Level <= 2449 then
+            Monster = "Candy Rebel" NameQuest = "ChocQuest2" LevelQuest = 2 NameCheckQuest = "Candy Rebel" CFrameQ = CFrame.new(151, 24, -12775) CFrameMon = CFrame.new(151, 24, -12775)
+        elseif Level == 2450 or Level <= 2499 then
+            Monster = "Candy Pirate" NameQuest = "CandyQuest1" LevelQuest = 1 NameCheckQuest = "Candy Pirate" CFrameQ = CFrame.new(-1149, 14, -14445) CFrameMon = CFrame.new(-1149, 14, -14445)
+        elseif Level == 2500 or Level <= 2549 then
+            Monster = "Snow Demon" NameQuest = "CandyQuest1" LevelQuest = 2 NameCheckQuest = "Snow Demon" CFrameQ = CFrame.new(-1149, 14, -14445) CFrameMon = CFrame.new(-1149, 14, -14445)
+        elseif Level == 2550 or Level <= 2599 then
+            Monster = "Isle Outlaw" NameQuest = "TikiQuest1" LevelQuest = 1 NameCheckQuest = "Isle Outlaw" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level == 2600 or Level <= 2649 then
+            Monster = "Island Boy" NameQuest = "TikiQuest1" LevelQuest = 2 NameCheckQuest = "Island Boy" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level == 2650 or Level <= 2699 then
+            Monster = "Sun-kissed Warrior" NameQuest = "TikiQuest2" LevelQuest = 1 NameCheckQuest = "Sun-kissed Warrior" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        elseif Level >= 2700 then
+            Monster = "Isle Champion" NameQuest = "TikiQuest2" LevelQuest = 2 NameCheckQuest = "Isle Champion" CFrameQ = CFrame.new(-16535, 54, -175, 0, 0, -1, 0, 1, 0, 1, 0, 0) CFrameMon = CFrame.new(-16535, 54, -175)
+        end
+    end
+end
 
 -- Promo Code Auto Redemption Thread
 task.spawn(function()
@@ -5089,11 +4738,485 @@ task.spawn(function()
     end
 end)
 
+local function GetNearestMob(originMob, maxDistance)
+    if not originMob or not originMob:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    local nearest
+    local nearestDistance = math.huge
+    for _, mob in ipairs(workspace.Enemies:GetChildren()) do
+        if mob ~= originMob
+        and mob.Name == originMob.Name
+        and mob.Parent
+        and mob:FindFirstChild("Humanoid")
+        and mob:FindFirstChild("HumanoidRootPart")
+        and mob.Humanoid.Health > 0 then
+            local dist = (mob.HumanoidRootPart.Position - originMob.HumanoidRootPart.Position).Magnitude
+            if dist <= maxDistance and dist < nearestDistance then
+                nearest = mob
+                nearestDistance = dist
+            end
+        end
+    end
+    return nearest
+end
+
+-- ══════════════════════════════════════════════════════════════════
+-- 🎯 SMART MOVE & ATTACK (INSTANT ATTACK ON ARRIVAL)
+-- ══════════════════════════════════════════════════════════════════
+
+local function SmartMoveAndAttack(mainMob, QuestTitle, Quest, IsCheckQuest, CustomName)
+    if IsCheckQuest == nil then IsCheckQuest = true end
+    CustomName = CustomName or NameCheckQuest
+    pcall(sethiddenproperty, LocalPlayer, "SimulationRadius", math.huge)
+    
+    if not mainMob or not mainMob.Parent or not mainMob:FindFirstChild("Humanoid") or not mainMob:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
+
+    local humanoid = mainMob.Humanoid
+    local hrp = mainMob.HumanoidRootPart
+    humanoid.JumpPower = 0
+    humanoid.WalkSpeed = 0
+    hrp.CanCollide = false
+    
+    if getgenv().Configs.BringMob then
+        local bv = hrp:FindFirstChild("BringVelocity")
+        if not bv then
+            bv = Instance.new("BodyVelocity")
+            bv.Name = "BringVelocity"
+            bv.MaxForce = Vector3.new(100000, 100000, 100000)
+            bv.Parent = hrp
+        end
+        bv.Velocity = Vector3.zero
+    end
+
+    local secondMob = nil
+    local tween = nil
+
+    repeat task.wait()
+        title.Text = "Status: Kill " .. mainMob.Name
+        if mobHpLabel and humanoid then
+            pcall(function()
+                mobHpLabel.Text = string.format("Mob HP: %d / %d", math.floor(humanoid.Health), math.floor(humanoid.MaxHealth))
+            end)
+        end
+        
+        if not secondMob and getgenv().Configs.BringMob then
+            secondMob = GetNearestMob(mainMob, 350)
+        end
+        if secondMob and secondMob.Parent and secondMob:FindFirstChild("Humanoid") and secondMob.Humanoid.Health > 0 and secondMob:FindFirstChild("HumanoidRootPart") then
+            secondMob.HumanoidRootPart.CFrame = hrp.CFrame
+            secondMob.Humanoid.JumpPower = 0
+            secondMob.Humanoid.WalkSpeed = 0
+            secondMob.HumanoidRootPart.CanCollide = false
+            local bv2 = secondMob.HumanoidRootPart:FindFirstChild("BringVelocity")
+            if not bv2 then
+                bv2 = Instance.new("BodyVelocity")
+                bv2.Name = "BringVelocity"
+                bv2.MaxForce = Vector3.new(100000, 100000, 100000)
+                bv2.Parent = secondMob.HumanoidRootPart
+            end
+            bv2.Velocity = Vector3.zero
+        else
+            secondMob = nil
+        end
+
+        local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not myHRP then break end
+
+        local targetPos = hrp.Position + Vector3.new(0, 7.5, 0)
+        local distance = (myHRP.Position - hrp.Position).Magnitude
+
+        if distance > 45 then
+            if not tween or tween.PlaybackState ~= Enum.PlaybackState.Playing then
+                tween = Tween(CFrame.lookAt(targetPos, hrp.Position), 150)
+            end
+        else
+            if tween then
+                tween:Cancel()
+                tween = nil
+            end
+            
+            EquipWeapon(getgenv().Configs.SelectWeapon or "Melee")
+            AutoSkillUse()
+            myHRP.CFrame = CFrame.lookAt(targetPos, hrp.Position)
+
+            -- บินถึงมอนแล้วตีทันทีต่อเนื่อง
+            if secondMob then
+                Attack({mainMob, secondMob})
+            else
+                Attack(mainMob)
+            end
+        end
+    until not mainMob 
+        or not mainMob.Parent 
+        or not mainMob:FindFirstChild("Humanoid") 
+        or (mainMob.Humanoid.Health <= 0) 
+        or not getgenv().Configs.AutoFarmLevel
+
+    if tween then
+        tween:Cancel()
+        tween = nil
+    end
+
+    return humanoid.Health <= 0
+end
+
+local function KaitunWorld1(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    if Level >= 700 then
+        title.Text = "Doing Second Sea Puzzle"
+        if not CommF_:InvokeServer("DressrosaQuestProgress", "Dressrosa") then
+            if CommF_:InvokeServer("DressrosaQuestProgress").TalkedDetective and CommF_:InvokeServer("DressrosaQuestProgress").UsedKey then
+                local admiral = TargetManager:GetBestTarget("Ice Admiral", 500)
+                if admiral then
+                    SmartMoveAndAttack(admiral, QuestTitle, Quest, false)
+                    title.Text = "Travel To Second Sea"
+                    CommF_:InvokeServer("TravelDressrosa")
+                else
+                    MovementManager:MoveTo(CFrame.new(1382.562255859375, 26.999441146850586, -1458.77783203125), 150, 2)
+                end
+            elseif IsOwn("Key") then
+                CommF_:InvokeServer("DressrosaQuestProgress", "UseKey")
+            elseif not IsOwn("Key") then
+                CommF_:InvokeServer("DressrosaQuestProgress", "Detective")
+            end
+        else
+            title.Text = "Travel To Second Sea"
+            CommF_:InvokeServer("TravelDressrosa")
+        end
+    elseif Level >= 200 and getgenv().Configs.Saber and workspace.Map:FindFirstChild("Jungle") and workspace.Map.Jungle:FindFirstChild("Final") and workspace.Map.Jungle.Final:FindFirstChild("Part") and workspace.Map.Jungle.Final.Part.CanCollide and not IsSaber then
+        title.Text = "Saber Quest | Solve Puzzle"
+        if not workspace.Map.Jungle.QuestPlates.Door.CanCollide then
+            if CommF_:InvokeServer("ProQuestProgress").UsedTorch then
+                if CommF_:InvokeServer("ProQuestProgress", "SickMan") == 0 then
+                    if CommF_:InvokeServer("ProQuestProgress", "RichSon") == 0 then
+                        local mobLeader = TargetManager:GetBestTarget("Mob Leader", 500)
+                        if mobLeader then
+                            SmartMoveAndAttack(mobLeader, QuestTitle, Quest, false)
+                        else
+                            MovementManager:MoveTo(CFrame.new(-2848, 8, 5342), 150, 2)
+                        end
+                    elseif CommF_:InvokeServer("ProQuestProgress", "RichSon") == 1 then
+                        CommF_:InvokeServer("ProQuestProgress", "PlaceRelic")
+                    else
+                        CommF_:InvokeServer("ProQuestProgress", "RichSon")
+                    end
+                else
+                    CommF_:InvokeServer("ProQuestProgress", "GetCup")
+                    task.wait(0.2)
+                    EquipName("Cup")
+                    task.wait(0.2)
+                    local cup = IsOwn("Cup")
+                    CommF_:InvokeServer("ProQuestProgress", "FillCup", cup)
+                    CommF_:InvokeServer("ProQuestProgress", "SickMan")
+                end
+            elseif IsOwn("Torch") then
+                CommF_:InvokeServer("ProQuestProgress", "DestroyTorch")
+            elseif not IsOwn("Torch") then
+                CommF_:InvokeServer("ProQuestProgress", "GetTorch")
+            end
+        else
+            for i, v in workspace.Map.Jungle.QuestPlates:GetChildren() do
+                if v:IsA("Model") and v.Button.BrickColor ~= BrickColor.new("Camo") then
+                    title.Text = "Doing Saber Quest | Touching Plates " .. i .. "/5"
+                    MovementManager:MoveTo(v.Button.CFrame, 150, 2)
+                    task.wait(0.5)
+                end
+            end
+        end
+    elseif Level >= 200 and getgenv().Configs.Saber and not IsSaber and (ReplicatedStorage:FindFirstChild("Saber Expert") or workspace.Enemies:FindFirstChild("Saber Expert")) then
+        title.Text = "Saber Quest | Kill Saber Expert"
+        local saberBoss = TargetManager:GetBestTarget("Saber Expert", 500)
+        if saberBoss then
+            SmartMoveAndAttack(saberBoss, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(-1458.89502, 29.8870335, -50.633564), 150, 2)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Level >= 200 and getgenv().Configs.Pole and not IsPoleV1 and (ReplicatedStorage:FindFirstChild("Thunder God") or workspace.Enemies:FindFirstChild("Thunder God")) then
+        title.Text = "Get Pole | Kill Thunder God"
+        local thunderGod = TargetManager:GetBestTarget("Thunder God", 500)
+        if thunderGod then
+            SmartMoveAndAttack(thunderGod, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(-7795.9287109375, 5605.951171875, -2231.444580078125), 150, 2)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif getgenv().Configs.SkipFarmLevel and (Level >= 0 and Level <= 24) then
+        local darkMaster = TargetManager:GetBestTarget("Dark Master", 500)
+        if darkMaster then
+            SmartMoveAndAttack(darkMaster, QuestTitle, Quest, false)
+        else
+            title.Text = "Skip Farming Level | Waiting"
+            MovementManager:MoveTo(CFrame.new(-5250, 389, -2272), 150, 2)
+        end
+    elseif getgenv().Configs.SkipFarmLevel and (Level >= 25 and Level <= 59) then
+        local royalSquad = TargetManager:GetBestTarget("Royal Squad", 500)
+        if royalSquad then
+            SmartMoveAndAttack(royalSquad, QuestTitle, Quest, false)
+        else
+            title.Text = "Skip Farming Level | Waiting"
+            MovementManager:MoveTo(CFrame.new(-7670, 5607, -1460), 150, 2)
+        end
+    elseif not Quest.Visible then
+        title.Text = "Auto Farming Level | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
+local function KaitunWorld2(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    local bartiloProg = KaitunCache:Get("BartiloProgress", function()
+        return CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
+    end, 10)
+    
+    if Level >= 1500 then
+        title.Text = "Doing Third Sea Puzzle / Transition"
+        local prog = KaitunCache:Get("TravelThirdSeaProg", function()
+            return CommF_:InvokeServer("TravelThirdSea", "Progress")
+        end, 15)
+        
+        if type(prog) == "number" and prog >= 3 then
+            title.Text = "Travel To Third Sea"
+            CommF_:InvokeServer("TravelThirdSea")
+        else
+            if bartiloProg ~= 3 then
+                if bartiloProg == 0 then
+                    if LocalPlayer.PlayerGui.Main.Quest.Visible then 
+                        if string.find(LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text, "50 Swan Pirates") then
+                            local swanPirate = TargetManager:GetBestTarget("Swan Pirate", 500)
+                            if swanPirate then
+                                SmartMoveAndAttack(swanPirate, QuestTitle, Quest, false, "Swan Pirate")
+                            else
+                                title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
+                                MovementManager:MoveTo(CFrame.new(878, 122, 1235), 150, 3)
+                            end
+                        else
+                            CommF_:InvokeServer("AbandonQuest")
+                        end
+                    else
+                        CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
+                        KaitunCache:Invalidate("BartiloProgress")
+                    end
+                elseif bartiloProg == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+                    local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
+                    if jeremy then
+                        SmartMoveAndAttack(jeremy, QuestTitle, Quest, false)
+                    else
+                        MovementManager:MoveTo(CFrame.new(2099.88159, 448.931, 648.997375), 150, 3)
+                        CommF_:InvokeServer("SetSpawnPoint")
+                    end
+                elseif bartiloProg == 2 then
+                    title.Text = "Doing Bartilo Quest | Pressing Mansion Plates"
+                    local codePlates = {
+                        CFrame.new(-1837.46, 44.29, 1656.19),
+                        CFrame.new(-1836.0, 11, 1714),
+                        CFrame.new(-1850.49, 13.17, 1750.89),
+                        CFrame.new(-1858.87, 19.37, 1712.01),
+                        CFrame.new(-1803.94, 16.57, 1750.89),
+                        CFrame.new(-1858.55, 16.86, 1724.79),
+                        CFrame.new(-1869.54, 15.98, 1681.00),
+                        CFrame.new(-1800.09, 16.49, 1684.52),
+                        CFrame.new(-1819.26, 14.79, 1717.90),
+                        CFrame.new(-1813.51, 14.86, 1724.79)
+                    }
+                    for _, cf in ipairs(codePlates) do
+                        MovementManager:MoveTo(cf, 150, 2)
+                        task.wait(0.3)
+                    end
+                    KaitunCache:Invalidate("BartiloProgress")
+                end
+            else
+                -- Bartilo Quest Complete! Proceed with Trevor / Don Swan / Rip Indra Quest chain
+                local talkedTrevor = KaitunCache:Get("TalkedTrevor", function() 
+                    return CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor") 
+                end, 5)
+
+                -- Check Don Swan Boss Status inside Mansion
+                local donSwanBoss = TargetManager:GetBestTarget("Don Swan", 500) or workspace.Enemies:FindFirstChild("Don Swan")
+                local donSwanInRS = ReplicatedStorage:FindFirstChild("Don Swan")
+
+                if donSwanBoss then
+                    title.Text = "Defeating Don Swan Boss (Lv. 1000)"
+                    SmartMoveAndAttack(donSwanBoss, QuestTitle, Quest, false)
+                    KaitunCache:Invalidate("TalkedTrevor")
+                    KaitunCache:Invalidate("TravelThirdSeaProg")
+                elseif donSwanInRS then
+                    title.Text = "Waiting for Don Swan Boss to Spawn..."
+                    MovementManager:MoveTo(CFrame.new(2284.4, 15.2, 867.3), 150, 3)
+                elseif not talkedTrevor and (type(prog) ~= "number" or prog < 1) then
+                    -- Need to talk to Trevor & Give 1M+ Fruit
+                    local fruitTool = Has1MFruitInInventoryOrBackpack()
+                    if fruitTool then
+                        title.Text = "Talking to Trevor (Equipping " .. fruitTool.Name .. ")"
+                        MovementManager:MoveTo(CFrame.new(2284, 15, 905), 150, 3)
+                        pcall(function() LocalPlayer.Character.Humanoid:EquipTool(fruitTool) end)
+                        task.wait(0.5)
+                        CommF_:InvokeServer("TalkTrevor", fruitTool.Name)
+                        CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                        KaitunCache:Invalidate("TalkedTrevor")
+                        KaitunCache:Invalidate("TravelThirdSeaProg")
+                        task.wait(1)
+                    else
+                        -- No 1M+ Fruit in possession yet. Attempt Gacha & Dealer buy.
+                        title.Text = "Attempting Gacha & Dealer for 1M+ Fruit..."
+                        pcall(function() CommF_:InvokeServer("Cousin", "Buy") end)
+                        task.wait(0.5)
+                        StoreAllFruits()
+
+                        pcall(function()
+                            local stock = CommF_:InvokeServer("GetFruits")
+                            if type(stock) == "table" then
+                                for _, f in pairs(stock) do
+                                    local price = tonumber(f.Price) or 0
+                                    local rawName = f.Name or f.Value or ""
+                                    local inStock = (f.OnSale == true) or (f.InStock == true)
+                                    if inStock and price >= 1000000 then
+                                        local beli = LocalPlayer.Data and LocalPlayer.Data:FindFirstChild("Beli") and LocalPlayer.Data.Beli.Value or 0
+                                        if beli >= price then
+                                            CommF_:InvokeServer("PurchaseRawFruit", rawName)
+                                            task.wait(1)
+                                            StoreAllFruits()
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                        end)
+
+                        -- Re-check fruit after attempting Gacha/Dealer
+                        fruitTool = Has1MFruitInInventoryOrBackpack()
+                        if not fruitTool then
+                            -- FALLBACK: Do NOT stand idle! Farm level, melee, money while waiting!
+                            title.Text = "Waiting for 1M+ Fruit | Auto Farming Level & Melee..."
+                            if not Quest.Visible then
+                                MovementManager:MoveTo(CFrameQ, 150, 2)
+                                if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+                                    CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+                                    CommF_:InvokeServer("SetSpawnPoint")
+                                end
+                            elseif Quest.Visible then
+                                local targetMob = TargetManager:GetBestTarget(Monster, 600)
+                                if targetMob then
+                                    SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+                                else
+                                    MovementManager:MoveTo(CFrameMon, 150, 2)
+                                end
+                            end
+                        end
+                    end
+                elseif workspace.Enemies:FindFirstChild("rip_indra") or ReplicatedStorage:FindFirstChild("rip_indra") then
+                    title.Text = "Defeating Rip Indra Boss"
+                    local ripIndra = TargetManager:GetBestTarget("rip_indra", 500)
+                    if ripIndra then
+                        SmartMoveAndAttack(ripIndra, QuestTitle, Quest, false)
+                    else
+                        MovementManager:MoveTo(CFrame.new(-460, 73, 300), 150, 3)
+                    end
+                else
+                    title.Text = "Travel To Third Sea (King Red Head / Captain)"
+                    CommF_:InvokeServer("TravelThirdSea", "TalkedTrevor")
+                    CommF_:InvokeServer("TravelThirdSea")
+                    task.wait(2)
+                end
+            end
+        end
+    elseif workspace.Enemies:FindFirstChild("Core") or ReplicatedStorage:FindFirstChild("Core") then
+        local coreMob = TargetManager:GetBestTarget("Core", 500)
+        if coreMob then
+            SmartMoveAndAttack(coreMob, QuestTitle, Quest, false)
+        else
+            MovementManager:MoveTo(CFrame.new(448.46756, 199.356781, -441.389252), 150, 3)
+        end
+    elseif Level >= 850 and (bartiloProg == 0 or bartiloProg == 2 or (bartiloProg == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")))) then
+        if bartiloProg == 0 then
+            if LocalPlayer.PlayerGui.Main.Quest.Visible then 
+                if string.find(LocalPlayer.PlayerGui.Main.Quest.Container.QuestTitle.Title.Text, "50 Swan Pirates") then
+                    local swanPirate = TargetManager:GetBestTarget("Swan Pirate", 500)
+                    if swanPirate then
+                        SmartMoveAndAttack(swanPirate, QuestTitle, Quest, false, "Swan Pirate")
+                    else
+                        title.Text = "Doing Bartilo Quest | Wait For Swan Pirates"
+                        MovementManager:MoveTo(CFrame.new(878, 122, 1235), 150, 3)
+                    end
+                else
+                    CommF_:InvokeServer("AbandonQuest")
+                end
+            else
+                CommF_:InvokeServer("StartQuest", "BartiloQuest", 1)
+                KaitunCache:Invalidate("BartiloProgress")
+            end
+        elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 1 and (workspace.Enemies:FindFirstChild("Jeremy") or ReplicatedStorage:FindFirstChild("Jeremy")) then
+            local jeremy = TargetManager:GetBestTarget("Jeremy", 500)
+            if jeremy then
+                SmartMoveAndAttack(jeremy, QuestTitle, Quest, false)
+            else
+                MovementManager:MoveTo(CFrame.new(2099.88159, 448.931, 648.997375), 150, 3)
+                CommF_:InvokeServer("SetSpawnPoint")
+            end
+        elseif CommF_:InvokeServer("BartiloQuestProgress", "Bartilo") == 2 then
+            MovementManager:MoveTo(CFrame.new(-1837.46155, 44.2921753, 1656.1987), 150, 3)
+        end
+    elseif not Quest.Visible then
+        title.Text = "Auto Farming Level | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
+local function KaitunWorld3(Quest, QuestTitle, Level)
+    WorldState:Update()
+    CheckQuest()
+    if not Quest.Visible then
+        title.Text = "Auto Farming Level (Sea 3) | Get Quest"
+        MovementManager:MoveTo(CFrameQ, 150, 2)
+        if (CFrameQ.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 15 then
+            CommF_:InvokeServer("StartQuest", NameQuest, LevelQuest)
+            CommF_:InvokeServer("SetSpawnPoint")
+        end
+    elseif Quest.Visible then
+        local targetMob = TargetManager:GetBestTarget(Monster, 600)
+        if targetMob then
+            SmartMoveAndAttack(targetMob, QuestTitle, Quest)
+        else
+            title.Text = "Auto Farming Level (Sea 3) | Wait For " .. tostring(Monster)
+            MovementManager:MoveTo(CFrameMon, 150, 2)
+        end
+    end
+end
+
 -- ══════════════════════════════════════════════════════════════════
 -- 🧠 ARCHITECTURE V2: 10-TIER KAITUN PRIORITY QUEUE SYSTEM
 -- ══════════════════════════════════════════════════════════════════
 
-PriorityQueue = {
+local PriorityQueue = {
     P0_Emergency = false,
     P1_SeaTransition = false,
     P2_MandatoryProgression = false,
@@ -5107,12 +5230,12 @@ PriorityQueue = {
     P10_Watchdog = false
 }
 
-CurrentObjective = "IDLE"
-PreviousObjective = "IDLE"
-ObjectiveReason = "Initializing Queue"
-ObjectiveStartTime = os.clock()
+local CurrentObjective = "IDLE"
+local PreviousObjective = "IDLE"
+local ObjectiveReason = "Initializing Queue"
+local ObjectiveStartTime = os.clock()
 
-function SetObjective(priorityLevel, objectiveName, reason)
+local function SetObjective(priorityLevel, objectiveName, reason)
     if CurrentObjective ~= objectiveName then
         PreviousObjective = CurrentObjective
         CurrentObjective = objectiveName
@@ -5122,10 +5245,8 @@ function SetObjective(priorityLevel, objectiveName, reason)
         KaitunMonitor:AddLog(priorityLevel, string.format("%s: %s", objectiveName, reason or ""), priorityLevel)
     end
     ObjectiveReason = reason or ""
-    pcall(function()
-        if title then title.Text = string.format("[%s] %s", priorityLevel, CurrentObjective) end
-        if subtitle then subtitle.Text = ObjectiveReason end
-    end)
+    title.Text = string.format("[%s] %s", priorityLevel, CurrentObjective)
+    subtitle.Text = ObjectiveReason
 
     KaitunMonitor.State.PriorityTier = priorityLevel
     KaitunMonitor.State.ActiveObjective = objectiveName
@@ -5133,13 +5254,11 @@ function SetObjective(priorityLevel, objectiveName, reason)
     KaitunMonitor.State.EngineStatus = "🟢 " .. objectiveName
     KaitunMonitor:UpdateUI()
 end
-getgenv().SetObjective = SetObjective
-getgenv().PriorityQueue = PriorityQueue
 
 -- ══════════════════════════════════════════════════════════════════
 -- P0: EMERGENCY RECOVERY SERVICE 🛑
 -- ══════════════════════════════════════════════════════════════════
-function ProcessP0_Emergency()
+local function ProcessP0_Emergency()
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChild("Humanoid")
@@ -5165,7 +5284,7 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- P10: BACKGROUND WATCHDOG 🔄
 -- ══════════════════════════════════════════════════════════════════
-function ProcessP10_Watchdog()
+local function ProcessP10_Watchdog()
     local now = os.clock()
     if (CurrentObjective == "FARM_LEVEL" or CurrentObjective == "TRAVEL_TO_MOB") and (now - ObjectiveStartTime > 30) then
         warn("[P10 Watchdog]: Stuck in " .. CurrentObjective .. " >30s. Triggering self-healing...")
@@ -5179,7 +5298,7 @@ end
 -- ══════════════════════════════════════════════════════════════════
 -- 📊 BUILD MANAGER & BACKGROUND MAINTENANCE (BUILD SYSTEM V2)
 -- ══════════════════════════════════════════════════════════════════
-BuildManager = {}
+local BuildManager = {}
 
 function BuildManager:AllocatePoints()
     if not getgenv().Configs.AutoStats then return end
@@ -5230,9 +5349,9 @@ end)
 -- 📊 DATA-DRIVEN PROGRESSION MARKS ENGINE (M01 - M16 | LVL 1-2800)
 -- ══════════════════════════════════════════════════════════════════
 
-MaxLevel = 2800
+local MaxLevel = 2800
 
-ProgressionMarks = {
+local ProgressionMarks = {
     { Mark = "M01", MinLvl = 1, MaxLvl = 59, Sea = 1, Primary = "LEVEL_FARM", Secondary = "BASIC_SETUP", Description = "First Sea Starter (Lv. 1-60)" },
     { Mark = "M02", MinLvl = 60, MaxLvl = 119, Sea = 1, Primary = "LEVEL_FARM", Secondary = "RESOURCE_CHECK", Description = "First Sea Early Farm + Basic Resources (Lv. 60-120)" },
     { Mark = "M03", MinLvl = 120, MaxLvl = 299, Sea = 1, Primary = "LEVEL_FARM", Secondary = "MAINTENANCE", Description = "First Sea Mid Farm + Character Maintenance (Lv. 120-300)" },
@@ -5251,7 +5370,7 @@ ProgressionMarks = {
     { Mark = "M16", MinLvl = 2800, MaxLvl = 9999, Sea = 3, Primary = "ENDGAME_MODE", Description = "MAX LEVEL 2800 — Endgame Mode Activated" }
 }
 
-ProgressionEngine = {
+local ProgressionEngine = {
     CurrentMark = nil,
     CurrentStage = "INITIALIZING"
 }
@@ -5296,7 +5415,9 @@ function ProgressionEngine:Evaluate()
     end
 
     if lvl >= 1500 and curSea == 2 then
-        local bartiloProg = CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
+        local bartiloProg = KaitunCache:Get("BartiloProgress", function()
+            return CommF_:InvokeServer("BartiloQuestProgress", "Bartilo")
+        end, 10)
         
         if bartiloProg ~= 3 then
             return {
@@ -5523,8 +5644,6 @@ task.spawn(function()
                         KaitunWorld1(Quest, QuestTitle, CurLevel)
                     elseif World2 then
                         KaitunWorld2(Quest, QuestTitle, CurLevel)
-                    elseif World3 then
-                        KaitunWorld3(Quest, QuestTitle, CurLevel)
                     end
                 else
                     -- 5. P4 & P5 COMBINED: Main Level Farming + Melee Progression
